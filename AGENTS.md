@@ -191,7 +191,22 @@ Long version in [CONTRIBUTING.md](CONTRIBUTING.md). Short version:
      number and is **immutable** — those notes already shipped; never reword,
      reorder, or delete them. New work always goes under `[Unreleased]`.
 5. **Human validation on a real Nextcloud** is required before review — agents
-   cannot skip this. State what was tested in the PR description.
+   cannot skip this. **The agent MUST deploy the branch to the live pod as part of
+   opening the PR — do not just open the PR and stop.** A green CI run is not a
+   smoke test: most UX/UI problems (a folder picker that doesn't populate, an
+   awkward panel layout, a confusing flow) only surface when a human clicks through
+   the real app. Deploy the *working tree of the branch under test* (not `main`)
+   with:
+
+   ```
+   SKIP_PULL=1 bash /projects/cluster/apps/nextcloud/components/grafana/deploy-dev.sh
+   ```
+
+   It builds the frontend, copies the runtime files into the live pod's PVC-backed
+   `custom_apps/grafana_sync`, enables the app, and re-runs the connection test
+   (opcache picks up replaced files within ~60s — no restart). Then tell the human
+   it's deployed and exactly what to click, and let them try it for real **before**
+   they approve. State what was tested in the PR description.
 6. **Release is manual** via `publish.yml`. Don't bump versions in feature PRs.
 
 If you're working on behalf of a human, **point them at CONTRIBUTING.md** rather
