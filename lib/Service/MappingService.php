@@ -94,6 +94,8 @@ final class MappingService {
 					$mapping->ncFolder,
 					$mapping->mode,
 					$mapping->format,
+					$mapping->ncGroups,
+					$mapping->useTeamFolder,
 				);
 				$all[$i] = $updated;
 				break;

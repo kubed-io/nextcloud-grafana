@@ -39,11 +39,21 @@ use JsonSerializable;
  * (opt-in). The sync chapter reads it to pick the serializer + file extension
  * (`.grafana.json` vs `.grafana.yaml`); it is inert config until then.
  *
+ * Storage model (mirrors the n8n master's Mapping, so the two reduce cleanly into a
+ * shared base later): `ncGroups` are the Nextcloud groups the mapped folder is
+ * shared with, and `useTeamFolder` picks the backend — an ownerless Team Folder
+ * (groupfolders) when true, an admin-owned shared folder when false. Both persist
+ * with the mapping today; the sync engine that *provisions* the folder from them
+ * lands in a later chapter (Course 2), so they are stored-but-not-yet-acted-on —
+ * config the engine will read, not decoration.
+ *
  * Invariants:
  *  - `grafanaFolderUid` MUST be non-empty.
  *  - `ncFolder` MUST be non-empty (after normalising away surrounding slashes).
  *  - `mode` MUST be `sync` or `link`.
  *  - `format` MUST be `json` or `yaml`.
+ *  - `ncGroups` MAY be empty (a folder no group can see); the sync reconciler will
+ *    warn + skip those, same as the master.
  */
 final class Mapping implements JsonSerializable {
 	public const MODE_SYNC = 'sync';
@@ -52,6 +62,9 @@ final class Mapping implements JsonSerializable {
 	public const FORMAT_JSON = 'json';
 	public const FORMAT_YAML = 'yaml';
 
+	/**
+	 * @param list<string> $ncGroups
+	 */
 	public function __construct(
 		public readonly string $id,
 		public readonly string $grafanaFolderUid,
@@ -59,6 +72,8 @@ final class Mapping implements JsonSerializable {
 		public readonly string $ncFolder,
 		public readonly string $mode,
 		public readonly string $format,
+		public readonly array $ncGroups,
+		public readonly bool $useTeamFolder,
 	) {
 	}
 
@@ -87,6 +102,13 @@ final class Mapping implements JsonSerializable {
 			$format = self::FORMAT_JSON;
 		}
 
+		$ncGroups = self::normaliseGroups($data['nc_groups'] ?? []);
+
+		// Storage backend. Default true: groupfolders is the preferred path (matches
+		// the n8n master), and an omitted flag means "use a Team Folder".
+		$useTeamFolder = !array_key_exists('use_team_folder', $data)
+			|| filter_var($data['use_team_folder'], FILTER_VALIDATE_BOOLEAN);
+
 		if ($uid === '') {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
 		}
@@ -100,7 +122,7 @@ final class Mapping implements JsonSerializable {
 			throw new \InvalidArgumentException('format must be "json" or "yaml"');
 		}
 
-		return new self($id, $uid, $title, $ncFolder, $mode, $format);
+		return new self($id, $uid, $title, $ncFolder, $mode, $format, $ncGroups, $useTeamFolder);
 	}
 
 	/** @return array<string,mixed> */
@@ -112,6 +134,8 @@ final class Mapping implements JsonSerializable {
 			'nc_folder' => $this->ncFolder,
 			'mode' => $this->mode,
 			'format' => $this->format,
+			'nc_groups' => $this->ncGroups,
+			'use_team_folder' => $this->useTeamFolder,
 		];
 	}
 
@@ -136,5 +160,31 @@ final class Mapping implements JsonSerializable {
 		$v = trim($value);
 		$v = preg_replace('#/+#', '/', $v) ?? $v;
 		return trim($v, '/');
+	}
+
+	/**
+	 * Group ids: a list of non-empty trimmed strings, de-duplicated, re-indexed.
+	 * Tolerates a comma-separated string from a form field. Identical to the n8n
+	 * master's normaliser so the two mapping models reduce cleanly into a shared
+	 * base later.
+	 *
+	 * @param mixed $value
+	 * @return list<string>
+	 */
+	private static function normaliseGroups(mixed $value): array {
+		if (is_string($value)) {
+			$value = $value === '' ? [] : explode(',', $value);
+		}
+		if (!is_array($value)) {
+			return [];
+		}
+		$out = [];
+		foreach ($value as $g) {
+			$g = trim((string)$g);
+			if ($g !== '' && !in_array($g, $out, true)) {
+				$out[] = $g;
+			}
+		}
+		return $out;
 	}
 }

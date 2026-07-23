@@ -27,6 +27,8 @@ final class MappingTest extends TestCase {
 			'nc_folder' => 'dashboards/observe',
 			'mode' => 'sync',
 			'format' => 'yaml',
+			'nc_groups' => ['admin', 'ops'],
+			'use_team_folder' => false,
 		]);
 
 		self::assertSame('abc123', $m->id);
@@ -35,6 +37,28 @@ final class MappingTest extends TestCase {
 		self::assertSame('dashboards/observe', $m->ncFolder);
 		self::assertSame('sync', $m->mode);
 		self::assertSame('yaml', $m->format);
+		self::assertSame(['admin', 'ops'], $m->ncGroups);
+		self::assertFalse($m->useTeamFolder);
+	}
+
+	public function testGroupsDefaultToEmptyAndTeamFolderToTrue(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+		]);
+		self::assertSame([], $m->ncGroups);
+		self::assertTrue($m->useTeamFolder);
+	}
+
+	public function testGroupsAreTrimmedDedupedAndReindexed(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+			'nc_groups' => [' admin ', 'admin', '', 'ops'],
+		]);
+		self::assertSame(['admin', 'ops'], $m->ncGroups);
 	}
 
 	public function testGeneratesAnIdWhenNoneGiven(): void {
@@ -132,6 +156,8 @@ final class MappingTest extends TestCase {
 			'nc_folder' => 'observe',
 			'mode' => 'link',
 			'format' => 'json',
+			'nc_groups' => ['admin'],
+			'use_team_folder' => false,
 		]);
 		$round = Mapping::fromArray($original->toArray());
 		self::assertEquals($original, $round);
