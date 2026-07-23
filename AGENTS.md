@@ -163,6 +163,19 @@ Things that have bitten contributors (human and AI) and shouldn't bite again:
   versions silently break the Files row script. (saga §11/§12)
 - **Don't run heavy tools (Psalm) repeatedly in the shared prod pod.** Stacked
   processes thrash it. Let CI be the authoritative runner.
+- **Action buttons can't live in a declarative settings section** — declarative
+  forms are fields that auto-save, with no place for a button. Any *action* button
+  (Test connection, and later bulk pull/push) has to be a classic server-rendered
+  panel. Consolidate them into **one actions panel at the bottom of the section**
+  (mirror `nextcloud-n8n`'s "Sync Actions"), rather than sprinkling buttons across
+  the other cards. Per-item card controls (a mapping card's Save/Delete) are fine
+  inline — this is about *global* actions.
+- **A sensitive settings field always renders blank**, even when a value is stored
+  (core never echoes it). So an admin can't tell "not set" from "already saved"
+  from the field alone. Drive the card's copy from whether a value is stored (read
+  it in `getSchema()`), and make the connection *test* distinguish a **missing**
+  credential from a **rejected** one — those are different problems and the error
+  must say which. See `InstanceSettings` + `GrafanaClient::describeConnectionError`.
 
 ---
 
@@ -191,11 +204,57 @@ Long version in [CONTRIBUTING.md](CONTRIBUTING.md). Short version:
      number and is **immutable** — those notes already shipped; never reword,
      reorder, or delete them. New work always goes under `[Unreleased]`.
 5. **Human validation on a real Nextcloud** is required before review — agents
-   cannot skip this. State what was tested in the PR description.
+   cannot skip this. **The agent MUST deploy the branch to the live pod as part of
+   opening the PR — do not just open the PR and stop.** A green CI run is not a
+   smoke test: most UX/UI problems (a folder picker that doesn't populate, an
+   awkward panel layout, a confusing flow) only surface when a human clicks through
+   the real app. Deploy the *working tree of the branch under test* (not `main`)
+   with:
+
+   ```
+   SKIP_PULL=1 bash /projects/cluster/apps/nextcloud/components/grafana/deploy-dev.sh
+   ```
+
+   It builds the frontend, copies the runtime files into the live pod's PVC-backed
+   `custom_apps/grafana_sync`, enables the app, and re-runs the connection test
+   (opcache picks up replaced files within ~60s — no restart). Then tell the human
+   it's deployed and exactly what to click, and let them try it for real **before**
+   they approve. State what was tested in the PR description.
 6. **Release is manual** via `publish.yml`. Don't bump versions in feature PRs.
 
 If you're working on behalf of a human, **point them at CONTRIBUTING.md** rather
 than re-explaining the flow each session.
+
+### After the PR is open — close the review loop
+
+An automated reviewer (**GitHub Copilot code review**, driven by our
+`.github/copilot-instructions.md` + `.github/instructions/*`) comments on every PR.
+Close the loop before asking a human to review — don't leave a wall of open threads.
+
+1. **Read the bot's threads back.** List them with `gh api graphql`
+   (`repository.pullRequest.reviewThreads`) or `gh api repos/<owner>/<repo>/pulls/<n>/comments`.
+   `review_on_push` re-reviews on every push, so expect duplicate / `isOutdated`
+   re-posts of the same point — the push that fixed the code usually leaves its
+   thread `isOutdated: true`.
+2. **Triage each — worth it vs fluff.** Real correctness / security / nativeness
+   issues are worth it. **Verify a claim against the framework before acting** (e.g.
+   check whether a helper already escapes — `Util::sanitizeHTML` does `ENT_QUOTES`).
+   The recurring fluff is: framework-internal ignorance, un-scoped old-browser
+   paranoia, speculative *unreachable* edge cases, and low-value wording/docblock nits.
+3. **Handled → resolve the thread.** After the fix lands, resolve it via the GraphQL
+   mutation (thread id from step 1):
+   `gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"<id>"}){ thread { isResolved } } }'`.
+   Optionally reply `Fixed in <sha>` first.
+4. **Not handled (fluff / declined) → reply, don't resolve.** Post a short reply
+   prefixed **`[declined — safe to resolve]`** with the reason, and leave the thread
+   open so the human can scan it and resolve in the UI if they agree. **Never silently
+   resolve a thread you didn't address.**
+5. Post a one-paragraph triage summary as a PR comment, and tell the human what you
+   fixed vs declined.
+
+If the fluff shows a *pattern*, fix it at the source — add the false-positive to the
+"what not to flag" list in `.github/copilot-instructions.md` so the bot stops
+re-raising it (that file, not the PR, is where you tune the reviewer).
 
 ### Shape of a feature change
 

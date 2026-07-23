@@ -1,0 +1,29 @@
+{
+  "uid": "nc-bravo-demo",
+  "title": "Bravo Demo",
+  "tags": ["integration", "nextcloud"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 0,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Bravo signal",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line" }, "unit": "short" },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "scenario": "bravo" }
+      ]
+    }
+  ]
+}

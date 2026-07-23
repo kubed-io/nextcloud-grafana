@@ -566,6 +566,37 @@ green against live Grafana with the Ch. 1 token; `occ grafana_sync:set-token` +
   settings/branch-protection via `gh`, land the init commit through the PR flow.
   Chapter 1 stays open until Dr K calls it.*
 
+### Progress log (2026-07-23, the cameo) — **we cooked with the master**
+
+The repo exists (`kubed-io/nextcloud-grafana`), the folder-mapping course is plated
+(PR #2 — Grafana folder → NC folder, the tag-hack retired), and then the two kitchens
+crossed for real:
+
+- ✅ **The connection-UX dish, cooked on both apps the same afternoon.** A sensitive
+  token field renders blank whether set or not, so the admin can't tell "not set" from
+  "saved" — we drive the card's copy from stored state, and make *Test connection*
+  distinguish a **missing** token (`add one first`) from a **rejected** one
+  (`HTTP 401 — Grafana rejected the token`). The master shipped the identical fix for
+  its API key the same day. **This is the meetup:** one lesson, two plates, adapted
+  only for the ingredient (`grafana_token` + `Authorization: Bearer` here; `api_key` +
+  `X-N8N-API-KEY` there). The "mother sauce" thesis above stopped being a hope — the
+  diff *rhymes*.
+- ✅ **A sous-chef joined the line.** Copilot code review, tuned to our house rules via
+  `.github/copilot-instructions.md` + path-specific `*.instructions.md` (all back-linked
+  to `AGENTS.md`), now enforces *be-Nextcloud-native* on every PR — and caught real
+  bugs (a client-settable mapping id; an `update()` union that kept the body's id).
+  Repo Security-&-Quality settings (Copilot ruleset, secret scanning, CodeQL) brought
+  to parity with the master over `gh`.
+- 🎬 **The master made the marquee.** While we were doing mise en place, `nextcloud-n8n`
+  went live on **apps.nextcloud.com** — its saga's
+  [Chapter 5 — The Marquee and the Meal](https://github.com/kubed-io/nextcloud-n8n/blob/main/saga/Chapter_5_The_Marquee_and_the_Meal.md)
+  is the other side of this table. The apprentice isn't on the store yet (publish stays
+  fused off until feature-complete, by Dr K's call) — but we sat down to the same meal.
+
+> **Dr K, from the apprentice's kitchen:** *"He got his stars this week. You're not
+> there yet — but you cooked his hardest fix beside him and it came out the same.
+> That's the whole point of the exercise. Keep prepping."*
+
 ---
 
 <details>

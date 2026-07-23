@@ -1,0 +1,38 @@
+{
+  "uid": "nc-charlie-demo",
+  "title": "Charlie Demo",
+  "tags": ["integration", "nextcloud"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 0,
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "custom",
+        "query": "one,two,three",
+        "current": { "text": "one", "value": "one" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "gauge",
+      "title": "Charlie level",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "min": 0, "max": 100, "unit": "percent" },
+        "overrides": []
+      },
+      "options": { "showThresholdLabels": false, "showThresholdMarkers": true },
+      "targets": [
+        { "refId": "A", "scenario": "charlie" }
+      ]
+    }
+  ]
+}

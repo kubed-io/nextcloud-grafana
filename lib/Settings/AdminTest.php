@@ -15,12 +15,16 @@ use OCP\Settings\IDelegatedSettings;
 use OCP\Util;
 
 /**
- * Classic (non-declarative) "Test" panel: one button that hits an authenticated
- * Grafana endpoint to prove the saved URL + token actually work. Declarative
- * settings cannot include buttons, so the test lives here.
+ * Auth target for the Test-connection endpoint — **not rendered as its own panel.**
+ * The button itself now lives in the {@see SyncSettings} "Sync Actions" panel (all
+ * action buttons in one place, below the mappings); this class is kept only so
+ * `ConfigController::testConnection` can gate that endpoint with the canonical
+ * `#[AuthorizedAdminSetting(settings: AdminTest::class)]` attribute. It is
+ * intentionally absent from `info.xml`'s `<settings>` (mirrors the n8n master).
  *
- * Implements IDelegatedSettings so the controller can gate the test endpoint with
- * the canonical #[AuthorizedAdminSetting] attribute.
+ * `getForm()` still returns a valid panel (declarative settings can't host buttons,
+ * so a classic template) in case it is ever rendered, but in normal operation it is
+ * not — the section renders Instance → Connection → Folder mappings → Sync Actions.
  */
 final class AdminTest implements IDelegatedSettings {
 	#[\Override]

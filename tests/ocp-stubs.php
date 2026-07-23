@@ -125,6 +125,28 @@ namespace OCP {
 			public function getUser(): ?IUser;
 		}
 	}
+	// MappingSettings reads the group list for the per-mapping picker; both are
+	// mocked in the SyncSettings test (which instantiates MappingSettings).
+	if (!interface_exists(IGroup::class, false)) {
+		interface IGroup {
+			public function getGID(): string;
+		}
+	}
+	if (!interface_exists(IGroupManager::class, false)) {
+		interface IGroupManager {
+			/** @return list<IGroup> */
+			public function search(string $search): array;
+		}
+	}
+}
+
+namespace OCP\App {
+	// MappingSettings checks whether groupfolders is installed (Team Folder flag).
+	if (!interface_exists(IAppManager::class, false)) {
+		interface IAppManager {
+			public function isInstalled(string $appId): bool;
+		}
+	}
 }
 
 namespace OCP\EventDispatcher {
@@ -133,6 +155,48 @@ namespace OCP\EventDispatcher {
 	// this to exist first. Declaration-only.
 	if (!class_exists(Event::class, false)) {
 		class Event {
+		}
+	}
+}
+
+namespace OCP\Settings {
+	// InstanceSettings implements IDeclarativeSettingsForm and reads
+	// DeclarativeSettingsTypes constants; the InstanceSettings test instantiates one
+	// to assert its dynamic "is a token stored?" copy. Declaration-only — the constant
+	// *values* are irrelevant to the assertions (they check id/sensitive/description/
+	// placeholder), so any strings suffice.
+	if (!interface_exists(IDeclarativeSettingsForm::class, false)) {
+		interface IDeclarativeSettingsForm {
+			public function getSchema(): array;
+		}
+	}
+	if (!class_exists(DeclarativeSettingsTypes::class, false)) {
+		final class DeclarativeSettingsTypes {
+			public const SECTION_TYPE_ADMIN = 'admin';
+			public const STORAGE_TYPE_INTERNAL = 'internal';
+			public const TEXT = 'text';
+			public const PASSWORD = 'password';
+			public const URL = 'url';
+			public const CHECKBOX = 'checkbox';
+		}
+	}
+	// SyncSettings / MappingSettings implement IDelegatedSettings; the SyncSettings
+	// test instantiates them to assert the panel ordering (priority). The classes
+	// mark these methods #[\Override], so the stub must declare all five for the
+	// attribute to be valid. `getForm()` is left untyped so the real
+	// `: TemplateResponse` return is a compatible narrowing without needing the
+	// TemplateResponse class stubbed here.
+	if (!interface_exists(IDelegatedSettings::class, false)) {
+		interface IDelegatedSettings {
+			public function getForm();
+
+			public function getSection(): string;
+
+			public function getPriority(): int;
+
+			public function getName(): ?string;
+
+			public function getAuthorizedAppConfig(): array;
 		}
 	}
 }
