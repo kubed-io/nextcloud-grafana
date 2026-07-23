@@ -158,4 +158,23 @@ namespace OCP\Settings {
 			public const CHECKBOX = 'checkbox';
 		}
 	}
+	// SyncSettings / MappingSettings implement IDelegatedSettings; the SyncSettings
+	// test instantiates them to assert the panel ordering (priority). The classes
+	// mark these methods #[\Override], so the stub must declare all five for the
+	// attribute to be valid. `getForm()` is left untyped so the real
+	// `: TemplateResponse` return is a compatible narrowing without needing the
+	// TemplateResponse class stubbed here.
+	if (!interface_exists(IDelegatedSettings::class, false)) {
+		interface IDelegatedSettings {
+			public function getForm();
+
+			public function getSection(): string;
+
+			public function getPriority(): int;
+
+			public function getName(): ?string;
+
+			public function getAuthorizedAppConfig(): array;
+		}
+	}
 }
