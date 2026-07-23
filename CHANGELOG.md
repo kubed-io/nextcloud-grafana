@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin **folder mapping** panel: bind a Grafana folder (picked from the folders your token can see) to a Nextcloud folder, with a **mode** (sync / link) and a serialization **format** (json / yaml — the classic dashboard JSON or the newer k8s-style YAML schema). A Grafana folder maps to exactly one location; mappings are stored as config, so the same list is editable over the CLI.
 - Headless mapping config via `occ grafana_sync:add-mapping '<json>'`, `occ grafana_sync:list-mappings`, and `occ grafana_sync:remove-mapping <id>` (occ/helm-injectable).
 
+### Changed
+
+- Connection card now shows whether a service-account token is **currently stored** (the field itself always looks empty because the token is sensitive/encrypted), so you can tell "not set yet" from "already saved" at a glance.
+
 ### Fixed
 
+- Test connection now tells a **missing** token apart from a **rejected** one — an unset token says so, an invalid/expired one reports "Grafana rejected the token (HTTP 401)". Previously a rejected token surfaced Grafana's raw error and looked the same as other failures. Same wording on the button and `occ grafana_sync:test-connection`.
 - CI: dropped the inherited Psalm issue-handler suppressions the connection-only POC never triggers (they caused an UnusedIssueHandlerSuppression failure and a broken SARIF upload); they return with the sync code that needs them.

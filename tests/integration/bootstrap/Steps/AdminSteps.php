@@ -85,6 +85,30 @@ trait AdminSteps {
 		$this->theAdminSetsTheGrafanaBaseUrl();
 	}
 
+	/** @Given no service-account token is set */
+	public function noServiceAccountTokenIsSet(): void {
+		// Best-effort: the key may or may not exist depending on scenario order.
+		$this->occ('config:app:delete ' . self::APP_ID . ' grafana_token');
+	}
+
+	/** @Then the connection test says the token is not set */
+	public function theConnectionTestSaysTheTokenIsNotSet(): void {
+		Assert::assertStringContainsStringIgnoringCase(
+			'add one first',
+			$this->lastOutput,
+			"expected a 'no token set' message, got:\n{$this->lastOutput}",
+		);
+	}
+
+	/** @Then the connection test says the token was rejected */
+	public function theConnectionTestSaysTheTokenWasRejected(): void {
+		Assert::assertStringContainsStringIgnoringCase(
+			'rejected',
+			$this->lastOutput,
+			"expected a 'token rejected' message, got:\n{$this->lastOutput}",
+		);
+	}
+
 	/**
 	 * One-line connection setup for feature Backgrounds: app enabled + base URL +
 	 * the CI-minted token. The canonical "ready to talk to Grafana" precondition —

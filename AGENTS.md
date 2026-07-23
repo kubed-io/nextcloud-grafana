@@ -163,6 +163,19 @@ Things that have bitten contributors (human and AI) and shouldn't bite again:
   versions silently break the Files row script. (saga §11/§12)
 - **Don't run heavy tools (Psalm) repeatedly in the shared prod pod.** Stacked
   processes thrash it. Let CI be the authoritative runner.
+- **Action buttons can't live in a declarative settings section** — declarative
+  forms are fields that auto-save, with no place for a button. Any *action* button
+  (Test connection, and later bulk pull/push) has to be a classic server-rendered
+  panel. Consolidate them into **one actions panel at the bottom of the section**
+  (mirror `nextcloud-n8n`'s "Sync Actions"), rather than sprinkling buttons across
+  the other cards. Per-item card controls (a mapping card's Save/Delete) are fine
+  inline — this is about *global* actions.
+- **A sensitive settings field always renders blank**, even when a value is stored
+  (core never echoes it). So an admin can't tell "not set" from "already saved"
+  from the field alone. Drive the card's copy from whether a value is stored (read
+  it in `getSchema()`), and make the connection *test* distinguish a **missing**
+  credential from a **rejected** one — those are different problems and the error
+  must say which. See `ConnectionSettings` + `GrafanaClient::describeConnectionError`.
 
 ---
 

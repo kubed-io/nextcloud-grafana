@@ -24,8 +24,17 @@ Feature: Admin configures the Grafana connection
     And the admin tests the connection
     Then the connection is verified
 
-  Scenario: Testing fails when the token is wrong
+  # A sensitive token field renders blank whether or not a token is stored, so the
+  # Test connection result is the admin's diagnostic — and it must tell the two
+  # failure modes apart: "you haven't added a token" vs "the token you added was
+  # rejected". Same distinct messages on the button and the occ command.
+  Scenario: The connection test tells an unset token apart from a rejected one
     Given the admin has set the Grafana base URL
+    And no service-account token is set
+    When the admin tests the connection
+    Then the connection test reports a failure
+    And the connection test says the token is not set
     When the admin provides an invalid service-account token
     And the admin tests the connection
     Then the connection test reports a failure
+    And the connection test says the token was rejected

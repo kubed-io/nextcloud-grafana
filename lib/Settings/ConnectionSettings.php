@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Settings;
 
+use OCA\GrafanaSync\AppInfo\Application;
+use OCP\IAppConfig;
 use OCP\Settings\DeclarativeSettingsTypes;
 use OCP\Settings\IDeclarativeSettingsForm;
 
@@ -21,10 +23,31 @@ use OCP\Settings\IDeclarativeSettingsForm;
  *
  * Values land in appconfig under app `grafana_sync`; `grafana_token` is
  * `sensitive` so core stores it encrypted and never echoes it back.
+ *
+ * Because a sensitive field renders **blank** even when a value is stored (core
+ * never echoes it), the admin otherwise can't tell "no token yet" from "a token is
+ * saved". So the card's copy is rendered *dynamically* from whether a token is
+ * currently stored — a plain, reliable "is it set?" signal that doesn't depend on
+ * the framework showing the masked value. (Whether that token is *valid* is a
+ * separate question the Test connection button answers.)
  */
 final class ConnectionSettings implements IDeclarativeSettingsForm {
+	public function __construct(
+		private IAppConfig $config,
+	) {
+	}
+
 	#[\Override]
 	public function getSchema(): array {
+		$hasToken = $this->config->getValueString(Application::APP_ID, 'grafana_token', '') !== '';
+
+		$fieldDescription = $hasToken
+			? '✓ A token is currently stored (encrypted). Paste a new one to replace it, or use Test connection to check it still works.'
+			: 'No token stored yet. Sent as Authorization: Bearer to the Grafana API once saved.';
+		$placeholder = $hasToken
+			? '•••••••••••••• — a token is stored (paste to replace)'
+			: 'Paste the Grafana service-account token';
+
 		return [
 			// NOTE: do NOT prefix the form id with the app id. The settings
 			// frontend strips a leading "<app>_" before calling the save API, so a
@@ -42,9 +65,9 @@ final class ConnectionSettings implements IDeclarativeSettingsForm {
 				[
 					'id' => 'grafana_token',
 					'title' => 'Service-account token',
-					'description' => 'Stored encrypted. Sent as Authorization: Bearer to the Grafana API.',
+					'description' => $fieldDescription,
 					'type' => DeclarativeSettingsTypes::PASSWORD,
-					'placeholder' => 'Paste the Grafana service-account token',
+					'placeholder' => $placeholder,
 					'default' => '',
 					'sensitive' => true,
 				],

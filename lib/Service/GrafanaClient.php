@@ -112,6 +112,47 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * Turn any failure from {@see ping()} into one friendly, user-facing line —
+	 * shared by the Test connection button ({@see \OCA\GrafanaSync\Controller\ConfigController})
+	 * and the `grafana_sync:test-connection` occ command, so both surfaces say the
+	 * exact same thing. Crucially it tells the two failure classes apart:
+	 *
+	 *  - **Not set / misconfigured** — our own pre-formatted guards (missing URL or
+	 *    token, decrypt failure, local-address refused) are plain `\RuntimeException`s;
+	 *    their message is already user-ready, so pass it through. This is the
+	 *    "you haven't finished setup" case.
+	 *  - **Rejected / unreachable** — a real HTTP failure arrives as a
+	 *    {@see GrafanaApiException} (a `\RuntimeException` *subclass*) carrying the
+	 *    status code. 401/403 means the token was *set but rejected* — a different
+	 *    problem from "not set", and the whole reason this method exists.
+	 *
+	 * The subclass check is load-bearing: catching `\RuntimeException` first (as the
+	 * older code did) swallowed the 401 into the generic branch and showed Grafana's
+	 * raw text instead of a clear "token rejected" — so an unset vs. a bad token
+	 * looked identical.
+	 */
+	public static function describeConnectionError(\Throwable $e): string {
+		if (!($e instanceof GrafanaApiException)) {
+			// Our own pre-formatted guards (missing URL/token, decrypt failure,
+			// local-address refused) are plain RuntimeExceptions — their message is
+			// already user-ready. Anything else with no HTTP context is unreachable.
+			return $e instanceof \RuntimeException
+				? $e->getMessage()
+				: 'Could not reach Grafana: ' . $e->getMessage();
+		}
+		// NB: GrafanaApiException stashes the status in `httpStatus`, not the
+		// Exception code (which is always 0) — so read the property, not getCode().
+		$code = $e->httpStatus;
+		if ($code === 401 || $code === 403) {
+			return "Authentication failed (HTTP $code) — Grafana rejected the token. Check it is valid, not expired, and has access.";
+		}
+		if ($code === 404) {
+			return 'Reached the host but the Grafana API was not found — check the base URL.';
+		}
+		return 'Could not reach Grafana: ' . $e->getMessage();
+	}
+
+	/**
 	 * Single chokepoint for every HTTP call. Reads + decrypts the token, applies
 	 * the standard headers, and sets `allow_local_address` so the homelab's
 	 * in-cluster URLs (e.g. grafana-service.observe.svc:3000) work the same way as
@@ -133,7 +174,7 @@ final class GrafanaClient {
 			throw new \RuntimeException('Set the Grafana base URL first.');
 		}
 		if ($enc === '') {
-			throw new \RuntimeException('Set the service-account token first.');
+			throw new \RuntimeException('No Grafana service-account token is set — add one first.');
 		}
 		try {
 			$token = $this->crypto->decrypt($enc);
