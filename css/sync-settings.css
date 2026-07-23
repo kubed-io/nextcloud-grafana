@@ -1,0 +1,43 @@
+/* SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Layout for the "Sync Actions" panel (manual bulk-sync buttons + the connection
+ * test button). Ported from the n8n master's sync-settings.css so the two apps look
+ * the same. Buttons + msg states use NC native `.button` / `.msg success` /
+ * `.msg error` styling.
+ */
+
+.grafana-sync-manual {
+	margin-top: 12px;
+}
+
+/* Divider before the purge / connection-test sub-groups (quieter sub-groups). */
+.grafana-sync-actions__sep {
+	margin-top: 18px;
+	padding-top: 14px;
+	border-top: 1px solid var(--color-border);
+}
+
+.grafana-sync-manual__row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 8px 0;
+	flex-wrap: wrap;
+}
+
+.grafana-sync-manual__row .button {
+	min-width: 200px;
+	text-align: start;
+}
+
+.grafana-sync-manual__hint {
+	color: var(--color-text-maxcontrast);
+	font-style: italic;
+	font-size: 0.9em;
+}
+
+.grafana-sync-manual__footer {
+	margin-top: 8px;
+	min-height: 1.6em;
+}

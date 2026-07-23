@@ -22,18 +22,21 @@ use OCP\Util;
  * Nextcloud's declarative settings can't host buttons, and putting a button in its
  * own panel beside each data card makes the section a stack of thin strips — so the
  * house rule (settled on n8n) is **one classic panel for every button, rendered
- * last**: connection cards → Folder mappings → **Sync Actions**.
+ * last**: connection cards → Sync Settings → Folder mappings → **Sync Actions**.
  *
- * For now this holds only the **Test connection** button (folded in from the old
- * standalone panel; handler in `admin-test.js`, endpoint gated by {@see AdminTest}).
- * The bulk pull/push buttons join it here when the sync engine lands — same panel,
- * more rows.
+ * Holds the master's full button layout — **Sync to Grafana** / **Sync from
+ * Grafana** / **Purge** (rendered disabled until the sync engine lands, Course 2/3)
+ * plus **Test connection** (live today; handler in `admin-test.js`, endpoint gated
+ * by {@see AdminTest}). Enabling the bulk buttons later is deleting a `disabled`
+ * attribute + porting the master's `sync-settings.js` — the panel already matches.
  */
 final class SyncSettings implements IDelegatedSettings {
 	#[\Override]
 	public function getForm(): TemplateResponse {
-		// The Test-connection button's handler + styles (loaded via Util so they pick
-		// up the CSP nonce — inline <script>/<style> is blocked by NC's strict CSP).
+		// The panel's own layout styles, plus the Test-connection button's handler +
+		// styles. Loaded via Util so they pick up the CSP nonce — inline
+		// <script>/<style> in templates is blocked by NC's strict CSP.
+		Util::addStyle(Application::APP_ID, 'sync-settings');
 		Util::addScript(Application::APP_ID, 'admin-test');
 		Util::addStyle(Application::APP_ID, 'admin-test');
 

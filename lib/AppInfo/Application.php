@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\AppInfo;
 
+use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -18,12 +19,11 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
 /**
  * App bootstrap.
  *
- * POC scope: register only the admin **connection** surface — the single Instance
- * declarative form (base URL + service-account token; Grafana has one API and one
- * credential, so it's one card, unlike n8n's split). AdminSection (the sidebar
- * entry), the Folder-mappings + Sync Actions panels are wired through info.xml's
- * <settings> block; the only IRegistrationContext settings hook is
- * registerDeclarativeSettings().
+ * Admin scope: register the two declarative admin forms — the Instance card (base
+ * URL + service-account token; Grafana has one API and one credential, so it's one
+ * card, unlike n8n's split) and the Sync Settings card (push timing + scheduled
+ * pull). The AdminSection sidebar entry, the Folder-mappings + Sync Actions panels
+ * are wired through info.xml's <settings> block.
  *
  * Everything else from the master (the NodeWritten/rename/copy/delete listeners,
  * background jobs, Files-Metadata registration, the mimetype migration) is
@@ -40,11 +40,13 @@ final class Application extends App implements IBootstrap {
 
 	#[\Override]
 	public function register(IRegistrationContext $context): void {
-		// The single connection card shown at the top of the grafana_sync admin
-		// section: Instance (base URL + service-account token, priority 5). The
-		// Folder-mappings (30) and Sync Actions (45) panels — the latter holding the
-		// Test-connection button — are classic panels registered via info.xml.
+		// Declarative admin cards, top of the grafana_sync section:
+		//   Instance (5)  — base URL + service-account token
+		//   Sync Settings (20) — push timing + scheduled pull (config only)
+		// The Folder-mappings (30) and Sync Actions (45) panels — the latter holding
+		// the action buttons — are classic panels registered via info.xml.
 		$context->registerDeclarativeSettings(InstanceSettings::class);
+		$context->registerDeclarativeSettings(AutoSyncSettings::class);
 	}
 
 	#[\Override]
