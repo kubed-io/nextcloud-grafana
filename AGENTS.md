@@ -175,7 +175,7 @@ Things that have bitten contributors (human and AI) and shouldn't bite again:
   from the field alone. Drive the card's copy from whether a value is stored (read
   it in `getSchema()`), and make the connection *test* distinguish a **missing**
   credential from a **rejected** one — those are different problems and the error
-  must say which. See `ConnectionSettings` + `GrafanaClient::describeConnectionError`.
+  must say which. See `InstanceSettings` + `GrafanaClient::describeConnectionError`.
 
 ---
 

@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The admin connection settings are now a single **Instance** card (base URL + service-account token together) instead of separate Instance and Connection cards — Grafana has one API and one credential, so there's nothing to split. The name stays "Instance" to line up with the n8n app's first section.
 - Folder mappings admin UI now matches the n8n app's card layout: **Grafana folder + Nextcloud folder** (col 1) · **Mode + Format + Team Folder** (col 2) · **Groups** (col 3) · **Save / Sync / Delete** (row 4). The Team Folder checkbox, Groups picker, and per-folder Sync button are shown for interface parity — they're wired to the sync engine in a later release.
 - Admin settings: the **Test connection** button moved into a new **Sync Actions** section rendered below the folder mappings — one home for every action button (matching the n8n app's layout), instead of a button panel wedged between the data cards.
 - Connection card now shows whether a service-account token is **currently stored** (the field itself always looks empty because the token is sensitive/encrypted), so you can tell "not set yet" from "already saved" at a glance.

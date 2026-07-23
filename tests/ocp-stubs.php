@@ -160,8 +160,8 @@ namespace OCP\EventDispatcher {
 }
 
 namespace OCP\Settings {
-	// ConnectionSettings/InstanceSettings implement IDeclarativeSettingsForm and read
-	// DeclarativeSettingsTypes constants; the ConnectionSettings test instantiates one
+	// InstanceSettings implements IDeclarativeSettingsForm and reads
+	// DeclarativeSettingsTypes constants; the InstanceSettings test instantiates one
 	// to assert its dynamic "is a token stored?" copy. Declaration-only — the constant
 	// *values* are irrelevant to the assertions (they check id/sensitive/description/
 	// placeholder), so any strings suffice.
