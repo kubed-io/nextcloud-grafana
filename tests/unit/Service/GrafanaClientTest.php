@@ -49,7 +49,15 @@ final class GrafanaClientTest extends TestCase {
 	}
 
 	public function testDescribesATransportErrorAsUnreachable(): void {
+		// httpStatus 0 = no response at all — genuinely "could not reach".
 		$msg = GrafanaClient::describeConnectionError(new GrafanaApiException('connection refused', 0));
 		self::assertStringContainsStringIgnoringCase('could not reach', $msg);
+	}
+
+	public function testDescribesA500AsAReachedHttpErrorNotUnreachable(): void {
+		// Grafana WAS reached and returned 500 — must not claim "could not reach".
+		$msg = GrafanaClient::describeConnectionError(new GrafanaApiException('internal error', 500));
+		self::assertStringContainsString('500', $msg);
+		self::assertStringNotContainsStringIgnoringCase('could not reach', $msg);
 	}
 }

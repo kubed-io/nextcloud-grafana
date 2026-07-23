@@ -149,7 +149,13 @@ final class GrafanaClient {
 		if ($code === 404) {
 			return 'Reached the host but the Grafana API was not found — check the base URL.';
 		}
-		return 'Could not reach Grafana: ' . $e->getMessage();
+		// httpStatus 0 is a genuine transport failure (no response). Any other code
+		// means we DID reach Grafana and it returned an error (e.g. 500) — say so
+		// with the code rather than the misleading "could not reach".
+		if ($code === 0) {
+			return 'Could not reach Grafana: ' . $e->getMessage();
+		}
+		return "Grafana returned HTTP $code: " . $e->getMessage();
 	}
 
 	/**
