@@ -51,6 +51,10 @@ final class AddMapping extends Command {
 			$output->writeln('<error>argument is not a valid JSON object</error>');
 			return 1;
 		}
+		// Ids are server-assigned — strip any client-supplied one, same as the REST
+		// create endpoint, so a mapping can't get a non-route-safe id (e.g. slashes)
+		// that the admin panel then can't update or delete.
+		unset($data['id']);
 		try {
 			$saved = $this->service->add(Mapping::fromArray($data));
 		} catch (\InvalidArgumentException $e) {
