@@ -23,3 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Admin **connection** panel: point the app at your Grafana (base URL), store a service-account token (encrypted), and a **Test connection** button that authenticates against Grafana to confirm the token is valid.
 - Headless config via `occ grafana_sync:set-token` (encrypted, occ/helm-injectable) and `occ grafana_sync:test-connection` (same authenticated check as the button).
+
+### Fixed
+
+- CI: dropped the inherited Psalm issue-handler suppressions the connection-only POC never triggers (they caused an UnusedIssueHandlerSuppression failure and a broken SARIF upload); they return with the sync code that needs them.
