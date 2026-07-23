@@ -107,26 +107,21 @@ final class MappingTest extends TestCase {
 		]);
 	}
 
-	/**
-	 * @dataProvider ncFolderProvider
-	 */
-	public function testNormalisesTheNcFolder(string $input, string $expected): void {
-		$m = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid1',
-			'nc_folder' => $input,
-			'mode' => 'sync',
-		]);
-		self::assertSame($expected, $m->ncFolder);
-	}
-
-	/** @return array<string, array{string, string}> */
-	public static function ncFolderProvider(): array {
-		return [
+	public function testNormalisesTheNcFolder(): void {
+		$cases = [
 			'surrounding slashes stripped' => ['/observe/', 'observe'],
 			'duplicate separators collapsed' => ['dashboards//observe', 'dashboards/observe'],
 			'whitespace trimmed' => ['  observe  ', 'observe'],
 			'nested kept' => ['a/b/c', 'a/b/c'],
 		];
+		foreach ($cases as $label => [$input, $expected]) {
+			$m = Mapping::fromArray([
+				'grafana_folder_uid' => 'uid1',
+				'nc_folder' => $input,
+				'mode' => 'sync',
+			]);
+			self::assertSame($expected, $m->ncFolder, $label);
+		}
 	}
 
 	public function testToArrayRoundTripsThroughFromArray(): void {
