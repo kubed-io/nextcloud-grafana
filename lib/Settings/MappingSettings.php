@@ -26,9 +26,10 @@ use OCP\Util;
  *
  * The card layout mirrors the n8n master (Grafana folder + NC folder | mode +
  * format + team-folder | groups | actions). The **groups** list and the
- * **team-folder-available** flag feed the col-3 picker + the Team Folder checkbox —
- * rendered for interface parity with n8n even though the Grafana mapping model
- * doesn't act on them yet (they land with the sync engine).
+ * **team-folder-available** flag feed the col-3 picker + the Team Folder checkbox.
+ * Both now **persist with the mapping** (the model carries `nc_groups` +
+ * `use_team_folder`, mirroring n8n); the sync engine that *provisions* the folder
+ * from those values lands in a later chapter.
  *
  * The Grafana folder picker itself is filled client-side (the JS fetches
  * `/apps/grafana_sync/folders`) so a render never depends on Grafana being

@@ -11,11 +11,14 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-30--33-0082c9?logo=nextcloud&logoColor=white)](https://apps.nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A58.1-777bb4?logo=php&logoColor=white)](composer.json)
 
-> **Status: early development.** This build ships the admin **connection** panel only —
-> point the app at Grafana, store a service-account token, and test it. Dashboard sync
-> (mapping, files, two-way writeback) lands in later releases. The full behaviour is
-> written up front as executable specs under [`features/`](features/) (most tagged
-> `@todo`), so the docs, tests, and roadmap stay aligned.
+> **Status: early development.** This build ships the full admin **settings** surface —
+> point the app at Grafana and store a service-account token (with a live Test
+> connection), configure the sync schedule, and define folder mappings (mode, format,
+> groups, Team Folder) — all persisted and editable over `occ`. The dashboard sync
+> engine itself (files, two-way writeback, the bulk-sync buttons) lands in later
+> releases. The full behaviour is written up front as executable specs under
+> [`features/`](features/) (most tagged `@todo`), so the docs, tests, and roadmap stay
+> aligned.
 
 ---
 
@@ -81,6 +84,43 @@ distinguishes the two failure modes you care about: **no token set yet** vs. a t
 that was **set but rejected** (invalid/expired) — the same wording on the button and
 the `occ` command.
 
+### Sync Schedule
+
+| Setting | Description |
+|---|---|
+| **Nextcloud → Grafana push timing** | **async** (recommended): the push runs in the background after you save a dashboard file. **sync**: the push runs inline during the save for immediate feedback. Only sync-mode mappings push back. |
+| **Grafana → Nextcloud scheduled sync** | Master toggle for automatic pulls (read-only — nothing changes in Grafana). When off, use the "Sync from Grafana" button. |
+| **Sync interval** | How often to pull, as `<number><unit>` — e.g. `15m`, `1h`, `6h`, `1d`. A plain number is seconds; minimum 1 minute. |
+
+These settings are stored now and read by the sync engine when it lands — a scheduled
+pull doesn't run until that release.
+
+### Folder Mappings
+
+A mapping binds a Grafana folder to a Nextcloud folder and defines how its dashboards
+appear.
+
+| Field | Description |
+|---|---|
+| **Grafana folder** | The Grafana folder to mirror (picked from the folders your token can see). Bound by its stable **uid**, so a rename in Grafana never breaks the mapping. Each folder maps to exactly one location. |
+| **Nextcloud folder** | The Nextcloud folder the dashboards appear in. May be nested (`dashboards/observe`); the nearest enclosing mapping wins. |
+| **Mode** | `sync` (full dashboard body, edits push back) or `link` (a read-only pointer that opens the dashboard in Grafana). See [Modes](#modes). |
+| **Format** | `json` (the classic dashboard model, `.grafana.json`) or `yaml` (the newer k8s-style schema, `.grafana.yaml`). |
+| **Team Folder** | On = an ownerless Team Folder (requires the groupfolders app). Off = a folder in the admin account shared to the groups. |
+| **Groups** | The Nextcloud groups the folder is shared with. |
+
+Every field persists with the mapping (and round-trips over `occ`). The Team Folder,
+Groups, and per-mapping **Sync** button describe how the folder is provisioned and
+synced — that provisioning runs once the sync engine lands.
+
+### Sync Actions
+
+All action buttons live together in the **Sync Actions** section, below the folder
+mappings: **Sync to Grafana** / **Sync from Grafana** (bulk manual sync), **Purge
+Nextcloud files** (removes the dashboard files this app created; Grafana is never
+touched), and **Test connection**. The bulk-sync and purge buttons are disabled until
+dashboard sync lands; **Test connection works today**.
+
 ---
 
 ## CLI commands
@@ -98,6 +138,16 @@ echo "$GRAFANA_TOKEN" | occ grafana_sync:set-token
 
 # Verify it all works — the headless "Test connection" button
 occ grafana_sync:test-connection
+
+# Sync Schedule (the declarative "Sync Settings" card, headless)
+occ config:app:set grafana_sync timing --value=async
+occ config:app:set grafana_sync schedule_enabled --value=1
+occ config:app:set grafana_sync schedule_interval --value=1h
+
+# Folder mappings (same operations as the admin panel)
+occ grafana_sync:add-mapping '{"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe","nc_folder":"observe","mode":"sync","format":"json","nc_groups":["admin"],"use_team_folder":true}'
+occ grafana_sync:list-mappings
+occ grafana_sync:remove-mapping <mapping-id>
 ```
 
 ---

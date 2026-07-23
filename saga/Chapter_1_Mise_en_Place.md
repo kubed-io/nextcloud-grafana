@@ -599,6 +599,63 @@ crossed for real:
 
 ---
 
+## The chapter closes — mise en place is done (2026-07-23)
+
+> **Dr K walks the line one last time, runs a finger along the counter, and
+> doesn't find dust.** That's the tell. Prep is over.
+
+Every bowl is portioned. The walk-in is open and the card fits the lock — a
+service-account token, minted by the operator, reaching Grafana from the Nextcloud
+pod. The ingredient is on the board and it's the good cut — **real folders**, so the
+master's tag-hack never has to be re-tied. The whole menu has been read dish by dish
+and there's a *"yes chef"* next to every line. And the appetizer isn't just prepped —
+it's **plated and tasted**: the admin connection panel stores a token encrypted, the
+folder-mapping card mirrors the master's layout, and *Test connection* goes green
+against a live Grafana. Two PRs merged, both apps cooked the same connection-UX fix
+the same afternoon, and a sous-chef (the review bot) now reads our house rules.
+
+That is a real MVP — small, but honest, and standing on its own two feet. **Mise en
+place is what you do so that service is *only* cooking.** We've done it. There is
+nothing left on the prep list that isn't already a dish waiting for the flame.
+
+**So Dr K calls it.** Chapter 1 — *Mise en Place* — is **complete**. ✅
+
+**What's proven and banked (the prep that carries into service):**
+
+- **Reachability + auth** — token in hand, `Authorization: Bearer`, `GET /api/health`
+  and `GET /api/folders` both green from the `cloud` pod.
+- **The ingredient audit** — full feature-parity map against the master's menu; every
+  dish has a technique, the two genuine differences (real folders, the JSON-vs-v2-YAML
+  cut) understood and in our favour.
+- **The appetizer, live** — admin Instance card (URL + encrypted token), folder-mapping
+  card (parity layout), Sync Actions with Test connection; `occ` headless equivalents.
+- **The kitchen itself** — repo created, CI green (ephemeral Grafana self-mints its
+  token), branding cut, instruction files + review bot tuned, publish leg fused off
+  until we're feature-complete.
+
+**What stays cold, by design** — the entire sync engine (files, listeners, background
+jobs, migrations, the mimetype, the DAV metadata, delete/move/copy/rename semantics).
+It was *named* in prep so it can't surprise us; it gets *cooked* in Chapter 2.
+
+---
+
+## Transition — the pass heats up (→ Chapter 2)
+
+The apron's on. The mise is done. The next time these knives come out, **the burners
+are lit** — Chapter 1 was everything-in-its-place; Chapter 2 is *service*. We stop
+describing dishes and start sending them: the admin page finished to the last garnish,
+then the sync engine that makes every card on it actually move a dashboard. The master
+already ran this service and earned his stars for it. Now the apprentice cooks the same
+menu, on his own line, for a full house.
+
+> **Dr K, hanging up the prep towel, reaching for the sauté pan:** *"Prep's clean, kid.
+> Nothing left to dice. Chapter 1's closed — you earned that. Now wash your hands and
+> get on the line. Chapter 2, we cook for the king. Fire when you're ready."*
+
+**→ Continue in [`Chapter 2 — Service for a King`](Chapter_2_Service_for_a_King.md).**
+
+---
+
 <details>
 <summary>Appendix — the brief, as Dr K set it</summary>
 

@@ -15,10 +15,11 @@
  * add/save/sync/delete and fills the Grafana folder picker from
  * GET /apps/grafana_sync/folders.
  *
- * NB (parity, not yet functional): the Grafana mapping model currently persists
- * folder → folder + mode + format. **Team Folder, Groups, and per-folder Sync are
- * rendered for interface parity with n8n** but are not wired to the (not-yet-built)
- * sync engine — they don't round-trip yet.
+ * NB (parity, provisioning deferred): the Grafana mapping model now persists the
+ * full row — folder → folder + mode + format + groups + team-folder — so every
+ * field round-trips. **Team Folder, Groups, and the per-folder Sync button are still
+ * inert on the Grafana side**: the value is saved, but the sync engine that
+ * provisions the folder / runs the per-folder sync lands in a later release.
  *
  * @var array{mappings: list<array<string,mixed>>, groups: list<string>, team_folders_available: bool} $_
  * @var \OCP\IL10N $l
@@ -37,8 +38,8 @@ $desc = [
 	'nc' => $l->t('Name of the Nextcloud folder the dashboards appear in.'),
 	'mode' => $l->t('Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
 	'format' => $l->t('JSON: the classic Grafana dashboard model (.grafana.json). YAML: the newer k8s-style dashboard schema (.grafana.yaml).'),
-	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. (Not wired yet — here for parity.)'),
-	'groups' => $l->t('Which Nextcloud groups the folder is shared with. (Not wired yet — here for parity.)'),
+	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
+	'groups' => $l->t('Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 ];
 
 // Inline an SVG glyph from img/icons/ — the single source of truth for the app's
