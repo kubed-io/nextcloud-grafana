@@ -28,7 +28,7 @@ $soon = $l->t('Available once dashboard sync lands (a later release). Test conne
 	<h3><?php p($l->t('Sync Actions')); ?></h3>
 
 	<p class="settings-hint">
-		<?php p($l->t('Run a one-shot bulk sync at any time. These always work regardless of the automatic Sync Settings above.')); ?>
+		<?php p($l->t('Run a one-shot bulk sync at any time. Sync to/from Grafana and Purge arrive with dashboard sync (a later release) — until then these buttons are disabled. Test connection works now.')); ?>
 	</p>
 
 	<div class="grafana-sync-manual__row" data-direction="push">
