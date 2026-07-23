@@ -1,0 +1,205 @@
+name: 🔗 Integration
+
+# Integration tests — prove the real wiring the unit suite mocks out, on a live
+# Nextcloud + Grafana. Framework: **Behat** (the Nextcloud-native integration
+# framework), run from tests/integration/. Behat drives `occ` and (later stages)
+# NC's API + the Grafana REST API, and asserts both sides. Its BUILT-IN junit
+# formatter emits JUnit XML, which the same EnricoMi reporter the unit suite uses
+# turns into a sticky PR comment + summary.
+#
+# Setup follows the official apps: check out nextcloud/server, mount this app into
+# apps/grafana_sync, install on SQLite. Grafana runs as a GHA services: container
+# (pre-built image). Unlike n8n, Grafana has a HEADLESS token mint — the suite's
+# own bin/mint-grafana-token.sh creates an Editor service account + token over
+# admin basic-auth, so no secret needs to be supplied.
+
+on:
+  pull_request:
+    branches:
+    - main
+    paths:
+    - .github/workflows/integration.yml
+    - appinfo/**
+    - lib/**
+    - templates/**
+    - features/**
+    - tests/integration/**
+    - composer.json
+  push:
+    branches:
+    - main
+
+permissions:
+  contents: read
+  # Behat results → sticky PR comment + check run (EnricoMi), like the unit suite.
+  checks: write
+  pull-requests: write
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+# Static values here so `run:` steps are pure bash reading $VARS — never inline
+# Github templating (see CONTRIBUTING.md "Workflow authoring conventions").
+env:
+  APP_ID: grafana_sync
+  GRAFANA_URL: http://localhost:3000
+  GRAFANA_ADMIN_USER: admin
+  GRAFANA_ADMIN_PASS: admin
+  NC_ADMIN_USER: admin
+  NC_ADMIN_PASS: admin
+
+jobs:
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # NC 33 is the app's max-version; SQLite is the fast integration path.
+        server-versions: ['stable33']
+
+    services:
+      # Grafana with its admin user provisioned from env — a background container
+      # via the GHA services feature. The token the suite uses is minted from
+      # these admin creds at runtime (bin/mint-grafana-token.sh).
+      grafana:
+        image: grafana/grafana:13.0.2
+        ports:
+        - 3000:3000
+        env:
+          GF_SECURITY_ADMIN_USER: admin
+          GF_SECURITY_ADMIN_PASSWORD: admin
+          # Keep it quiet + fast to boot for CI.
+          GF_ANALYTICS_REPORTING_ENABLED: "false"
+          GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+          GF_LOG_LEVEL: error
+        options: >-
+          --health-cmd "wget -q -O - http://localhost:3000/api/health | grep -q ok"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 40
+          --health-start-period 15s
+
+    steps:
+    # ── Provision: install everything up front, before any action runs ───────
+    - name: Checkout server
+      uses: actions/checkout@v7
+      with:
+        repository: nextcloud/server
+        ref: ${{ matrix.server-versions }}
+        submodules: true
+
+    - name: Checkout app into apps/
+      uses: actions/checkout@v7
+      with:
+        path: apps/${{ env.APP_ID }}
+
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        # Match the production pod / the rest of our CI.
+        php-version: '8.4'
+        extensions: mbstring, iconv, fileinfo, intl, sqlite, pdo_sqlite, gd, zip, curl, xml
+        coverage: none
+        tools: composer:v2
+
+    - name: Install Behat deps
+      working-directory: apps/${{ env.APP_ID }}/tests/integration
+      run: composer install --prefer-dist --no-progress
+
+    - name: Install Nextcloud (SQLite)
+      run: |
+        mkdir -p data
+        ./occ maintenance:install \
+          --database=sqlite \
+          --admin-user="$NC_ADMIN_USER" \
+          --admin-pass="$NC_ADMIN_PASS"
+        ./occ config:system:set trusted_domains 1 --value=localhost
+        # WebDAV scenarios reach NC over HTTP at localhost:8080 (see below), so
+        # that host:port must be trusted too.
+        ./occ config:system:set trusted_domains 2 --value=localhost:8080
+
+    # ── Serve: occ-only scenarios need no HTTP, but the WebDAV channel does.
+    # PHP's built-in server is enough for DAV; no nginx/fpm needed. Backgrounded.
+    - name: Start Nextcloud (php built-in server)
+      run: |
+        php -S localhost:8080 -t "$GITHUB_WORKSPACE" >/tmp/nc-web.log 2>&1 &
+        echo "NC_WEB_PID=$!" >> "$GITHUB_ENV"
+        for i in $(seq 1 30); do
+          if curl -fsS -o /dev/null "$NC_BASE_URL/status.php"; then echo "NC web up"; exit 0; fi
+          sleep 2
+        done
+        echo "NC web server did not come up" >&2; cat /tmp/nc-web.log >&2; exit 1
+      env:
+        NC_BASE_URL: http://localhost:8080
+
+    # ── Readiness: wait for the Grafana service container ────────────────────
+    - name: Wait for Grafana
+      run: |
+        for i in $(seq 1 40); do
+          if curl -fsS "$GRAFANA_URL/api/health" | grep -q '"database": *"ok"'; then echo "Grafana healthy"; exit 0; fi
+          sleep 3
+        done
+        echo "Grafana did not become healthy" >&2; exit 1
+
+    # ── Act: everything provisioned and ready — now do the work ──────────────
+    # PREREQUISITE (not a feature): mint a Grafana service-account token so the
+    # tests can act as an admin who already has one. How the token is created is
+    # out of the app's scope — this is pure test setup. Grafana's admin API mints
+    # it over basic-auth (no secret to supply). Fails the job loudly if no token.
+    # The token is exposed as a step output for later steps; NOT stored anywhere.
+    - name: Mint Grafana token (prerequisite)
+      id: grafana_token
+      run: |
+        token="$(bash apps/$APP_ID/tests/integration/bin/mint-grafana-token.sh)"
+        if [ -z "$token" ]; then echo "no token minted" >&2; exit 1; fi
+        echo "::add-mask::$token"
+        echo "token=$token" >> "$GITHUB_OUTPUT"
+        echo "✅ Grafana service-account token obtained (length ${#token})"
+
+    # PREREQUISITE control case: create a sample folder + dashboard in Grafana
+    # through Grafana's OWN API (not via the app under test), so mapping/pull
+    # scenarios have a real, pre-existing folder+dashboard to act on.
+    - name: Preload a sample dashboard into Grafana (prerequisite)
+      env:
+        GRAFANA_TOKEN: ${{ steps.grafana_token.outputs.token }}
+      run: bash apps/$APP_ID/tests/integration/bin/preload-grafana.sh
+
+    # Behat runs from the integration dir; OCC points back at the server root so
+    # `occ` resolves. Formatters (pretty → stdout, junit → junit/) are configured
+    # in behat.dist.yml, so no --format flags needed here.
+    - name: Run Behat
+      working-directory: apps/${{ env.APP_ID }}/tests/integration
+      env:
+        OCC: php ${{ github.workspace }}/occ
+        NC_BASE_URL: http://localhost:8080
+        # The minted token, available to scenarios as an "admin already has a token".
+        GRAFANA_TOKEN: ${{ steps.grafana_token.outputs.token }}
+      run: vendor/bin/behat --config behat.dist.yml
+
+    - name: Publish integration results
+      if: always()
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        check_name: Integration test results
+        files: apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
+        comment_mode: always
+
+    - name: Upload JUnit + NC log on failure
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: integration-junit
+        path: |
+          apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
+        if-no-files-found: warn
+
+    - name: Nextcloud log on failure
+      if: failure()
+      run: |
+        if [ -f data/nextcloud.log ]; then cat data/nextcloud.log; else echo "no nextcloud.log"; fi
+        echo "── php built-in server log ──"
+        if [ -f /tmp/nc-web.log ]; then cat /tmp/nc-web.log; else echo "no nc-web.log"; fi

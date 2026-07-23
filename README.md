@@ -1,0 +1,106 @@
+# Grafana Sync
+
+A Nextcloud app that surfaces Grafana dashboards as native files — browse, edit, and
+manage your dashboards right inside the Files app, with folder-to-folder mapping and
+(planned) bidirectional sync back to Grafana.
+
+[![🧪 Tests](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/tests.yml/badge.svg)](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/tests.yml)
+[![🛡️ Quality](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/quality.yml/badge.svg)](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/quality.yml)
+[![🔗 Integration](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/integration.yml/badge.svg)](https://github.com/kubed-io/nextcloud-grafana/actions/workflows/integration.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Nextcloud](https://img.shields.io/badge/Nextcloud-30--33-0082c9?logo=nextcloud&logoColor=white)](https://apps.nextcloud.com)
+[![PHP](https://img.shields.io/badge/PHP-%E2%89%A58.1-777bb4?logo=php&logoColor=white)](composer.json)
+
+> **Status: early development.** This build ships the admin **connection** panel only —
+> point the app at Grafana, store a service-account token, and test it. Dashboard sync
+> (mapping, files, two-way writeback) lands in later releases. The full behaviour is
+> written up front as executable specs under [`features/`](features/) (most tagged
+> `@todo`), so the docs, tests, and roadmap stay aligned.
+
+---
+
+## How it works (the design)
+
+Grafana Sync maps a Grafana **folder** to a Nextcloud folder. Every dashboard inside a
+mapped Grafana folder appears in the corresponding Nextcloud folder as a `.grafana.json`
+file. Depending on the mode you choose, changes you make in Nextcloud push back to
+Grafana, and changes made in Grafana pull back into Nextcloud on a schedule.
+
+```
+Grafana (folder of dashboards) ⟺ Nextcloud (mapped folder of .grafana.json files)
+```
+
+Because **Grafana has real folders**, the mapping is a plain folder-to-folder mirror —
+there is no tagging scheme to maintain (this is the main thing that makes it simpler than
+the sibling [n8n](https://github.com/kubed-io/nextcloud-n8n) integration, whose API has no
+folders). The link between a file and its dashboard is the stable Grafana **uid** stored in
+the file's metadata — not the filename — so renaming, moving, and restoring all work
+without ever breaking the connection.
+
+### Modes
+
+| Mode | File content | Pushes to Grafana? |
+|---|---|---|
+| **Sync** | Full dashboard JSON | Yes — bidirectional; the folder doubles as a restorable backup |
+| **Link** | Tiny pointer (uid, title, URL) | No — click opens the dashboard in Grafana |
+
+**Link** mode is a natural fit for operator- or GitOps-provisioned dashboards (e.g. via the
+Grafana Operator's `GrafanaDashboard` CRD): they're owned elsewhere and should never be
+written back — a clickable pointer is all you want.
+
+### Two dashboard "cuts" (classic JSON and the new YAML schema)
+
+Grafana serves a dashboard two ways, and the mapping records which one a folder uses:
+
+- **Classic JSON** (`dashboard.grafana.app/v1beta1` / the `/api/dashboards` model) — the
+  familiar dashboard JSON. The default, and what every existing dashboard already is.
+- **The v2 schema as YAML** (`dashboard.grafana.app/v2`, the App Platform's k8s-style
+  resource) — the modern, GitOps-friendly cut, serialized as YAML (`.grafana.yaml`).
+
+Classic JSON ships first; the v2/YAML cut is an opt-in per mapping.
+
+---
+
+## Administration
+
+### Grafana connection
+
+| Setting | Description |
+|---|---|
+| **Grafana base URL** | Base URL of your Grafana, e.g. `https://grafana.example.com` (no trailing slash). In-cluster URLs like `http://grafana-service.observe.svc:3000` also work. |
+| **Service-account token** | A Grafana service-account token (role **Editor** is enough). Create one under **Administration → Service accounts** in Grafana. Sent as `Authorization: Bearer`. Stored encrypted — never echoed back after saving. |
+
+A **Test connection** button verifies the URL + token by calling an **authenticated**
+Grafana endpoint (`GET /api/folders`), so a green result proves the token itself is valid,
+not merely that the host is reachable.
+
+---
+
+## CLI commands
+
+Every admin action is available over `occ`, so setup can be automated (e.g. from a
+Kubernetes init/config job). All commands exit `0` on success and non-zero on error.
+
+```sh
+# Point the app at your Grafana instance
+occ config:app:set grafana_sync grafana_url --value="https://grafana.example.com"
+
+# Store the service-account token (encrypted, exactly as the Settings panel does).
+# Pass it as an argument, or pipe it on stdin to keep it out of shell history:
+echo "$GRAFANA_TOKEN" | occ grafana_sync:set-token
+
+# Verify it all works — the headless "Test connection" button
+occ grafana_sync:test-connection
+```
+
+---
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full process, and
+[AGENTS.md](AGENTS.md) for a cold-start orientation. The long-form design narrative lives
+in [`saga/`](saga/).
+
+This is a community integration and is not affiliated with, endorsed by, or sponsored by
+Grafana Labs. "Grafana" and the Grafana logo are trademarks of Grafana Labs, used here only
+to identify the service this app integrates with.

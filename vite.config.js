@@ -1,0 +1,41 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Plain vite config (no @nextcloud preset).
+ *
+ * Why not the preset? `@nextcloud/vite-config`'s app preset hard-wipes the
+ * entire `js/` directory before each build (its `EmptyJSDirPlugin` calls
+ * `rmSync('js', recursive: true)`). The preset is designed for apps where
+ * every JS file is vite-built, but our admin-settings scripts in `js/` are
+ * hand-written and unbundled. So we ship a minimal IIFE bundle instead.
+ *
+ * Output: `dist/grafana_sync-files.js` (single self-contained file, no chunks).
+ * Loaded by `LoadFilesScriptListener` via `Util::addScript('grafana_sync',
+ * '../dist/grafana_sync-files', 'files')` so NC's loader walks out of `js/` and
+ * into `dist/`. All generated artefacts stay under `dist/` (gitignored).
+ */
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    cssCodeSplit: false,
+    sourcemap: true,
+    target: 'es2020',
+    // Vite 8 bundles with Rolldown and no longer ships esbuild; its default
+    // minifier is Oxc. Leaving minify at the default ('oxc') keeps esbuild out
+    // of the dependency tree entirely (which also avoids the esbuild dev-server
+    // advisory that prompted this bump). 'esbuild' is deprecated in Vite 8.
+    minify: 'oxc',
+    lib: {
+      // IIFE so the bundle adds nothing to the global scope and runs
+      // inline at <script> load time — no module loader plumbing needed.
+      entry: 'src/files.js',
+      name: 'grafanaSyncFiles',
+      formats: ['iife'],
+      fileName: () => 'grafana_sync-files.js',
+    },
+  },
+})

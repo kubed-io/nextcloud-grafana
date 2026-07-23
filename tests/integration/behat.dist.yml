@@ -1,0 +1,41 @@
+# Behat config for the grafana_sync integration suite.
+#
+# Behat is the Nextcloud-native integration framework (see nextcloud/deck). It
+# drives a *running* Nextcloud (over HTTP / occ) and the Grafana service, and asserts
+# both sides — the real wiring the unit suite mocks out (saga §5).
+#
+# Output: Behat's BUILT-IN junit formatter (no third-party dep) writes JUnit XML
+# to junit/, which the integration workflow feeds to the same EnricoMi reporter
+# the unit suite uses → sticky PR comment + job summary.
+#
+# Env the FeatureContext reads (set by the workflow / local runner):
+#   NC_BASE_URL, NC_ADMIN_USER, NC_ADMIN_PASS, GRAFANA_URL, OCC
+
+default:
+  # @todo scenarios are the documented spec for stages not yet wired (their step
+  # defs don't exist yet); skip them so CI runs only live scenarios. Drop the
+  # filter (or retag) as each stage's steps land.
+  gherkin:
+    filters:
+      tags: '~@todo'
+
+  suites:
+    default:
+      paths:
+        # Gherkin lives at the repo root (features/) so the human-readable use
+        # cases are prominent and linkable from docs; behat.dist.yml stays under
+        # tests/integration/ with the rest of the test plumbing.
+        - '%paths.base%/../../features'
+      contexts:
+        # Context class lives with the test code (tests/integration/bootstrap/),
+        # loaded via the integration composer autoload — features/ stays pure
+        # Gherkin.
+        - OCA\GrafanaSync\Tests\Integration\FeatureContext
+
+  formatters:
+    # Human-readable progress in the log…
+    pretty:
+      verbose: true
+    # …and machine-readable JUnit for the CI reporter.
+    junit:
+      output_path: '%paths.base%/junit'

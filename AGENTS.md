@@ -1,0 +1,247 @@
+# AGENTS.md
+
+> Cold-start orientation for AI coding agents. Keep it open in another tab.
+> **Goal of this file:** get you productive in 60 seconds, then point you to the
+> right deeper doc for whatever task you were given.
+
+---
+
+## What this repo is
+
+**Grafana Sync** — a Nextcloud app (PHP backend + small JS frontend) that maps Grafana
+dashboards into Nextcloud folders as `.grafana.json` files with bidirectional sync.
+Lives under the [kubed-io](https://github.com/kubed-io) GitHub org. Licensed
+AGPL-3.0-or-later. Target: the official Nextcloud app store.
+
+For the user-facing "what does it do?" → [README.md](README.md).
+
+## What this repo is **not**
+
+- Not an `External Storage` backend (rejected, see saga §0).
+- Not a generic file plugin.
+- Not a fork of any upstream Nextcloud app.
+
+---
+
+## First moves on any task
+
+1. **Read [README.md](README.md)** if you don't already know what the app does.
+2. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** for the process — issue-first flow,
+   PR rules, what CI expects, testing policy, release flow. **Don't re-derive any
+   of this; the contributing doc is the source of truth.**
+3. **Read [`saga/`](saga/)** for the "why" behind the code. The saga is the
+   durable design + progress narrative (chef metaphor; Dr K narrates). **A chapter
+   is not finished until Dr K says so** — the current chapter stays open, and its
+   latest "Where we are" / progress-log section is the authoritative current-state
+   record. Read that first.
+   - [Chapter_1_Mise_en_Place.md](saga/Chapter_1_Mise_en_Place.md) — feasibility
+     against live Grafana, the file-by-file port plan (the "prep list" / buckets),
+     the admin-connection POC, and the running progress log. **Currently open.**
+
+This repo is a deliberate copy of the mature
+[kubed-io/nextcloud-n8n](https://github.com/kubed-io/nextcloud-n8n) plugin (the
+"master") with the backend swapped from n8n to Grafana; when a convention here is
+undocumented, the master repo is the reference. The long-term arc is to abstract
+the shared core once drupal + grafana copies both exist — keep changes easy to
+later DRY out.
+
+If the task is about **how a thing works**, the README + the saga are where to
+look. If the task is about **the process of getting a change in**, CONTRIBUTING.md
+owns that — don't ask the human to re-explain the PR flow.
+
+---
+
+## Repo map (where stuff lives)
+
+| Path | What's there |
+|---|---|
+| [appinfo/](appinfo/) | NC app metadata (`info.xml`, routes). |
+| [lib/](lib/) | PHP backend (`OCA\GrafanaSync`). Subdirs: `Controller/`, `Service/`, `Listener/`, `BackgroundJob/`, `Migration/`, `Command/`, `Settings/`, `Notification/`, `Exception/`, `AppInfo/`. |
+| [src/](src/) | JS frontend source (Files row script). Vite builds `dist/grafana_sync-files.js`. |
+| [tests/unit/](tests/unit/) | PHPUnit unit suite. Mirrors `lib/` tree. Standalone — no NC server needed. |
+| [templates/](templates/) [css/](css/) [img/](img/) | Twig templates, styles, icons. |
+| [config/](config/) | App-level static config (if any). |
+| [.github/dashboards/](.github/dashboards/) | `tests.yml`, `quality.yml`, `publish.yml`. |
+| [.devcontainer/](.devcontainer/) | PHP 8.3 + Node + GH CLI dev environment. |
+| [saga/](saga/) | The long-form design narrative. **Read before refactoring anything non-trivial.** |
+| [composer.json](composer.json) [package.json](package.json) | Dep manifests + script entrypoints. |
+| [psalm.xml](psalm.xml) [.php-cs-fixer.dist.php](.php-cs-fixer.dist.php) [tests/psalm-baseline.xml](tests/psalm-baseline.xml) | Static analysis + style config. |
+| [CHANGELOG.md](CHANGELOG.md) | Every PR adds a line under `## [Unreleased]`. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Process. **Read it.** |
+| [SECURITY.md](SECURITY.md) | Vuln reporting policy. |
+
+Out-of-repo but relevant: the [kubed-io](https://github.com/kubed-io) org has
+shared dashboard plumbing (issue templates, reusable actions) that this repo
+inherits. The agent-task issue template lives at
+[`kubed-io/.github`](https://github.com/kubed-io/.github).
+
+---
+
+## Core commands
+
+```sh
+# PHP
+composer install
+composer run test:unit       # PHPUnit unit suite
+composer run cs:check        # php-cs-fixer dry-run
+composer run cs:fix          # auto-fix style
+composer run psalm           # static analysis
+composer run lint            # php -l across lib/
+
+# JS
+npm ci
+npm run build                # produces dist/grafana_sync-files.js
+npm run watch                # rebuild on save
+```
+
+CI runs all of the above (see [CONTRIBUTING.md §What CI expects](CONTRIBUTING.md#what-ci-expects)).
+
+---
+
+## Architectural non-negotiables
+
+These are inherited from the master and adapted to Grafana. **Don't relitigate**
+without a real reason documented in the saga:
+
+- **No `External Storage` / `OCP\Files\Storage` backend.** Wrong tool for "API
+  ⇆ JSON files."
+- **Files-Metadata API is the source of truth for the file↔dashboard link**, not
+  filenames. The stable link is the Grafana **uid** embedded as `grafana_uid`.
+  Renames must preserve it.
+- **Auth is a single service-account token** sent as `Authorization: Bearer`
+  (Grafana's one credential — not n8n's `X-N8N-API-KEY`, and no separate webhook
+  channel).
+- **The connection test hits an authenticated endpoint** (`GET /api/folders`), never
+  the unauthenticated `/api/health`, so a green result proves the token, not just
+  reachability.
+- **Mapping unit is a Grafana folder → a Nextcloud folder** (folder-to-folder
+  mirror). Grafana has real folders, so there is **no tag scheme** — this is the
+  headline simplification over the n8n master.
+- **The metadata key is `grafana_mode = link|sync`.**
+- **Loop prevention is a content-hash guard.** Pulls must not trigger pushes; hash
+  the spec we *sent*, not Grafana's echoed-back object (Grafana bumps a `version`
+  int on every save — see saga risk #6).
+- **Custom mimetype `application/grafana+json`** drives the icon and the row click
+  (deferred to the sync chapter; don't switch to extension-only detection when it
+  lands).
+- **The file extension is the compound `.grafana.json` — locked, don't "simplify".**
+  The file *is* real JSON, so the `.json` tail means that **outside** Nextcloud
+  (desktop sync, download) the OS opens it in a JSON editor with no setup; the
+  `.grafana.` segment is the hook NC keys the custom mimetype / icon / file-actions
+  off **inside** the UI. Plain `.json` → no custom icon/actions. Bare `.grafana` →
+  off-Nextcloud nothing opens it. Both are worse; keep `.grafana.json`. (The v2
+  YAML cut is `.grafana.yaml`, same reasoning.)
+
+---
+
+## Hard-won gotchas
+
+Things that have bitten contributors (human and AI) and shouldn't bite again:
+
+- **Never bump `appinfo/info.xml` `<version>` in a feature PR.** It triggers a
+  Nextcloud upgrade flow and can crash-loop the pod. The release dashboard owns
+  version bumps. See `/memories/repo/nextcloud-crash-loops.md` for the recovery.
+- **Deploy to a running NC by copying files, not the whole dir.** `kubectl cp` of
+  a directory clobbers permissions. Copy the changed files only. (saga §15)
+- **CI PHP must match the prod pod's PHP** (currently 8.4). `php-cs-fixer` applies
+  version-specific rules; a 8.3 CI job will disagree with an 8.4 pod. (Chapter 2 §5.2)
+- **PSR-4 paths are case-sensitive** and must mirror namespaces segment-for-segment.
+  A mismatch is a silent composer warning, not an error.
+- **CodeQL has no PHP extractor.** PHP is scanned by Psalm SARIF, JS by CodeQL.
+  Don't list `php` as a CodeQL language.
+- **The Psalm baseline is the deferred-cleanup ledger.** Don't regenerate it on a
+  feature branch. New findings should be fixed, not baselined.
+- **LLMs ship stale action majors.** Verify with `gh api repos/<o>/<r>/releases/latest`
+  before pinning anything in a dashboard.
+- **Never weave `${{ }}` into `run:` bash.** It's interpolated before the shell runs
+  (injection risk + mixes templating with logic). Bind it to an `env:` entry and read the
+  clean `$VAR` in bash. Prefer `env:` for static/derivable values too. Invoke scripts with
+  `bash path/x.sh`, not the exec bit. (CONTRIBUTING.md → Dashboard authoring conventions.)
+- **Provision first, act second.** Group all install/setup steps up front, then a readiness
+  gate, then the work. Don't stagger "install A → use A → install B → use B".
+- **`@nextcloud/files` major must match NC major.** v4 for NC 33+. Mismatched
+  versions silently break the Files row script. (saga §11/§12)
+- **Don't run heavy tools (Psalm) repeatedly in the shared prod pod.** Stacked
+  processes thrash it. Let CI be the authoritative runner.
+
+---
+
+## Process — short version
+
+Long version in [CONTRIBUTING.md](CONTRIBUTING.md). Short version:
+
+1. **Issue first is preferred, not strictly required.** For non-trivial work, open an
+   issue and let a maintainer weigh in on scope before you write code. Small obvious
+   fixes can go straight to a PR.
+2. **PR targets `main`.** Link the issue if there is one. Must pass CI and get one
+   maintainer approval (hard gates).
+3. **Tests on every PR** that touches `lib/`, when reasonable. Skip with a note if not.
+4. **Changelog entry** under `## [Unreleased]`. **The changelog IS the release
+   notes** — write for a user reading the release. One line per entry, never a
+   paragraph. Length tracks user impact:
+   - **Functional change** (a feature/behavior users notice, e.g. "Publish a
+     dashboard to Grafana from the file action") → the most detail you get, but still
+     one line. This is where words are warranted.
+   - **Non-functional** (refactor, types, tests, lint) → short, often half a line.
+   - **DevOps/CI/tooling not touching app code** → shortest, e.g. "CI: add
+     integration dashboard." No rationale, no file lists, no method names.
+   - Only `**BREAKING:**` entries may stretch. The why / file lists / design go in
+     the **saga** or PR description — never the changelog.
+   - **Only ever edit `## [Unreleased]`.** Every section below it has a version
+     number and is **immutable** — those notes already shipped; never reword,
+     reorder, or delete them. New work always goes under `[Unreleased]`.
+5. **Human validation on a real Nextcloud** is required before review — agents
+   cannot skip this. State what was tested in the PR description.
+6. **Release is manual** via `publish.yml`. Don't bump versions in feature PRs.
+
+If you're working on behalf of a human, **point them at CONTRIBUTING.md** rather
+than re-explaining the flow each session.
+
+### Shape of a feature change
+
+Features here follow one repeatable shape — see **[CONTRIBUTING.md → Anatomy of a
+feature change](CONTRIBUTING.md#anatomy-of-a-feature-change)** for the full version.
+In short, a feature PR touches:
+
+- a **feature file** in [`features/`](features/) — Gherkin first; flip its `@todo`
+  scenario live in the same PR as the code (keep it DRY, `behat --dry-run` clean);
+- the **code** in [`lib/`](lib/) — `Service` (logic) + thin `Listener`/`Controller`,
+  wired in `AppInfo/Application.php`;
+- **tests** — a unit test in [`tests/unit/`](tests/unit/) + step defs in a per-concern
+  trait under [`tests/integration/bootstrap/Steps/`](tests/integration/bootstrap/Steps/)
+  (add/grow a `*Steps` trait; the thin `FeatureContext` `use`s them all — don't bloat one
+  file);
+- **README** updates when user-facing behaviour changes;
+- a **`## [Unreleased]`** changelog entry.
+
+Two artifacts split by who's driving: **humans open an issue** to track the work;
+**agents update the [saga](saga/)** (the durable "why" + lessons + remaining `@todo`
+for the next session). Do the saga update — it's your memory across sessions.
+
+---
+
+## Principles for AI work in this repo
+
+- **Nextcloud-native first.** If there's a Nextcloud primitive, use it. Don't
+  reinvent `IAppConfig`, `IClientService`, BackgroundJob, etc.
+- **Validate hard.** Nitpick the diff. Read surrounding code before trusting your
+  own edits. Re-derive test assertions from the spec, not from what the code
+  happens to do today.
+- **Verify external references.** Action versions, package versions, API endpoints —
+  all of it. Use `gh api` / package registries to confirm.
+- **A change is not done until a human has tried it on a real Nextcloud instance.**
+  CI green is necessary, not sufficient. Make this easy for the human reviewer by
+  saying exactly what to test.
+
+---
+
+## When stuck
+
+- **"How does X work?"** → grep `lib/` + skim the relevant saga chapter.
+- **"What's the convention for Y?"** → [CONTRIBUTING.md](CONTRIBUTING.md).
+- **"Why was this decided?"** → [saga/](saga/), most likely Chapter 1 §15.
+- **"Is this a vulnerability?"** → [SECURITY.md](SECURITY.md).
+- **"Can I just refactor this?"** → only if tests cover it and the saga doesn't lock it.
+
+That's the whole map. Now go read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening anything.

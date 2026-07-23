@@ -1,0 +1,207 @@
+name: 🧬 Publish Version
+
+# Manual, intentional release, split into three jobs so each stage owns one thing
+# and hands the next a clean input:
+#
+#   version → bump package.json / lock / info.xml, commit + tag on main via
+#             duplocloud/version-bump. This is the ONLY job that writes files or
+#             a tag; it emits the new tag/version consumed downstream.
+#   package → calls package.yml with that tag, which checks out the exact released
+#             commit and uploads the app tarball as a GHA artifact (build only).
+#   release → downloads that artifact and creates the GitHub Release.
+#
+# ⚠️ APP-STORE PUBLISH IS DEFERRED. The apps.nextcloud.com sign + upload steps are
+# intentionally NOT here yet — the app is early (connection panel only) and must
+# not be listed on the store until it's feature-complete. When it's ready, restore
+# the "Sign tarball" + "Publish to Nextcloud App Store" steps (see the master repo,
+# kubed-io/nextcloud-n8n, publish.yml) and add the `nextcloud-store` environment
+# with its NEXTCLOUD_STORE_KEY / NEXTCLOUD_STORE_TOKEN secrets. Until then this
+# workflow stops at the GitHub Release.
+#
+# Run once with push=false (dry run: computes the version and packages, changes
+# nothing, skips release) then push=true to actually cut the release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Version to bump to
+        default: patch
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+        - premajor
+        - preminor
+        - prepatch
+      push:
+        description: Push changes and create release
+        default: false
+        type: boolean
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Bump the version files + tag. Owns every write; emits the tag/version.
+  # ---------------------------------------------------------------------------
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # commit the bump + push the tag to main
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      version: ${{ steps.bump.outputs.version }}
+      release-notes: ${{ steps.bump.outputs.release-notes }}
+    steps:
+
+    - name: Validate Branch
+      if: inputs.push
+      run: |
+        if [[ "$GITHUB_REF_NAME" != "main" ]]; then
+          echo "::error::Releases can only be pushed from main. Current branch: $GITHUB_REF_NAME"
+          exit 1
+        fi
+
+    - name: Create GitHub App Token
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ vars.GH_CLIENT_ID }}
+        private-key: ${{ secrets.GH_APP_KEY }}
+
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        token: ${{ steps.app-token.outputs.token }}
+
+    - name: Setup Node
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+
+    # Compute the next semver with npm and rewrite package.json / lock. No git tag
+    # here — duplocloud/version-bump owns the commit, tag, and changelog below.
+    - name: Compute next version
+      id: version
+      env:
+        ACTION: ${{ inputs.action }}
+      run: |
+        TAG=$(npm version "$ACTION" --no-git-tag-version)
+        VERSION="${TAG#v}"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    # Mirror the new version into appinfo/info.xml so the Nextcloud app catalog
+    # and package.json agree on the released version.
+    - name: Sync info.xml version
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        sed -i -E "s|<version>[^<]+</version>|<version>${VERSION}</version>|" appinfo/info.xml
+        grep -F "<version>${VERSION}</version>" appinfo/info.xml
+
+    # Commit the bumped files, roll the changelog, tag + push (when push=true).
+    # The tag it creates is what the package job checks out.
+    - name: Bump Version
+      id: bump
+      uses: duplocloud/version-bump@main
+      with:
+        version: ${{ steps.version.outputs.tag }}
+        push: ${{ inputs.push }}
+        token: ${{ steps.app-token.outputs.token }}
+        files: |
+          package.json
+          package-lock.json
+          appinfo/info.xml
+
+  # ---------------------------------------------------------------------------
+  # Build the tarball from the freshly tagged commit → GHA artifact. On a dry run
+  # there is no tag, so it packages the current ref instead (proves it still packs).
+  # ---------------------------------------------------------------------------
+  package:
+    name: Package
+    needs: version
+    uses: ./.github/workflows/package.yml
+    with:
+      ref: ${{ inputs.push && needs.version.outputs.tag || '' }}
+
+  # ---------------------------------------------------------------------------
+  # GitHub Release. No source checkout — pure artifact + secrets. (App-store
+  # publish deliberately omitted — see the header note.)
+  # ---------------------------------------------------------------------------
+  release:
+    name: Release
+    needs:
+    - version
+    - package
+    if: inputs.push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the GitHub Release on the existing tag
+    steps:
+
+    - name: Create GitHub App Token
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        client-id: ${{ vars.GH_CLIENT_ID }}
+        private-key: ${{ secrets.GH_APP_KEY }}
+
+    - name: Download package artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ needs.package.outputs.artifact }}
+        path: dist
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v3
+      with:
+        token: ${{ steps.app-token.outputs.token }}
+        name: ${{ needs.version.outputs.tag }}
+        tag_name: ${{ needs.version.outputs.tag }}
+        prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
+        files: dist/${{ needs.package.outputs.tarball }}
+        body: |
+          [![Publish](${{ github.server_url }}/${{ github.repository }}/actions/workflows/publish.yml/badge.svg)](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          [![Tests](${{ github.server_url }}/${{ github.repository }}/actions/workflows/tests.yml/badge.svg)](${{ github.server_url }}/${{ github.repository }}/actions/workflows/tests.yml)
+          [![Quality](${{ github.server_url }}/${{ github.repository }}/actions/workflows/quality.yml/badge.svg)](${{ github.server_url }}/${{ github.repository }}/actions/workflows/quality.yml)
+          [![Integration](${{ github.server_url }}/${{ github.repository }}/actions/workflows/integration.yml/badge.svg)](${{ github.server_url }}/${{ github.repository }}/actions/workflows/integration.yml)
+          [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](${{ github.server_url }}/${{ github.repository }}/blob/main/LICENSE)
+
+          ${{ needs.version.outputs.release-notes }}
+
+          ## Installation
+
+          > Not yet on the Nextcloud App Store — this is early development. Install
+          > manually from this release's tarball.
+
+          ```sh
+          curl -L -o grafana_sync.tar.gz \
+            https://github.com/${{ github.repository }}/releases/download/${{ needs.version.outputs.tag }}/${{ needs.package.outputs.tarball }}
+          tar -xzf grafana_sync.tar.gz -C /path/to/nextcloud/apps/
+          occ app:enable grafana_sync
+          ```
+
+    - name: Summary
+      env:
+        VERSION: ${{ needs.version.outputs.version }}
+        TAG: ${{ needs.version.outputs.tag }}
+        TARBALL: ${{ needs.package.outputs.tarball }}
+        RELEASE_NOTES: ${{ needs.version.outputs.release-notes }}
+      run: |
+        {
+          echo "## Release"
+          echo ""
+          echo "- **Version**: $VERSION"
+          echo "- **Tag**: $TAG"
+          echo "- **Tarball**: $TARBALL"
+          echo "- _App-store publish deferred until feature-complete._"
+          echo ""
+          echo "### Release Notes"
+          echo ""
+          echo "$RELEASE_NOTES"
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,36 @@
+name: 🔀 PR
+
+# Ensure the PR owner is set and they added to the changleog. 
+
+on:
+  pull_request:
+    branches:
+    - main
+
+permissions:
+  contents: read
+  # Auto-assign needs to write the assignee on the PR.
+  pull-requests: write
+
+jobs:
+
+  pr-tasks:
+    name: PR Tasks
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    # Assign the PR author to their own PR per .github/assign.yml.
+    - name: Auto Assign
+      uses: kentaro-m/auto-assign-action@v2.0.2
+      with:
+        configuration-path: .github/assign.yml
+
+    # Fail the PR if CHANGELOG.md has no new entry under [Unreleased] — the
+    # release workflow consumes that section as the release notes, so every PR
+    # has to contribute something to it.
+    - name: Make sure Changelog is updated
+      uses: tarides/changelog-check-action@v3
+      with:
+        changelog: CHANGELOG.md
