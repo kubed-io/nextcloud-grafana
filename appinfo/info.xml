@@ -26,9 +26,10 @@ no tagging scheme to maintain. The link between a file and its dashboard is the
 stable Grafana **uid** stored in the file's metadata, not the filename, so
 renaming, moving, and restoring never break the connection.
 
-⚠️ Early development — this build ships the admin **connection** panel only (point
-the app at Grafana, store a service-account token, and test it). Dashboard sync
-lands in later releases.
+⚠️ Early development — this build ships the admin **connection** panel (point the
+app at Grafana, store a service-account token, and test it) and the **folder
+mapping** panel (bind a Grafana folder to a Nextcloud folder, with a mode and
+format). The actual dashboard sync those mappings drive lands in later releases.
 
 This is a community integration and is not affiliated with, endorsed by, or
 sponsored by Grafana Labs. "Grafana" and the Grafana logo are trademarks of
@@ -47,13 +48,18 @@ Grafana Labs, used here only to identify the service this app integrates with.
     <nextcloud min-version="30" max-version="33"/>
   </dependencies>
   <settings>
-    <!-- Test connection button. The Instance (URL) + Connection (token) cards are
-         declarative forms registered in AppInfo\Application::register(). -->
+    <!-- Test connection button + the folder-mapping panel. The Instance (URL) +
+         Connection (token) cards are declarative forms registered in
+         AppInfo\Application::register(). -->
     <admin>OCA\GrafanaSync\Settings\AdminTest</admin>
+    <admin>OCA\GrafanaSync\Settings\MappingSettings</admin>
     <admin-section>OCA\GrafanaSync\Settings\AdminSection</admin-section>
   </settings>
   <commands>
     <command>OCA\GrafanaSync\Command\SetToken</command>
     <command>OCA\GrafanaSync\Command\TestConnection</command>
+    <command>OCA\GrafanaSync\Command\AddMapping</command>
+    <command>OCA\GrafanaSync\Command\ListMappings</command>
+    <command>OCA\GrafanaSync\Command\RemoveMapping</command>
   </commands>
 </info>

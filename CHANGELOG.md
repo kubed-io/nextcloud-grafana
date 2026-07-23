@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Admin **connection** panel: point the app at your Grafana (base URL), store a service-account token (encrypted), and a **Test connection** button that authenticates against Grafana to confirm the token is valid.
 - Headless config via `occ grafana_sync:set-token` (encrypted, occ/helm-injectable) and `occ grafana_sync:test-connection` (same authenticated check as the button).
+- Admin **folder mapping** panel: bind a Grafana folder (picked from the folders your token can see) to a Nextcloud folder, with a **mode** (sync / link) and a serialization **format** (json / yaml — the classic dashboard JSON or the newer k8s-style YAML schema). A Grafana folder maps to exactly one location; mappings are stored as config, so the same list is editable over the CLI.
+- Headless mapping config via `occ grafana_sync:add-mapping '<json>'`, `occ grafana_sync:list-mappings`, and `occ grafana_sync:remove-mapping <id>` (occ/helm-injectable).
 
 ### Fixed
 

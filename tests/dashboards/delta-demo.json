@@ -1,0 +1,29 @@
+{
+  "uid": "nc-delta-demo",
+  "title": "Delta Demo",
+  "tags": ["integration", "nextcloud"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 0,
+  "editable": true,
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Delta rows",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": null,
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" }, "unit": "none" },
+        "overrides": []
+      },
+      "options": { "showHeader": true },
+      "targets": [
+        { "refId": "A", "scenario": "delta" }
+      ]
+    }
+  ]
+}

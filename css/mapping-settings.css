@@ -1,0 +1,189 @@
+/* SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Layout-only — feedback uses Nextcloud's native `.msg success` / `.msg error`
+ * classes; buttons use `.button`. One card per mapping (a repeating form): a
+ * compact 2-column grid (Grafana folder / Nextcloud folder on row 1, mode / format
+ * on row 2) instead of a wide table, so it stops blowing past the admin-settings
+ * margin.
+ */
+
+.grafana-sync-mappings {
+	margin-top: 12px;
+}
+
+.grafana-sync-mappings__heading {
+	margin-bottom: 4px;
+}
+
+/* ── one card per mapping ───────────────────────────────────────────── */
+.grafana-sync-mappings__card {
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large, 12px);
+	padding: 14px 16px;
+	margin-bottom: 14px;
+	background: var(--color-main-background);
+	/* Match NC's settings text width (`.section p { max-width: 900px }`) so the
+	   card's right edge lines up with the explanations above it. */
+	max-width: 900px;
+}
+
+/* grafana-folder | nc-folder   (row 1)
+ * mode           | format      (row 2)
+ * actions                      (row 3, spans both columns) */
+.grafana-sync-mappings__grid {
+	display: grid;
+	grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr);
+	grid-template-rows: auto auto auto;
+	gap: 10px 18px;
+	align-items: start;
+}
+
+.gf-folder { grid-area: 1 / 1; }
+.gf-nc     { grid-area: 1 / 2; }
+.gf-mode   { grid-area: 2 / 1; }
+.gf-format { grid-area: 2 / 2; }
+
+/* ⓘ info button next to each field label — a pure-CSS hover/focus tooltip
+ * (no JS, no @nextcloud/vue). */
+.grafana-sync-info {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	margin-inline-start: 4px;
+	color: var(--color-text-maxcontrast);
+	opacity: 0.4; /* subtle by default — it's a hint, not a control */
+	cursor: help;
+	vertical-align: middle;
+}
+
+.grafana-sync-info svg {
+	width: 14px;
+	height: 14px;
+}
+
+.grafana-sync-info:hover,
+.grafana-sync-info:focus-visible {
+	color: var(--color-primary-element, var(--color-primary));
+	opacity: 1;
+	outline: none;
+}
+
+.grafana-sync-info::after {
+	content: attr(data-tip);
+	position: absolute;
+	inset-inline-start: 0;
+	top: calc(100% + 6px);
+	z-index: 100;
+	width: max-content;
+	max-width: 260px;
+	padding: 8px 10px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius, 6px);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+	font-size: 0.95em;
+	font-weight: normal;
+	line-height: 1.35;
+	white-space: normal;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+
+.grafana-sync-info:hover::after,
+.grafana-sync-info:focus-visible::after {
+	opacity: 1;
+}
+
+/* a field = label stacked over its control */
+.grafana-sync-field {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+.grafana-sync-field > label {
+	font-size: 1.1em;
+	font-weight: 600;
+	color: var(--color-main-text);
+}
+
+.grafana-sync-field input[type="text"],
+.grafana-sync-field select {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* Save / Delete — a horizontal group of colored, icon-only buttons.
+ * Row 3 of the grid, spanning both columns. */
+.grafana-sync-mappings__actions {
+	grid-area: 3 / 1 / 4 / 3;
+	align-self: end;
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.grafana-sync-mappings__actions .button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	min-height: 38px;
+	padding: 0;
+	color: #fff;
+	border: none;
+}
+
+.grafana-sync-mappings__actions .button svg {
+	width: 20px;
+	height: 20px;
+}
+
+.grafana-sync-mappings__actions .js-save {
+	background-color: var(--color-success);
+}
+.grafana-sync-mappings__actions .js-save:hover:not(:disabled) {
+	background-color: var(--color-success-hover, var(--color-success));
+}
+
+.grafana-sync-mappings__actions .js-delete {
+	background-color: var(--color-error);
+}
+.grafana-sync-mappings__actions .js-delete:hover:not(:disabled) {
+	background-color: var(--color-error-hover, var(--color-error));
+}
+
+.grafana-sync-mappings__actions .button:disabled {
+	opacity: 0.5;
+}
+
+/* Per-mapping status, right of the buttons. Sticky (no auto-dismiss); uses the
+   canonical .msg success/error pill once a message is set. */
+.grafana-sync-mappings__actions .js-card-status {
+	margin-left: 6px;
+	font-size: 0.9em;
+}
+
+.grafana-sync-mappings__footer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+/* Narrow admin widths: collapse the grid to a single column so nothing
+ * overflows. */
+@media (max-width: 680px) {
+	.grafana-sync-mappings__grid {
+		grid-template-columns: 1fr;
+		grid-template-rows: auto;
+	}
+	.gf-folder, .gf-nc, .gf-mode, .gf-format,
+	.grafana-sync-mappings__actions {
+		grid-area: auto;
+	}
+}

@@ -13,6 +13,7 @@ use Behat\Behat\Context\Context;
 use GuzzleHttp\Client;
 use OCA\GrafanaSync\Tests\Integration\Steps\AdminSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\AppLifecycleSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
 use OCA\GrafanaSync\Tests\Integration\Support\GrafanaApiTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\OccTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\WebDavTrait;
@@ -25,9 +26,10 @@ use OCA\GrafanaSync\Tests\Integration\Support\WebDavTrait;
  * lives in a per-concern trait composed in below (mirrors how nextcloud/server
  * composes its Behat context from traits).
  *
- * POC scope: only the connection + lifecycle concerns are wired — the admin
- * appetizer. As the sync chapters land, their `*Steps` traits (Mapping, Create,
- * Rename, Delete, Move, …) return here, and their features flip off `@todo`.
+ * Wired so far: the connection + lifecycle concerns (the admin appetizer) and the
+ * folder-mapping concern. As the sync chapters land, the remaining `*Steps` traits
+ * (Create, Rename, Delete, Move, …) return here, and their features flip off
+ * `@todo`.
  *
  * Transport channels:
  *  - **occ** (the $OCC env var) drives admin setup the way our CLI commands do. → OccTrait
@@ -42,6 +44,7 @@ final class FeatureContext implements Context {
 	use GrafanaApiTrait;
 	use AppLifecycleSteps;
 	use AdminSteps;
+	use MappingSteps;
 
 	private const APP_ID = 'grafana_sync';
 

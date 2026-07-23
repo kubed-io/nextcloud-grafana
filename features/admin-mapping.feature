@@ -9,9 +9,10 @@
 # and nested Grafana folders mirror to nested NC folders (the "General"/root area
 # maps to the mapping's root). Modes are sync / link (see the saga).
 #
-# @todo — the mapping engine lands with the sync chapter; this feature is the
-# executable spec for it. The POC ships only the connection panel.
-@todo
+# Note on the "grafana folder" column: the mapping stores a folder **uid**, which
+# in real Grafana is opaque. This config-only feature does not check the uid
+# against a live Grafana (a mapping is pure config until the sync chapter), so the
+# steps use the folder name as its own uid — the mapping CRUD is what's under test.
 Feature: Admin configures folder mappings
   As a Nextcloud admin
   I want to map Grafana folders to Nextcloud folders with a mode
@@ -33,3 +34,23 @@ Feature: Admin configures folder mappings
   Scenario: A mapping mode must be sync or link
     When the admin adds a mapping with an unknown mode for grafana folder "build"
     Then the mapping is rejected
+    And there are 0 configured mappings
+
+  # Difference #2 — the serialization cut is a per-mapping field. It defaults to the
+  # classic JSON dashboard model and can opt into the newer k8s-style YAML schema.
+  Scenario: A mapping records its serialization format, defaulting to json
+    When the admin adds these mappings:
+      | grafana folder | folder    | mode |
+      | network        | network   | sync |
+    Then the mapping for grafana folder "network" is in "json" format
+    When the admin adds a "yaml" mapping for grafana folder "observe" in folder "observe"
+    Then the mapping for grafana folder "observe" is in "yaml" format
+
+  # A folder can map to exactly one location — a duplicate uid is rejected.
+  Scenario: A Grafana folder may only be mapped once
+    When the admin adds these mappings:
+      | grafana folder | folder  | mode |
+      | observe        | observe | sync |
+    And the admin adds a "json" mapping for grafana folder "observe" in folder "elsewhere"
+    Then the mapping is rejected
+    And there are 1 configured mappings

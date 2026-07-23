@@ -78,6 +78,40 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * List the Grafana folders the token can see, normalised to the small shape the
+	 * folder-mapping picker needs: `{uid, title, parentUid}`. `parentUid` is present
+	 * on nested folders (Grafana ≥ 11) and empty for top-level ones, so the admin
+	 * panel can render the tree later without a schema change here.
+	 *
+	 * This is the read half of the mapping model — the mapping stores a folder uid,
+	 * and this is where the panel discovers which uids exist. Writes
+	 * (create/upsert/delete a dashboard) land in the sync chapter on this same
+	 * request() chokepoint.
+	 *
+	 * @return list<array{uid:string, title:string, parentUid:string}>
+	 */
+	public function listFolders(): array {
+		$res = $this->request('GET', '/api/folders', ['limit' => 1000]);
+		$body = $this->decode($res);
+		$out = [];
+		foreach ($body as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			$uid = (string)($entry['uid'] ?? '');
+			if ($uid === '') {
+				continue;
+			}
+			$out[] = [
+				'uid' => $uid,
+				'title' => (string)($entry['title'] ?? $uid),
+				'parentUid' => (string)($entry['parentUid'] ?? ''),
+			];
+		}
+		return $out;
+	}
+
+	/**
 	 * Single chokepoint for every HTTP call. Reads + decrypts the token, applies
 	 * the standard headers, and sets `allow_local_address` so the homelab's
 	 * in-cluster URLs (e.g. grafana-service.observe.svc:3000) work the same way as
