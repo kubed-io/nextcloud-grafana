@@ -125,6 +125,28 @@ namespace OCP {
 			public function getUser(): ?IUser;
 		}
 	}
+	// MappingSettings reads the group list for the per-mapping picker; both are
+	// mocked in the SyncSettings test (which instantiates MappingSettings).
+	if (!interface_exists(IGroup::class, false)) {
+		interface IGroup {
+			public function getGID(): string;
+		}
+	}
+	if (!interface_exists(IGroupManager::class, false)) {
+		interface IGroupManager {
+			/** @return list<IGroup> */
+			public function search(string $search): array;
+		}
+	}
+}
+
+namespace OCP\App {
+	// MappingSettings checks whether groupfolders is installed (Team Folder flag).
+	if (!interface_exists(IAppManager::class, false)) {
+		interface IAppManager {
+			public function isInstalled(string $appId): bool;
+		}
+	}
 }
 
 namespace OCP\EventDispatcher {

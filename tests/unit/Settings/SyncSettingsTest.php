@@ -12,6 +12,8 @@ namespace OCA\GrafanaSync\Tests\Unit\Settings;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Settings\MappingSettings;
 use OCA\GrafanaSync\Settings\SyncSettings;
+use OCP\App\IAppManager;
+use OCP\IGroupManager;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,7 +25,11 @@ use PHPUnit\Framework\TestCase;
 final class SyncSettingsTest extends TestCase {
 	public function testSyncActionsRenderBelowFolderMappings(): void {
 		$sync = new SyncSettings();
-		$mapping = new MappingSettings($this->createMock(MappingService::class));
+		$mapping = new MappingSettings(
+			$this->createMock(MappingService::class),
+			$this->createMock(IGroupManager::class),
+			$this->createMock(IAppManager::class),
+		);
 		self::assertGreaterThan(
 			$mapping->getPriority(),
 			$sync->getPriority(),

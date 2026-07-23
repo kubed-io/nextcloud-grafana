@@ -11,7 +11,9 @@ namespace OCA\GrafanaSync\Settings;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\MappingService;
+use OCP\App\IAppManager;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\IGroupManager;
 use OCP\Settings\IDelegatedSettings;
 use OCP\Util;
 
@@ -22,18 +24,21 @@ use OCP\Util;
  * server-side: PHP foreach builds the initial cards, and vanilla JS does
  * add/update/delete through MappingController.
  *
- * The Grafana folder picker is filled client-side (the JS fetches
- * `/apps/grafana_sync/folders`) so a render never depends on Grafana being
- * reachable — an unconfigured or offline instance still shows the panel, just with
- * manual uid entry.
+ * The card layout mirrors the n8n master (Grafana folder + NC folder | mode +
+ * format + team-folder | groups | actions). The **groups** list and the
+ * **team-folder-available** flag feed the col-3 picker + the Team Folder checkbox —
+ * rendered for interface parity with n8n even though the Grafana mapping model
+ * doesn't act on them yet (they land with the sync engine).
  *
- * Implements IDelegatedSettings so the controller can use
- * #[AuthorizedAdminSetting(settings: MappingSettings::class)] to gate the REST
- * endpoints — same canonical pattern as the Test connection button.
+ * The Grafana folder picker itself is filled client-side (the JS fetches
+ * `/apps/grafana_sync/folders`) so a render never depends on Grafana being
+ * reachable.
  */
 final class MappingSettings implements IDelegatedSettings {
 	public function __construct(
-		private MappingService $service,
+		private readonly MappingService $service,
+		private readonly IGroupManager $groupManager,
+		private readonly IAppManager $appManager,
 	) {
 	}
 
@@ -42,11 +47,23 @@ final class MappingSettings implements IDelegatedSettings {
 		Util::addScript(Application::APP_ID, 'mapping-settings');
 		Util::addStyle(Application::APP_ID, 'mapping-settings');
 
+		// All group ids, for the per-mapping group multiselect. search('') returns
+		// every group; fine for a homelab — paginate later if it ever gets large.
+		$groups = array_map(
+			static fn ($g) => $g->getGID(),
+			$this->groupManager->search(''),
+		);
+		sort($groups);
+
 		return new TemplateResponse(
 			Application::APP_ID,
 			'mapping_settings',
 			[
 				'mappings' => array_map(fn ($m) => $m->toArray(), $this->service->list()),
+				'groups' => $groups,
+				// Drives whether the Team Folder checkbox defaults on (groupfolders
+				// present) — UI parity with n8n; not acted on yet.
+				'team_folders_available' => $this->appManager->isInstalled('groupfolders'),
 			],
 			'blank',
 		);
@@ -58,8 +75,8 @@ final class MappingSettings implements IDelegatedSettings {
 	}
 
 	/**
-	 * Below the connection cards (Instance 5 / Connection 10 / Test 15) and before
-	 * anything the sync chapters add: connect first, then map.
+	 * Below the connection cards (Instance 5 / Connection 10) and above Sync Actions
+	 * (45): connect first, then map, then the action buttons.
 	 */
 	#[\Override]
 	public function getPriority(): int {

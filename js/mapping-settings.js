@@ -2,13 +2,17 @@
  * SPDX-FileCopyrightText: 2026 Kelly Ferrone
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Folder-mapping admin handlers (vanilla JS, no build step).
+ * Folder-mapping admin handlers (vanilla JS, no build step). Laid out to match the
+ * n8n master so the two apps look the same:
  *
- * One card per mapping: a Grafana folder (picked from the live list the token can
- * see) → a Nextcloud folder, with a mode (sync / link) and a serialization format
- * (json / yaml). The Grafana folder list is fetched once on init and merged into
- * every card's <select>, preserving each card's already-saved uid. Card glyphs are
- * read from the root element's data-icons attribute (filled from img/icons/).
+ *   col 1: Grafana folder (picker) · Nextcloud folder
+ *   col 2: Mode · Format · Team Folder
+ *   col 3: Groups
+ *   row 4: Save / Sync / Delete
+ *
+ * The Grafana folder list is fetched once on init and merged into every card's
+ * <select>. Team Folder, Groups, and per-folder Sync are rendered for interface
+ * parity with n8n but aren't wired to the (not-yet-built) sync engine.
  */
 (function () {
 	'use strict';
@@ -16,6 +20,8 @@
 	var MAP_BASE = '/apps/grafana_sync/mappings';
 	var FOLDERS_URL = '/apps/grafana_sync/folders';
 
+	// Card glyphs (info / save / sync / delete), read from the root element's
+	// data-icons attribute (server-filled from img/icons/).
 	var ICONS = {};
 	// Grafana folders the token can see: [{uid, title, parentUid}]. Filled by
 	// loadFolders(); empty until then (and if Grafana is unreachable).
@@ -44,6 +50,8 @@
 			if (!card) { return; }
 			if (btn.classList.contains('js-save')) {
 				saveCard(card);
+			} else if (btn.classList.contains('js-sync')) {
+				syncCard(card);
 			} else if (btn.classList.contains('js-delete')) {
 				deleteCard(card);
 			}
@@ -56,25 +64,37 @@
 		loadFolders();
 	}
 
+	function availableGroups() {
+		var root = document.getElementById('grafana-sync-mappings');
+		try { return JSON.parse(root.dataset.groups || '[]'); } catch { return []; }
+	}
+
+	function tfAvailable() {
+		var root = document.getElementById('grafana-sync-mappings');
+		return root.dataset.tfAvailable === '1';
+	}
+
 	// Fetch the Grafana folder list and merge it into every card's picker. Failure
-	// is non-fatal: the server-rendered options (each card's saved folder) stay,
-	// and new cards fall back to a "type a uid" text input.
+	// is non-fatal: the server-rendered options (each card's saved folder) stay, and
+	// new cards fall back to a "type a uid" text input.
 	function loadFolders() {
 		api('GET', OC.generateUrl(FOLDERS_URL))
 			.then(function (res) {
 				FOLDERS = (res && Array.isArray(res.folders)) ? res.folders : [];
 				Array.prototype.forEach.call(
 					document.querySelectorAll('#grafana-sync-mappings .js-grafana-folder'),
-					function (sel) { fillFolderSelect(sel, sel.dataset.uid || sel.value); }
+					function (sel) {
+						if (sel.tagName === 'SELECT') { fillFolderSelect(sel, sel.dataset.uid || sel.value); }
+					}
 				);
 			})
 			.catch(function () { FOLDERS = []; });
 	}
 
-	// Rebuild a <select> from FOLDERS, keeping selectedUid selected even if it is
-	// not (or no longer) in the fetched list.
+	// Rebuild a <select> from FOLDERS, keeping selectedUid selected even if it is not
+	// (or no longer) in the fetched list.
 	function fillFolderSelect(sel, selectedUid) {
-		if (!FOLDERS.length) { return; }
+		if (!FOLDERS.length || sel.tagName !== 'SELECT') { return; }
 		var seen = false;
 		sel.innerHTML = FOLDERS.map(function (f) {
 			var isSel = f.uid === selectedUid;
@@ -111,6 +131,12 @@
 		} else {
 			uid = folderEl.value.trim();
 		}
+		var groups = [];
+		Array.prototype.forEach.call(
+			card.querySelectorAll('.js-groups input[type="checkbox"]:checked'),
+			function (cb) { groups.push(cb.value); }
+		);
+		var tfEl = card.querySelector('.js-use-team-folder');
 		return {
 			id: card.dataset.id || '',
 			grafana_folder_uid: uid,
@@ -118,6 +144,8 @@
 			nc_folder: card.querySelector('.js-nc-folder').value.trim(),
 			mode: mode,
 			format: format,
+			nc_groups: groups,
+			use_team_folder: tfEl ? tfEl.checked : true,
 		};
 	}
 
@@ -145,6 +173,16 @@
 			});
 	}
 
+	// Per-folder sync isn't wired yet — the button exists for parity with n8n. Show a
+	// neutral note rather than hitting a missing endpoint.
+	function syncCard(card) {
+		if (!card.dataset.id) {
+			cardStatus(card, 'error', t('grafana_sync', 'Save the mapping first.'));
+			return;
+		}
+		cardStatus(card, '', t('grafana_sync', 'Per-folder sync isn’t available yet — coming with the sync engine.'));
+	}
+
 	function deleteCard(card) {
 		var id = card.dataset.id || '';
 		if (!id) { card.remove(); return; }
@@ -163,8 +201,8 @@
 			});
 	}
 
-	// Per-mapping status, shown to the right of the card's buttons. Sticky — it
-	// stays until the next action or a page reload (no auto-dismiss).
+	// Per-mapping status, shown to the right of the card's buttons. Sticky — it stays
+	// until the next action or a page reload (no auto-dismiss).
 	function cardStatus(card, kind, text) {
 		var el = card.querySelector('.js-card-status');
 		if (!el) { return; }
@@ -177,6 +215,8 @@
 		nc: t('grafana_sync', 'Name of the Nextcloud folder the dashboards appear in.'),
 		mode: t('grafana_sync', 'Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
 		format: t('grafana_sync', 'JSON: the classic Grafana dashboard model (.grafana.json). YAML: the newer k8s-style dashboard schema (.grafana.yaml).'),
+		tf: t('grafana_sync', 'On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. (Not wired yet — here for parity.)'),
+		groups: t('grafana_sync', 'Which Nextcloud groups the folder is shared with. (Not wired yet — here for parity.)'),
 	};
 	function info(tip) {
 		var e = escapeHtml(tip);
@@ -201,6 +241,11 @@
 	function buildEmptyCard() {
 		var card = document.createElement('div');
 		card.className = 'grafana-sync-mappings__card';
+		var tfAttrs = tfAvailable() ? ' checked' : ' disabled';
+		var groupBoxes = availableGroups().map(function (g) {
+			return '<label class="grafana-sync-groups__item"><input type="checkbox" value="'
+				+ escapeHtml(g) + '" /> ' + escapeHtml(g) + '</label>';
+		}).join('');
 		card.innerHTML = ''
 			+ '<div class="grafana-sync-mappings__grid">'
 			+   '<div class="grafana-sync-field gf-folder"><label>' + t('grafana_sync', 'Grafana folder') + info(DESC.folder) + '</label>'
@@ -217,9 +262,15 @@
 			+       '<option value="json" selected>' + t('grafana_sync', 'JSON') + '</option>'
 			+       '<option value="yaml">' + t('grafana_sync', 'YAML') + '</option>'
 			+     '</select></div>'
+			+   '<div class="grafana-sync-field gf-tf"><label class="grafana-sync-checkbox">'
+			+     '<input type="checkbox" class="js-use-team-folder"' + tfAttrs + ' /> ' + t('grafana_sync', 'Team Folder') + info(DESC.tf) + '</label></div>'
+			+   '<div class="grafana-sync-field gf-groups"><label>' + t('grafana_sync', 'Groups') + info(DESC.groups) + '</label>'
+			+     '<div class="js-groups grafana-sync-groups">' + groupBoxes + '</div></div>'
 			+   '<div class="grafana-sync-mappings__actions">'
 			+   '<button type="button" class="button js-save" title="' + t('grafana_sync', 'Save') + '" aria-label="' + t('grafana_sync', 'Save') + '">'
 			+     (ICONS.save || '') + '</button>'
+			+   '<button type="button" class="button js-sync" title="' + t('grafana_sync', 'Sync') + '" aria-label="' + t('grafana_sync', 'Sync') + '">'
+			+     (ICONS.sync || '') + '</button>'
 			+   '<button type="button" class="button js-delete" title="' + t('grafana_sync', 'Delete') + '" aria-label="' + t('grafana_sync', 'Delete') + '">'
 			+     (ICONS.delete || '') + '</button>'
 			+     '<span class="js-card-status"></span>'
