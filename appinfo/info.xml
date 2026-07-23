@@ -48,11 +48,14 @@ Grafana Labs, used here only to identify the service this app integrates with.
     <nextcloud min-version="30" max-version="33"/>
   </dependencies>
   <settings>
-    <!-- Test connection button + the folder-mapping panel. The Instance (URL) +
-         Connection (token) cards are declarative forms registered in
-         AppInfo\Application::register(). -->
-    <admin>OCA\GrafanaSync\Settings\AdminTest</admin>
+    <!-- Section order (by priority): Instance (5) + Connection (10) declarative
+         cards → Folder mappings (30) → Sync Actions (45, all the buttons). The
+         Instance/Connection cards are declarative forms registered in
+         AppInfo\Application::register(). AdminTest is NOT rendered as its own panel
+         — it stays only as the #[AuthorizedAdminSetting] target for the test
+         endpoint; the Test-connection button now lives in the Sync Actions panel. -->
     <admin>OCA\GrafanaSync\Settings\MappingSettings</admin>
+    <admin>OCA\GrafanaSync\Settings\SyncSettings</admin>
     <admin-section>OCA\GrafanaSync\Settings\AdminSection</admin-section>
   </settings>
   <commands>

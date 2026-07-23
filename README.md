@@ -72,7 +72,9 @@ Classic JSON ships first; the v2/YAML cut is an opt-in per mapping.
 
 Because the token is stored encrypted and never echoed back, the field always looks
 empty — so the card's text tells you whether a token is **currently stored**, and a
-**Test connection** button confirms whether it actually *works*. The test calls an
+**Test connection** button (in the **Sync Actions** section, below the folder
+mappings — all action buttons live together there) confirms whether it actually
+*works*. The test calls an
 **authenticated** Grafana endpoint (`GET /api/folders`), so a green result proves the
 token itself is valid, not merely that the host is reachable. A red result
 distinguishes the two failure modes you care about: **no token set yet** vs. a token
