@@ -195,7 +195,7 @@
 				}).join('')
 				+ '</select>';
 		}
-		return '<input type="text" class="js-grafana-folder" placeholder="' + t('grafana_sync', 'Grafana folder uid') + '" />';
+		return '<input type="text" class="js-grafana-folder" placeholder="' + escapeHtml(t('grafana_sync', 'Grafana folder uid')) + '" />';
 	}
 
 	function buildEmptyCard() {
@@ -206,7 +206,7 @@
 			+   '<div class="grafana-sync-field gf-folder"><label>' + t('grafana_sync', 'Grafana folder') + info(DESC.folder) + '</label>'
 			+     folderControl() + '</div>'
 			+   '<div class="grafana-sync-field gf-nc"><label>' + t('grafana_sync', 'Nextcloud folder') + info(DESC.nc) + '</label>'
-			+     '<input type="text" class="js-nc-folder" placeholder="dashboards" /></div>'
+			+     '<input type="text" class="js-nc-folder" placeholder="' + escapeHtml(t('grafana_sync', 'dashboards')) + '" /></div>'
 			+   '<div class="grafana-sync-field gf-mode"><label>' + t('grafana_sync', 'Mode') + info(DESC.mode) + '</label>'
 			+     '<select class="js-mode">'
 			+       '<option value="sync" selected>' + t('grafana_sync', 'Sync') + '</option>'
@@ -238,11 +238,19 @@
 			opts.body = JSON.stringify(body);
 		}
 		return fetch(url, opts).then(function (res) {
-			return res.json().then(function (data) {
-				if (!res.ok) {
-					return Promise.reject(new Error(data && data.message ? data.message : 'HTTP ' + res.status));
+			// Parse the body as text first, then JSON-decode only if it actually is
+			// JSON — a proxy/HTML error page or an empty body must surface as the real
+			// HTTP failure, not a "JSON parse error" from an unconditional res.json().
+			return res.text().then(function (text) {
+				var data = null;
+				if (text) {
+					try { data = JSON.parse(text); } catch { data = null; }
 				}
-				return data;
+				if (!res.ok) {
+					var msg = (data && data.message) ? data.message : ('HTTP ' + res.status);
+					return Promise.reject(new Error(msg));
+				}
+				return data || {};
 			});
 		});
 	}

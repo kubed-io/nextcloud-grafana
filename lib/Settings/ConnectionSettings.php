@@ -33,7 +33,7 @@ use OCP\Settings\IDeclarativeSettingsForm;
  */
 final class ConnectionSettings implements IDeclarativeSettingsForm {
 	public function __construct(
-		private IAppConfig $config,
+		private readonly IAppConfig $config,
 	) {
 	}
 

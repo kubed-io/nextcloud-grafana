@@ -37,8 +37,8 @@ final class MappingController extends Controller {
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		private MappingService $service,
-		private GrafanaClient $client,
+		private readonly MappingService $service,
+		private readonly GrafanaClient $client,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -53,7 +53,11 @@ final class MappingController extends Controller {
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function create(): JSONResponse {
 		try {
-			$mapping = Mapping::fromArray($this->request->getParams());
+			// `id` is server-assigned — never honour a client-supplied one on create,
+			// or two mappings could collide on the stable handle update/delete key off.
+			$params = $this->request->getParams();
+			unset($params['id']);
+			$mapping = Mapping::fromArray($params);
 			$saved = $this->service->add($mapping);
 			return new JSONResponse(['mapping' => $saved->toArray()], Http::STATUS_CREATED);
 		} catch (\InvalidArgumentException $e) {
@@ -64,7 +68,12 @@ final class MappingController extends Controller {
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function update(string $id): JSONResponse {
 		try {
-			$mapping = Mapping::fromArray($this->request->getParams() + ['id' => $id]);
+			// The path id is authoritative — assign it explicitly. (Array union
+			// `getParams() + ['id' => $id]` would keep a body-supplied id, since union
+			// favours the left operand's keys — the opposite of what we want.)
+			$params = $this->request->getParams();
+			$params['id'] = $id;
+			$mapping = Mapping::fromArray($params);
 			$saved = $this->service->update($id, $mapping);
 			return new JSONResponse(['mapping' => $saved->toArray()]);
 		} catch (\InvalidArgumentException $e) {
@@ -95,7 +104,9 @@ final class MappingController extends Controller {
 		try {
 			return new JSONResponse(['folders' => $this->client->listFolders()]);
 		} catch (\Throwable $e) {
-			return new JSONResponse(['folders' => [], 'message' => $e->getMessage()]);
+			// Same friendly formatter as the connection test — so this never leaks
+			// Grafana's raw auth text ("Invalid API key") into the picker UI.
+			return new JSONResponse(['folders' => [], 'message' => GrafanaClient::describeConnectionError($e)]);
 		}
 	}
 }

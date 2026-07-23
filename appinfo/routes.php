@@ -12,8 +12,8 @@ return [
 		['name' => 'config#testConnection', 'url' => '/testconnection', 'verb' => 'GET'],
 
 		// Folder mappings — admin-only CRUD (each handler carries its own
-		// #[AuthorizedAdminSetting]). The admin panel and the occ commands hit
-		// these same endpoints.
+		// #[AuthorizedAdminSetting]). The admin panel hits these endpoints; the occ
+		// commands perform the same operations by calling MappingService directly.
 		['name' => 'mapping#index', 'url' => '/mappings', 'verb' => 'GET'],
 		['name' => 'mapping#create', 'url' => '/mappings', 'verb' => 'POST'],
 		['name' => 'mapping#update', 'url' => '/mappings/{id}', 'verb' => 'PUT'],

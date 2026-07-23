@@ -33,7 +33,7 @@ final class MappingService {
 	private ?array $cache = null;
 
 	public function __construct(
-		private IAppConfig $config,
+		private readonly IAppConfig $config,
 	) {
 	}
 
@@ -74,6 +74,7 @@ final class MappingService {
 	public function add(Mapping $mapping): Mapping {
 		$all = $this->list();
 		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, null);
+		$this->assertIdUnique($all, $mapping->id);
 		$all[] = $mapping;
 		$this->persist($all);
 		return $mapping;
@@ -169,6 +170,23 @@ final class MappingService {
 				throw new \InvalidArgumentException(
 					'Another mapping already uses the Grafana folder "' . $uid . '". Each folder may map to only one location.',
 				);
+			}
+		}
+	}
+
+	/**
+	 * The id is the stable primary key update/delete resolve on, so it must be
+	 * unique within the list. New mappings get a server-minted id (the create
+	 * endpoint strips any client-supplied one), so this only fires on a genuinely
+	 * corrupt store — but a duplicate id would make update touch one row and delete
+	 * remove several, so reject it loudly rather than silently misbehave.
+	 *
+	 * @param list<Mapping> $all
+	 */
+	private function assertIdUnique(array $all, string $id): void {
+		foreach ($all as $m) {
+			if ($m->id === $id) {
+				throw new \InvalidArgumentException('A mapping with id "' . $id . '" already exists.');
 			}
 		}
 	}

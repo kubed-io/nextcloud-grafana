@@ -88,6 +88,15 @@ final class MappingServiceTest extends TestCase {
 		$svc->add($this->mapping('uid-a', 'different-folder'));
 	}
 
+	public function testRejectsADuplicateId(): void {
+		$svc = $this->service();
+		$a = Mapping::fromArray(['id' => 'fixed', 'grafana_folder_uid' => 'uid-a', 'nc_folder' => 'alpha', 'mode' => 'sync']);
+		$b = Mapping::fromArray(['id' => 'fixed', 'grafana_folder_uid' => 'uid-b', 'nc_folder' => 'bravo', 'mode' => 'sync']);
+		$svc->add($a);
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->add($b);
+	}
+
 	public function testUpdateChangesFieldsButKeepsId(): void {
 		$svc = $this->service();
 		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));

@@ -80,7 +80,7 @@ $info = static function (string $tip) use ($icon): string {
 					<div class="grafana-sync-field gf-nc">
 						<label><?php p($l->t('Nextcloud folder'));
 			print_unescaped($info($desc['nc'])); ?></label>
-						<input type="text" class="js-nc-folder" value="<?php p($m['nc_folder']); ?>" placeholder="dashboards" />
+						<input type="text" class="js-nc-folder" value="<?php p($m['nc_folder']); ?>" placeholder="<?php p($l->t('dashboards')); ?>" />
 					</div>
 					<div class="grafana-sync-field gf-mode">
 						<label><?php p($l->t('Mode'));
