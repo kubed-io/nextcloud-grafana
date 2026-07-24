@@ -68,7 +68,7 @@ Feature: Deleting a dashboard file
 
   # ── link: trash only severs the tie; the dashboard is never deleted ───────────
 
-  Scenario: Trashing a link only unlinks it — the dashboard is untouched
+  Scenario: Trashing a link never deletes the dashboard
     Given a managed "link" dashboard file
     When I move it to the trash
     Then the dashboard in Grafana is not deleted
@@ -96,10 +96,10 @@ Feature: Deleting a dashboard file
   # deleted; if fork D already removed it, this is a no-op. @todo until fork D + the
   # trashbin listener are called.
   @todo
-  Scenario: Purging an unmapped file permanently deletes the dashboard (if still live)
+  Scenario: Purging an unmapped file leaves no dashboard in Grafana
     Given a trashed unmapped dashboard file that still carries its "grafana_uid"
     When I purge it from the trash
-    Then the dashboard is permanently deleted in Grafana (if fork D left it live)
+    Then the dashboard does not exist in Grafana
 
   Scenario: Restoring an unmapped file from trash touches nothing in Grafana
     Given a trashed unmapped dashboard file that still carries its "grafana_uid"

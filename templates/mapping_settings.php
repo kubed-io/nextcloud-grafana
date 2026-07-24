@@ -88,8 +88,8 @@ $info = static function (string $tip) use ($icon): string {
 			$formatSel = (($m['format'] ?? '') === 'yaml') ? 'yaml' : 'json';
 			$label = $title !== '' ? $title . ' (' . $uid . ')' : $uid;
 			$selectedGroups = $m['nc_groups'] ?? [];
-			$useTf = (bool)($m['use_team_folder'] ?? $tfAvailable);
-			$syncSubfolders = (bool)($m['sync_subfolders'] ?? false);
+			$useTf = filter_var($m['use_team_folder'] ?? $tfAvailable, FILTER_VALIDATE_BOOLEAN);
+			$syncSubfolders = filter_var($m['sync_subfolders'] ?? false, FILTER_VALIDATE_BOOLEAN);
 			?>
 			<div class="grafana-sync-mappings__card" data-id="<?php p($m['id']); ?>">
 				<div class="grafana-sync-mappings__grid">

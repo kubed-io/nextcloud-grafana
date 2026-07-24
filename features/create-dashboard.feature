@@ -25,4 +25,4 @@ Feature: Create a dashboard from Nextcloud
     When I create a ".grafana.json" file in that folder
     Then no dashboard is created in Grafana
     And the file has no "grafana_uid" metadata
-    And the file is treated as a plain document (unmapped state)
+    And the file is treated as a plain, untracked document (not "unmapped" — that state carries a uid)

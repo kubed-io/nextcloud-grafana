@@ -48,7 +48,7 @@ Feature: Purge the app's restorable files from Nextcloud
 
   # The in-folder mode-check (ignored stays put) and the untracked-file case are
   # covered by the SyncServiceTest unit test; their integration arrange (tagging
-  # Grafana:ignore / a never-tracked file) is left @todo to keep this suite lean.
+  # grafana:ignore / a never-tracked file) is left @todo to keep this suite lean.
   @todo
   Scenario: Purge keeps an ignored file
     Given a managed "ignored" dashboard file in the "alpha" folder

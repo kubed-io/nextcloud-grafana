@@ -55,7 +55,7 @@ Feature: The grafana:ignore reserved tag excludes individual dashboards
 
   Scenario: grafana:ignore on a file already in a mapped folder gives it "ignored" mode
     Given a managed "sync" dashboard file in the "flows" folder
-    When I tag it "grafana:ignore"
+    When the admin adds the Nextcloud tag "grafana:ignore" to the file
     Then the file's mode becomes "ignored"
     And the file stays in the mapped folder and keeps its "grafana_uid"
     And the dashboard is left fully live in Grafana (no archive)
@@ -63,7 +63,7 @@ Feature: The grafana:ignore reserved tag excludes individual dashboards
 
   Scenario: Removing grafana:ignore returns the file to the mapping's mode
     Given a managed "sync" dashboard file in the "flows" folder
-    And I tag it "grafana:ignore"
+    And the file has the Nextcloud tag "grafana:ignore"
     When I remove the "grafana:ignore" tag
     Then the file's mode becomes "sync"
 

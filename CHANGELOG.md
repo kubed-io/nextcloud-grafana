@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Admin **Sync Settings** card: choose the Nextcloud → Grafana push timing (async/sync) and enable a scheduled Grafana → Nextcloud pull with an interval (any duration, e.g. `15m`, `1h`, `1d`). Config only for now — read by the sync engine when it lands; injectable over `occ config:app:set grafana_sync <key>`.
+- Admin **Sync Settings** card: choose the Nextcloud → Grafana push timing (async/sync) and enable a scheduled Grafana → Nextcloud pull with an interval — a number plus a unit (`s`/`m`/`h`/`d`; a bare number is seconds), minimum `1m`, e.g. `15m`, `1h`, `1d`. Config only for now — read by the sync engine when it lands; injectable over `occ config:app:set grafana_sync <key>`.
 - Admin **Sync Actions** panel now shows the full action set — **Sync to Grafana** / **Sync from Grafana** / **Purge Nextcloud files** — beside **Test connection**, matching the n8n app's layout. The bulk buttons are disabled until dashboard sync lands (a later release); Test connection works today.
 - Admin **connection** panel: point the app at your Grafana (base URL), store a service-account token (encrypted), and a **Test connection** button that authenticates against Grafana to confirm the token is valid.
 - Headless config via `occ grafana_sync:set-token` (encrypted, occ/helm-injectable) and `occ grafana_sync:test-connection` (same authenticated check as the button).
