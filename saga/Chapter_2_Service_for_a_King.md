@@ -810,7 +810,7 @@ specs — designed, not wired.
   `teamFolder`→`ncFolder`) · **`SyncService` (pull)** (reconcile-by-uid: update in place,
   collision-suffix fresh writes, prune the departed, SyncGuard-wrapped, filecache mimetype
   fixup) · **`OwnershipTags`** (grafana:sync/link/unmapped pills) · **`SyncController` POST
-  /sync/pull + `occ grafana_sync:pull` + the enabled "Sync from Grafana" button**
+  /sync/pull + `occ grafana_sync:sync pull` + the enabled "Sync from Grafana" button**
   (js/sync-settings.js). **Live smoke test PASSED** on the pod: `observe` (team folder, 6
   dashboards) + `nxt-fun` (admin-owned, 1) materialized as `.grafana.json` with the full
   metadata contract (uid/mode/version/hash/mapping) + `grafana:sync` pill + correct
@@ -930,7 +930,7 @@ The full Course 3, cooked in one confident batch (we have the master's `PushServ
 6. **`SyncService::pushOne/pushAll`** *(the bulk ladle)* — the **Sync to Grafana** button:
    push every sync file under a mapping (or all). `link` mappings are a no-op (a pointer has
    nothing to push).
-7. **`SyncController::push` + `occ grafana_sync:push [--mapping]` + the live button** — the
+7. **`SyncController::push` + `occ grafana_sync:sync push [--mapping]` + the live button** — the
    **Sync to Grafana** button stops being disabled and its `occ` twin lands. (Purge stays
    disabled — it's Course 4's delete machine.)
 8. **Tests + live smoke.** `PushServiceTest` + `SyncService` push units; the **push scenario
@@ -955,7 +955,7 @@ brand-new file becomes a dashboard), and the **move / rename / delete / copy** m
 Round 4 is the **update writeback for files we already track** — complete and live.
 
 **Ships when:** editing a synced `.grafana.json` updates its Grafana dashboard (uid + folder
-intact), a re-save doesn't loop, **Sync to Grafana** + `occ grafana_sync:push` work, the
+intact), a re-save doesn't loop, **Sync to Grafana** + `occ grafana_sync:sync push` work, the
 push integration + unit tests + CI are green, and it's smoke-tested live on the pod.
 
 > **Dr K, tasting the spoon:** *"A protein without sauce is a demo, and a sauce that
