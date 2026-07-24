@@ -1187,6 +1187,25 @@ content is safe in Nextcloud *before* we touch Grafana. We confirm the file hold
 then act on Grafana. A delete/move-out that can't confirm the Grafana step aborts, leaving the
 file recoverable.
 
+**Removing a folder mapping (the tear-down, `remove-mapping.feature`).** Deleting a mapping is
+*not* the Purge button (that keeps the mapping + never touches Grafana). Removing the mapping
+tears down the connection, and the recycle bin is again the thing that saves us from surgery:
+- Every file **actively connected** to the mapping (a managed sync/link file whose
+  `grafana_mapping` is this one) is **moved to the Nextcloud trash**. Because a trash move rides
+  the delete contract above, the Grafana side follows for free — **bin OFF** deletes the
+  connected dashboard + strips the file; **bin ON** parks it in the bin folder, uid kept.
+- Files that were **never connected** (an `unmapped`/`untracked` standalone `.grafana.json` that
+  only ever lived in Nextcloud) are **left strictly alone** — removing a mapping they weren't
+  part of must never move or bin them. No data loss.
+- We don't surgically decide what to keep: we trash exactly the connected set, and the NC trash
+  is fully recoverable. **Fully emptying the trash** does the permanent clean-up (bin ON → the
+  matching dashboards are deleted from the Grafana bin, and *only* those — never a wholesale
+  clear; bin OFF → already gone).
+- **Reconnection:** re-map the same folder later, **restore (untrash)** the files, and they
+  reconnect — cleanest with the bin ON (the dashboards were only parked, so the SAME uids
+  re-link); with the bin OFF a restore is a re-create (new uids, same content). A `link` mapping's
+  removal only trashes the pointers — the dashboards, which a link never owned, are never deleted.
+
 **Two mapping-model rulings that fell out of the same conversation** (both recorded in
 `admin-mapping.feature`):
 - **The Nextcloud folder name is optional** — Grafana has real folders, so "same name both
