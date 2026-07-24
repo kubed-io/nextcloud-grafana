@@ -97,28 +97,47 @@ final class MappingServiceTest extends TestCase {
 		$svc->add($b);
 	}
 
-	public function testUpdateChangesFieldsButKeepsId(): void {
+	public function testUpdateChangesMutableFieldsButKeepsIdAndFolders(): void {
 		$svc = $this->service();
 		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
 
-		$svc->update($saved->id, $this->mapping('uid-a', 'alpha-renamed', 'link', 'yaml'));
+		// The folder names are immutable, so an update keeps them and only changes the
+		// mutable fields (mode/format/…).
+		$svc->update($saved->id, $this->mapping('uid-a', 'alpha', 'link', 'yaml'));
 
 		$got = $svc->getById($saved->id);
 		self::assertNotNull($got);
 		self::assertSame($saved->id, $got->id);
-		self::assertSame('alpha-renamed', $got->ncFolder);
+		self::assertSame('alpha', $got->ncFolder);
 		self::assertSame('link', $got->mode);
 		self::assertSame('yaml', $got->format);
+	}
+
+	public function testUpdateRejectsChangingTheNextcloudFolder(): void {
+		$svc = $this->service();
+		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->update($saved->id, $this->mapping('uid-a', 'alpha-renamed', 'sync', 'json'));
+	}
+
+	public function testUpdateRejectsChangingTheGrafanaFolder(): void {
+		$svc = $this->service();
+		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->update($saved->id, $this->mapping('uid-b', 'alpha', 'sync', 'json'));
 	}
 
 	public function testUpdateForcesTheIdFromThePathNotTheBody(): void {
 		$svc = $this->service();
 		$saved = $svc->add($this->mapping('uid-a', 'alpha'));
 		// A body carrying a different id must not create a second row or move the id.
+		// (Same folders — those are immutable.)
 		$body = Mapping::fromArray([
 			'id' => 'attacker-supplied',
 			'grafana_folder_uid' => 'uid-a',
-			'nc_folder' => 'alpha2',
+			'nc_folder' => 'alpha',
 			'mode' => 'sync',
 		]);
 		$svc->update($saved->id, $body);

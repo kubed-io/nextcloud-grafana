@@ -1193,12 +1193,26 @@ file recoverable.
   sides" is the common case; omit the NC folder and it **defaults to the Grafana folder's name**.
   (Mapping model change: `Mapping::fromArray` fills `nc_folder` from `grafana_folder_title` when
   blank; `nc_folder` is no longer strictly required at input.)
-- **Folder names are immutable once a mapping exists** — re-pointing which Grafana folder a
-  mapping reads, or which Nextcloud folder it writes, would force a live migration of already-
-  synced files (rename/move both trees + re-stamp), doubly fiddly if both change at once. So we
-  **forbid it**: to re-point, delete the mapping and add a new one. Mode / format / groups /
-  subfolder-sync stay editable. (Mapping-service change: `update()` rejects a changed
-  `grafana_folder_uid` / `nc_folder`.)
+- **Four fields are immutable once a mapping exists** — each would otherwise force a live
+  migration that's easier to sidestep by re-creating the mapping: the **Grafana folder** and
+  the **Nextcloud folder** (re-pointing either would rename/move both trees of already-synced
+  files + re-stamp, doubly fiddly if both change at once); the **Team Folder flag** — switching
+  the storage backend (ownerless Team Folder ⇄ admin-owned shared folder) would have to migrate
+  the provisioned folder + its shares (**the n8n master reinforces this same rule**); and
+  **subfolder-sync** — flipping it restructures the far-side tree. So we **forbid** all four: to
+  change any, delete the mapping and add a new one. Mode / format / groups stay editable.
+  (Mapping-service change: `update()` rejects a changed `grafana_folder_uid` / `nc_folder` /
+  `use_team_folder` / `sync_subfolders`.)
+  - *Subfolder-sync — what a safe on-the-fly flip could look like (future thought, not now):*
+    the two directions are not symmetric. **OFF→ON** is the benign one — it's *additive* and
+    the mirror is already lazy/presence-driven, so it needs no migration: on the next sync,
+    each Nextcloud subfolder that holds a dashboard grows its matching Grafana subfolder and the
+    dashboards re-parent into it. **ON→OFF** is the hazard — it must *flatten*: move every
+    mirrored dashboard back up to the mapping's root folder in Grafana and leave (or prune) the
+    now-empty Grafana subfolders, all while the Nextcloud subfolders revert to cosmetic. That
+    flatten is a real re-parenting migration with prune decisions, so both stay behind the
+    immutable wall until we're ready to cook it deliberately (likely: allow OFF→ON as a plain
+    reconcile first, keep ON→OFF an explicit "delete + recreate" until the flatten is designed).
 
 **Live-verify when we cook it:** the "create-on-land re-adopts by writing the same JSON" path
 (bin-OFF restore) should be tested on the pod — a re-upsert of the same content mints a new uid
