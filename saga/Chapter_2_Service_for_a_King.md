@@ -555,6 +555,99 @@ sets *the same set*, minus our reserved control tags, in both directions:
    filter that separates "the user's labels" from "the app's controls" is a single
    prefix test.
 
+**The three edit surfaces — the object body is the third.** The user sharpened this: *tags
+live inside the object we're mapping*, so a `sync` file's on-disk JSON **already has a
+`tags` array**, and editing that array in a text editor is a first-class way to change the
+tags — just like editing a panel. That means the tags exist in **three** editable places,
+and a full sync keeps all three equal (minus the reserved namespace):
+
+| # | Surface | Where | Edited by | Authority |
+|---|---|---|---|---|
+| 1 | **Source tags** | Grafana `dashboard.tags` (inside the object) | the Grafana UI / API | wins on **pull** |
+| 2 | **File-body tags** | the `tags` array inside the `.grafana.json` file | opening the JSON in an editor / desktop client | the object's own truth in Nextcloud |
+| 3 | **NC system tags** | the coloured pills in Files (`ISystemTagManager`) | the Files UI, DAV | the searchable projection |
+
+The subtlety the user is naming: **two of the three surfaces live inside Nextcloud** — the
+file-body `tags` array (2) and the system-tag pills (3) — and they can drift from each other
+*without ever touching Grafana*. So before we even talk to the source, Nextcloud must keep
+its **own** two representations in agreement. The model:
+
+- **The file body is the canonical object; the pills are its projection.** In `sync` mode
+  the file *is* the dashboard, so its `tags` array is the Nextcloud-side source of truth for
+  the object. The NC system-tag pills are a **searchable projection** kept equal to the body
+  by listeners — so the two never silently disagree.
+- **Edit the pills → the body follows → the source follows.** Adding/removing an NC pill
+  updates the file body's `tags` array (a guarded write, so it doesn't loop), which — being
+  a body change — is a normal push candidate that carries the new tag set to Grafana on the
+  next push. This is the "edit Nextcloud tags, it syncs back to source" path, routed
+  *through* the object so there's only ever one push mechanism (the body upsert), never a
+  side-channel.
+- **Edit the body JSON → the pills follow → the source follows.** Saving the file with an
+  edited `tags` array updates the pills to match (same guarded listener, other direction)
+  and pushes the body to Grafana. Editing tags in the JSON and editing them as pills are two
+  doors into the same room.
+- **Edit the source → pull updates both.** A pull writes Grafana's tags into the body
+  (automatic in `sync` mode — it's the whole object) **and** reconciles the pills to match.
+  Both NC representations converge on the source.
+- **`link` mode has only surfaces 1 and 3.** A `link` file's body is a pointer, not the
+  object, so there is no editable body-`tags` surface to keep canonical — the pills (3) are
+  a **read-only projection of the source** (1), reconciled on pull, never pushed. This is
+  exactly why link-mode tags flow one way (Grafana → NC): with no canonical body to push,
+  there's nothing to send back. (The pointer JSON still lists tags for the human reader, but
+  those are regenerated from the source on every pull, not an edit surface.)
+
+So "three-way" is precise: **source ↔ body ↔ pills**, with the body as the hinge. Two of the
+arrows (body ↔ pills) are internal to Nextcloud and kept tight by listeners; the third
+(body ↔ source) is the existing pull/push spine, which already moves the body — tags simply
+ride inside it (Grafana) or alongside it via the tags endpoint (n8n — see the parity note).
+
+**The provenance problem — a *new* tag from Nextcloud vs. a *new* tag from Grafana.** The
+rules above say "a pull makes Grafana authoritative, a push makes Nextcloud authoritative,"
+and for a **manual, single-direction** reconcile that is complete and honest. But the moment
+tags drift on **both** sides between reconciles, "make them the same set" is ambiguous — and
+the ambiguity is exactly the one the user named: **when the two tag sets differ on a string,
+was it *added* on one side or *removed* on the other?** You cannot tell from the two current
+sets alone. Consider a dashboard that last synced with `{linux}`:
+
+- NC now has `{linux, urgent}`, Grafana has `{linux}` → did the user **add** `urgent` in
+  Files (should push to Grafana), or did someone **remove** `urgent` in Grafana (should
+  strip from NC)? Both produce the exact same pair of current sets.
+- NC has `{linux}`, Grafana has `{linux, prod}` → did Grafana **gain** `prod` (pull it into
+  NC), or did NC **drop** `prod` (push the removal to Grafana)? Again indistinguishable from
+  the current sets.
+
+**A two-way merge needs a baseline** — the tag set *as of the last successful sync* — to
+turn "the sets differ" into "who changed what." This is the same three-way-merge insight the
+body already leans on (`grafana_syncedHash` is the body's baseline); tags need the analogous
+baseline. Resolution:
+
+- **Bank a new metadata key `grafana_syncedTags`** — the reserved-stripped tag set we last
+  reconciled, stored on the file (comma-joined, sorted, alongside `grafana_syncedHash`).
+  Registered like the other banked keys; **written by the tag course, not this round.** With
+  it, each side's delta is computable: `nc_added = NC − baseline`, `nc_removed = baseline −
+  NC`, `g_added = Grafana − baseline`, `g_removed = baseline − Grafana`. The merged result is
+  `baseline ∪ (adds from both sides) − (removes from both sides)` — a true union-of-adds,
+  intersection-of-keeps three-way merge, so **a new tag from *either* side is additive and a
+  removal from *either* side propagates**, with no side clobbering the other's untouched
+  tags.
+- **The genuine conflict** — the same tag added on one side and removed on the other since
+  baseline — is the only case the merge can't auto-resolve. It resolves by the **reconcile's
+  direction of truth** (pull → Grafana wins that tag, push → NC wins), so behaviour stays
+  predictable and matches the body. This keeps the simple manual flows (pull-only, push-only)
+  behaving exactly as points 2–5 describe, and *only* the two-sided-drift case consults the
+  baseline.
+- **Origin, not authorship.** We deliberately track the *baseline set*, **not** a per-tag
+  "created in NC" / "created in Grafana" author stamp. Neither system records tag authorship,
+  and a per-tag origin flag would rot the instant a user re-adds a tag the other side also
+  has. The last-synced baseline is the minimal, honest state that answers the add-vs-remove
+  question without inventing provenance the backends don't keep.
+- **The n8n dimension is the same shape.** For the n8n sibling the identical baseline
+  (`n8n_syncedTags`) answers the identical question; the only backend difference is that n8n
+  tags are id'd resources (`ensureTag` to resolve a name→id before `PUT …/tags`), whereas
+  Grafana tags are bare strings inside the object. The three-way-merge logic — baseline,
+  deltas, direction-of-truth on conflict — is **backend-agnostic** and belongs in the shared
+  module. **This is the tag-provenance note to carry into the n8n saga too** (below).
+
 **Why this matters beyond parity — and a note back to the master.** **n8n has this same
 gap and hasn't closed it either.** n8n workflows carry real tags (`/api/v1/tags`, opaque
 ids, `PUT …/tags` to set them), and the master app uses them only as the *mapping key* +
@@ -562,11 +655,17 @@ reserved control tags — it does **not** reconcile a workflow's content tags in
 tags bidirectionally. So this is a genuinely new capability for **both** extensions, and a
 prime candidate for the eventual shared module: *"reconcile a backend object's label set
 with Nextcloud system tags, minus a reserved control namespace"* is backend-agnostic. The
-only per-backend differences are (a) **where tags live** — inside the object for Grafana
-(write = upsert the dashboard), a separate id'd resource for n8n (write = `PUT …/tags`
-with resolved ids) — and (b) **the reserved prefix** (`grafana:` vs `n8n:`). The NC-side
-half — systemtag reconcile, reserved-namespace filter, direction-of-truth — is identical.
-**No commits to the n8n repo; this is a saga note there too if we want it — see the
+per-backend differences are three, all small and injectable: (a) **where tags live / how
+they're written** — inside the object for Grafana (write = upsert the dashboard), a separate
+id'd resource for n8n (write = `ensureTag` name→id then `PUT …/tags`, and n8n's body PUT
+*drops* tags entirely); (b) **the reserved prefix** (`grafana:` vs `n8n:`); and (c) **a
+protected-tags set** — tags the pill-sync may show but must not push a *removal* for. For
+Grafana that set is **empty** (a content tag is never load-bearing); for n8n it's the
+**mapping tags** (n8n binds a folder *by tag*, so removing the mapping pill would unmap the
+workflow — a hazard Grafana's folder-mapping simply doesn't have). The NC-side half — the
+body↔pills projection, systemtag reconcile, reserved-namespace filter, baseline three-way
+merge, direction-of-truth — is **identical**. **No commits to the n8n repo for the design;
+this is a saga note there too (now written up in `nextcloud-n8n` Chapter 5 §5.6) — see the
 cross-note below.**
 
 > **Dr K, turning a dashboard over in his hands:** *"You plated the body and the folder but
@@ -576,7 +675,14 @@ cross-note below.**
 > garnish, and let the direction of the sync decide who's right — same as the body. And
 > here's the sharp bit: **even a `link` pointer gets the real Nextcloud tags** — a pointer
 > body, but a fully *searchable* one, so the mirror filters like the origin no matter the
-> mode. Tell the n8n line: they've got the same hole. This is shared-module bait."*
+> mode. Now the part the guest just taught us: the tags live in **three** places — in
+> Grafana, in the file's own JSON, and on the Nextcloud pills — and a guest might reach for
+> any of the three. So make the **file the hinge**: the pills follow the file, the file goes
+> to Grafana, and it all closes the loop no matter which door they opened. And when a tag
+> shows up on one side and not the other, you can't guess whether it was **born there or died
+> on the other side** — so you keep a little note of what the tags were last time you all
+> agreed. That note is what tells an *add* from a *remove*. Tell the n8n line: they've got the
+> same three doors and the same fix. This is shared-module bait."*
 
 ### The decision forks — where I need Dr K at the pass
 
@@ -592,7 +698,7 @@ through the saga before the destructive Courses are cooked:
 | E | **Delete gate mechanics** | NC-trash-as-gate: trash = recoverable (no Grafana call), **purge-from-trash = the one Grafana `DELETE`**, restore = re-upsert | 🟡 **leaning** — needs the trashbin-DAV listener proven on the pod (the master's `@todo` purge leg is unproven here too) |
 | F | **`ignored` mode without an archive verb** | the master archives an ignored dashboard; we can't — so `ignored` just means "skip it in sync," dashboard left fully live | 🟡 **leaning** — simplest honest behaviour |
 | G | **Mapping binds a folder, not a tag** | the feature specs still say "Grafana **tag**" (verbatim from the master); Ch1 already made mappings bind real **folders** | 🔴 **open wording fix** — reword specs to folders (this round's feature edits) |
-| H | **Bidirectional dashboard-tag sync** | reconcile `dashboard.tags` ⇄ NC **system tags**, minus the reserved `grafana:*` namespace; **pull reconciles NC tags for BOTH `sync` and `link`** (searchability is mode-independent), **push writes tags into Grafana for `sync` only**; direction-of-truth = same as the body (pull → Grafana wins, push → NC wins) | 🟡 **leaning** — Grafana tags measured (live inside `dashboard.tags`, no `labels`, no tag-id API; write = upsert the dashboard). New capability for **both** extensions → shared-module bait. Course TBD (rides the pull/push spine). |
+| H | **Bidirectional dashboard-tag sync (three surfaces)** | keep **source `dashboard.tags` ↔ file-body `tags` array ↔ NC system tags** one set, minus the reserved `grafana:*` namespace; the **file body is the canonical object** and the pills are a listener-kept projection (edit either NC surface → the other follows → push); **pull reconciles NC tags for BOTH `sync` and `link`** (searchability is mode-independent), **push writes tags for `sync` only**; two-sided drift resolved by a **three-way merge against a banked `grafana_syncedTags` baseline** (add-vs-remove provenance), genuine conflicts fall to the reconcile's direction-of-truth (pull → Grafana, push → NC) | 🟡 **leaning** — Grafana tags measured (live inside `dashboard.tags`, no `labels`, no tag-id API; write = upsert the dashboard). Needs new banked key `grafana_syncedTags` + a body↔pills mirror listener. New capability for **both** extensions → shared-module bait. Course TBD (rides the pull/push spine). |
 | H | **Reserved tags — two origins, don't conflate** | a Nextcloud-origin tag (on the *file*) vs a Grafana-origin tag (on the *dashboard*) are different systems: `grafana:ignore` = NC file tag (app namespace) read on tag events → `ignored` mode; `nextcloud:ignore` = Grafana dashboard tag (`nextcloud:` = addressed-to-NC) read at pull → never pulled. Rule: **tag with the name of the system you're talking to.** | 🟡 **called** — split the two in `reserved-tags.feature`; symmetric with n8n (`n8n:ignore` on the file, `nextcloud:ignore` on the workflow) so the shared base gets one two-axis model |
 
 ### Round-2 ticket — the commitment
