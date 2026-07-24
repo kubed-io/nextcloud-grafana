@@ -11,12 +11,10 @@
  *   • Purge — remove the dashboard files this app created (Nextcloud side only)
  *   • Connection test — "Test connection" (wired by admin-test.js)
  *
- * NB (honest UI, saga Ch2): "Sync from Grafana" (pull) is **live** as of Course 2 —
- * it provisions each mapped folder and fills it with the mapping's dashboards
- * (handler in sync-settings.js). "Sync to Grafana" (push) + "Purge" stay **disabled**
- * — they write back / delete, and land with the writeback release; they're here so the
- * page shows exactly what's coming, and each enables when its engine arrives.
- * **Test connection works today.**
+ * NB (honest UI, saga Ch2): "Sync from Grafana" (pull, Course 2) and "Sync to Grafana"
+ * (push, Course 3) are both **live** — pull provisions + fills a mapped folder, push
+ * writes local edits back to Grafana (handlers in sync-settings.js). "Purge" stays
+ * **disabled** until Course 4's delete machine. **Test connection works today.**
  *
  * @var \OCP\IL10N $l
  */
@@ -29,11 +27,11 @@ $soon = $l->t('Available once dashboard sync lands (a later release). Test conne
 	<h3><?php p($l->t('Sync Actions')); ?></h3>
 
 	<p class="settings-hint">
-		<?php p($l->t('Run a one-shot bulk sync at any time. Sync from Grafana pulls every mapped folder’s dashboards into Nextcloud now. Sync to Grafana and Purge arrive with the writeback release — until then those buttons are disabled. Test connection works now.')); ?>
+		<?php p($l->t('Run a one-shot bulk sync at any time. Sync from Grafana pulls every mapped folder’s dashboards into Nextcloud; Sync to Grafana pushes your local edits back up. Purge arrives with a later release — until then that button is disabled. Test connection works now.')); ?>
 	</p>
 
 	<div class="grafana-sync-manual__row" data-direction="push">
-		<button type="button" class="button js-run" disabled title="<?php p($soon); ?>"><?php p($l->t('Sync to Grafana')); ?></button>
+		<button type="button" class="button js-run"><?php p($l->t('Sync to Grafana')); ?></button>
 		<span class="grafana-sync-manual__hint"><?php p($l->t('(two-way sync mappings only)')); ?></span>
 	</div>
 

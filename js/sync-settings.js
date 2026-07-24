@@ -28,27 +28,30 @@
 				return;
 			}
 			var row = btn.closest('.grafana-sync-manual__row');
-			// Only the pull row is live in this release; ignore any other .js-run.
-			if (!row || row.dataset.direction !== 'pull') {
+			var direction = row && row.dataset.direction;
+			// pull = Grafana → NC (populate); push = NC → Grafana (writeback). Both live.
+			if (direction !== 'pull' && direction !== 'push') {
 				return;
 			}
-			pull(btn);
+			run(btn, direction);
 		});
 	}
 
-	// Pull is synchronous: the POST reconciles every mapping inline and returns the
-	// counts, which we surface in the status line + a toast.
-	function pull(btn) {
+	// Both directions are synchronous: the POST reconciles every mapping inline and
+	// returns the counts, which we surface in the status line + a toast.
+	function run(btn, direction) {
 		var prev = btn.textContent;
 		btn.disabled = true;
-		btn.textContent = t('grafana_sync', 'Syncing…');
+		btn.textContent = direction === 'push'
+			? t('grafana_sync', 'Pushing…')
+			: t('grafana_sync', 'Syncing…');
 
-		api('POST', OC.generateUrl('/apps/grafana_sync/sync/pull'))
+		api('POST', OC.generateUrl('/apps/grafana_sync/sync/' + direction))
 			.then(function (res) {
 				if (res && res.status === 'error') {
 					throw new Error(res.message || t('grafana_sync', 'Sync failed.'));
 				}
-				flash('success', summary(res));
+				flash('success', summary(res, direction));
 			})
 			.catch(function (err) {
 				flash('error', (err && err.message) || t('grafana_sync', 'Sync failed.'));
@@ -59,12 +62,17 @@
 			});
 	}
 
-	function summary(res) {
+	function summary(res, direction) {
 		res = res || {};
-		var line = t('grafana_sync', 'Synced {succeeded} dashboard(s); {failed} error(s).', {
-			succeeded: res.succeeded || 0,
-			failed: res.failed || 0,
-		});
+		var line = direction === 'push'
+			? t('grafana_sync', 'Pushed {succeeded} dashboard(s); {failed} error(s).', {
+				succeeded: res.succeeded || 0,
+				failed: res.failed || 0,
+			})
+			: t('grafana_sync', 'Synced {succeeded} dashboard(s); {failed} error(s).', {
+				succeeded: res.succeeded || 0,
+				failed: res.failed || 0,
+			});
 		if (res.pruned) {
 			line += ' ' + t('grafana_sync', 'Pruned {pruned}.', { pruned: res.pruned });
 		}

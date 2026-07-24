@@ -810,7 +810,7 @@ specs — designed, not wired.
   `teamFolder`→`ncFolder`) · **`SyncService` (pull)** (reconcile-by-uid: update in place,
   collision-suffix fresh writes, prune the departed, SyncGuard-wrapped, filecache mimetype
   fixup) · **`OwnershipTags`** (grafana:sync/link/unmapped pills) · **`SyncController` POST
-  /sync/pull + `occ grafana_sync:pull` + the enabled "Sync from Grafana" button**
+  /sync/pull + `occ grafana_sync:sync pull` + the enabled "Sync from Grafana" button**
   (js/sync-settings.js). **Live smoke test PASSED** on the pod: `observe` (team folder, 6
   dashboards) + `nxt-fun` (admin-owned, 1) materialized as `.grafana.json` with the full
   metadata contract (uid/mode/version/hash/mapping) + `grafana:sync` pill + correct
@@ -818,8 +818,12 @@ specs — designed, not wired.
   (icon in core, alias in mimetypelist.js). **reconcile.feature** pull scenarios off `@todo`
   and runnable (SyncSteps over occ + WebDAV, admin-owned so CI needs no groupfolders).
   Push + the whole-instance root mirror stay `@todo` for their courses.
-- ⏭ *Next: **Course 3 — the writeback** (push: NC edits → Grafana, the DAV write guard).
-  Chapter 2 stays open until Dr K calls it.*
+- ✅ **Round 3 review loop closed — PR #5 merged.** 34/34 review threads triaged/resolved
+  (Psalm infra suppressions ported from the master, redundant casts, unused logger, error
+  curation via `describeConnectionError`, robust JS fetch, saga filename fix) + the unit
+  tests the bot asked for (`SyncServiceTest`, `OwnershipTagsTest`). CI green across the board.
+- ⏭ *Now cooking: **Round 4 — The Sauce** (Course 3, push: NC edits → Grafana, loop-guarded)
+  — see the section below. Chapter 2 stays open until Dr K calls it.*
 
 ---
 
@@ -885,6 +889,78 @@ live (the two staged mappings materialize).
 > **Dr K, ladle up:** *"You've prepped the protein and read the room. Now sear it and put
 > it on the plate — a whole folder of live dashboards, appearing in Nextcloud like they
 > were always there. Be bold: one ticket, the whole pull. Fire Round 3."*
+
+---
+
+## Round 4 — The Sauce *(this PR: the writeback — NC edits → Grafana, loop-guarded)*
+
+> Round 3 seared the protein and plated it. **Round 4 spoons the sauce.** Edit a
+> `.grafana.json` in the Files app (or over WebDAV, or the desktop client), hit save,
+> and the dashboard changes **in Grafana** — same uid, same folder — and *nothing
+> loops*. The pull made dashboards flow down; the push makes them flow back up. Together
+> they are the spine: a sync folder is now a true two-way mirror **and** a restorable
+> backup you can edit.
+
+### The ticket — the whole sauce, one PR (be bold)
+
+The full Course 3, cooked in one confident batch (we have the master's `PushService` /
+`NodeWrittenListener` / push-job / `SyncNotifier` cards — the job is ported here as
+`PushDashboardJob`):
+
+1. **`GrafanaClient::upsertDashboard()`** *(finishes the adapter)* — `POST /api/dashboards/db`
+   through the existing `request()` chokepoint, returning the decoded `{uid, version,
+   status}`. The write half of the client the read half (Course 2) already left a seat for.
+2. **`PushService`** *(the reduction)* — read a managed **sync** file, decode to `stdClass`,
+   build the body with the already-shipped `DashboardBody::toUpsertBody` (forces `id:null`,
+   `overwrite:true`, folder placement), upsert, then stamp `grafana_syncedHash = sha1(the
+   file bytes we sent)` + the returned `grafana_version`. Folder placement is resolved from
+   the file's `grafana_mapping` → the mapping's `grafanaFolderUid` so a push never yanks a
+   dashboard out of its folder. Errors are **thrown** (never stamp on failure → next save
+   retries), carrying Grafana's own message via `describeConnectionError`.
+3. **`NodeWrittenListener`** *(the burner that fires on save)* — on `NodeWrittenEvent` for a
+   `.grafana.json`: re-stamp the mimetype (every external write re-detects `.json` →
+   `application/json`, clobbering our row icon), then push **only when all hold**: guard
+   inactive, file is ours (`grafana_uid` set) + **sync** mode, and the content actually
+   changed (`sha1 ≠ grafana_syncedHash`). Inline when `timing=sync`, else enqueue the job.
+4. **`PushDashboardJob`** *(async plating)* — the background writeback path, honouring the
+   Course-1 `timing` switch (default `async`), re-resolving the node by file id.
+5. **`SyncNotifier` + `Notifier`** *(the callback)* — a native NC notification (bell + toast)
+   when a background push fails, keyed on the file id so a later success clears it and
+   retries collapse onto one entry. A failed save never loses the user's edits.
+6. **`SyncService::pushOne/pushAll`** *(the bulk ladle)* — the **Sync to Grafana** button:
+   push every sync file under a mapping (or all). `link` mappings are a no-op (a pointer has
+   nothing to push).
+7. **`SyncController::push` + `occ grafana_sync:sync push [--mapping]` + the live button** — the
+   **Sync to Grafana** button stops being disabled and its `occ` twin lands. (Purge stays
+   disabled — it's Course 4's delete machine.)
+8. **Tests + live smoke.** `PushServiceTest` + `SyncService` push units; the **push scenario
+   in `reconcile.feature` off `@todo`** (edit a synced file → assert Grafana's dashboard
+   changed, uid intact); deploy + smoke on the pod (edit an `observe` dashboard file, watch
+   Grafana update, prove a re-save doesn't loop).
+
+### The one to actually get right (Ch1 risk #6 — the loop)
+
+Grafana bumps `dashboard.version` on **every** save. If we hashed Grafana's echoed-back
+object, a push→pull round-trip would look like a change and loop. We don't: the on-disk body
+has `version` **stripped** (pull's `encodeSync`, push's `toUpsertBody`), so `sha1(fileBytes)`
+is naturally stable across Grafana's bumps. Two guards, layered:
+- **`SyncGuard`** (request-scoped) — our own pull writes never trip the save listener.
+- **content hash** (`grafana_syncedHash`) — an unchanged or echoed save is skipped; only a
+  real user edit pushes.
+
+### Left on the shelf this round (still Course 4+)
+
+The **DAV link-write guard** (refuse writes to a link pointer), **create-from-Nextcloud** (a
+brand-new file becomes a dashboard), and the **move / rename / delete / copy** mode machine.
+Round 4 is the **update writeback for files we already track** — complete and live.
+
+**Ships when:** editing a synced `.grafana.json` updates its Grafana dashboard (uid + folder
+intact), a re-save doesn't loop, **Sync to Grafana** + `occ grafana_sync:sync push` work, the
+push integration + unit tests + CI are green, and it's smoke-tested live on the pod.
+
+> **Dr K, tasting the spoon:** *"A protein without sauce is a demo, and a sauce that
+> breaks is worse than none. Reduce it slow, guard the loop, and when the king cuts in,
+> the plate writes itself back. Be bold — the whole sauce, one pan. Fire Round 4."*
 
 ---
 

@@ -84,6 +84,6 @@ Grafana Labs, used here only to identify the service this app integrates with.
     <command>OCA\GrafanaSync\Command\AddMapping</command>
     <command>OCA\GrafanaSync\Command\ListMappings</command>
     <command>OCA\GrafanaSync\Command\RemoveMapping</command>
-    <command>OCA\GrafanaSync\Command\SyncPull</command>
+    <command>OCA\GrafanaSync\Command\Reconcile</command>
   </commands>
 </info>

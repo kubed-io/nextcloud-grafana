@@ -16,6 +16,7 @@ use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\OwnershipTags;
+use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\StorageService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncService;
@@ -50,6 +51,7 @@ final class SyncServiceTest extends TestCase {
 	private DashboardMetadata $metadata;
 	private OwnershipTags $tags;
 	private StorageService $storage;
+	private PushService $push;
 	private SyncService $service;
 
 	protected function setUp(): void {
@@ -62,6 +64,9 @@ final class SyncServiceTest extends TestCase {
 		// SyncGuard just brackets work in enter/leave; inert stub is enough.
 		$guard = $this->createStub(SyncGuard::class);
 
+		// The pull path never calls PushService; the push tests configure it.
+		$this->push = $this->createMock(PushService::class);
+
 		// fixupFilecacheMimetype: a no-op pair, never asserted.
 		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
 		$mimeLoader->method('getId')->willReturn(1);
@@ -73,6 +78,7 @@ final class SyncServiceTest extends TestCase {
 			$this->tags,
 			$this->storage,
 			$guard,
+			$this->push,
 			$mimeLoader,
 			new NullLogger(),
 		);
@@ -264,5 +270,90 @@ final class SyncServiceTest extends TestCase {
 		$res = $this->service->pullOne($this->mapping(Mapping::MODE_LINK));
 
 		self::assertSame(1, $res['succeeded']);
+	}
+
+	// ── push (bulk Sync to Grafana) ──────────────────────────────────────────────
+
+	public function testPushOneIsANoOpForALinkMapping(): void {
+		// A link mapping never reaches storage; the returned zeros prove the bail.
+		$this->push->expects(self::never())->method('push');
+
+		$res = $this->service->pushOne($this->mapping(Mapping::MODE_LINK));
+
+		self::assertSame(['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null], $res);
+	}
+
+	public function testPushOnePushesManagedSyncFilesAndSkipsTheRest(): void {
+		$syncFile = $this->file(1, 'Flow.grafana.json');
+		$notOurs = $this->file(2, 'notes.txt');          // wrong extension → skipped
+		$linkFile = $this->file(3, 'Pointer.grafana.json'); // link mode → skipped
+
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$syncFile, $notOurs, $linkFile]);
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('findFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturnCallback(fn (int $id): ?ManagedFile => match ($id) {
+			1 => $this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'),
+			3 => $this->managed('d3', Mapping::MODE_LINK, 'map-alpha'),
+			default => null,
+		});
+
+		// Only the managed sync file is a push candidate.
+		$this->push->expects(self::once())->method('push')->with($syncFile)->willReturn(true);
+
+		$res = $this->service->pushOne($this->mapping(Mapping::MODE_SYNC, 'map-alpha'));
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(1, $res['succeeded']);
+		self::assertSame(0, $res['failed']);
+		self::assertNull($res['message']);
+	}
+
+	public function testPushOneCarriesAPerFileFailureMessage(): void {
+		$syncFile = $this->file(1, 'Flow.grafana.json');
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$syncFile]);
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('findFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->push->method('push')->willThrowException(new \RuntimeException('boom'));
+
+		$res = $this->service->pushOne($this->mapping(Mapping::MODE_SYNC, 'map-alpha'));
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(0, $res['succeeded']);
+		self::assertSame(1, $res['failed']);
+		self::assertNotNull($res['message']);
+		self::assertStringContainsString('Flow.grafana.json', (string)$res['message']);
+	}
+
+	// ── dispatch / runInline (the parity seam) ───────────────────────────────────
+
+	public function testDispatchRejectsAnUnknownDirection(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		$this->service->dispatch('sideways', null, false);
+	}
+
+	public function testDispatchRunsPullInlineOverAllMappings(): void {
+		$this->mappings->method('list')->willReturn([]); // no mappings → clean zero run
+		$res = $this->service->dispatch(SyncService::DIR_PULL, null, false);
+		self::assertSame('ok', $res['status']);
+		self::assertSame(0, $res['processed']);
+	}
+
+	public function testDispatchIgnoresAsyncAndStillRunsInline(): void {
+		// There is no background-job path yet, so async=true must behave exactly like
+		// inline (the seam is signature-only until the scheduled course).
+		$this->mappings->method('list')->willReturn([]);
+		$res = $this->service->dispatch(SyncService::DIR_PUSH, null, true);
+		self::assertSame('ok', $res['status']);
+	}
+
+	public function testRunInlineThrowsForAnUnknownMappingId(): void {
+		$this->mappings->method('getById')->willReturn(null);
+		$this->expectException(\OutOfBoundsException::class);
+		$this->service->runInline(SyncService::DIR_PUSH, 'no-such-id');
 	}
 }

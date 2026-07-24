@@ -22,8 +22,10 @@ return [
 		// The Grafana folders the token can see — feeds the panel's folder picker.
 		['name' => 'mapping#folders', 'url' => '/folders', 'verb' => 'GET'],
 
-		// Manual bulk sync — the "Sync from Grafana" button (admin-only, gated by
-		// the handler's own #[AuthorizedAdminSetting]). Runs the pull inline.
+		// Manual bulk sync — the "Sync from Grafana" / "Sync to Grafana" buttons
+		// (admin-only, gated by the handler's own #[AuthorizedAdminSetting]). Both run
+		// inline: pull = Grafana → NC (populate), push = NC → Grafana (writeback).
 		['name' => 'sync#pull', 'url' => '/sync/pull', 'verb' => 'POST'],
+		['name' => 'sync#push', 'url' => '/sync/push', 'verb' => 'POST'],
 	],
 ];

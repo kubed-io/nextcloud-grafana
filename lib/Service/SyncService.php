@@ -41,6 +41,10 @@ use Psr\Log\LoggerInterface;
  * courses; the seams (`effectiveMode`, the ignored-index split) are left in place for them.
  */
 final class SyncService {
+	/** Sync directions — the parity vocabulary shared with the n8n master. */
+	public const DIR_PULL = 'pull';
+	public const DIR_PUSH = 'push';
+
 	public function __construct(
 		private MappingService $mappings,
 		private GrafanaClient $grafana,
@@ -48,9 +52,69 @@ final class SyncService {
 		private OwnershipTags $tags,
 		private StorageService $storage,
 		private SyncGuard $guard,
+		private PushService $push,
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Single parameterized entry point for a manual sync — the same public shape as the
+	 * n8n master's {@see \OCA\N8nSync\Service\SyncService::dispatch}, so the controller,
+	 * the occ command, and (later) a shared base all call one method regardless of
+	 * direction or scope.
+	 *
+	 * Async note: the master enqueues a background job + tracks status when `$async` is
+	 * true. Grafana has no job/status infra yet (it lands with the scheduled-pull
+	 * course), so **every dispatch runs inline** — `$async` is accepted for signature
+	 * parity and honoured as a no-op. The controller/CLI already call through here, so
+	 * wiring the async branch later needs no change at the call sites.
+	 *
+	 * @param string $direction self::DIR_PULL | self::DIR_PUSH
+	 * @param string|null $mappingId a specific mapping id, or null = every mapping
+	 * @param bool $async reserved for the future background-job path; inline for now
+	 * @return array<string,mixed>
+	 */
+	public function dispatch(string $direction, ?string $mappingId, bool $async): array {
+		if ($direction !== self::DIR_PULL && $direction !== self::DIR_PUSH) {
+			throw new \InvalidArgumentException('direction must be "pull" or "push"');
+		}
+		// $async is intentionally ignored until the background-job course; see docblock.
+		unset($async);
+		return $this->runInline($direction, $mappingId);
+	}
+
+	/**
+	 * Synchronous execution of one dispatch — also the seam a future {@see dispatch}
+	 * async job would call. Normalises the return to always carry `status`.
+	 *
+	 * @param string $direction self::DIR_PULL | self::DIR_PUSH
+	 * @return array<string,mixed>
+	 */
+	public function runInline(string $direction, ?string $mappingId): array {
+		if ($direction === self::DIR_PUSH) {
+			if ($mappingId !== null && $mappingId !== '') {
+				$mapping = $this->mappings->getById($mappingId);
+				if ($mapping === null) {
+					throw new \OutOfBoundsException('Mapping not found');
+				}
+				$res = $this->pushOne($mapping);
+				$res['status'] = ($res['failed'] ?? 0) === 0 ? 'ok' : 'error';
+				return $res;
+			}
+			return $this->pushAll();
+		}
+		if ($mappingId !== null && $mappingId !== '') {
+			$mapping = $this->mappings->getById($mappingId);
+			if ($mapping === null) {
+				throw new \OutOfBoundsException('Mapping not found');
+			}
+			$res = $this->pullOne($mapping);
+			$res['status'] = ($res['failed'] ?? 0) === 0 ? 'ok' : 'error';
+			$res['message'] = null;
+			return $res;
+		}
+		return $this->pullAll();
 	}
 
 	/**
@@ -86,6 +150,98 @@ final class SyncService {
 			'failed' => $total['failed'],
 			'pruned' => $total['pruned'],
 			'status' => $errors === [] ? 'ok' : 'error',
+			'message' => $errors === [] ? null : implode('; ', $errors),
+		];
+	}
+
+	/**
+	 * Push every mapping's `sync` files back to Grafana — the bulk "Sync to Grafana"
+	 * action (Nextcloud treated as the source of truth). Delegates per mapping to
+	 * {@see pushOne}; `link` mappings never push.
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, status:string, message:?string}
+	 */
+	public function pushAll(): array {
+		$processed = 0;
+		$succeeded = 0;
+		$failed = 0;
+		$errors = [];
+		foreach ($this->mappings->list() as $mapping) {
+			$res = $this->pushOne($mapping);
+			$processed += $res['processed'];
+			$succeeded += $res['succeeded'];
+			$failed += $res['failed'];
+			if (is_string($res['message'] ?? null) && $res['message'] !== '') {
+				$errors[] = $res['message'];
+			}
+		}
+		return [
+			'processed' => $processed,
+			'succeeded' => $succeeded,
+			'failed' => $failed,
+			'status' => $failed === 0 ? 'ok' : 'error',
+			'message' => $errors === [] ? null : implode('; ', $errors),
+		];
+	}
+
+	/**
+	 * Push a single mapping's `sync` files up to Grafana. Files outside this mapping's
+	 * folder — including every `unmapped` file — are never listed, so never pushed. A
+	 * `link` mapping is a no-op (a pointer has nothing to push).
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, message:?string}
+	 */
+	public function pushOne(Mapping $mapping): array {
+		if ($mapping->mode !== Mapping::MODE_SYNC) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		if (!$this->storage->isAvailable($mapping)) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		$folder = $this->storage->findFolder($mapping);
+		if ($folder === null) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		$processed = 0;
+		$succeeded = 0;
+		$failed = 0;
+		$errors = [];
+		foreach ($folder->getDirectoryListing() as $node) {
+			if (!FilenameCodec::isDashboardFile($node)) {
+				continue;
+			}
+			$managed = $this->metadata->read($node->getId());
+			if (!$managed?->isManaged()) {
+				continue;
+			}
+			// Push only files that are themselves `sync`. A `link`/`ignored` file must not
+			// push even in a sync mapping; a legacy file with no recorded mode is treated
+			// as sync for backward compatibility.
+			if ($managed->mode !== '' && !$managed->isSync()) {
+				continue;
+			}
+			$processed++;
+			try {
+				if ($this->push->push($node)) {
+					$succeeded++;
+				}
+			} catch (\Throwable $e) {
+				// Carry Grafana's own message through to the admin button, curated the
+				// same way as everywhere else so a bad dashboard is fixable from the toast.
+				$failed++;
+				$errors[] = $node->getName() . ': ' . GrafanaClient::describeConnectionError($e);
+				$this->logger->warning('grafana_sync push failed', [
+					'app' => Application::APP_ID,
+					'file' => $node->getName(),
+					'ncFolder' => $mapping->ncFolder,
+					'exception' => $e,
+				]);
+			}
+		}
+		return [
+			'processed' => $processed,
+			'succeeded' => $succeeded,
+			'failed' => $failed,
 			'message' => $errors === [] ? null : implode('; ', $errors),
 		];
 	}

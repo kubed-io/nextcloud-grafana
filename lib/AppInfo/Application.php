@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\AppInfo;
 
+use OCA\GrafanaSync\Listener\NodeWrittenListener;
+use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
@@ -16,6 +18,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\Node\NodeWrittenEvent;
 
 /**
  * App bootstrap.
@@ -26,11 +29,11 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
  * pull). The AdminSection sidebar entry, the Folder-mappings + Sync Actions panels
  * are wired through info.xml's <settings> block.
  *
- * Everything else from the master (the NodeWritten/rename/copy/delete listeners,
- * background jobs, Files-Metadata registration, the mimetype migration) is
- * deferred to the sync chapters and intentionally NOT wired here — a save on a
- * Nextcloud instance must not trigger any Grafana behaviour until that behaviour
- * is actually implemented.
+ * Writeback (Course 3): the {@see NodeWrittenListener} pushes a saved sync-mode
+ * `.grafana.json` back to Grafana, and the {@see Notifier} renders its failure
+ * notices. The remaining master listeners (rename/copy/delete/move, the DAV link
+ * guard) stay deferred to Course 4 — a save only ever triggers the *update* writeback
+ * for a file we already track; nothing else fires yet.
  */
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'grafana_sync';
@@ -48,6 +51,15 @@ final class Application extends App implements IBootstrap {
 		// the action buttons — are classic panels registered via info.xml.
 		$context->registerDeclarativeSettings(InstanceSettings::class);
 		$context->registerDeclarativeSettings(AutoSyncSettings::class);
+
+		// Writeback (Course 3): a save of a managed sync-mode .grafana.json pushes back
+		// to Grafana. NodeWrittenEvent covers the text editor, WebDAV PUTs, and desktop
+		// syncs; the listener's own SyncGuard + content-hash checks keep our own pull
+		// writes from looping back.
+		$context->registerEventListener(NodeWrittenEvent::class, NodeWrittenListener::class);
+
+		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
+		$context->registerNotifierService(Notifier::class);
 	}
 
 	#[\Override]
