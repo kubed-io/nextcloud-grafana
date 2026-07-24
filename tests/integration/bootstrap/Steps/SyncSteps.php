@@ -75,7 +75,7 @@ trait SyncSteps {
 		$spec = json_decode($this->davGet($path), true);
 		Assert::assertIsArray($spec, "dashboard file '$path' is not valid JSON");
 		$spec['title'] = $title;
-		$this->davPut($path, (string)json_encode($spec, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+		$this->davPut($path, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 	}
 
 	/**
