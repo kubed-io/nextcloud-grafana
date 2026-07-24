@@ -74,7 +74,10 @@ trait GrafanaApiTrait {
 			'overwrite' => true,
 			'message' => 'integration prune-case setup',
 		], JSON_THROW_ON_ERROR);
-		$res = $this->grafanaClient()->request('POST', 'dashboards/db', ['body' => $body]);
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => $body,
+		]);
 		Assert::assertSame(200, $res->getStatusCode(), "create Grafana dashboard $uid failed: " . (string)$res->getBody());
 	}
 

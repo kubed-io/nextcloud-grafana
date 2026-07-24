@@ -51,10 +51,14 @@ final class SyncController extends Controller {
 		try {
 			$res = $this->sync->pullAll();
 		} catch (\Throwable $e) {
+			// Per-mapping failures are caught + curated inside pullAll (it returns
+			// status=error with a friendly message, never throws). Reaching here means
+			// an unexpected error, so log the detail and show the admin a generic line
+			// rather than leaking raw internals — consistent with the app's other endpoints.
 			$this->logger->error('grafana_sync pull failed', ['exception' => $e]);
 			return new JSONResponse([
 				'status' => 'error',
-				'message' => $e->getMessage(),
+				'message' => 'Sync failed — check the server log for details.',
 			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 		return new JSONResponse($res, Http::STATUS_OK);

@@ -69,7 +69,10 @@ final class SyncService {
 				$total['failed'] += $res['failed'];
 				$total['pruned'] += $res['pruned'];
 			} catch (\Throwable $e) {
-				$errors[] = $mapping->ncFolder . ': ' . $e->getMessage();
+				// Curate the message the same way the rest of the app does: a Grafana
+				// auth/transport failure becomes a friendly line rather than raw upstream
+				// text, and our own RuntimeExceptions pass through unchanged.
+				$errors[] = $mapping->ncFolder . ': ' . GrafanaClient::describeConnectionError($e);
 				$total['failed']++;
 				$this->logger->error('pullOne failed for ' . $mapping->ncFolder, [
 					'app' => Application::APP_ID,
@@ -310,7 +313,7 @@ final class SyncService {
 		} else {
 			// Sync — read the full record for the spec we serialize + the version we bank.
 			$record = $this->grafana->readDashboard($uid);
-			$dashboard = isset($record['dashboard']) && is_array($record['dashboard']) ? $record['dashboard'] : [];
+			$dashboard = $record['dashboard'] ?? [];
 			$version = (string)($dashboard['version'] ?? '');
 			$body = DashboardBody::encodeSync($dashboard);
 		}
