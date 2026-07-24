@@ -149,6 +149,48 @@ namespace OCP\App {
 	}
 }
 
+namespace OCP\FilesMetadata {
+	// DashboardMetadata wraps the Files-Metadata API; the DashboardMetadata test drives
+	// it through an in-memory fake of this manager to pin the link↔reference wire + the
+	// loop-guard hash. Declaration-only, just the methods DashboardMetadata calls.
+	if (!interface_exists(IFilesMetadataManager::class, false)) {
+		interface IFilesMetadataManager {
+			public function getMetadata(int $fileId, bool $generate = false): \OCP\FilesMetadata\Model\IFilesMetadata;
+
+			public function saveMetadata(\OCP\FilesMetadata\Model\IFilesMetadata $filesMetadata): void;
+
+			public function deleteMetadata(int $fileId): void;
+
+			public function initMetadata(string $key, string $type, bool $indexed, int $editPermission): void;
+		}
+	}
+}
+
+namespace OCP\FilesMetadata\Model {
+	if (!interface_exists(IFilesMetadata::class, false)) {
+		interface IFilesMetadata {
+			public function hasKey(string $needle): bool;
+
+			public function getString(string $key): string;
+
+			public function setString(string $key, string $value, bool $index = false): self;
+		}
+	}
+	if (!interface_exists(IMetadataValueWrapper::class, false)) {
+		interface IMetadataValueWrapper {
+			public const TYPE_STRING = 'string';
+			public const EDIT_FORBIDDEN = 0;
+		}
+	}
+}
+
+namespace OCP\FilesMetadata\Exceptions {
+	if (!class_exists(FilesMetadataNotFoundException::class, false)) {
+		class FilesMetadataNotFoundException extends \Exception {
+		}
+	}
+}
+
 namespace OCP\EventDispatcher {
 	// Base event class other bundled-app events (e.g. SabrePluginAddEvent) extend;
 	// PHP resolves the parent at declaration time, so the external-stubs file needs
