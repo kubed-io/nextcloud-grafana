@@ -68,3 +68,14 @@ Feature: Admin configures folder mappings
     Then the mapping for grafana folder "observe" has subfolder sync off
     When the admin enables subfolder sync for grafana folder "observe"
     Then the mapping for grafana folder "observe" has subfolder sync on
+
+  # The Grafana root ("General") holds dashboards with no folder. It has no real uid, so the
+  # folder picker offers a reserved "/" entry for it. Mapping "/" pulls the no-folder
+  # dashboards; "/" → Nextcloud "/" with subfolder sync on mirrors the WHOLE instance
+  # (see reconcile.feature). @todo — needs the reserved-root handling.
+  @todo
+  Scenario: The Grafana root can be mapped via the reserved "/" folder
+    When the admin adds these mappings:
+      | grafana folder | folder     | mode |
+      | /              | dashboards | sync |
+    Then the mapping for grafana folder "/" is in "sync" mode

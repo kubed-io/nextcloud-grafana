@@ -36,3 +36,15 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
     When the admin clicks "Sync to Grafana" for the "alpha" mapping
     Then each sync file in the folder is pushed to its dashboard in Grafana
     And the unmapped file is not pushed (it is outside the mapping's scope)
+
+  # The whole-instance mirror (saga Ch2): the Grafana root "/" mapped to a Nextcloud folder
+  # with "Sync subfolders" on. The root encloses every folder, so the pull walks the entire
+  # Grafana folder tree — a perfect one-to-one mirror.
+  @todo
+  Scenario: Sync from Grafana on a root mapping with subfolder sync mirrors the whole instance
+    Given a folder mapped as "sync" to the Grafana root "/" with "Sync subfolders" on
+    And Grafana has dashboards at the root and inside nested folders
+    When the admin clicks "Sync from Grafana" for the root mapping
+    Then every Grafana folder that holds dashboards appears as a nested Nextcloud subfolder
+    And every dashboard appears as a ".grafana.json" file in the matching subfolder
+    And the Nextcloud tree is a one-to-one mirror of the Grafana folder structure

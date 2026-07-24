@@ -427,6 +427,36 @@ dropped in favour of the dashboard-presence trigger.
 > always there. One checkbox to switch the magic off when it misbehaves. We'll nail the
 > corners over time — but the feel is 'it just mirrors.'"*
 
+### Mapping the root — and the perfect one-to-one mirror
+
+Grafana has a **root / "General" area**: dashboards with no folder. It has no real
+`folderUid`, so it isn't in the folder list the picker fetches — but it's mappable, and it's
+the key to the most powerful configuration we can offer. The folder picker gains a reserved
+**`/` (General — dashboards with no folder)** entry; a mapping bound to it pulls the
+no-folder dashboards into its Nextcloud folder (Ch1 already anticipated "General/root → the
+mapping's root").
+
+**The marquee case — a whole-instance mirror.** Map the Grafana root **`/` → Nextcloud `/`**
+(or any folder) with **"Sync subfolders" ON**. Because the root encloses *every* Grafana
+folder, the cascade follows the entire tree: every Grafana folder that holds dashboards
+becomes a nested Nextcloud folder, every dashboard a `.grafana.json` file, nested exactly as
+in Grafana — a **perfect one-to-one mirror of the whole Grafana instance's dashboards and
+folder structure**, browsable and (in sync mode) editable as a file tree, edits pushing
+back. This is the GitOps dream the v2/YAML cut (Course 6) then makes gorgeous.
+
+- **Precedence still holds:** a more-specific folder mapping wins over the root mapping for
+  its own subtree (longest-prefix resolver), so you can mirror everything under `/` *and*
+  route one folder somewhere special.
+- **Still presence-driven:** "all folders" means every folder that *contains* dashboards; a
+  genuinely empty Grafana folder has nothing to mirror.
+- **The root marker is reserved.** `/` in the picker stores a reserved root sentinel (not a
+  real `folderUid`); the pull treats it as "no-folder dashboards, and — if cascade — the
+  whole tree beneath."
+
+> **Dr K, eyes lighting up:** *"Map the top to the top, flip the switch, and the whole
+> Grafana shows up in Nextcloud folder-for-folder, dashboard-for-dashboard. That's the plate
+> that makes the king put his fork down. Build toward that."*
+
 ### The decision forks — where I need Dr K at the pass
 
 Some forks Dr K has already called (banked above ✅). These remain open for us to refine
