@@ -11,11 +11,11 @@ namespace OCA\GrafanaSync\Listener;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\CreateService;
+use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
-use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;

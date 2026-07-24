@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Service;
 
+use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Files\File;
 use Psr\Log\LoggerInterface;
 
@@ -58,7 +59,18 @@ final class CopyService {
 		}
 
 		// Identity was just wiped, so this mints a brand-new uid — never the source's.
-		$this->createService->createForFile($node, $mapping);
+		// Logged + swallowed here (honouring this service's contract): the NC copy already
+		// happened, so a failed registration is just an untracked .grafana.json to re-save.
+		try {
+			$this->createService->createForFile($node, $mapping);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: failed to register a copied file as a new dashboard', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'path' => $node->getPath(),
+				'exception' => $e,
+			]);
+		}
 	}
 
 	/**
