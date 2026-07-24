@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Folder mappings are now hardened: the **Nextcloud folder name is optional** (when left blank it's stored as the Grafana folder's own name at create, so the list shows both), and a mapping's **Grafana folder, Nextcloud folder, Team Folder, and subfolder-sync are immutable** once created — to re-point any of them, delete the mapping and add a new one. This avoids a fiddly live migration of already-synced files. Mode, format, and groups stay editable.
+
 - Folder mappings now persist **Groups** and **Team Folder** with each mapping — previously the checkboxes/pickers were rendered for parity but the values were dropped on save; now every field round-trips through both the admin panel and `occ grafana_sync:add-mapping`. (The folder is still provisioned from those values only once the sync engine lands.)
 - The admin connection settings are now a single **Instance** card (base URL + service-account token together) instead of separate Instance and Connection cards — Grafana has one API and one credential, so there's nothing to split. The name stays "Instance" to line up with the n8n app's first section.
 - Folder mappings admin UI now matches the n8n app's card layout: **Grafana folder + Nextcloud folder** (col 1) · **Mode + Format + Team Folder** (col 2) · **Groups** (col 3) · **Save / Sync / Delete** (row 4). The per-folder Sync button is shown for interface parity — it's wired to the sync engine in a later release.

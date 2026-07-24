@@ -100,6 +100,15 @@ final class Mapping implements JsonSerializable {
 		$uid = trim((string)($data['grafana_folder_uid'] ?? ''));
 		$title = trim((string)($data['grafana_folder_title'] ?? ''));
 		$ncFolder = self::normaliseFolder((string)($data['nc_folder'] ?? ''));
+		// The Nextcloud folder is OPTIONAL: when omitted, materialise it to the Grafana
+		// folder's NAME (its title) AT CREATE and store it (mappings are immutable, so
+		// resolving once is enough). This keeps both folder fields populated in the saved
+		// mapping + the admin list, so it's visible at a glance that they match because the
+		// NC name was left blank. If there is no title to borrow either, the invariant below
+		// still requires an explicit nc_folder.
+		if ($ncFolder === '' && $title !== '') {
+			$ncFolder = self::normaliseFolder($title);
+		}
 		$mode = (string)($data['mode'] ?? '');
 
 		// Format defaults to the classic JSON cut when absent — everything already
@@ -124,7 +133,9 @@ final class Mapping implements JsonSerializable {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
 		}
 		if ($ncFolder === '') {
-			throw new \InvalidArgumentException('nc_folder is required');
+			// Reachable when nc_folder is blank AND there is no grafana_folder_title to default
+			// from (a non-empty uid alone does not fill it — we default from the folder *name*).
+			throw new \InvalidArgumentException('nc_folder is required (or a grafana_folder_title to default it from)');
 		}
 		if (!in_array($mode, [self::MODE_SYNC, self::MODE_LINK], true)) {
 			throw new \InvalidArgumentException('mode must be "sync" or "link"');

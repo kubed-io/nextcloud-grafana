@@ -31,24 +31,44 @@ Feature: Admin configures folder mappings
     And the mapping for grafana folder "secrets" is in "link" mode
 
   # The Nextcloud folder name is OPTIONAL — Grafana has real folders, so the common case
-  # is "same name on both sides". When the NC folder is omitted, it defaults to the Grafana
-  # folder's name, so mapping a whole instance is one column of Grafana folders.
-  Scenario: The Nextcloud folder defaults to the Grafana folder name when omitted
+  # is "same name on both sides". When the NC folder is omitted, it is **resolved to the
+  # Grafana folder's name AT CREATE and stored** (not defaulted lazily). Because mappings
+  # are immutable, resolving once on create is enough, and it means the saved mapping (and
+  # the admin list) shows BOTH folder fields with a value — you can see at a glance they
+  # match precisely because you left the Nextcloud name blank.
+  # @todo — new step phrases (no step defs yet); the behaviour is covered by MappingTest.
+  @todo
+  Scenario: The Nextcloud folder is stored as the Grafana folder name when omitted at create
     When the admin adds a mapping for grafana folder "observability" with no Nextcloud folder
-    Then the mapping for grafana folder "observability" targets the Nextcloud folder "observability"
+    Then the stored mapping for grafana folder "observability" has Nextcloud folder "observability"
+    And both folder fields are set in the saved mapping (nothing left blank)
 
-  # The folder names are IMMUTABLE once a mapping exists — changing which Grafana folder a
-  # mapping points at, or which Nextcloud folder it targets, would require a live migration
-  # of already-synced files (rename/move both trees, re-stamp metadata) that is fiddly and
-  # error-prone, especially if BOTH change at once. So we forbid it: to "re-point" a mapping,
-  # delete it and add a new one. Mode / format / groups / subfolder-sync stay editable.
-  Scenario: A mapping's folder names cannot be changed after it is created
+  # Four fields are IMMUTABLE once a mapping exists — each would otherwise force a live
+  # migration that's easier to avoid by re-creating the mapping:
+  #   - the Grafana folder + the Nextcloud folder — re-pointing either would rename/move both
+  #     trees of already-synced files and re-stamp metadata (doubly fiddly if BOTH change);
+  #   - the **Team Folder** flag — switching the storage backend (ownerless Team Folder ⇄
+  #     admin-owned shared folder) would migrate the provisioned folder + its shares (the n8n
+  #     master reinforces this same rule);
+  #   - **subfolder-sync** — flipping it restructures the far-side folder tree (ON→OFF flattens
+  #     mirrored Grafana subfolders + re-parents dashboards; OFF→ON lazily grows them). Immutable
+  #     for now; the saga records what a safe on-the-fly flip could look like later.
+  # To change any of them, delete the mapping and add a new one. Mode / format / groups stay
+  # editable.
+  # @todo — immutability can't be driven over occ (no update command); MappingServiceTest
+  # provides the real coverage. Kept here as the executable spec for when a REST/UI step lands.
+  @todo
+  Scenario: A mapping's folders, Team Folder, and subfolder-sync cannot be changed after it is created
     Given a mapping from grafana folder "observe" to Nextcloud folder "observe"
     When the admin tries to change that mapping's Nextcloud folder to "elsewhere"
     Then the change is rejected as immutable
     When the admin tries to change that mapping's Grafana folder to "secrets"
     Then the change is rejected as immutable
-    And the admin can still change that mapping's mode, format, groups, and subfolder-sync
+    When the admin tries to change that mapping's Team Folder setting
+    Then the change is rejected as immutable
+    When the admin tries to change that mapping's subfolder-sync setting
+    Then the change is rejected as immutable
+    And the admin can still change that mapping's mode, format, and groups
 
   # New-model invariant: a mapping's mode is exactly sync or link.
   Scenario: A mapping mode must be sync or link
@@ -76,18 +96,19 @@ Feature: Admin configures folder mappings
     And there are 1 configured mappings
 
   # Subfolder sync (saga Ch2, revised): a mapping carries an optional "Sync subfolders"
-  # flag (default OFF). ON = a Nextcloud subfolder mirrors to a Grafana subfolder the
-  # moment a dashboard lands in it (lazy, presence-driven — no hidden child mappings, no
-  # manual trigger tag). The flag persists like any other mapping field; the folder-
-  # mirroring engine that acts on it lands in a later Course, so this scenario is @todo.
+  # flag (default OFF), chosen AT CREATE (it is immutable afterwards — see above). ON = a
+  # Nextcloud subfolder mirrors to a Grafana subfolder the moment a dashboard lands in it
+  # (lazy, presence-driven — no hidden child mappings, no manual trigger tag). The flag
+  # persists like any other mapping field; the folder-mirroring engine that acts on it lands
+  # in a later Course, so the "on" behaviour is @todo.
   @todo
-  Scenario: A mapping records a "Sync subfolders" flag, defaulting to off
+  Scenario: A mapping records its "Sync subfolders" flag at create, defaulting to off
     When the admin adds these mappings:
       | grafana folder | folder  | mode |
       | observe        | observe | sync |
     Then the mapping for grafana folder "observe" has subfolder sync off
-    When the admin enables subfolder sync for grafana folder "observe"
-    Then the mapping for grafana folder "observe" has subfolder sync on
+    When the admin adds a "sync" mapping for grafana folder "network" in folder "network" with subfolder sync on
+    Then the mapping for grafana folder "network" has subfolder sync on
 
   # The Grafana root ("General") holds dashboards with no folder. It has no real uid, so the
   # folder picker offers a reserved "/" entry for it. Mapping "/" pulls the no-folder

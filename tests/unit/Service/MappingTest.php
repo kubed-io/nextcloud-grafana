@@ -125,7 +125,30 @@ final class MappingTest extends TestCase {
 		Mapping::fromArray(['grafana_folder_uid' => '   ', 'nc_folder' => 'observe', 'mode' => 'sync']);
 	}
 
-	public function testRejectsAMissingNcFolder(): void {
+	public function testNcFolderDefaultsToTheGrafanaFolderTitleWhenOmitted(): void {
+		// Omitting nc_folder materialises it to the Grafana folder's name AT CREATE, so
+		// the stored mapping carries both — and round-trips with both set.
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'af397c9y8enswf',
+			'grafana_folder_title' => 'observability',
+			'mode' => 'sync',
+		]);
+		self::assertSame('observability', $m->ncFolder);
+		self::assertSame('observability', $m->toArray()['nc_folder']);
+	}
+
+	public function testAnExplicitNcFolderIsNotOverriddenByTheTitle(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'grafana_folder_title' => 'observability',
+			'nc_folder' => 'my-dashboards',
+			'mode' => 'sync',
+		]);
+		self::assertSame('my-dashboards', $m->ncFolder);
+	}
+
+	public function testRejectsAMissingNcFolderWhenThereIsNoTitleToDefaultFrom(): void {
+		// No nc_folder AND no title → nothing to borrow → still rejected.
 		$this->expectException(\InvalidArgumentException::class);
 		Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'mode' => 'sync']);
 	}

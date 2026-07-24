@@ -158,16 +158,22 @@
 			cardStatus(card, 'error', t('grafana_sync', 'Pick a Grafana folder first.'));
 			return;
 		}
-		if (!data.nc_folder) {
-			cardStatus(card, 'error', t('grafana_sync', 'Name the Nextcloud folder first.'));
-			return;
-		}
+		// The Nextcloud folder is optional: leave it blank and the backend stores it as the
+		// Grafana folder's own name at create (both fields then show in the list).
 		var isNew = !data.id;
 		var url = OC.generateUrl(MAP_BASE + (isNew ? '' : '/' + encodeURIComponent(data.id)));
 		api(isNew ? 'POST' : 'PUT', url, data)
 			.then(function (res) {
 				if (res.mapping && res.mapping.id) {
 					card.dataset.id = res.mapping.id;
+				}
+				// Reflect the materialised Nextcloud folder back into the field so a blank
+				// entry shows the name the backend filled in.
+				if (res.mapping && res.mapping.nc_folder) {
+					var ncEl = card.querySelector('.js-nc-folder');
+					if (ncEl && !ncEl.value.trim()) {
+						ncEl.value = res.mapping.nc_folder;
+					}
 				}
 				cardStatus(card, 'success', t('grafana_sync', 'Saved.'));
 			})

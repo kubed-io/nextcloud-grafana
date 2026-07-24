@@ -86,6 +86,31 @@ final class MappingService {
 		$updated = null;
 		foreach ($all as $i => $existing) {
 			if ($existing->id === $id) {
+				// Four fields are IMMUTABLE once a mapping exists, because each would force a
+				// live migration that's easier to avoid by just re-creating the mapping:
+				//   - the Grafana folder + the Nextcloud folder — re-pointing either would have
+				//     to rename/move both trees of already-synced files and re-stamp metadata;
+				//   - the Team Folder flag — switching the storage backend (ownerless Team
+				//     Folder ⇄ admin-owned shared folder) would have to migrate the provisioned
+				//     folder + its shares (the n8n master reinforces this same rule);
+				//   - subfolder-sync — flipping it would restructure the folder tree on the far
+				//     side (ON→OFF flattens mirrored Grafana subfolders + re-parents dashboards;
+				//     OFF→ON lazily grows them), another migration. Immutable for now; the saga
+				//     records what a safe on-the-fly flip could look like later.
+				// To change any of them, delete the mapping and add a new one. Everything else
+				// (mode / format / groups) stays editable.
+				if ($mapping->grafanaFolderUid !== $existing->grafanaFolderUid) {
+					throw new \InvalidArgumentException('A mapping\'s Grafana folder cannot be changed after it is created — delete it and add a new one.');
+				}
+				if ($mapping->ncFolder !== $existing->ncFolder) {
+					throw new \InvalidArgumentException('A mapping\'s Nextcloud folder cannot be changed after it is created — delete it and add a new one.');
+				}
+				if ($mapping->useTeamFolder !== $existing->useTeamFolder) {
+					throw new \InvalidArgumentException('A mapping\'s Team Folder setting cannot be changed after it is created — delete it and add a new one.');
+				}
+				if ($mapping->syncSubfolders !== $existing->syncSubfolders) {
+					throw new \InvalidArgumentException('A mapping\'s subfolder-sync setting cannot be changed after it is created — delete it and add a new one.');
+				}
 				// Preserve the original id even if the caller sent a different one.
 				$updated = new Mapping(
 					$id,
