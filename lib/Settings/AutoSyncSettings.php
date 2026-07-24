@@ -63,7 +63,12 @@ final class AutoSyncSettings implements IDeclarativeSettingsForm {
 					'title' => 'Grafana → Nextcloud: scheduled sync',
 					'description' => 'Nextcloud periodically pulls dashboards from Grafana (read-only — nothing changes in Grafana). Optional; when off, use the manual “Sync from Grafana” button.',
 					'type' => DeclarativeSettingsTypes::CHECKBOX,
-					'default' => '0',
+					// NC's DeclarativeManager does NO type coercion — a CHECKBOX default MUST
+					// be a real bool (matches core, e.g. dav SystemAddressBookSettings). A
+					// string '0' breaks the frontend boolean round-trip, so the toggle
+					// silently never persists to appconfig (the scheduled pull then reads it
+					// as off and never runs). Found + fixed in the n8n sibling first.
+					'default' => false,
 				],
 				[
 					'id' => 'schedule_interval',
