@@ -41,8 +41,18 @@
 # the content is safe in Nextcloud BEFORE we touch Grafana. We only ever DELETE from
 # Grafana once we have confirmed the file holds what it needs to rebuild.
 #
-# DESIGN, NOT WIRED: this file is driving-truth for the file-lifecycle Course (Course 4 ·
-# Slice 2). The whole feature is @todo — CI skips it — until the move engine is cooked.
+# STATUS: the move engine IS cooked (Course 4 · Slice 2b) — MotionService + MoveGuardListener,
+# unit-tested for the invariants (uid kept on a re-parent, a failed delete never strips, a link
+# move-out refused) and verified live on the pod (create → re-parent uid-kept → move-out delete
+# → move-back new-uid, all confirmed against Grafana's API).
+#   SCOPE — same-storage moves only: Nextcloud fires NodeRenamedEvent for a move within one
+#   storage (regular folder ↔ regular folder, rename, subfolder). A move into/out of a TEAM
+#   FOLDER crosses a storage boundary and is a copy+delete under the hood (NodeDeletedEvent, not
+#   NodeRenamedEvent), so team-folder re-homing rides the delete/create lifecycle — a fast-follow
+#   — NOT this engine. The bin-ON parking rows here also stay design-only (fast-follow).
+# The whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions for a move
+# are written; until then the unit suite + the live smoke carry the proof, matching how the app
+# was built so far.
 
 @todo
 Feature: Moving a dashboard file mirrors the move in Grafana

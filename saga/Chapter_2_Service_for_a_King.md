@@ -1246,6 +1246,86 @@ round-trip preserving the uid, and the trashbin-DAV listener (`BeforeNodeDeleted
 > ever change the table numbers mid-service — a mapping's folders are set when it's seated. Now
 > set the flatware: move, delete, rename. The rulings are in; cook them."*
 
+### Slice 2b cooked — **The Pie-and-Beer Day Feast** *(this PR: the move engine + the link-write guard)*
+
+> Cooked in Utah, on the 24th of July. Everyone here calls it **Pioneer Day** — the day the
+> handcart companies came down out of the canyon and Brigham Young said *"this is the right
+> place"* and stopped the wagon. The line cooks call it **Pie and Beer Day**, because the ear
+> hears what it wants and because a holiday that ends in *pie* and *beer* is a holiday worth
+> keeping. So the pass got loud: peach hand-pies blistering under the salamander, a keg
+> sweating in the corner, and a whole brigade moving plates between tables like it was a wedding.
+> Which, conveniently, is exactly the dish this PR plates: **moving a plate from one table to
+> another without the kitchen ever losing track of whose it is.**
+
+**What went on the pass this round** — Slice 2b, the *move* half of the mode machine plus the
+DAV guard the whole Course-4 plan flagged 🟢-easy, cooked together because they share a table:
+
+- **`MotionService` — the runner.** Classifies a completed move by *where the plate lands*, straight
+  off the decision tree above. **Mapped → another mapped folder** is the dish Grafana lets us cook
+  that n8n never could: a real **folder move** — re-parent the dashboard into the destination
+  folder via an upsert with the new `folderUid`, **uid kept**, because both ends are real folders
+  and nothing is deleted. **Mapped → out of every mapping** (bin OFF, the default) is the honest
+  scrape: the file already holds the whole recipe, so we **delete** in Grafana and **strip the
+  file's identity** — and we do it in that order, delete *first*, so a Grafana that can't confirm
+  the delete leaves the plate on the table with its ticket still pinned. Nobody's dinner hits
+  the floor.
+- **`MoveGuardListener` — the maître d' at the door.** Refuses the one move that's meaningless
+  before it happens: ejecting a **link** (a pointer with no local recipe) out of its mapping.
+  Everything else it waves through — crucially the **mapped → mapped** move, which the n8n master
+  *blocks* because a tag has no folder to move to. We map by real folders, so we let the plate
+  travel and let `MotionService` re-parent it. This is the one spot the apprentice out-cooks the
+  master, and it's only because Grafana handed us the better primitive.
+- **`LinkWriteGuardPlugin` — the "do not touch the display plate" rule.** A link is the dessert
+  in the glass case: look, click through to Grafana, but don't stick a fork in it. A raw WebDAV
+  `PUT` or a desktop client would overwrite the pointer blind, so we hook Sabre's
+  `beforeWriteContent` — the *only* choke that fires for every PUT regardless of the `.part`-file
+  dance — and bounce the write with a clean `403` plus the `link_edit_blocked` notice (the
+  `SyncNotifier`/`Notifier` seam Course 3 left a seat for, now filled). And it **fails open**:
+  anything it can't positively read as a link, it lets through. Better a stray edit than a
+  refused save on a plate that wasn't even in the case.
+
+**Wired, tested, tasted.** All three hang off `Application.php` (`BeforeNodeRenamedEvent` →
+guard, `NodeRenamedEvent` → motion, `SabrePluginAddEvent` → the Sabre registration), and they
+split cleanly with the existing create-on-land listener that shares `NodeRenamedEvent`: it bails
+on managed files, `MotionService` bails on unmanaged, so a plate is only ever run by one hand.
+Unit tests pin the invariants that matter — uid kept on a re-parent, a **failed delete never
+strips** the ticket, the guard only ever bounces a known link. And because a move-back-in rides
+create-on-land, the bin-OFF "restore = fresh plate, new uid" path falls out for free, exactly as
+the ruling wanted. The frontend larder also got stocked this round — the `@nextcloud/*` deps the
+in-Files openers will need — so the next PR can cook openers, not tooling.
+
+**We tasted every course on the live pod, not just in the test kitchen.** On the running
+Nextcloud, as a real user with a real mapped folder: made a file → a dashboard appeared in
+Grafana (uid stamped); moved it to another mapped folder → **Grafana re-parented it into the new
+folder with the uid kept** (confirmed against Grafana's own API — same uid, `folderTitle` changed);
+moved it out to an unmapped folder → **the dashboard was gone from Grafana (404) and the file's
+identity stripped**; moved it back in → **a brand-new dashboard, new uid**. The whole decision
+tree, proven on real plates.
+
+**The feast taught us one thing the test kitchen couldn't.** Moving a file *into a Team Folder*
+doesn't come through the move door at all — Nextcloud treats a hop across a storage boundary (a
+regular folder ↔ a groupfolders mount) as a **copy-and-delete, not a rename**, so it fires
+`NodeDeletedEvent`, never `NodeRenamedEvent`. `MotionService` never even sees it. So Team-Folder
+re-homing rightly belongs to the *delete/create* lifecycle, not the move engine — a clean seam we
+only saw clearly by watching real plates cross the pass. `MotionService` stays the **same-storage**
+runner (regular ↔ regular, rename, subfolder), and as belt-and-suspenders it now refuses to delete
+on *any* destination path it can't positively place as a normal `…/files/…` path — so even a
+surprise event shape can never scrape a plate by mistake.
+
+*Still on the shelf* (the rulings are in, the code is a fast-follow): the recycle-bin **ON**
+parking path (move into the bin folder, uid kept), the delete-through-NC-trash reconcile
+(`BeforeNodeDeletedEvent`/`NodeRestoredEvent`) — which is also where **Team-Folder re-homing** will
+land, now that we know it rides the delete/create seam — and the mapping tear-down cascade.
+`move.feature` marks the bin-ON rows `@todo` so the spec still tells the whole story while the
+burner's on the move engine.
+
+> **Dr K, wiping peach off the pass with a bar towel, beer in the other hand:** *"You moved a
+> hundred plates today and didn't lose one. That's the whole job — a plate is the same plate
+> whether it's on table four or table nine, and the second you can't say whose it is, you've lost
+> the guest. Delete first, strip second. Fail open on the display case. And when the plate leaves
+> the room for good, you plate it fresh from the recipe — because we kept the recipe. Happy Pie
+> and Beer Day. Eat something. Then set the trashbin — that's the last fork."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

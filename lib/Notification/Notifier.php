@@ -23,7 +23,9 @@ use OCP\Notification\UnknownNotificationException;
  * Subjects:
  *   - `push_failed` — a save couldn't be written back to Grafana. The parsed message is
  *     Grafana's own complaint (e.g. a rejected panel or a uid collision) so the user can
- *     fix the dashboard JSON. (`link_edit_blocked` joins here with Course 4's link guard.)
+ *     fix the dashboard JSON.
+ *   - `link_edit_blocked` — a WebDAV edit to a `link`-mode file was refused (a link is only
+ *     a pointer; there's nothing to edit). Explains the switch-to-sync fix.
  */
 final class Notifier implements INotifier {
 	public function __construct(
@@ -66,6 +68,21 @@ final class Notifier implements INotifier {
 				if ($reason !== '') {
 					$notification->setParsedMessage($reason);
 				}
+				return $notification;
+			case 'link_edit_blocked':
+				$params = $notification->getSubjectParameters();
+				$file = (string)($params['file'] ?? $l->t('dashboard'));
+				$notification->setRichSubject(
+					$l->t('Couldn’t edit {file} — it’s a linked dashboard'),
+					['file' => ['type' => 'highlight', 'id' => $file, 'name' => $file]]
+				);
+				$notification->setParsedSubject(
+					$l->t('Couldn’t edit “%s” — it’s a linked dashboard', [$file])
+				);
+				$notification->setParsedMessage(
+					$l->t('A link is only a pointer to a dashboard in Grafana, so its file can’t be edited here. '
+						. 'Switch its folder mapping to sync mode to edit the JSON locally, or open it in Grafana to make changes.')
+				);
 				return $notification;
 			default:
 				throw new UnknownNotificationException();

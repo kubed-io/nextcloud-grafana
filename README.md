@@ -11,13 +11,17 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-30--33-0082c9?logo=nextcloud&logoColor=white)](https://apps.nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A58.1-777bb4?logo=php&logoColor=white)](composer.json)
 
-> **Status: early development.** This build ships the full admin **settings** surface —
-> point the app at Grafana and store a service-account token (with a live Test
-> connection), configure the sync schedule, and define folder mappings (mode, format,
-> groups, Team Folder) — all persisted and editable over `occ`. The dashboard sync
-> engine itself (files, two-way writeback, the bulk-sync buttons) lands in later
-> releases. The full behaviour is written up front as executable specs under
-> [`features/`](features/) (most tagged `@todo`), so the docs, tests, and roadmap stay
+> **Status: active development.** The sync engine is live: mapped folders provision and
+> fill with dashboards as `.grafana.json` files (**pull**), editing a synced file pushes
+> the dashboard back to Grafana on save (**writeback**), and the full file lifecycle works
+> — **create** a dashboard by making a file, **copy** it to fork a new one, and **move** it
+> between mapped folders to re-parent it in Grafana (uid kept) or out to delete it. A DAV
+> guard keeps a link file's pointer from being overwritten. On top of that sits the full
+> admin surface: point the app at Grafana with a service-account token (live **Test
+> connection**), set the sync schedule, and define folder mappings — all persisted and
+> scriptable over `occ`. Still to come: delete-through-trash reconcile, bidirectional tag
+> sync, the in-Files openers, and the v2/YAML dashboard cut. Behaviour is written up front
+> as executable specs under [`features/`](features/), so docs, tests, and roadmap stay
 > aligned.
 
 ---
@@ -87,6 +91,134 @@ Grafana serves a dashboard two ways, and the mapping records which one a folder 
   resource) — the modern, GitOps-friendly cut, serialized as YAML (`.grafana.yaml`).
 
 Classic JSON ships first; the v2/YAML cut is an opt-in per mapping.
+
+---
+
+## Features
+
+A high-level showcase of what's live today. Each feature links to its **executable
+specification** — a Gherkin `.feature` file under [`features/`](features/) that describes
+the exact behaviour in plain language and drives the integration tests — and to the
+**code** that implements it. The `.feature` files *are* the requirements.
+
+### Create a dashboard from Nextcloud
+
+Make a `.grafana.json` file in a mapped **sync** folder (new file, upload, or move-in) and
+the app registers it as a real Grafana dashboard — placed in the mapped folder and stamped
+with its new uid. Author in your editor of choice; it goes live in Grafana without opening
+the Grafana UI. A file created **outside** any mapped folder stays a plain, untracked
+document. (A file that already carries a uid re-adopts that dashboard rather than making a
+duplicate.)
+
+📋 spec: [`features/create-dashboard.feature`](features/create-dashboard.feature) · 🛠 [`lib/Listener/CreateInGrafanaListener.php`](lib/Listener/CreateInGrafanaListener.php), [`lib/Service/CreateService.php`](lib/Service/CreateService.php)
+
+### Mapping membership follows the folder
+
+Folder mappings are **metadata on the folder**, so a file's mapping is resolved by where it
+lives. Because mappings are per-folder, you can map a folder **inside** an already-mapped
+folder — the nearest enclosing mapping wins.
+
+📋 spec: [`features/mapping-membership.feature`](features/mapping-membership.feature) · 🛠 [`lib/Service/MappingService.php`](lib/Service/MappingService.php)
+
+### Moving a dashboard (real folders, so a move is a real move)
+
+Because Grafana has **real folders**, moving a dashboard file is the one place this app does
+*more* than its tag-based n8n sibling — the move mirrors straight through to Grafana's own
+folder tree.
+
+- **Within its own mapping** (rename, or into a subfolder of the same mapped folder): stays
+  managed; nothing changes in Grafana.
+- **Into a *different* mapped folder**: a genuine Grafana **folder move** — the dashboard
+  re-parents into the destination folder and **keeps its uid**. Same dashboard, new home.
+  (Moving *into or out of a Team Folder* crosses a storage boundary, which Nextcloud handles
+  as a copy-and-delete rather than a move; that re-homing rides the delete/create lifecycle and
+  is a fast-follow.)
+- **Out of every mapping** (sync): the file already holds the full JSON, so Nextcloud keeps
+  the only copy — the dashboard is **deleted** in Grafana and the file's identity stripped,
+  leaving a plain, untracked `.grafana.json`. Move it back into a mapping and it rides
+  create-on-land: a brand-new dashboard (new uid). *(Recycle-bin-preserving move-out — park
+  the dashboard instead of deleting it, uid kept — is a fast-follow.)*
+- **A link** cannot be moved out of its mapping (ejecting a pointer with no local JSON is
+  meaningless); that move is refused with a message.
+
+If Grafana can't confirm the delete, the file **keeps its identity** and stays reconcilable
+rather than being silently orphaned.
+
+📋 spec: [`features/move.feature`](features/move.feature) · 🛠 [`lib/Listener/MoveGuardListener.php`](lib/Listener/MoveGuardListener.php), [`lib/Listener/MotionListener.php`](lib/Listener/MotionListener.php), [`lib/Service/MotionService.php`](lib/Service/MotionService.php)
+
+### Copying a dashboard (always a brand-new instance)
+
+Where a move is "the same dashboard," a **copy** is always a *new* one. A copied file never
+carries the original's Grafana identity — its metadata is stripped the moment it is copied.
+
+- **Copy within a mapped sync folder** → the copy becomes a **new** dashboard in Grafana
+  (new uid, its own name).
+- **Copy to outside any mapping** → a plain, untracked `.grafana.json`.
+
+So duplicating a dashboard is as simple as copying its file, and a copy never silently
+hijacks the original's dashboard.
+
+📋 spec: [`features/copy.feature`](features/copy.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
+
+### Writeback: edit a file, update the dashboard
+
+Edit a synced `.grafana.json` in the Files app (or over WebDAV / the desktop client) and on
+**Save** the dashboard updates in Grafana on its stable uid — same dashboard, same folder,
+never a duplicate. It runs automatically (background by default, honouring the push-timing
+setting), on the **Sync to Grafana** button, or via `occ grafana_sync:sync push`. A
+request-scoped guard plus a content hash keep the app from pushing its own pull writes back
+(the classic sync-loop problem). A push Grafana rejects raises a notification with Grafana's
+own message and leaves the file to retry on the next save.
+
+📋 spec: [`features/reconcile.feature`](features/reconcile.feature) · 🛠 [`lib/Listener/NodeWrittenListener.php`](lib/Listener/NodeWrittenListener.php), [`lib/Service/PushService.php`](lib/Service/PushService.php)
+
+### A link file can't be edited into a corner
+
+A **link** file is only a tiny pointer to a dashboard that lives in Grafana — there's no
+full JSON on the Nextcloud side to change. A raw WebDAV `PUT`, a desktop-client sync, or
+`curl` would otherwise overwrite the pointer blindly, so a DAV guard **refuses** any write
+to a link file with a clean `403` and a notification explaining how to switch the folder to
+sync mode. (The Files UI already routes a link's click to "Open in Grafana" rather than the
+editor.) The guard **fails open** on any doubt — it only ever blocks a file it positively
+knows is a link.
+
+🧪 tested: [`tests/unit/DAV/LinkWriteGuardPluginTest.php`](tests/unit/DAV/LinkWriteGuardPluginTest.php) · 🛠 [`lib/DAV/LinkWriteGuardPlugin.php`](lib/DAV/LinkWriteGuardPlugin.php), [`lib/Listener/RegisterDavPluginsListener.php`](lib/Listener/RegisterDavPluginsListener.php)
+
+### A first-class file type: custom mimetype, icon, queryable metadata
+
+A managed dashboard isn't a generic JSON blob — it's a proper file type. The app registers
+the `application/grafana+json` mimetype, so files show a **Grafana icon** instead of a
+generic JSON glyph, and each file's state is exposed over WebDAV in a raw `PROPFIND`:
+
+| DAV property | What it contains |
+|---|---|
+| `nc:metadata-grafana_uid` | The dashboard's uid in Grafana |
+| `nc:metadata-grafana_mode` | `sync`, `reference`¹, `unmapped`, or `ignored` |
+| `nc:metadata-grafana_version` | The version of the last successful sync |
+| `nc:metadata-grafana_mapping` | The mapping this file belongs to (empty when unmapped) |
+
+¹ `reference` is the on-the-wire value for **link** mode — a Nextcloud PROPFIND quirk treats
+a stored value equal to the built-in `link()` function as a callback, so the literal string
+`link` would crash it. Everywhere else — UI, tag, docs — it's **link**.
+
+Because `grafana_mode` is **indexed**, "find every sync dashboard" / "every unmapped file"
+is a fast DAV `REPORT`, not a folder walk. A `grafana:sync` / `grafana:link` coloured pill
+(a system tag) mirrors each managed file's mode automatically.
+
+📋 spec: [`features/file-type.feature`](features/file-type.feature) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
+
+### Manual sync (Sync from / Sync to Grafana)
+
+Beyond the on-save writeback, both directions are available on demand — from the admin
+**Sync Actions** buttons or `occ grafana_sync:sync <pull|push> [--mapping=<id>]`:
+
+- **Sync from Grafana** (pull) provisions each mapped folder (Team Folder or admin-owned)
+  and fills it with that Grafana folder's dashboards — adding new files, updating existing
+  ones in place (matched by uid, never duplicated), and pruning a file whose dashboard left
+  the folder.
+- **Sync to Grafana** (push) sends the mapping's sync files up.
+
+📋 spec: [`features/reconcile.feature`](features/reconcile.feature) · 🛠 [`lib/Service/SyncService.php`](lib/Service/SyncService.php)
 
 ---
 
