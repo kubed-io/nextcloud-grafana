@@ -684,6 +684,83 @@ cross-note below.**
 > agreed. That note is what tells an *add* from a *remove*. Tell the n8n line: they've got the
 > same three doors and the same fix. This is shared-module bait."*
 
+#### Finalized in the sibling — the reactive engine, and what Grafana imports vs. adapts *(update)*
+
+The n8n line didn't just take the note — they **cooked the whole dish**. As of `nextcloud-n8n`
+Chapter 5 §5.6 the tag-reconcile engine is built, unit-tested, and live in CI, and it hardens
+the design above in ways we import wholesale. When that PR merges it is our **base**; this is
+what lands and how our ingredient bends it.
+
+**The engine (backend-agnostic, ported as-is):**
+- **`TagMerge`** — the pure three-way merge (baseline + both sides → merged set; reserved-
+  stripped, deduped, sorted). No I/O, no backend — the exact function §620–643 specced. Ours
+  verbatim.
+- **`TagSyncService` / `TagReconcileService`** — drive the pull mirror (source → pills, `sync`
+  **and** `link`), the push (pills → source, `sync` only), and the baseline write
+  (`*_syncedTags`). The seams we inject: **where tags live / how written**, the **reserved
+  prefix**, and the **protected-tags set**.
+- **`n8n_syncedTags` → `grafana_syncedTags`** — the banked baseline key, registered beside the
+  other managed keys (our metadata contract already reserves this slot, §624).
+
+**The part that's genuinely new to the spec above — reactivity (n8n "Slice A", live):**
+- **No button for tags.** A content-pill add/remove on a managed `sync` file is caught by a
+  dedicated **`ContentTagListener`** (`TagAssignedEvent`/`TagUnassignedEvent` for *content*
+  tags, distinct from the reserved `grafana:ignore` the mode listener watches) and reconciled
+  to the source **on its own** — no "Sync to Grafana" click. It honours the **same `timing`
+  knob** as the body writeback: `sync` reconciles inline, `async` enqueues a per-file
+  **`ReconcileTagsJob`** the cron worker runs next tick. This upgrades §579's "edit the pills →
+  the body follows → the *next push* carries it" to **edit the pills → it propagates itself**.
+- **Slices.** n8n shipped **A** (pill → backend reactive) and left **B** (the body↔pills
+  projection — a pill edit also silently rewrites the file-body `tags` array, and a hand-edit
+  of that array updates the pills + pushes) plus **pull change-detection**, the **reactive
+  eject**, and the **optional catalog sweep** as `@todo`. Our feature file mirrors that slicing.
+
+**What changes for Grafana (the three injected knobs, all simpler here):**
+1. **Tags are body-native, so there is no tags-only side-channel.** n8n's reactive pill push
+   uses a **decoupled** tag path (`setWorkflowTags` → `PUT /workflows/{id}/tags`) and must
+   *re-stamp `n8n_syncedHash`* on the silent body-tags write so it isn't mistaken for a body
+   edit and re-pushed. Grafana has **no such endpoint**: `dashboard.tags` *is* part of the
+   object, so a pill edit updates the body's `tags` and rides the **existing body upsert** —
+   the one push mechanism we already have. There's nothing to decouple and no re-stamp dance;
+   the loop guard is the `SyncGuard` + `grafana_syncedHash` we already ship (a genuine tag
+   change *is* a genuine body change — which is correct, not a hazard).
+2. **The protected-tags set is empty.** n8n's sharpest hazard — the **mapping tag is a content
+   tag** (n8n maps a folder *by tag*, so dropping that pill would unbind + prune) — **does not
+   exist for us.** We map by *real Grafana folders*, so no content tag is ever load-bearing:
+   the whole "force-keep the mapping pill / eject-via-`ignore` / union-of-mapping-tags across
+   mirrors" apparatus (a big slice of n8n's feature file) **evaporates**. Our protected set is
+   `[]`. (The n8n README says it outright: *"Grafana Sync, which maps by real folders, has no
+   such caveat."*)
+3. **Pull change-detection is a branch shorter.** Because our tags live *in* the body, a
+   Grafana-side tag change is a **body** change `grafana_syncedHash` already catches — n8n's
+   separate "tags-only changed in the source" branch (needed because its tags sit *outside* the
+   body) **collapses** for us into the ordinary body-changed path. Our detection is just
+   *skip-if-unchanged* vs *body-changed → write + reconcile pills*.
+
+**Pruning (imported, with one Grafana subtraction):** assignment **edges** are swept both ways
+(remove-on-either-side drops the edge, so the mirror never keeps a tag the canonical side let
+go); catalog **definitions** are **not** auto-pruned (a system tag may be pinned on unrelated
+files); reconcile is **prune-free by construction** (compute the merged set first, write once,
+never mint a pill we're about to drop); and an **optional, opt-in `occ` sweep** (dry-run first,
+never on the hot path) can GC definitions orphaned *on both sides at once*. Grafana subtraction:
+Grafana has **no tag catalog** — a tag exists only as a string on some dashboard and vanishes
+when the last one drops it — so there are **no Grafana-side definitions to sweep**; the sweep is
+an **NC-side-only** courtesy here.
+
+**Scope (imported):** tag sync is a **mapped-folder feature**. An `unmapped` or `ignored` file
+is a plain Nextcloud file — its pills are ordinary system tags with **no Grafana side effect** —
+so the `ContentTagListener` and the reconcile must no-op on it. (This is why the mode machine —
+Course 4 — lands *before* we cook tags: `unmapped`/`ignored` are its states.)
+
+> **Dr K, reading the sibling's ticket:** *"They didn't just take the note — they built the
+> line. Good. So we don't re-derive it; we plate it on our ingredient. And ours is the *easier*
+> cook: our tags live in the object, so a pill edit just rides the same pan the body does — no
+> second burner, no re-stamp sleight of hand. And the guest can't hand us the one knife that
+> cuts n8n — the mapping tag — because we plate on real folders. Empty protected set, one push
+> path, one fewer branch. Wait for their pan to come off the heat, then pour it over our
+> protein. But not tonight: the file *lifecycle* (Course 4) sets the table this dish is served
+> on."*
+
 ### The decision forks — where I need Dr K at the pass
 
 Some forks Dr K has already called (banked above ✅). These remain open for us to refine
@@ -961,6 +1038,53 @@ push integration + unit tests + CI are green, and it's smoke-tested live on the 
 > **Dr K, tasting the spoon:** *"A protein without sauce is a demo, and a sauce that
 > breaks is worse than none. Reduce it slow, guard the loop, and when the king cuts in,
 > the plate writes itself back. Be bold — the whole sauce, one pan. Fire Round 4."*
+
+---
+
+## Round 5 — The Sides *(next: the file-lifecycle mode machine — Course 4)*
+
+> The protein and its sauce are plated (pull + push). **Round 5 is the sides** — the moves
+> around the dish that make the mirror behave like a real filesystem: create a dashboard by
+> making a file, move it out to park it, copy it as a fresh one, rename it, delete it to trash
+> and restore it. This is the biggest remaining **parity** gap with the n8n master (its
+> `Create`/`Copy`/`Delete`/`Motion`/`ModeChange` services + the move/copy/rename/delete/restore
+> listeners), and it is the **prerequisite for tags** — the `unmapped` and `ignored` states this
+> course defines are what the tag reconcile scopes itself to.
+
+### Why this is the next leg (not tags)
+
+The bidirectional **tag sync** is designed to the last edge (above) and its engine is being
+finalized in the sibling — but it is **spec-only for us until two things are true**: (1) the n8n
+tag PR merges (then we import `TagMerge`/`TagSyncService`/`ContentTagListener`/`ReconcileTagsJob`
+as the base), and (2) **this course lands**, because tag sync no-ops on `unmapped`/`ignored`
+files and those states are born here. So the dependency order is **mode machine → tags**, and
+Round 5 is the mode machine.
+
+### The ticket — the mode machine (scope; one PR when we cook it)
+
+Ported from the master, re-cut for "Grafana has real folders and **no archive verb**":
+
+| Dish | Master parity | Kind | Grafana note |
+|---|---|---|---|
+| **Create from Nextcloud** | `CreateService` / create listener | 🟢 | A new `.grafana.json` in a mapped **sync** folder (new file, upload, move-in) becomes a real dashboard via `POST /api/dashboards/db`, uid-stamped. Outside a mapping → plain untracked file. |
+| **Move → `unmapped` / restore** | `MoveGuardListener` / `MotionService` | 🟡 | Move a file **out** of its mapped folder → **unmapped** (NC keeps the full JSON + uid as the backup); move back → re-adopted by uid. `link` can't be ejected this way. |
+| **The "archive" substitution** | n8n's `archive` verb | 🔴 | **The load-bearing Grafana decision.** n8n *archives* a workflow on unmap/delete (reversible in n8n). Grafana has **no soft-delete** — reversibility already lives on **our** side (the file + the NC trashbin gate, Round 2). So decide the unmap/delete contract: **leave the Grafana dashboard in place and just drop the NC binding** (default, honest, non-destructive) vs. an app-owned "archive" folder. Resolve at cook time. |
+| **Copy = always a new instance** | `CopyListener` / `CopyService` | 🟢 | A copy strips identity (new file, no `grafana_uid`) so it never hijacks the original's dashboard; becomes a fresh dashboard on first push/create. |
+| **Rename (three-way)** | `NameSyncListener` | 🟡 | filename stem ⇄ `dashboard.title` ⇄ Grafana title kept in agreement; the **uid** is the stable thread, so a rename never breaks the link. |
+| **Delete (mode-aware, two-step trash)** | `DeleteService` / delete + restore listeners | 🟡 | Trash a managed file → drop the binding (no Grafana delete yet — the trashbin is the reversibility gate); empty-trash / purge → **permanent** Grafana delete (no soft-delete to fall back on, so gated hard); restore → re-adopt by uid. Abort if Grafana is unreachable (never desync). |
+| **DAV link-write guard** | `LinkWriteGuardPlugin` + DAV registration | 🟢 | A `link` file is a read-only pointer — refuse writes to it over DAV, with the `link_edit_blocked` notice (the `SyncNotifier`/`Notifier` seam we already stubbed for Course 3 fills in here). |
+
+**Exit:** the full mode machine — **sync / link / unmapped / ignored** — behaves like the
+master's, adapted for "no archive verb," and CI's `move`/`copy`/`rename`/`delete`/`create`
+feature files come off `@todo`. Then, once the sibling's tag PR merges, **tags are the round
+after** (import the engine, plate it on our empty-protected-set / body-native ingredient).
+
+> **Dr K, setting the flatware:** *"You've sent the protein and the sauce. Now lay the table —
+> the moves a guest makes without thinking: slide a plate over and it's a new dish, take one
+> away and it's parked not binned, drop your knife and you can pick it back up. Ours has one
+> honest edge the master doesn't: there's no walk-in to archive into, so *our* trash **is** the
+> safety net — treat it like one. Set the sides. The garnish (tags) comes once the sibling's
+> reduction is off the heat."*
 
 ---
 

@@ -42,5 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The **“Grafana → Nextcloud: scheduled sync”** toggle now saves. Its checkbox default was a string (`'0'`) where Nextcloud's declarative settings require a real boolean, so the toggle silently reverted to off and never persisted — it now stores correctly (and will drive the scheduled pull once that lands). Same fix the n8n sibling shipped.
 - Test connection now tells a **missing** token apart from a **rejected** one — an unset token says so, an invalid/expired one reports "Grafana rejected the token (HTTP 401)". Previously a rejected token surfaced Grafana's raw error and looked the same as other failures. Same wording on the button and `occ grafana_sync:test-connection`.
 - CI: dropped the inherited Psalm issue-handler suppressions the connection-only POC never triggers (they caused an UnusedIssueHandlerSuppression failure and a broken SARIF upload); they return with the sync code that needs them.
