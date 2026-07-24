@@ -40,6 +40,12 @@ on:
         default: false
         type: boolean
 
+# Least-privilege default for every job (CodeQL actions/missing-workflow-permissions).
+# The package job (which calls package.yml to build) needs only read; the version and
+# release jobs opt up to `contents: write` in their own blocks below.
+permissions:
+  contents: read
+
 jobs:
 
   # ---------------------------------------------------------------------------
