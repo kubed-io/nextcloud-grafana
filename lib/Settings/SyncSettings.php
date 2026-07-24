@@ -37,6 +37,9 @@ final class SyncSettings implements IDelegatedSettings {
 		// styles. Loaded via Util so they pick up the CSP nonce — inline
 		// <script>/<style> in templates is blocked by NC's strict CSP.
 		Util::addStyle(Application::APP_ID, 'sync-settings');
+		// The pull button's handler (Course 2). Push + Purge stay disabled until
+		// their engines land, so no extra handler is loaded for them yet.
+		Util::addScript(Application::APP_ID, 'sync-settings');
 		Util::addScript(Application::APP_ID, 'admin-test');
 		Util::addStyle(Application::APP_ID, 'admin-test');
 

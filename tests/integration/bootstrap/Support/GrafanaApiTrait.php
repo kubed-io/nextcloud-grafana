@@ -62,6 +62,25 @@ trait GrafanaApiTrait {
 		return is_array($decoded) ? $decoded : null;
 	}
 
+	/**
+	 * Create (or overwrite) a minimal Grafana dashboard by uid in a folder — the
+	 * control-case setup a prune scenario needs (a throwaway dashboard the app then
+	 * sees leave). Straight through Grafana's own API, not the app under test.
+	 */
+	private function grafanaCreateDashboard(string $uid, string $title, string $folderUid): void {
+		$body = json_encode([
+			'dashboard' => ['uid' => $uid, 'title' => $title, 'schemaVersion' => 39, 'panels' => []],
+			'folderUid' => $folderUid,
+			'overwrite' => true,
+			'message' => 'integration prune-case setup',
+		], JSON_THROW_ON_ERROR);
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => $body,
+		]);
+		Assert::assertSame(200, $res->getStatusCode(), "create Grafana dashboard $uid failed: " . (string)$res->getBody());
+	}
+
 	/** Delete a Grafana dashboard by uid. 200 = gone; 404 = already gone. */
 	private function grafanaDeleteDashboard(string $uid): void {
 		$res = $this->grafanaClient()->request('DELETE', 'dashboards/uid/' . rawurlencode($uid));

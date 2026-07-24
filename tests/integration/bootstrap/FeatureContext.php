@@ -14,6 +14,7 @@ use GuzzleHttp\Client;
 use OCA\GrafanaSync\Tests\Integration\Steps\AdminSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\AppLifecycleSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\SyncSteps;
 use OCA\GrafanaSync\Tests\Integration\Support\GrafanaApiTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\OccTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\WebDavTrait;
@@ -45,6 +46,7 @@ final class FeatureContext implements Context {
 	use AppLifecycleSteps;
 	use AdminSteps;
 	use MappingSteps;
+	use SyncSteps;
 
 	private const APP_ID = 'grafana_sync';
 

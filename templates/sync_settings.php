@@ -11,11 +11,12 @@
  *   • Purge — remove the dashboard files this app created (Nextcloud side only)
  *   • Connection test — "Test connection" (wired by admin-test.js)
  *
- * NB (honest UI, saga Ch2 Course 1): the bulk-sync + purge buttons are the master's
- * layout rendered **disabled** — they move real dashboards, and the sync engine that
- * does that lands in a later release (Course 2/3). They're here so the admin page is
- * finalized and shows exactly what's coming; each enables (and gains its handler,
- * ported from the master) when its engine arrives. **Test connection works today.**
+ * NB (honest UI, saga Ch2): "Sync from Grafana" (pull) is **live** as of Course 2 —
+ * it provisions each mapped folder and fills it with the mapping's dashboards
+ * (handler in sync-settings.js). "Sync to Grafana" (push) + "Purge" stay **disabled**
+ * — they write back / delete, and land with the writeback release; they're here so the
+ * page shows exactly what's coming, and each enables when its engine arrives.
+ * **Test connection works today.**
  *
  * @var \OCP\IL10N $l
  */
@@ -28,7 +29,7 @@ $soon = $l->t('Available once dashboard sync lands (a later release). Test conne
 	<h3><?php p($l->t('Sync Actions')); ?></h3>
 
 	<p class="settings-hint">
-		<?php p($l->t('Run a one-shot bulk sync at any time. Sync to/from Grafana and Purge arrive with dashboard sync (a later release) — until then these buttons are disabled. Test connection works now.')); ?>
+		<?php p($l->t('Run a one-shot bulk sync at any time. Sync from Grafana pulls every mapped folder’s dashboards into Nextcloud now. Sync to Grafana and Purge arrive with the writeback release — until then those buttons are disabled. Test connection works now.')); ?>
 	</p>
 
 	<div class="grafana-sync-manual__row" data-direction="push">
@@ -37,7 +38,7 @@ $soon = $l->t('Available once dashboard sync lands (a later release). Test conne
 	</div>
 
 	<div class="grafana-sync-manual__row" data-direction="pull">
-		<button type="button" class="button js-run" disabled title="<?php p($soon); ?>"><?php p($l->t('Sync from Grafana')); ?></button>
+		<button type="button" class="button primary js-run"><?php p($l->t('Sync from Grafana')); ?></button>
 	</div>
 
 	<div class="grafana-sync-manual__footer">

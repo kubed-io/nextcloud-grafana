@@ -1,4 +1,4 @@
-# The two manual sync controls in admin settings, each SCOPED TO A MAPPING:
+# The manual per-mapping sync controls in admin settings:
 #   - "Sync from Grafana" (pull): bring the mapping's folder dashboards into its folder.
 #   - "Sync to Grafana"   (push): send the mapping's sync files up to Grafana.
 # Both reconcile the mapped folder against the dashboards in that mapping's Grafana
@@ -6,12 +6,12 @@
 # a mapping-scoped sync never sees them. Pruning here is therefore mapping-scoped:
 # it only ever concerns files/dashboards inside the mapping.
 #
-# (The "merge" that happens when you MOVE an unmapped file back into a mapping that
-# already holds its dashboard is a MOVE-time behaviour, not a sync — see
-# move.feature. The duplicate state, one unmapped + one mapped with the same uid, is
-# perfectly fine and intentional; a sync does not touch the unmapped one.)
+# The pull scenarios below are LIVE (Course 2): they drive `occ grafana_sync:pull`
+# (the headless twin of the admin button) against the preloaded Grafana folders and
+# assert the result over WebDAV. The mapping is admin-owned so CI needs no
+# groupfolders app. Push (Course 3, writeback) and the whole-instance root mirror
+# (the subfolder course) are still @todo — their engines land later.
 
-@todo
 Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   As a Nextcloud admin
   I want the per-mapping sync buttons to reconcile just that mapping
@@ -19,17 +19,31 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
 
-  Scenario: Sync from Grafana pulls the folder's dashboards into the mapped folder
-    Given Grafana has dashboards in the "alpha" folder
-    And an unmapped dashboard file exists outside every mapping
-    When the admin clicks "Sync from Grafana" for the "alpha" mapping
-    Then each "alpha" dashboard appears as a file in the mapped folder
-    And existing files are updated in place — matched by dashboard uid, never duplicated
-    And a mapped file whose dashboard left the folder is pruned from the folder
-    And the unmapped file is left untouched (it is outside the mapping's scope)
+  Scenario: Sync from Grafana fills the mapped folder, matched by dashboard uid
+    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-dash"
+    When the admin pulls from Grafana
+    Then a file named "Alpha Demo.grafana.json" appears in "alpha-dash"
+    And the file "alpha-dash/Alpha Demo.grafana.json" is a "sync" dashboard for uid "nc-alpha-demo"
+    And "alpha-dash" holds exactly 1 dashboard file
+    # A second pull updates in place by uid — no duplicate, no "(2)" collision file.
+    When the admin pulls from Grafana
+    Then "alpha-dash" holds exactly 1 dashboard file
 
+  Scenario: Sync from Grafana prunes a file whose dashboard left the folder
+    Given an admin-owned mapping from Grafana folder "nc-delta" to Nextcloud folder "delta-dash"
+    And a throwaway Grafana dashboard "Ephemeral" with uid "nc-ephemeral" in folder "nc-delta"
+    When the admin pulls from Grafana
+    Then a file named "Delta Demo.grafana.json" appears in "delta-dash"
+    And a file named "Ephemeral.grafana.json" appears in "delta-dash"
+    When the Grafana dashboard with uid "nc-ephemeral" is deleted
+    And the admin pulls from Grafana
+    Then no file named "Ephemeral.grafana.json" remains in "delta-dash"
+    And a file named "Delta Demo.grafana.json" appears in "delta-dash"
+
+  # Push (Course 3, writeback): sending the mapping's sync files up to Grafana. The
+  # reconciler's push half + the DAV write guard land there; kept @todo until then.
+  @todo
   Scenario: Sync to Grafana pushes the mapping's sync files up to Grafana
     Given the "alpha" folder has sync dashboard files with local changes
     And an unmapped dashboard file exists outside every mapping
@@ -39,7 +53,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
 
   # The whole-instance mirror (saga Ch2): the Grafana root "/" mapped to a Nextcloud folder
   # with "Sync subfolders" on. The root encloses every folder, so the pull walks the entire
-  # Grafana folder tree — a perfect one-to-one mirror.
+  # Grafana folder tree — a perfect one-to-one mirror. Lands with the subfolder course.
   @todo
   Scenario: Sync from Grafana on a root mapping with subfolder sync mirrors the whole instance
     Given a folder mapped as "sync" to the Grafana root "/" with "Sync subfolders" on
