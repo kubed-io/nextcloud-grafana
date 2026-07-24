@@ -50,7 +50,9 @@ final class FilenameCodec {
 	 * Pure string test — the single source of truth for "is this one of ours?".
 	 */
 	public static function isDashboardName(string $name): bool {
-		return str_ends_with($name, self::EXT);
+		// Require a non-empty stem so this agrees with parse() (which rejects a bare
+		// ".grafana.json") — the two predicates must never disagree on "is this ours?".
+		return strlen($name) > strlen(self::EXT) && str_ends_with($name, self::EXT);
 	}
 
 	/**
@@ -83,9 +85,7 @@ final class FilenameCodec {
 	 * Both clean and uid-suffixed shapes are recognised; the uid field is `null` for
 	 * the clean shape and a non-empty string for the suffixed shape.
 	 *
-	 * @return array{name:string, uid:?string, suffix:int}|null
-	 *                                                          `suffix` is the collision counter (0 for the canonical name,
-	 *                                                          1+ for "(N)" duplicates).
+	 * @return array{name:string, uid:?string, suffix:int}|null suffix is the collision counter (0 = canonical name, 1+ = "(N)" duplicate)
 	 */
 	public static function parse(string $basename): ?array {
 		$slash = strrpos($basename, '/');

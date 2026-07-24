@@ -12,7 +12,6 @@ namespace OCA\GrafanaSync\Service;
 use OCP\FilesMetadata\Exceptions\FilesMetadataNotFoundException;
 use OCP\FilesMetadata\IFilesMetadataManager;
 use OCP\FilesMetadata\Model\IMetadataValueWrapper;
-use Psr\Log\LoggerInterface;
 
 /**
  * Wraps Nextcloud's Files Metadata API for Grafana dashboard files — the master's
@@ -96,7 +95,6 @@ final class DashboardMetadata {
 
 	public function __construct(
 		private IFilesMetadataManager $manager,
-		private LoggerInterface $logger,
 	) {
 	}
 

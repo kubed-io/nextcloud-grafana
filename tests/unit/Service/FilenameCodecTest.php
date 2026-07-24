@@ -125,7 +125,7 @@ final class FilenameCodecTest extends TestCase {
 		yield 'clean shape' => ['My Dashboard.grafana.json', true];
 		yield 'uid-suffixed shape' => ['My Dashboard.af397c9y8enswf.grafana.json', true];
 		yield 'collision suffix' => ['My Dashboard (2).grafana.json', true];
-		yield 'bare extension' => ['.grafana.json', true]; // a name test, not a parse — the suffix alone matches
+		yield 'bare extension (empty stem)' => ['.grafana.json', false]; // agrees with parse(), which rejects an empty stem
 		yield 'plain json' => ['notes.json', false];
 		yield 'wrong extension' => ['dashboard.grafana.txt', false];
 		yield 'yaml cut' => ['board.grafana.yaml', false];
