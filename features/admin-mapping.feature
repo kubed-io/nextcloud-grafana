@@ -30,6 +30,26 @@ Feature: Admin configures folder mappings
     And the mapping for grafana folder "observe" is in "sync" mode
     And the mapping for grafana folder "secrets" is in "link" mode
 
+  # The Nextcloud folder name is OPTIONAL — Grafana has real folders, so the common case
+  # is "same name on both sides". When the NC folder is omitted, it defaults to the Grafana
+  # folder's name, so mapping a whole instance is one column of Grafana folders.
+  Scenario: The Nextcloud folder defaults to the Grafana folder name when omitted
+    When the admin adds a mapping for grafana folder "observability" with no Nextcloud folder
+    Then the mapping for grafana folder "observability" targets the Nextcloud folder "observability"
+
+  # The folder names are IMMUTABLE once a mapping exists — changing which Grafana folder a
+  # mapping points at, or which Nextcloud folder it targets, would require a live migration
+  # of already-synced files (rename/move both trees, re-stamp metadata) that is fiddly and
+  # error-prone, especially if BOTH change at once. So we forbid it: to "re-point" a mapping,
+  # delete it and add a new one. Mode / format / groups / subfolder-sync stay editable.
+  Scenario: A mapping's folder names cannot be changed after it is created
+    Given a mapping from grafana folder "observe" to Nextcloud folder "observe"
+    When the admin tries to change that mapping's Nextcloud folder to "elsewhere"
+    Then the change is rejected as immutable
+    When the admin tries to change that mapping's Grafana folder to "secrets"
+    Then the change is rejected as immutable
+    And the admin can still change that mapping's mode, format, groups, and subfolder-sync
+
   # New-model invariant: a mapping's mode is exactly sync or link.
   Scenario: A mapping mode must be sync or link
     When the admin adds a mapping with an unknown mode for grafana folder "build"
@@ -79,3 +99,24 @@ Feature: Admin configures folder mappings
       | grafana folder | folder     | mode |
       | /              | dashboards | sync |
     Then the mapping for grafana folder "/" is in "sync" mode
+
+  # ── the optional Grafana recycle-bin folder (opt-in id-preserving delete/move-out) ──
+  # OFF by default: a move-out / delete is a true Grafana delete (see move.feature +
+  # delete.feature). Turned ON, the admin names an existing Grafana folder to act as the
+  # trash: instead of deleting, the app MOVES the dashboard there (keeping its uid), so a
+  # restore / move-back-in returns the SAME dashboard — Grafana's answer to n8n's archive.
+  # The bin folder has special meaning, so it may not itself be used in a folder mapping.
+  # @todo — the delete/move engine that reads these settings lands in Course 4 · Slice 2.
+  @todo
+  Scenario: The recycle-bin folder is off by default and can be enabled with a folder name
+    Given the app is enabled
+    Then the Grafana recycle-bin folder is off
+    When the admin enables the Grafana recycle-bin folder and sets it to "nextcloud-trash"
+    Then the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+
+  @todo
+  Scenario: The recycle-bin folder cannot also be a mapped folder
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    When the admin adds a "sync" mapping for grafana folder "nextcloud-trash" in folder "trash"
+    Then the mapping is rejected
+    And there are 0 configured mappings

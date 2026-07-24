@@ -119,6 +119,16 @@ final class CreateServiceTest extends TestCase {
 		$this->service->createForFile($this->file(1, '{not json'), $this->mapping());
 	}
 
+	public function testANonObjectJsonBodyThrowsRatherThanCoercingToEmpty(): void {
+		// A JSON array or scalar is a malformed dashboard — fail loudly like PushService,
+		// never silently mint an empty dashboard from it.
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->metadata->expects(self::never())->method('stampSynced');
+
+		$this->expectException(\RuntimeException::class);
+		$this->service->createForFile($this->file(1, '["not","an","object"]'), $this->mapping());
+	}
+
 	public function testAUidLessResponseThrowsAndNeverStamps(): void {
 		$this->grafana->method('upsertDashboard')->willReturn(['version' => 1]); // no uid
 		$this->metadata->expects(self::never())->method('stampSynced');

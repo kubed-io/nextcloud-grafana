@@ -64,9 +64,11 @@ final class CopyServiceTest extends TestCase {
 	}
 
 	public function testACopyIntoALinkFolderStripsIdentityButDoesNotCreate(): void {
-		// A link folder is for read-only pointers — a copy there is not authored.
+		// A link folder is for read-only pointers — a copy there is not authored. Both
+		// halves of stripIdentity must still run (metadata + ownership pill cleared).
 		$this->mappings->method('resolveForPath')->willReturn($this->mapping(Mapping::MODE_LINK));
-		$this->metadata->expects(self::once())->method('clear');
+		$this->metadata->expects(self::once())->method('clear')->with(1);
+		$this->tags->expects(self::once())->method('clear')->with(1);
 		$this->create->expects(self::never())->method('createForFile');
 
 		$this->service->onCopy($this->file(1));

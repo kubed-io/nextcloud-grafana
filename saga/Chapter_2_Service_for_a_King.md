@@ -1139,6 +1139,80 @@ is its own new dashboard, the original untouched. `create.feature` + `copy.featu
 > copy becomes its own dish.* Ours even re-adopts a stray by its uid for free. Send those two
 > clean, then we set the trickier flatware."*
 
+### Slice 2 — **The Trickier Flatware** *(next: move, delete, rename — the rulings are IN)*
+
+Dr K called the forks. Recording the resolved contract here so the implementation is a
+transcription, not a re-derivation. The whole of it turns on one hard truth we already
+proved live — **Grafana has no soft-delete/archive; a DELETE is permanent** — and one
+optional escape hatch that buys back the one thing that truth costs us (id preservation).
+
+**The move/delete decision tree (by *where the file lands*, not by "move vs delete"):**
+
+| The gesture | Grafana action | The file's id |
+|---|---|---|
+| Rename / move **within** the same mapping | title reconcile only | kept |
+| Move **mapped → another mapped** folder | **folder move** (update `folderUid` via upsert) | **kept** (both sides are real folders; no delete) |
+| Move **out of every mapping** — **bin OFF** | **true DELETE** | **stripped** (see the id rule) |
+| Move **out of every mapping** — **bin ON** | **move into the bin folder** (not a delete) | **kept** (parked, `unmapped`) |
+| Delete to NC trash — **bin OFF** | **true DELETE** at trash-time | **stripped** |
+| Delete to NC trash — **bin ON** | **move into the bin folder** | **kept** |
+| Restore / move-back-in — **bin OFF** | **create-on-land** (re-upsert from the file's JSON) | **NEW uid** |
+| Restore / move-back-in — **bin ON** | **move out of the bin** back to the folder | **same uid** |
+| Empty NC trash — **bin OFF** | nothing (already deleted at trash-time) | — |
+| Empty NC trash — **bin ON** | permanently delete **only the cleared items** from the bin | — |
+
+**The id-strip rule (precise, from Dr K):** strip the file's `grafana_uid` **only when we do
+a TRUE Grafana delete while the file survives in Nextcloud** — because the dashboard is gone,
+its uid is dead. With the bin ON, a "delete/move-out" is a *move into the bin*, **not** a true
+delete, so the dashboard still exists and the file **keeps its uid**. This is the single
+predicate the whole delete/move engine branches on.
+
+**Why n8n could park an id for free and we can't (and how the bin gives it back):** n8n
+*archives* the workflow on move-out, keeping the id for an un-archive on move-back. Grafana
+has no archive, so a move-out is either a real delete (id gone → re-create with a new uid) or
+— if the admin opts in — a **move into a designated Grafana folder that acts as the trash**.
+Moving preserves the uid, so the bin is Grafana's answer to n8n's archive, built from the one
+primitive Grafana *does* give us: real folders. The n8n **note-for-note** flow becomes:
+- an admin setting: a **folder-name string** naming an existing Grafana folder as the bin, plus
+  an **on/off toggle** (OFF by default → the aggressive real-delete path);
+- that folder **may not be used in a mapping** (special meaning);
+- "delete/move-out" **moves** the dashboard into the bin exactly as Nextcloud moves the file
+  into its own trash; **restore/move-back moves it out**;
+- emptying the NC trash is the one irreversible step — and it must delete from the bin **only
+  the dashboards for the files being cleared**, never a wholesale bin-clear (the bin may hold
+  dashboards Nextcloud does not manage).
+
+**The safety rule (never lose data):** a sync file always holds the full dashboard JSON, so the
+content is safe in Nextcloud *before* we touch Grafana. We confirm the file holds what it needs,
+then act on Grafana. A delete/move-out that can't confirm the Grafana step aborts, leaving the
+file recoverable.
+
+**Two mapping-model rulings that fell out of the same conversation** (both recorded in
+`admin-mapping.feature`):
+- **The Nextcloud folder name is optional** — Grafana has real folders, so "same name both
+  sides" is the common case; omit the NC folder and it **defaults to the Grafana folder's name**.
+  (Mapping model change: `Mapping::fromArray` fills `nc_folder` from `grafana_folder_title` when
+  blank; `nc_folder` is no longer strictly required at input.)
+- **Folder names are immutable once a mapping exists** — re-pointing which Grafana folder a
+  mapping reads, or which Nextcloud folder it writes, would force a live migration of already-
+  synced files (rename/move both trees + re-stamp), doubly fiddly if both change at once. So we
+  **forbid it**: to re-point, delete the mapping and add a new one. Mode / format / groups /
+  subfolder-sync stay editable. (Mapping-service change: `update()` rejects a changed
+  `grafana_folder_uid` / `nc_folder`.)
+
+**Live-verify when we cook it:** the "create-on-land re-adopts by writing the same JSON" path
+(bin-OFF restore) should be tested on the pod — a re-upsert of the same content mints a new uid
+and *should* "just work", but we want to see it, not assume it. Same for the bin move-in/out
+round-trip preserving the uid, and the trashbin-DAV listener (`BeforeNodeDeletedEvent` /
+`NodeRestoredEvent`) actually firing on the pod.
+
+> **Dr K, setting the sharp knives:** *"Here's the honest cut: a plate scraped into the bin is
+> gone — so if the guest wants it back, we plate it fresh from the recipe we kept. That's the
+> default, and it never loses the recipe. But if they want the *same* plate back, give them a
+> bin they can fish it out of — a real folder that means 'trash', move don't burn. And never,
+> ever change the table numbers mid-service — a mapping's folders are set when it's seated. Now
+> set the flatware: move, delete, rename. The rulings are in; cook them."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
