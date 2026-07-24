@@ -190,4 +190,17 @@ final class PushServiceTest extends TestCase {
 		$this->expectException(GrafanaApiException::class);
 		$this->service->push($this->file(1, '{"uid":"d1","title":"X"}'));
 	}
+
+	public function testADeletedMappingFailsThePushRatherThanRelocatingToGeneral(): void {
+		// The file still points at a mapping that has since been removed. Rather than
+		// silently omit folderUid (which would move the dashboard to General), the push
+		// must fail — and never stamp — so it retries once the mapping is restored.
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-gone'));
+		$this->mappings->method('getById')->willReturn(null); // mapping deleted
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->metadata->expects(self::never())->method('write');
+
+		$this->expectException(\RuntimeException::class);
+		$this->service->push($this->file(1, '{"uid":"d1","title":"X"}'));
+	}
 }

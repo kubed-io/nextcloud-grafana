@@ -101,20 +101,31 @@ final class PushService {
 	/**
 	 * The Grafana folder uid a push should place the dashboard in, so a writeback never
 	 * yanks a dashboard out of its folder. Prefer the file's banked `grafana_folderUid`
-	 * (a later course writes it); otherwise resolve from the originating mapping. The
-	 * reserved-root mapping (`/`) means "General / no folder" → null, which
-	 * {@see DashboardBody::toUpsertBody} expresses by omitting folderUid.
+	 * (a later course writes it); otherwise resolve from the originating mapping.
+	 *
+	 * General placement (null → {@see DashboardBody::toUpsertBody} omits folderUid) is
+	 * reached **only** via an explicit reserved-root (`/`) mapping. Any "can't determine
+	 * the folder" state — no recorded mapping, or the mapping was deleted — **throws**
+	 * rather than defaulting to null, because a silent null would relocate the dashboard
+	 * to General on the next push (moving it out of its folder). Failing instead leaves
+	 * the file to retry once the mapping is restored/re-created; the notifier shows why.
 	 */
 	private function resolveFolderUid(ManagedFile $managed): ?string {
 		if ($managed->folderUid !== '') {
 			return $managed->folderUid;
 		}
-		if ($managed->mappingId !== '') {
-			$mapping = $this->mappings->getById($managed->mappingId);
-			if ($mapping !== null) {
-				return $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
-			}
+		if ($managed->mappingId === '') {
+			// A managed file always records its mapping (stampSynced writes it); missing it
+			// means we can't know the placement, so don't guess General.
+			throw new \RuntimeException('Cannot push: the file has no recorded Grafana folder mapping.');
 		}
-		return null;
+		$mapping = $this->mappings->getById($managed->mappingId);
+		if ($mapping === null) {
+			throw new \RuntimeException(
+				'Cannot push: the mapping this dashboard belongs to no longer exists — restore or re-map it before pushing.',
+			);
+		}
+		// '/' reserved-root = General / no folder.
+		return $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
 	}
 }
