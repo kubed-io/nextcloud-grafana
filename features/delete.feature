@@ -26,9 +26,11 @@
 # master's purge leg is @todo for the same reason). Until proven, the purge→Grafana-
 # DELETE legs stay @todo.
 #
-# SUBFOLDER SAFETY VALVE (saga Ch2 Round 2): deletes INSIDE a subfolder of a mapped
-# folder are BLOCKED for now — we don't open the cascade delete door until the
-# subfolder model is cooked.
+# SUBFOLDERS ARE NOT SPECIAL-CASED (saga Ch2, revised subfolder model): a dashboard
+# inside a subfolder deletes through the exact same Nextcloud-trashbin gate as one at
+# the mapping root — trash = recoverable (no Grafana call), purge-from-trash = the one
+# Grafana DELETE. The earlier "block subfolder deletes" safety valve is retired along
+# with the hidden-child-mappings model.
 #
 # DESIGN, NOT WIRED: the whole feature is @todo — CI skips it — until the delete
 # engine is cooked and the forks are called by Dr K.
@@ -105,13 +107,16 @@ Feature: Deleting a dashboard file
     Then Grafana is not contacted
     And the file returns as an unmapped file
 
-  # ── subfolder safety valve — blocked for now ─────────────────────────────────
+  # ── subfolders are not special-cased (saga Ch2, revised) ─────────────────────
+  # A dashboard in a subfolder deletes through the same trashbin gate as one at the
+  # mapping root — no special block. Trash is recoverable (no Grafana call); the
+  # Grafana DELETE only fires on purge-from-trash.
 
-  Scenario: Deleting a file inside a subfolder of a mapped folder is blocked
+  Scenario: Deleting a file inside a subfolder trashes it like any other (no special block)
     Given a managed "sync" dashboard file in a subfolder of the "alpha" folder
-    When I try to delete the file
-    Then the delete is refused with a message
-    And nothing changes in Grafana
+    When I delete the file
+    Then it goes to the Nextcloud trashbin and is recoverable
+    And Grafana is not contacted until the file is purged from the trash
 
   # ── error path — the irreversible step must never half-happen ────────────────
   # If the Grafana DELETE can't be confirmed on purge, we abort so the file stays in

@@ -45,12 +45,18 @@ Feature: Moving a dashboard file is the same dashboard leaving and returning
     Then the file stays in "sync" mode in the "alpha" mapping
     And nothing changes in Grafana except the name
 
-  Scenario: Move into a plain (unmapped) subfolder of the same mapping keeps the parent's UID
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I move the file into a plain Nextcloud subfolder of the "alpha" folder
-    Then the file stays in "sync" mode in the "alpha" mapping
-    And the file keeps the "grafana_uid" it had from the parent
-    And nothing changes in Grafana
+  # With "Sync subfolders" OFF (the default), a subfolder is an ordinary local NC folder,
+  # invisible to Grafana. This is the n8n-like flat model: the nesting is cosmetic, the
+  # dashboard stays bound to the PARENT mapped folder, and it keeps ALL its metadata. A
+  # file only becomes "unmapped" when it leaves every mapped folder — a subfolder is still
+  # inside the mapping.
+  Scenario: With subfolder-sync off, moving into a subfolder is local-only (stays bound to the parent)
+    Given "alpha" has "Sync subfolders" off
+    And a managed "sync" dashboard file in the "alpha" folder
+    When I move the file into a Nextcloud subfolder of the "alpha" folder
+    Then the file stays fully managed in "sync" mode under the "alpha" mapping
+    And it keeps its "grafana_uid", "grafana_mapping", and "grafana_folderUid" (still the "alpha" folder)
+    And nothing changes in Grafana — the subfolder is local Nextcloud organization only
 
   # ── sync move-out → unmapped (the file is the backup) ─────────────────────────
 
@@ -121,28 +127,43 @@ Feature: Moving a dashboard file is the same dashboard leaving and returning
     Then a matching dashboard is created in Grafana
     And the file's mode becomes "sync" in the "alpha" mapping
 
-  # ── subfolders — Grafana's real nested folders (design this round) ────────────
-  # Two kinds of subfolder, and the difference decides the behaviour:
-  #   • a Grafana-MAPPED subfolder (a child folder that exists in Grafana, matched by
-  #     name, modelled as a hidden child mapping with a "has-parent" flag), vs.
-  #   • a plain Nextcloud subfolder (no Grafana counterpart).
-  # Cascade is an OPTIONAL flag on the mapping (off by default). These are @todo —
-  # designed here, wired in a later Course.
+  # ── subfolders — the lazy, presence-driven mirror (saga Ch2, revised) ─────────
+  # ONE rule: a subfolder exists on the far side exactly when it holds a dashboard.
+  # Gated by a per-mapping "Sync subfolders" checkbox (off by default). No hidden
+  # child mappings, no "two kinds" — a Nextcloud subfolder mirrors to a Grafana
+  # subfolder, created LAZILY the moment a dashboard lands in it; the dashboard
+  # re-parents and the file stamps grafana_folderUid. The subtree stays under the
+  # top-level mapping. These are @todo — designed here, wired in a later Course.
 
   @todo
-  Scenario: Moving from a top-level mapped folder into a Grafana-mapped subfolder re-parents in Grafana
-    Given a managed "sync" dashboard file in the "alpha" folder
-    And "alpha" has a cascade-pulled subfolder mapped to a Grafana child folder
-    When I move the file into that Grafana-mapped subfolder
-    Then the dashboard is moved to the child folder in Grafana
-    And the file's "grafana_folderUid" and "grafana_mapping" update to the child folder's
+  Scenario: With subfolder-sync on, moving a dashboard into a subfolder mirrors it to Grafana
+    Given "alpha" has "Sync subfolders" on
+    And a managed "sync" dashboard file in the "alpha" folder
+    When I move the file into a Nextcloud subfolder of the "alpha" folder
+    Then a matching Grafana subfolder is created under the "alpha" folder
+    And the dashboard is re-parented into that Grafana subfolder
+    And the dashboard keeps the same "grafana_uid"
+    And the file's "grafana_folderUid" updates to the new subfolder
+    And the file stays under the "alpha" mapping
 
   @todo
-  Scenario: Deleting inside a subfolder is blocked for now
-    Given a managed "sync" dashboard file in a subfolder of the "alpha" folder
-    When I try to delete the file
-    Then the delete is refused with a message
-    And nothing changes in Grafana
+  Scenario: With subfolder-sync on, creating a dashboard in a subfolder creates the Grafana subfolder
+    Given "alpha" has "Sync subfolders" on
+    When I create a ".grafana.json" dashboard in a Nextcloud subfolder of the "alpha" folder
+    Then a matching Grafana subfolder is created under the "alpha" folder
+    And the dashboard is created inside that Grafana subfolder
+    And the file's "grafana_folderUid" is the new subfolder
+
+  @todo
+  Scenario: An empty subfolder mirrors nothing
+    Given "alpha" has "Sync subfolders" on
+    When I create an empty Nextcloud subfolder of the "alpha" folder
+    Then no folder is created in Grafana
+    And the Grafana subfolder appears only once a dashboard is placed in it
+
+  # Deleting inside a subfolder is NOT special-cased — a dashboard in a subfolder
+  # deletes through the same Nextcloud-trashbin gate as any other (see delete.feature).
+  # The retired "block subfolder deletes" scaffold is gone with the hidden-mapping model.
 
   # ── link move-out is refused ─────────────────────────────────────────────────
 

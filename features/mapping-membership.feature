@@ -38,3 +38,14 @@ Feature: Mapping membership is resolved by folder
     When a dashboard file lives in the subfolder
     Then it belongs to the "inner" mapping, not "outer"
     And the nearest enclosing mapping wins
+
+  # Cascade (saga Ch2, revised) is the *automatic* alternative to an explicit nested
+  # mapping: with the parent's "Sync subfolders" on, a subfolder needs no mapping of its
+  # own. The file stays under the PARENT mapping; its grafana_folderUid records which
+  # (auto-created, presence-driven) Grafana subfolder it sits in.
+  Scenario: A cascaded subfolder needs no mapping of its own
+    Given a folder mapped to the Grafana folder "outer" with "Sync subfolders" on
+    And a subfolder of it with no mapping of its own
+    When a dashboard file lives in that subfolder
+    Then it belongs to the "outer" mapping
+    And its "grafana_folderUid" records the subfolder, not the parent folder

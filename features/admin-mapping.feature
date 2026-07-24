@@ -54,3 +54,17 @@ Feature: Admin configures folder mappings
     And the admin adds a "json" mapping for grafana folder "observe" in folder "elsewhere"
     Then the mapping is rejected
     And there are 1 configured mappings
+
+  # Subfolder sync (saga Ch2, revised): a mapping carries an optional "Sync subfolders"
+  # flag (default OFF). ON = a Nextcloud subfolder mirrors to a Grafana subfolder the
+  # moment a dashboard lands in it (lazy, presence-driven — no hidden child mappings, no
+  # manual trigger tag). The flag persists like any other mapping field; the folder-
+  # mirroring engine that acts on it lands in a later Course, so this scenario is @todo.
+  @todo
+  Scenario: A mapping records a "Sync subfolders" flag, defaulting to off
+    When the admin adds these mappings:
+      | grafana folder | folder  | mode |
+      | observe        | observe | sync |
+    Then the mapping for grafana folder "observe" has subfolder sync off
+    When the admin enables subfolder sync for grafana folder "observe"
+    Then the mapping for grafana folder "observe" has subfolder sync on

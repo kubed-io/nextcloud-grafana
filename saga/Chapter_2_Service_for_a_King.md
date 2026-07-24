@@ -370,35 +370,62 @@ split we ship today is the conservative, isolation-first choice and can be migra
 > **Dr K:** *"Name them so they can't bleed into each other today, but so a smart reader
 > sees they're the same recipe. The shared pot comes later — don't burn it in now."*
 
-### Subfolders — a real Grafana capability, cooked deliberately (design only)
+### Subfolders — the lazy, presence-driven mirror (revised this round)
 
 The master only had flat tags, so "a subfolder inside a mapped folder" was never a real
-question for him. **Grafana has genuine nested folders**, so it *is* a question for us —
-and it's richer than a straight port. The decided model (design this round; wire in a
-later Course):
+question for him. **Grafana has genuine nested folders**, so it *is* a question for us. An
+earlier sketch modelled subfolders as *hidden child mappings* with a "has-parent" flag and
+split them into "Grafana-mapped" vs "plain NC" kinds. **We're retiring that** — Dr K called
+for something simpler and more magical. The decided model:
 
-- **Optional cascade on the mapping.** A mapping gains an optional **cascade** flag: when
-  set, the pull follows Grafana's child folders under the mapped folder and brings them
-  down as nested Nextcloud folders. Off by default (flat, like today).
-- **Two kinds of subfolder, and the difference matters:**
-  - a **Grafana-mapped subfolder** — a child folder that exists in Grafana (has its own
-    `folderUid`), matched **by name** under the parent; vs.
-  - a **plain Nextcloud subfolder** — a normal NC folder a user nested inside a mapped
-    folder, with no Grafana counterpart.
-- **How cascaded subfolders are modelled:** as **dynamically-created, hidden child
-  mappings** — a child mapping carries a hidden **"has-parent"** field so it doesn't
-  clutter the admin list but still resolves like any mapping. (`grafana_folderUid` on the
-  file is what lets a file know which child folder it belongs to.)
-- **Move semantics fall out of the two kinds:**
-  - **top-level mapped → plain NC subfolder (not Grafana-mapped):** *keep the uid from the
-    parent*, exactly as the master keeps the id — the dashboard stays where it is in
-    Grafana; the file is just nested locally.
-  - **top-level mapped → a Grafana-mapped subfolder:** do the **real Grafana move**
-    operation (re-parent the dashboard to the child `folderUid`), then **update the file's
-    metadata** to the new `folderUid` + new (child) mapping.
-- **Safety valve for now:** **block deletes on subfolders entirely** this round — we don't
-  even open that door until the cascade model is cooked. A delete inside a subfolder is
-  refused with a message; top-level delete semantics (NC-trash gate) are unaffected.
+**One rule:** *a subfolder exists on the other side exactly when it holds a dashboard.*
+Presence-driven, lazy, symmetric — and gated by a single per-mapping checkbox.
+
+- **The control is a per-mapping "Sync subfolders" checkbox** (default **off**). On = the
+  Grafana folder tree mirrors the Nextcloud folder tree under the mapped folder. The
+  checkbox is the escape hatch — *turn it off when it acts up, on when it behaves* — so we
+  iterate toward the perfect integration without a schema change.
+- **With the checkbox OFF (the n8n-like flat model):** a subfolder of a mapped folder is a
+  plain local Nextcloud folder. A dashboard dragged into it **keeps all its metadata** and
+  stays bound to the **parent** mapped folder — same `grafana_uid`, same `grafana_mapping`,
+  `grafana_folderUid` still the *parent's* Grafana folder — and **nothing changes in
+  Grafana**. The nesting is purely cosmetic, exactly how the master treats a tagged workflow
+  no matter where its file sits. (A file only becomes `unmapped` when it leaves *every*
+  mapped folder — a subfolder of a mapping is still inside the mapping.)
+- **No hidden mappings, no "two kinds."** A subfolder is **not** a separate mapping object
+  and needs no pre-existing Grafana counterpart. There is just the one rule above.
+- **Nextcloud → Grafana (the magic):** create or move a dashboard **into** a NC subfolder →
+  the app ensures the matching Grafana subfolder exists (creating it **lazily**, by path,
+  only when needed), places/re-parents the dashboard there, and stamps the file's
+  `grafana_folderUid`. An **empty** NC subfolder creates nothing — the folder "magically
+  shows up" in Grafana the instant a dashboard lands in it, and not before.
+- **Grafana → Nextcloud (pull):** a Grafana child folder that *contains dashboards* is
+  mirrored down as a nested NC subfolder; its files carry that child's `grafana_folderUid`.
+- **The uid is always preserved.** Moving into a subfolder never re-mints — it re-parents
+  (changes `folderUid`) and keeps the same `grafana_uid`.
+- **The subtree belongs to the top-level mapping.** A file in a cascaded subfolder still
+  resolves to the parent mapping (`grafana_mapping` = the top-level mapping); its
+  `grafana_folderUid` records *which* Grafana subfolder it sits in. (Explicit **nested
+  mappings** — an admin adding a second mapping *on* a subfolder — remain supported via the
+  longest-prefix resolver; cascade is the automatic alternative that needs no second
+  mapping.)
+- **Folder lifecycle follows the dashboards:** when the last dashboard leaves a subfolder,
+  the now-empty Grafana subfolder may be pruned (a detail deferred with the engine).
+- **Deletes** follow the same NC-trash gate as any dashboard — there is **no special
+  "block subfolder deletes."** (That block was scaffolding for the retired hidden-mapping
+  model.) The *wiring* still lands with the delete Course; the model does not special-case
+  depth.
+
+Why this is better: it answers "what happens when I make a folder in a mapped folder?" with
+*nothing — until you put a dashboard in it, then it appears in Grafana* — no manual tag, no
+admin bookkeeping, one honest toggle to fall back on. `grafana_folderUid` (banked in Fork A)
+is exactly the per-file breadcrumb this needs; a special "trigger tag" was considered and
+dropped in favour of the dashboard-presence trigger.
+
+> **Dr K, sketching folders on a napkin:** *"Don't make the admin declare a subfolder. Let
+> them just drop a dashboard in a folder and watch it appear on the Grafana side like it was
+> always there. One checkbox to switch the magic off when it misbehaves. We'll nail the
+> corners over time — but the feel is 'it just mirrors.'"*
 
 ### The decision forks — where I need Dr K at the pass
 
@@ -409,7 +436,7 @@ through the saga before the destructive Courses are cooked:
 |---|---|---|---|
 | A | **Metadata key set** | 1:1 `grafana_*` rename **+ bank `grafana_folderUid` + `grafana_apiVersion`** | ✅ **called** — per table above |
 | B | **Shared-module key naming** | per-app keys now (isolation-first) vs. shared discriminated keys later | ✅ **called** — per-app now, revisit at shared-module time |
-| C | **Cascade / subfolders** | optional cascade flag; hidden child mappings; name-matched; block subfolder deletes for now | ✅ **called** — per subfolder section |
+| C | **Cascade / subfolders** | per-mapping **"Sync subfolders" checkbox**; **lazy, presence-driven mirror** (a subfolder appears on the far side only once it holds a dashboard); **no** hidden mappings, **no** "two kinds"; subtree stays under the top-level mapping, per-file `grafana_folderUid` records the nesting; deletes use the normal NC-trash gate | ✅ **re-called** — supersedes the earlier hidden-child-mappings sketch |
 | D | **Move-out of a mapping: what happens to the *live* Grafana dashboard?** | (i) leave it live + just unmap the file; (ii) remove it from Grafana and rely on the file's JSON to restore on move-back-in | 🔴 **open** — the archive-verb substitution. (i) is honest + lossless but leaves an orphan live dashboard; (ii) matches the master's "it disappears from Grafana when unmapped" feel but leans 100% on our JSON + upsert-by-uid. |
 | E | **Delete gate mechanics** | NC-trash-as-gate: trash = recoverable (no Grafana call), **purge-from-trash = the one Grafana `DELETE`**, restore = re-upsert | 🟡 **leaning** — needs the trashbin-DAV listener proven on the pod (the master's `@todo` purge leg is unproven here too) |
 | F | **`ignored` mode without an archive verb** | the master archives an ignored dashboard; we can't — so `ignored` just means "skip it in sync," dashboard left fully live | 🟡 **leaning** — simplest honest behaviour |
@@ -491,11 +518,22 @@ specs — designed, not wired.
   (isolation is free — NC metadata keys are a flat string-keyed namespace, so no
   cross-app query bleed), **plus two banked-now Grafana-only keys**
   `grafana_folderUid` + `grafana_apiVersion`; the *shared-module neutral-key*
-  question is explicitly deferred. **Subfolders designed** (optional cascade,
-  hidden child mappings matched by name, real Grafana move only when the subfolder
-  is itself Grafana-mapped, **deletes on subfolders blocked for now**). Dr K has
-  called forks A/B/C; D (move-out → live dashboard?), E (delete gate mechanics),
-  F (`ignored` without archive), G (specs say "tag", must say "folder") stay open.
+  question is explicitly deferred. **Subfolders designed** — *(this first sketch was
+  hidden child mappings matched by name + "two kinds" + blocked subfolder deletes;
+  **superseded the same round** by the lazy presence-driven mirror — see the next
+  progress bullet and the revised "Subfolders" section)*. Dr K has called forks A/B/C;
+  D (move-out → live dashboard?), E (delete gate mechanics), F (`ignored` without
+  archive), G (specs say "tag", must say "folder") stay open.
+- ✅ **Subfolder model re-decided (Dr K + Claude, other cook napping).** Retired the
+  "hidden child mappings / two kinds of subfolder" sketch in favour of a **lazy,
+  presence-driven mirror**: one per-mapping **"Sync subfolders" checkbox**, and a single
+  rule — *a subfolder exists on the far side exactly when it holds a dashboard* (drop a
+  dashboard into a NC subfolder → the Grafana subfolder magically appears and the dashboard
+  re-parents into it; empty subfolders mirror nothing). No hidden mappings, no manual
+  trigger tag; the subtree stays under the top-level mapping with per-file `grafana_folderUid`
+  recording the nesting; deletes use the normal NC-trash gate (no special subfolder block).
+  Fork C **re-called**. Feature specs (`move`, `admin-mapping`, `mapping-membership`)
+  rewritten to this model.
 - ⏭ *Next: finish Round 2's pull code + spec rewordings, smoke-test in the pod, PR
   review loop. Destructive verbs stay designed-not-wired until Dr K calls the forks.
   Chapter 2 stays open until Dr K calls it.*
