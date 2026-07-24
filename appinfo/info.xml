@@ -59,6 +59,25 @@ Grafana Labs, used here only to identify the service this app integrates with.
     <admin>OCA\GrafanaSync\Settings\SyncSettings</admin>
     <admin-section>OCA\GrafanaSync\Settings\AdminSection</admin-section>
   </settings>
+  <repair-steps>
+    <!--
+      Installs the application/grafana+json mimetype + icon mapping on every
+      install/upgrade. Idempotent; see lib/Migration/RegisterMimetype.php.
+    -->
+    <install>
+      <step>OCA\GrafanaSync\Migration\RegisterMimetype</step>
+    </install>
+    <post-migration>
+      <step>OCA\GrafanaSync\Migration\RegisterMimetype</step>
+    </post-migration>
+    <uninstall>
+      <!-- Mirror image of RegisterMimetype: reverts the core-tree mimetype/icon
+           registration so removing the app leaves Nextcloud clean (store rule).
+           Touches only the system registration — never user files/metadata/Grafana.
+           See lib/Migration/UnregisterMimetype.php. -->
+      <step>OCA\GrafanaSync\Migration\UnregisterMimetype</step>
+    </uninstall>
+  </repair-steps>
   <commands>
     <command>OCA\GrafanaSync\Command\SetToken</command>
     <command>OCA\GrafanaSync\Command\TestConnection</command>
