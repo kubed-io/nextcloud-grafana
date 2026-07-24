@@ -9,9 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\AppInfo;
 
+use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
+use OCA\GrafanaSync\Listener\MotionListener;
+use OCA\GrafanaSync\Listener\MoveGuardListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
+use OCA\GrafanaSync\Listener\RegisterDavPluginsListener;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
@@ -20,6 +24,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
@@ -38,8 +43,13 @@ use OCP\Files\Events\Node\NodeWrittenEvent;
  *
  * Write surface (Course 4 · Slice 1): {@see CreateInGrafanaListener} turns a new file in
  * a mapped sync folder into a real dashboard, and {@see CopyListener} makes a copy its
- * own new dashboard. The rest of the mode machine (move → unmapped, delete, rename, the
- * DAV link-write guard) stays deferred to Slice 2 — it needs the "no archive verb" ruling.
+ * own new dashboard.
+ *
+ * Move + guards (Course 4 · Slice 2b): {@see MoveGuardListener} refuses a link move-out
+ * before it happens, {@see MotionListener} reconciles a completed move (re-parent on
+ * mapped→mapped, delete + strip on move-out, bin OFF the default), and
+ * {@see RegisterDavPluginsListener} bolts the link-write guard onto every Sabre server.
+ * Delete → recycle-bin restore and the recycle-bin ON parking path remain deferred.
  */
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'grafana_sync';
@@ -73,6 +83,21 @@ final class Application extends App implements IBootstrap {
 		// Copy: NC fires NodeCopiedEvent (not NodeWrittenEvent) on a copy, so this routes a
 		// copied file to strip its identity + register a brand-new dashboard.
 		$context->registerEventListener(NodeCopiedEvent::class, CopyListener::class);
+
+		// Move (Course 4 · Slice 2b): a completed move of a managed file. MotionService
+		// re-parents the dashboard on a mapped→mapped move (uid kept) or deletes it +
+		// strips the file on a move out of every mapping (bin OFF, the default). The
+		// before-gate refuses only a link move-out; mapped→mapped is allowed (a real
+		// Grafana folder move), which is where we diverge from the tag-mapped n8n master.
+		// CreateInGrafanaListener (also on NodeRenamedEvent) owns the unmanaged move-in;
+		// the two never overlap — it bails on managed files, MotionService on unmanaged.
+		$context->registerEventListener(BeforeNodeRenamedEvent::class, MoveGuardListener::class);
+		$context->registerEventListener(NodeRenamedEvent::class, MotionListener::class);
+
+		// DAV link-write guard (Course 4 · Slice 2b): attach LinkWriteGuardPlugin to every
+		// Sabre server so a raw WebDAV PUT / desktop-client edit can't overwrite a link
+		// file's pointer. The Files UI already routes a link's click to "Open in Grafana".
+		$context->registerEventListener(SabrePluginAddEvent::class, RegisterDavPluginsListener::class);
 
 		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
 		$context->registerNotifierService(Notifier::class);

@@ -28,6 +28,16 @@
 	<extraFiles>
 		<directory name="vendor/nextcloud/ocp" />
 	</extraFiles>
+	<!--
+		Hand-written stubs for the Server-app classes that live in a real Nextcloud
+		but ship in neither nextcloud/ocp nor Composer: the Sabre WebDAV server
+		(Sabre\DAV\*), the DAV connector's File node, and OCA\DAV\Events\SabrePluginAddEvent
+		— all reached by the link-write guard plugin + its registration listener. Mirrors
+		the n8n master's psalm.xml, which stubs the same DAV surface the same way.
+	-->
+	<stubs>
+		<file name="tests/external-stubs.php" />
+	</stubs>
 	<issueHandlers>
 		<!--
 			These reference classes that exist at runtime in a real Nextcloud but are

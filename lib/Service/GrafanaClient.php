@@ -238,6 +238,27 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * Permanently delete a dashboard by uid: `DELETE /api/dashboards/uid/{uid}`.
+	 *
+	 * Grafana has NO soft-delete/trash reachable to a service account — this is
+	 * **irreversible** (reversibility lives on the Nextcloud side: the file's JSON + the
+	 * NC trashbin). A 404 is treated as success: the dashboard is already gone, which is
+	 * the desired end state, so a re-run or a delete-of-an-already-deleted uid is a no-op
+	 * rather than an error. Any other failure bubbles up as a {@see GrafanaApiException}
+	 * so the caller can abort before assuming Grafana is in sync.
+	 */
+	public function deleteDashboard(string $uid): void {
+		try {
+			$this->request('DELETE', '/api/dashboards/uid/' . rawurlencode($uid));
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus === 404) {
+				return; // already gone — the end state we wanted
+			}
+			throw $e;
+		}
+	}
+
+	/**
 	 * Build the browser deep-link to a live dashboard: `<base>/d/<uid>/<slug>`.
 	 * The uid is the stable thread, so the slug is cosmetic — Grafana redirects to
 	 * the canonical slug regardless. When the search/meta `url` is already known
