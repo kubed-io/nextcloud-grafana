@@ -802,7 +802,24 @@ specs — designed, not wired.
   `ArgumentCountError` the bot caught). Live pod updated; **`observe` (team folder +
   groups) + `nxt-fun` (non-team) mappings staged** as the smoke test — config lives in
   appconfig, survives every code-only deploy.
-- ⏭ *Next: **Round 3 — the working pull** (below). Chapter 2 stays open until Dr K calls it.*
+- ✅ **Round 3 cooked — PR #5 (the pull works, folders provision).** The whole flat,
+  classic-JSON pull, end to end and live. Dishes plated: **`RegisterMimetype` /
+  `UnregisterMimetype`** (application/grafana+json + a folder-bars icon, install/upgrade
+  repair-step, clean uninstall) · **`TeamFolderService` + `StorageService`** (provision a
+  team folder shared to its groups, or an admin-owned folder — ported 1:1 from the master,
+  `teamFolder`→`ncFolder`) · **`SyncService` (pull)** (reconcile-by-uid: update in place,
+  collision-suffix fresh writes, prune the departed, SyncGuard-wrapped, filecache mimetype
+  fixup) · **`OwnershipTags`** (grafana:sync/link/unmapped pills) · **`SyncController` POST
+  /sync/pull + `occ grafana_sync:pull` + the enabled "Sync from Grafana" button**
+  (js/sync-settings.js). **Live smoke test PASSED** on the pod: `observe` (team folder, 6
+  dashboards) + `nxt-fun` (admin-owned, 1) materialized as `.grafana.json` with the full
+  metadata contract (uid/mode/version/hash/mapping) + `grafana:sync` pill + correct
+  mimetype; second pull idempotent (7 files, 0 dupes, 0 pruned); RegisterMimetype verified
+  (icon in core, alias in mimetypelist.js). **reconcile.feature** pull scenarios off `@todo`
+  and runnable (SyncSteps over occ + WebDAV, admin-owned so CI needs no groupfolders).
+  Push + the whole-instance root mirror stay `@todo` for their courses.
+- ⏭ *Next: **Course 3 — the writeback** (push: NC edits → Grafana, the DAV write guard).
+  Chapter 2 stays open until Dr K calls it.*
 
 ---
 
