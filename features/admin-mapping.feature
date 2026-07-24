@@ -36,6 +36,8 @@ Feature: Admin configures folder mappings
   # are immutable, resolving once on create is enough, and it means the saved mapping (and
   # the admin list) shows BOTH folder fields with a value — you can see at a glance they
   # match precisely because you left the Nextcloud name blank.
+  # @todo — new step phrases (no step defs yet); the behaviour is covered by MappingTest.
+  @todo
   Scenario: The Nextcloud folder is stored as the Grafana folder name when omitted at create
     When the admin adds a mapping for grafana folder "observability" with no Nextcloud folder
     Then the stored mapping for grafana folder "observability" has Nextcloud folder "observability"
@@ -53,6 +55,9 @@ Feature: Admin configures folder mappings
   #     for now; the saga records what a safe on-the-fly flip could look like later.
   # To change any of them, delete the mapping and add a new one. Mode / format / groups stay
   # editable.
+  # @todo — immutability can't be driven over occ (no update command); MappingServiceTest
+  # provides the real coverage. Kept here as the executable spec for when a REST/UI step lands.
+  @todo
   Scenario: A mapping's folders, Team Folder, and subfolder-sync cannot be changed after it is created
     Given a mapping from grafana folder "observe" to Nextcloud folder "observe"
     When the admin tries to change that mapping's Nextcloud folder to "elsewhere"
@@ -96,6 +101,7 @@ Feature: Admin configures folder mappings
   # (lazy, presence-driven — no hidden child mappings, no manual trigger tag). The flag
   # persists like any other mapping field; the folder-mirroring engine that acts on it lands
   # in a later Course, so the "on" behaviour is @todo.
+  @todo
   Scenario: A mapping records its "Sync subfolders" flag at create, defaulting to off
     When the admin adds these mappings:
       | grafana folder | folder  | mode |

@@ -129,6 +129,32 @@ final class MappingServiceTest extends TestCase {
 		$svc->update($saved->id, $this->mapping('uid-b', 'alpha', 'sync', 'json'));
 	}
 
+	public function testUpdateRejectsChangingTheTeamFolderFlag(): void {
+		$svc = $this->service();
+		// Default use_team_folder is true; the saved mapping is a Team Folder.
+		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
+
+		$flipped = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a', 'grafana_folder_title' => 'uid-a',
+			'nc_folder' => 'alpha', 'mode' => 'sync', 'use_team_folder' => false,
+		]);
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->update($saved->id, $flipped);
+	}
+
+	public function testUpdateRejectsChangingSubfolderSync(): void {
+		$svc = $this->service();
+		// Default sync_subfolders is false.
+		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
+
+		$flipped = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a', 'grafana_folder_title' => 'uid-a',
+			'nc_folder' => 'alpha', 'mode' => 'sync', 'sync_subfolders' => true,
+		]);
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->update($saved->id, $flipped);
+	}
+
 	public function testUpdateForcesTheIdFromThePathNotTheBody(): void {
 		$svc = $this->service();
 		$saved = $svc->add($this->mapping('uid-a', 'alpha'));

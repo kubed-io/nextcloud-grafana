@@ -133,7 +133,8 @@ final class Mapping implements JsonSerializable {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
 		}
 		if ($ncFolder === '') {
-			// Only reachable if BOTH the nc_folder and the grafana_folder_title/uid are blank.
+			// Reachable when nc_folder is blank AND there is no grafana_folder_title to default
+			// from (a non-empty uid alone does not fill it — we default from the folder *name*).
 			throw new \InvalidArgumentException('nc_folder is required (or a grafana_folder_title to default it from)');
 		}
 		if (!in_array($mode, [self::MODE_SYNC, self::MODE_LINK], true)) {
