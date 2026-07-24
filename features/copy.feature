@@ -1,6 +1,6 @@
 # Copying a dashboard file. Where a MOVE is "the same dashboard" (see move.feature),
 # a COPY is ALWAYS a brand-new instance. A copy never inherits the original's Grafana
-# identity — its metadata (n8n_id, versionId, mapping, mode) is stripped the moment
+# identity — its metadata (grafana_uid, version, mapping, mode) is stripped the moment
 # it is copied. Copy is therefore the single safest point to strip metadata:
 # whatever the source was (sync, link, unmapped), the copy starts clean.
 #
@@ -15,32 +15,32 @@ Feature: Copying a dashboard file always makes a new instance
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana tag "nextcloud:alpha"
+    And a folder mapped as "sync" to the Grafana folder "alpha"
 
   Scenario: Copy within a mapped sync folder becomes a new dashboard in Grafana
-    Given a managed "sync" dashboard file in the "nextcloud:alpha" folder
-    When I copy the file within the "nextcloud:alpha" folder
-    Then the copy carries no inherited "n8n_id"
-    And the copy is registered as a NEW dashboard in Grafana with its own id
+    Given a managed "sync" dashboard file in the "alpha" folder
+    When I copy the file within the "alpha" folder
+    Then the copy carries no inherited "grafana_uid"
+    And the copy is registered as a NEW dashboard in Grafana with its own uid
     And the original file and dashboard are unchanged
     And there are now two distinct dashboards in Grafana
 
   Scenario: Copy to outside any mapping is a plain untracked file
-    Given a managed "sync" dashboard file in the "nextcloud:alpha" folder
+    Given a managed "sync" dashboard file in the "alpha" folder
     When I copy the file to a folder that is not mapped
     Then the copy has no Grafana metadata
     And no dashboard is created in Grafana for the copy
     And the copy is treated as a plain document
 
   Scenario: Copy of an unmapped file strips its metadata wherever it lands
-    Given an unmapped dashboard file that still carries its "n8n_id"
+    Given an unmapped dashboard file that still carries its "grafana_uid"
     When I copy the file to a folder that is not mapped
     Then the copy has no Grafana metadata
-    And the original unmapped file keeps its "n8n_id"
+    And the original unmapped file keeps its "grafana_uid"
 
   Scenario: Copy of an unmapped file into a mapping becomes a new dashboard
-    Given an unmapped dashboard file that still carries its "n8n_id"
-    When I copy the file into the "nextcloud:alpha" folder
-    Then the copy carries no inherited "n8n_id"
-    And the copy is registered as a NEW dashboard in Grafana with its own id
+    Given an unmapped dashboard file that still carries its "grafana_uid"
+    When I copy the file into the "alpha" folder
+    Then the copy carries no inherited "grafana_uid"
+    And the copy is registered as a NEW dashboard in Grafana with its own uid
     And the original unmapped file's dashboard is not restored or duplicated

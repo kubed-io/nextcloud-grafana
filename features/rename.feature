@@ -1,5 +1,5 @@
-# Three-way name agreement in sync mode: filename stem ⇄ JSON "name" ⇄ Grafana name.
-# The stable link is the dashboard id, so none of these break the connection.
+# Three-way name agreement in sync mode: filename stem ⇄ JSON "title" ⇄ Grafana name.
+# The stable link is the dashboard uid, so none of these break the connection.
 # LIVE: rename/edit go over WebDAV; the file-locked reconcile runs in
 # ReconcileNameJob, so the steps drain that job class with the occ worker before
 # asserting both the file (PROPFIND/GET) and Grafana (REST) sides.
@@ -16,16 +16,16 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
   Scenario: Renaming the file updates the backend JSON name and Grafana
     Given a managed "sync" dashboard file named "Old Name.grafana.json"
     When I rename the file to "New Name.grafana.json"
-    Then the JSON "name" field inside the file becomes "New Name"
+    Then the JSON "title" field inside the file becomes "New Name"
     And the dashboard is renamed to "New Name" in Grafana
 
   Scenario: Editing the JSON name renames the file and updates Grafana
     Given a managed "sync" dashboard file
-    When I edit the file and change the JSON "name" field to "Renamed In JSON"
+    When I edit the file and change the JSON "title" field to "Renamed In JSON"
     Then the file is renamed to "Renamed In JSON.grafana.json"
     And the dashboard is renamed to "Renamed In JSON" in Grafana
 
   Scenario: Renaming never breaks the link
-    Given a managed "sync" dashboard file with a known "n8n_id"
+    Given a managed "sync" dashboard file with a known "grafana_uid"
     When the file is renamed by any of the above means
-    Then the "n8n_id" metadata is unchanged
+    Then the "grafana_uid" metadata is unchanged

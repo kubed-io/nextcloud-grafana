@@ -1,74 +1,77 @@
-# Reserved Grafana tag — the optional, per-dashboard EXCLUDE switch.
+# Reserved tags — the optional, per-dashboard EXCLUDE switches. TWO ORIGINS, and
+# conflating them is a trap (saga Ch2 Fork H). "Tag" means two entirely different
+# systems here:
 #
-# A mapping binds ONE Grafana tag (ANY name — e.g. "team:flows", "myfoobarflows"; the
-# "nextcloud:" prefix some examples use is just a convention, NOT required) to a
-# folder + a mode (`sync` / `link`). That mode is AUTHORITATIVE for every dashboard
-# in the mapping — there is no per-dashboard sync/link override. The only reserved
-# tag the app honours is the exclude:
+#   • a NEXTCLOUD tag — Nextcloud's own collaborative/system tag, on a *file*; and
+#   • a GRAFANA tag — a string in a dashboard's own `tags` array, on a *dashboard*.
 #
-#   Grafana:ignore  — exclude this one. Two facets:
-#                 • never-pulled dashboard → no Nextcloud file at all;
-#                 • a file already IN a mapped folder → "ignored" mode (it stays put,
-#                   keeps its id, is archived in Grafana, and the sync skips it).
+# The rule: **you tag with the name of the system you're talking TO.**
 #
-# Authority is one-directional. The app NEVER writes Grafana:ignore onto dashboards in
-# Grafana; it only READS it (if present) as a per-dashboard exclude at pull time. You add
-# it yourself when you want the exception. The Nextcloud-side `Grafana:sync` / `Grafana:link`
-# system tags the app stamps on managed files are AUTHORITATIVE + automatic and just
-# mirror each file's mode (see the Tagging feature / file-type.feature) — they are
-# not an override mechanism.
+#   grafana:ignore    — origin NEXTCLOUD. A Nextcloud tag the admin hand-sets on a
+#                       `.grafana.json` FILE (the app's own `grafana:*` namespace,
+#                       alongside the automatic `grafana:sync`/`grafana:link` mode
+#                       pills). Read on NC tag events → the file's mode becomes
+#                       `ignored`: it stays put, keeps its uid, sync skips it, and the
+#                       live Grafana dashboard is untouched. Never written to Grafana.
 #
-# So Grafana:ignore is 100% optional: the mapping does everything on its own; the
-# Grafana-side ignore tag is just the escape hatch to leave one dashboard out.
+#   nextcloud:ignore  — origin GRAFANA. A tag the Grafana admin sets on the DASHBOARD
+#                       in Grafana (`nextcloud:` = "addressed to Nextcloud"). Read at
+#                       PULL time → that dashboard is never brought into Nextcloud, no
+#                       file is created, even inside a mapped folder. Never written by
+#                       the app.
 #
-# The never-pulled ignore and the in-folder `ignored` mode are live (saga §14.8 B).
-# The un-tag RESTORE — removing Grafana:ignore unarchives the dashboard and returns the
-# file to the mapping's mode — is live too (saga §14.18), driven by a
-# TagUnassignedEvent listener.
+# One is Nextcloud saying "don't sync this file"; the other is Grafana saying "don't
+# pull this dashboard." Both are optional escape hatches — the mapping does everything
+# on its own. (Symmetric with the n8n master: `n8n:ignore` on the NC file,
+# `nextcloud:ignore` on the workflow — so the shared base gets one two-axis model.)
+#
+# NO ARCHIVE (saga Ch2 Round 2): the master archives an ignored resource. Our
+# ingredient has no reachable archive, so `ignored` just means "skip it in sync" — the
+# dashboard is left fully LIVE in Grafana (fork F, leaning).
+#
+# DESIGN, NOT WIRED: this feature is @todo — CI skips it — until the pull engine +
+# reserved-tag resolver are cooked.
 
 @todo
-Feature: The Grafana:ignore reserved tag excludes individual dashboards
-  As an Grafana admin
-  I want to exclude individual dashboards with the Grafana:ignore tag
-  So that one mapping can still leave specific dashboards out
+Feature: Reserved tags exclude individual dashboards — from either side
+  As an admin
+  I want a Grafana-side and a Nextcloud-side exclude tag
+  So that one dashboard can be left out from whichever side owns the decision
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana tag "team:flows"
+    And a folder mapped as "sync" to the Grafana folder "flows"
 
   Scenario: With no reserved tag, a dashboard takes the mapping's mode
-    Given Grafana has a dashboard tagged "team:flows" with no reserved tag
-    When the "team:flows" mapping is pulled
+    Given Grafana has a dashboard in the "flows" folder with no reserved tag
+    When the "flows" mapping is pulled
     Then that dashboard's file is in "sync" mode (the mapping mode)
 
-  Scenario: Grafana:ignore on a never-pulled dashboard creates no file
-    Given Grafana has a dashboard tagged "team:flows" and "Grafana:ignore"
-    When the "team:flows" mapping is pulled
+  # Grafana-origin exclude: the tag lives on the DASHBOARD in Grafana.
+  Scenario: nextcloud:ignore on a Grafana dashboard is never pulled
+    Given Grafana has a dashboard in the "flows" folder tagged "nextcloud:ignore" in Grafana
+    When the "flows" mapping is pulled
     Then that dashboard is not pulled into Nextcloud
     And no file is created for it
 
-  Scenario: Grafana:ignore on a file already in a mapped folder gives it "ignored" mode
-    Given a managed "sync" dashboard file in the "team:flows" folder
-    When I tag it "Grafana:ignore"
+  # Nextcloud-origin exclude: the tag lives on the FILE in Nextcloud.
+  Scenario: grafana:ignore on a file already in a mapped folder gives it "ignored" mode
+    Given a managed "sync" dashboard file in the "flows" folder
+    When the admin adds the Nextcloud tag "grafana:ignore" to the file
     Then the file's mode becomes "ignored"
-    And the file stays in the mapped folder and keeps its "n8n_id"
-    And the dashboard is archived in Grafana
-    And subsequent pulls/pushes for "team:flows" skip it
+    And the file stays in the mapped folder and keeps its "grafana_uid"
+    And the dashboard is left fully live in Grafana (no archive)
+    And subsequent pulls/pushes for "flows" skip it
 
-  Scenario: Removing Grafana:ignore returns the file to the mapping's mode
-    Given a managed "sync" dashboard file in the "team:flows" folder
-    And I tag it "Grafana:ignore"
-    When I remove the "Grafana:ignore" tag
+  Scenario: Removing grafana:ignore returns the file to the mapping's mode
+    Given a managed "sync" dashboard file in the "flows" folder
+    And the file has the Nextcloud tag "grafana:ignore"
+    When I remove the "grafana:ignore" tag
     Then the file's mode becomes "sync"
 
-  Scenario: A mapping tag needs no "nextcloud:" prefix
-    Given a folder mapped as "sync" to the Grafana tag "myfoobarflows"
-    And Grafana has a dashboard tagged "myfoobarflows"
-    When the "myfoobarflows" mapping is pulled
-    Then that dashboard's file is created in "sync" mode
-
+  # The two origins are independent — neither is written across the boundary.
   Scenario: The app never writes reserved tags onto Grafana dashboards
-    Given Grafana has a dashboard tagged "team:flows" with no reserved tag
-    When the "team:flows" mapping is pulled
+    Given Grafana has a dashboard in the "flows" folder with no reserved tag
+    When the "flows" mapping is pulled
     Then the dashboard in Grafana still carries only its original tags
-    And the app has not added any "Grafana:sync", "Grafana:link", or "Grafana:ignore" tag to it
+    And the app has not added any "grafana:sync", "grafana:link", "grafana:ignore", or "nextcloud:ignore" tag to it

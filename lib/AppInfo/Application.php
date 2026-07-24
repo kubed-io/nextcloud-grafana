@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\AppInfo;
 
+use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
 use OCP\AppFramework\App;
@@ -51,6 +52,15 @@ final class Application extends App implements IBootstrap {
 
 	#[\Override]
 	public function boot(IBootContext $context): void {
-		// Nothing to boot yet — no metadata keys, no scheduled jobs in the POC.
+		// Register our managed Files-Metadata keys (grafana_uid, grafana_mode, …) so
+		// they're advertised over DAV as `{nc:}metadata-<key>` and the indexed ones
+		// (mode + mapping) are SEARCH/REPORT-queryable. Idempotent — safe every boot —
+		// and it registers nothing but the key *schema*; nothing writes a value until
+		// the pull/push spine lands, so a save still triggers no Grafana behaviour yet.
+		//
+		// getAppContainer() resolves THIS app's services (DashboardMetadata). Its
+		// IAppContainer return type is deprecated by core with no non-deprecated
+		// accessor on IBootContext, so that one Psalm deprecation rides the baseline.
+		$context->getAppContainer()->get(DashboardMetadata::class)->register();
 	}
 }

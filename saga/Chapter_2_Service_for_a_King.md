@@ -253,14 +253,496 @@ needed to make the *config surface* honest — the burners light in Course 2.
 
 ---
 
+## Round 2 — the protein, cooked by two hands *(Course 2 · this PR)*
+
+> Course 1 finished the room. Round 2 lights the first burner — **the pull, Grafana →
+> Nextcloud** — but we cut the ticket smaller than the menu implied and we put **two
+> cooks on the same PR** at once. And before a single destructive verb is wired, we go
+> back into the walk-in: the master's move/delete recipes assume an **archive** verb our
+> ingredient doesn't have, so those semantics get **written as driving-truth docs this
+> round, not cooked.** We learned something in prep that changes the recipe, so we
+> re-plate before we sear.
+
+### What we learned in the walk-in (the finding that resizes the ticket)
+
+We put the master's delete/restore recipe to the fire against real Grafana, through the
+`cloud` pod, with the app's own service-account token. The result:
+
+- Classic `DELETE /api/dashboards/uid/{uid}` returns **200 "deleted"** and the dashboard
+  is **gone immediately** — an instant `404`, no grace.
+- The app-platform trash (`labelSelector=grafana.app/trash=true`) returned **0 items**,
+  even with the `restoreDashboards` toggle **on**.
+- `/api/search?deleted=true` — the UI's "Recently deleted" path — returned **401** to our
+  SA token.
+
+**Reading:** from *our* seat, **a Grafana delete is permanent.** The master's whole
+delete/move safety net is `archive` → `unarchive` — a reversible soft-delete Grafana
+simply does not offer us. So the master's core assumption ("the id is the thread; move
+out archives, move back unarchives") **does not translate**. That is exactly the
+data-loss trap Dr K warned about: *treating a Grafana dashboard like an n8n workflow
+would quietly lose data the first time someone drags a file out of a folder.*
+
+### The re-plated model — reversibility lives in **our** kitchen, not Grafana's
+
+Since Grafana won't hold a safety net, **Nextcloud holds it.** Two pillars:
+
+1. **The file *is* the backup.** A `sync`/`unmapped` file carries the **full dashboard
+   JSON**. Move it out of a mapping and we do **not** try to "archive" in Grafana — we
+   keep the JSON in the file, drop the mapping, and (the fork below) decide whether the
+   live Grafana dashboard is left in place or removed. Move it back in and we **re-create
+   / upsert from the JSON we still hold**, re-using the same `uid`. The thread is the
+   `uid` **plus the bytes on disk** — not a Grafana-side archived object.
+
+2. **The Nextcloud trashbin is the single reversible gate.** Delete = move to NC trash
+   (fully recoverable — the JSON is right there). Grafana is only touched when the file
+   is **purged from NC trash** — that is the one moment we issue the irreversible Grafana
+   `DELETE`. Restore-from-trash re-links/re-creates. NC's own two-step trash becomes the
+   soft-delete Grafana never gave us.
+
+> **Dr K, at the walk-in door:** *"You proved the net isn't there. Good. So you build the
+> net on our side of the line — the file is the parachute, the trashbin is the ripcord.
+> Nothing leaves the pass that can lose a guest's dashboard on a careless drag."*
+
+### Two cooks, one PR — the split (async-safe)
+
+We put a second cook — **Claude** — on the line beside me, on the **same PR**, on files
+that don't touch mine, so we cook more at once without colliding.
+
+**Claude's station — the pure foundation (zero Grafana API, no merge surface with mine):**
+- `lib/Service/FilenameCodec.php` — filename ⇄ name/uid parse+format (pure logic; port).
+- `lib/Service/SyncGuard.php` — request-scoped re-entrancy guard (trivial; port).
+- `lib/Service/ManagedFile.php` — typed value object over the metadata keys.
+- `lib/Service/DashboardMetadata.php` — the Files-Metadata wrapper + key **registration**
+  (the master's `WorkflowMetadata`), using the key set **decided below**.
+- `lib/Migration/RegisterMimetype.php` — `application/grafana+json` mimetype + icon.
+- Unit tests for each (the master ships `FilenameCodecTest`, `ManagedFileTest`, etc.).
+
+**My station — the Grafana-facing spine:**
+- `GrafanaClient` gains `listDashboards()` / `readDashboard(uid)` (`/api/search` +
+  `/api/dashboards/uid/{uid}`).
+- `StorageService` + the longest-prefix folder resolver (real folder tree).
+- `SyncService` **pull** — reconcile-by-uid, prune, collision suffixes.
+- `SyncController` + `occ grafana_sync:sync pull` wired to the live **Sync from Grafana**
+  button.
+
+**The seam that keeps us from colliding:** Claude owns *pure/no-API* files + the metadata
+**contract**; I consume that contract from the Grafana side. We agree the metadata key
+names and `ManagedFile` shape **first** (below), commit that as the interface, then cook
+in parallel. Destructive verbs (move/delete/copy) are **docs only** this round — no code,
+so no listener wiring conflicts.
+
+### The metadata — scrutinised, not 1:1 ported
+
+The master's five keys are `n8n_*`. We are **not** blindly renaming to `grafana_*`. Two
+goals pull at once: **(a)** each extension's metadata must stay **isolated** — a
+`grafana_*` file must never surface in an n8n-specific indexed query and vice-versa; and
+**(b)** we want the *meaning* of each key to be **abstractable** into a future shared
+module. Resolution for this round:
+
+| Meaning | n8n key | **Grafana key (this round)** | Kind | Note |
+|---|---|---|---|---|
+| Stable backend id | `n8n_id` | `grafana_uid` | 🟢 rename | dashboard **uid** — survives rename/move. |
+| Last-seen backend revision | `n8n_versionId` | `grafana_version` | 🟡 seasoned | Grafana bumps `version` **every save** — store it, **never hash it** (risk #6). |
+| Loop-guard body hash | `n8n_syncedHash` | `grafana_syncedHash` | 🟢 rename | sha1 of **the spec we sent**, not Grafana's echo. |
+| File mode | `n8n_mode` | `grafana_mode` | 🟢 rename | sync/link/unmapped/ignored; `link` still stored on-wire as `reference`. INDEXED. |
+| Originating mapping id | `n8n_mapping` | `grafana_mapping` | 🟢 rename | INDEXED. |
+| **Source folder uid** | — | **`grafana_folderUid`** | 🔴 new | Grafana has **real nested folders** (n8n had flat tags). Banked now — the move-back-in / cascade model below needs it. |
+| **Serialization schema** | — | **`grafana_apiVersion`** | 🔴 new | classic JSON vs v2 YAML cut (Course 6). A file that **self-describes its schema** reads back losslessly. Banked now. |
+
+**Isolation is safe by construction:** Nextcloud's Files-Metadata keys are a **flat global
+namespace keyed by the exact string**. `grafana_mode` and `n8n_mode` are *different keys*;
+one app's indexed REPORT can only ever match its own registered key. Two apps installed
+side-by-side never cross-contaminate. So we get isolation **and** parallel structure for
+free — no prefix collision, no shared index.
+
+**The abstraction caveat (banked for down the road, NOT this round):** the *cleanest*
+shared module would give these keys a **neutral, extension-agnostic name** (e.g.
+`kubedsync_id` / `kubedsync_mode`) so a single shared library registers **one** key set and
+both extensions consume it — but that would mean a file could carry a key that *both*
+apps' queries match, which is the exact cross-contamination we want to avoid, **unless**
+the shared module also carries a "source backend" discriminator. That is a real design
+question (shared key + discriminator vs. per-extension keys + shared *code* that only
+differs by a prefix constant). **We do not solve it now.** We note it: *when we build the
+shared module, revisit whether the metadata keys in both the n8n and Grafana extensions
+should collapse to a shared, discriminated key set — the per-app `n8n_*` / `grafana_*`
+split we ship today is the conservative, isolation-first choice and can be migrated later.*
+
+> **Dr K:** *"Name them so they can't bleed into each other today, but so a smart reader
+> sees they're the same recipe. The shared pot comes later — don't burn it in now."*
+
+### Subfolders — the lazy, presence-driven mirror (revised this round)
+
+The master only had flat tags, so "a subfolder inside a mapped folder" was never a real
+question for him. **Grafana has genuine nested folders**, so it *is* a question for us. An
+earlier sketch modelled subfolders as *hidden child mappings* with a "has-parent" flag and
+split them into "Grafana-mapped" vs "plain NC" kinds. **We're retiring that** — Dr K called
+for something simpler and more magical. The decided model:
+
+**One rule:** *a subfolder exists on the other side exactly when it holds a dashboard.*
+Presence-driven, lazy, symmetric — and gated by a single per-mapping checkbox.
+
+- **The control is a per-mapping "Sync subfolders" checkbox** (default **off**). On = the
+  Grafana folder tree mirrors the Nextcloud folder tree under the mapped folder. The
+  checkbox is the escape hatch — *turn it off when it acts up, on when it behaves* — so we
+  iterate toward the perfect integration without a schema change.
+- **With the checkbox OFF (the n8n-like flat model):** a subfolder of a mapped folder is a
+  plain local Nextcloud folder. A dashboard dragged into it **keeps all its metadata** and
+  stays bound to the **parent** mapped folder — same `grafana_uid`, same `grafana_mapping`,
+  `grafana_folderUid` still the *parent's* Grafana folder — and **nothing changes in
+  Grafana**. The nesting is purely cosmetic, exactly how the master treats a tagged workflow
+  no matter where its file sits. (A file only becomes `unmapped` when it leaves *every*
+  mapped folder — a subfolder of a mapping is still inside the mapping.)
+- **No hidden mappings, no "two kinds."** A subfolder is **not** a separate mapping object
+  and needs no pre-existing Grafana counterpart. There is just the one rule above.
+- **Nextcloud → Grafana (the magic):** create or move a dashboard **into** a NC subfolder →
+  the app ensures the matching Grafana subfolder exists (creating it **lazily**, by path,
+  only when needed), places/re-parents the dashboard there, and stamps the file's
+  `grafana_folderUid`. An **empty** NC subfolder creates nothing — the folder "magically
+  shows up" in Grafana the instant a dashboard lands in it, and not before.
+- **Grafana → Nextcloud (pull):** a Grafana child folder that *contains dashboards* is
+  mirrored down as a nested NC subfolder; its files carry that child's `grafana_folderUid`.
+- **The uid is always preserved.** Moving into a subfolder never re-mints — it re-parents
+  (changes `folderUid`) and keeps the same `grafana_uid`.
+- **The subtree belongs to the top-level mapping.** A file in a cascaded subfolder still
+  resolves to the parent mapping (`grafana_mapping` = the top-level mapping); its
+  `grafana_folderUid` records *which* Grafana subfolder it sits in. (Explicit **nested
+  mappings** — an admin adding a second mapping *on* a subfolder — remain supported via the
+  longest-prefix resolver; cascade is the automatic alternative that needs no second
+  mapping.)
+- **Folder lifecycle follows the dashboards:** when the last dashboard leaves a subfolder,
+  the now-empty Grafana subfolder may be pruned (a detail deferred with the engine).
+- **Deletes** follow the same NC-trash gate as any dashboard — there is **no special
+  "block subfolder deletes."** (That block was scaffolding for the retired hidden-mapping
+  model.) The *wiring* still lands with the delete Course; the model does not special-case
+  depth.
+
+Why this is better: it answers "what happens when I make a folder in a mapped folder?" with
+*nothing — until you put a dashboard in it, then it appears in Grafana* — no manual tag, no
+admin bookkeeping, one honest toggle to fall back on. `grafana_folderUid` (banked in Fork A)
+is exactly the per-file breadcrumb this needs; a special "trigger tag" was considered and
+dropped in favour of the dashboard-presence trigger.
+
+> **Dr K, sketching folders on a napkin:** *"Don't make the admin declare a subfolder. Let
+> them just drop a dashboard in a folder and watch it appear on the Grafana side like it was
+> always there. One checkbox to switch the magic off when it misbehaves. We'll nail the
+> corners over time — but the feel is 'it just mirrors.'"*
+
+### Mapping the root — and the perfect one-to-one mirror
+
+Grafana has a **root / "General" area**: dashboards with no folder. It has no real
+`folderUid`, so it isn't in the folder list the picker fetches — but it's mappable, and it's
+the key to the most powerful configuration we can offer. The folder picker gains a reserved
+**`/` (General — dashboards with no folder)** entry; a mapping bound to it pulls the
+no-folder dashboards into its Nextcloud folder (Ch1 already anticipated "General/root → the
+mapping's root").
+
+**The marquee case — a whole-instance mirror.** Map the Grafana root **`/` → Nextcloud `/`**
+(or any folder) with **"Sync subfolders" ON**. Because the root encloses *every* Grafana
+folder, the cascade follows the entire tree: every Grafana folder that holds dashboards
+becomes a nested Nextcloud folder, every dashboard a `.grafana.json` file, nested exactly as
+in Grafana — a **perfect one-to-one mirror of the whole Grafana instance's dashboards and
+folder structure**, browsable and (in sync mode) editable as a file tree, edits pushing
+back. This is the GitOps dream the v2/YAML cut (Course 6) then makes gorgeous.
+
+- **Precedence still holds:** a more-specific folder mapping wins over the root mapping for
+  its own subtree (longest-prefix resolver), so you can mirror everything under `/` *and*
+  route one folder somewhere special.
+- **Still presence-driven:** "all folders" means every folder that *contains* dashboards; a
+  genuinely empty Grafana folder has nothing to mirror.
+- **The root marker is reserved.** `/` in the picker stores a reserved root sentinel (not a
+  real `folderUid`); the pull treats it as "no-folder dashboards, and — if cascade — the
+  whole tree beneath."
+
+> **Dr K, eyes lighting up:** *"Map the top to the top, flip the switch, and the whole
+> Grafana shows up in Nextcloud folder-for-folder, dashboard-for-dashboard. That's the plate
+> that makes the king put his fork down. Build toward that."*
+
+### Dashboard **tags** — the ingredient we hadn't tasted, and bidirectional tag sync
+
+We had mapped Grafana's **folders** (the placement axis) but never looked at its **tags**
+(the labelling axis). A dashboard is not fully synced if its tags aren't — so we went back
+into the walk-in and tasted how Grafana actually holds tags, live, through the pod.
+
+**What Grafana tags *are* (measured, not assumed):**
+
+- **They live *inside* the dashboard object** — `dashboard.tags: ["dns","external-dns"]`
+  — a flat list of free-text strings. They are **not** a separate resource: there is no
+  create-tag / delete-tag / tag-id API the way n8n has `/api/v1/tags` with opaque ids.
+  A tag exists exactly when some dashboard carries the string; it vanishes when the last
+  dashboard drops it. (Confirmed: `dashboard.tags = ["cert-manager"]` on the full object;
+  the search row echoes the same list.)
+- **No `labels`, no separate metadata map.** We checked — the dashboard object has **no**
+  `labels` key and `meta.*` carries only server-computed placement/permission fields
+  (folderUid, version, canEdit, …), never user tags. So **`dashboard.tags` is the one and
+  only user-labelling surface.** (Grafana's newer app-platform `/apis/` layer *does* add
+  Kubernetes-style `metadata.labels`, but the classic dashboard object — the one our JSON
+  cut serialises — expresses user labels solely as `dashboard.tags`.)
+- **Read-only aggregate + AND-filter search.** `GET /api/dashboards/tags` returns
+  `[{term,count}, …]` across the instance (read-only, derived). `GET /api/search?tag=a&tag=b`
+  AND-matches — a dashboard must carry **all** listed tags (verified: `tag=dns&tag=external-dns`
+  → only *External DNS*). **Folders do NOT have tags** (folder objects are just
+  `{id,title,uid}`) — tags are a dashboard-only axis.
+- **Writing a tag = writing the dashboard.** Because tags live in the object, you change
+  them by upserting the dashboard through `POST /api/dashboards/db` with the edited
+  `tags` array. There is no side-channel — the tag write rides the same upsert as any
+  content edit. **This makes tags trivially part of `sync` mode already:** `encodeSync()`
+  serialises the whole object, so a pulled `sync` file *already carries the Grafana tags on
+  disk*, and a push already round-trips them. **What's missing is the Nextcloud-native
+  half.**
+
+**The gap — and why "sync without tags isn't a full sync."** Nextcloud has its **own**
+first-class labelling system: **collaborative system tags** (the coloured pills in Files,
+`OCP\SystemTag\ISystemTagManager` / `ISystemTagObjectMapper`, searchable via DAV REPORT).
+Today the app uses NC systemtags *only* as an internal control plane — `grafana:sync` /
+`grafana:link` mode pills and the `grafana:ignore` exclude. **A guest's actual dashboard
+tags (`dns`, `linux`, `media`, …) never surface as NC tags.** So a user browsing the
+mirror in Files can't filter "show me every `linux` dashboard" the Nextcloud-native way,
+and can't *re-tag* a dashboard by adding an NC pill and have it reach Grafana. The object's
+label axis is stored-but-invisible on the NC side and one-directional. That's a real
+seam: **we mirror the dashboard's body and folder, but not its labels as labels.**
+
+**The dish — bidirectional dashboard-tag sync (spec, not yet cooked).** Make the two label
+sets *the same set*, minus our reserved control tags, in both directions:
+
+1. **The rule of equality.** After a reconcile, a managed dashboard's **Grafana
+   `dashboard.tags`** and its Nextcloud **system tags** hold **the same strings**, with
+   exactly one exclusion: the app's **reserved namespace** (`grafana:*` — `grafana:sync`,
+   `grafana:link`, `grafana:ignore`, and any future control tag). Reserved tags are the
+   app's control plane and are **never** pushed into Grafana's `tags`, and Grafana tags
+   that happen to collide with the reserved namespace are **never** imported as content
+   (defensive — a user could hand-type `grafana:sync` as a Grafana tag; we ignore it as
+   content so it can't masquerade as a mode pill).
+2. **Pull (Grafana → NC).** On reconcile, read `dashboard.tags`, strip the reserved
+   namespace, and reconcile the file's **NC system tags** to exactly that set: add missing
+   ones (creating the systemtag if absent, via `ISystemTagManager`), remove NC content tags
+   no longer present in Grafana — **without ever touching the reserved mode/ignore pills.**
+   The tags also remain on disk inside the JSON (that's automatic in `sync` mode), so the
+   file stays a complete backup.
+3. **Tag pull is mode-independent — `link` files get NC tags too.** The whole point of the
+   NC systemtag half is **searchability**: browsing the mirror in Files, a guest can filter
+   "every `linux` dashboard" the Nextcloud-native way. That value must not depend on mode.
+   So the **pull-side systemtag reconcile (point 2) runs for `link` mappings exactly as for
+   `sync`** — a `link` file's body is only a tiny pointer, but its **NC system tags still
+   mirror the live Grafana tags**, so the mirror is *as searchable as the origin app*
+   regardless of whether the body is the full spec or a reference. This is the one place a
+   `link` file gets more than a pointer: a pointer body, but real, searchable NC tags. (The
+   pointer JSON also carries a `tags` array for the human reader — see `encodeReference` —
+   but the **NC system tags** are what make it filterable, and those are reconciled on every
+   pull.) A `link` file is still **never pushed** (point 4 push is `sync`-only), so its tags
+   flow **one way only, Grafana → NC** — which is exactly right for a read-only pointer.
+4. **Push (NC → Grafana).** On push (**`sync` mode only** — a `link` file never pushes),
+   read the file's NC system tags, strip the reserved namespace, and write that set into
+   `dashboard.tags` before the `POST /api/dashboards/db` upsert. A user adding a `linux`
+   pill in Files, then pushing, lands `linux` in Grafana's tag list. (In `sync` mode the
+   file's own JSON `tags` array and its NC pills must be reconciled to agree first — see the
+   conflict rule.)
+5. **The conflict rule (two-way, direction-of-truth per reconcile).** Tags are part of the
+   object, so they obey the **same** direction-of-truth the body already does: a **pull**
+   makes Grafana authoritative for that file's tags (both `sync` and `link`); a **push**
+   (only ever `sync`) makes Nextcloud authoritative. There is no separate tag-merge policy —
+   tags travel *with* the body, which is the whole point ("truly syncing the object"). The
+   only always-on invariant is the reserved-namespace exclusion.
+6. **The loop guard already covers it.** Because tags are inside the spec, they're inside
+   the bytes `grafana_syncedHash` hashes — so a tag-only change is a real change the hash
+   catches, and a no-op reconcile stays a no-op. No new guard needed; the tag set is not a
+   side-channel. (For `link` files, whose body is a pointer, the systemtag reconcile is
+   idempotent against the live Grafana tag list — re-pulling an unchanged dashboard adds and
+   removes nothing.)
+7. **Reserved namespace is the seam that makes it safe.** The `grafana:` prefix on our
+   control tags is what lets content tags and control tags coexist in the *same* NC
+   systemtag space without collision. This is why the mode pills were named `grafana:sync`
+   / `grafana:link` and not bare `sync` / `link` — a decision that now pays off: the
+   filter that separates "the user's labels" from "the app's controls" is a single
+   prefix test.
+
+**The three edit surfaces — the object body is the third.** The user sharpened this: *tags
+live inside the object we're mapping*, so a `sync` file's on-disk JSON **already has a
+`tags` array**, and editing that array in a text editor is a first-class way to change the
+tags — just like editing a panel. That means the tags exist in **three** editable places,
+and a full sync keeps all three equal (minus the reserved namespace):
+
+| # | Surface | Where | Edited by | Authority |
+|---|---|---|---|---|
+| 1 | **Source tags** | Grafana `dashboard.tags` (inside the object) | the Grafana UI / API | wins on **pull** |
+| 2 | **File-body tags** | the `tags` array inside the `.grafana.json` file | opening the JSON in an editor / desktop client | the object's own truth in Nextcloud |
+| 3 | **NC system tags** | the coloured pills in Files (`ISystemTagManager`) | the Files UI, DAV | the searchable projection |
+
+The subtlety the user is naming: **two of the three surfaces live inside Nextcloud** — the
+file-body `tags` array (2) and the system-tag pills (3) — and they can drift from each other
+*without ever touching Grafana*. So before we even talk to the source, Nextcloud must keep
+its **own** two representations in agreement. The model:
+
+- **The file body is the canonical object; the pills are its projection.** In `sync` mode
+  the file *is* the dashboard, so its `tags` array is the Nextcloud-side source of truth for
+  the object. The NC system-tag pills are a **searchable projection** kept equal to the body
+  by listeners — so the two never silently disagree.
+- **Edit the pills → the body follows → the source follows.** Adding/removing an NC pill
+  updates the file body's `tags` array (a guarded write, so it doesn't loop), which — being
+  a body change — is a normal push candidate that carries the new tag set to Grafana on the
+  next push. This is the "edit Nextcloud tags, it syncs back to source" path, routed
+  *through* the object so there's only ever one push mechanism (the body upsert), never a
+  side-channel.
+- **Edit the body JSON → the pills follow → the source follows.** Saving the file with an
+  edited `tags` array updates the pills to match (same guarded listener, other direction)
+  and pushes the body to Grafana. Editing tags in the JSON and editing them as pills are two
+  doors into the same room.
+- **Edit the source → pull updates both.** A pull writes Grafana's tags into the body
+  (automatic in `sync` mode — it's the whole object) **and** reconciles the pills to match.
+  Both NC representations converge on the source.
+- **`link` mode has only surfaces 1 and 3.** A `link` file's body is a pointer, not the
+  object, so there is no editable body-`tags` surface to keep canonical — the pills (3) are
+  a **read-only projection of the source** (1), reconciled on pull, never pushed. This is
+  exactly why link-mode tags flow one way (Grafana → NC): with no canonical body to push,
+  there's nothing to send back. (The pointer JSON still lists tags for the human reader, but
+  those are regenerated from the source on every pull, not an edit surface.)
+
+So "three-way" is precise: **source ↔ body ↔ pills**, with the body as the hinge. Two of the
+arrows (body ↔ pills) are internal to Nextcloud and kept tight by listeners; the third
+(body ↔ source) is the existing pull/push spine, which already moves the body — tags simply
+ride inside it (Grafana) or alongside it via the tags endpoint (n8n — see the parity note).
+
+**The provenance problem — a *new* tag from Nextcloud vs. a *new* tag from Grafana.** The
+rules above say "a pull makes Grafana authoritative, a push makes Nextcloud authoritative,"
+and for a **manual, single-direction** reconcile that is complete and honest. But the moment
+tags drift on **both** sides between reconciles, "make them the same set" is ambiguous — and
+the ambiguity is exactly the one the user named: **when the two tag sets differ on a string,
+was it *added* on one side or *removed* on the other?** You cannot tell from the two current
+sets alone. Consider a dashboard that last synced with `{linux}`:
+
+- NC now has `{linux, urgent}`, Grafana has `{linux}` → did the user **add** `urgent` in
+  Files (should push to Grafana), or did someone **remove** `urgent` in Grafana (should
+  strip from NC)? Both produce the exact same pair of current sets.
+- NC has `{linux}`, Grafana has `{linux, prod}` → did Grafana **gain** `prod` (pull it into
+  NC), or did NC **drop** `prod` (push the removal to Grafana)? Again indistinguishable from
+  the current sets.
+
+**A two-way merge needs a baseline** — the tag set *as of the last successful sync* — to
+turn "the sets differ" into "who changed what." This is the same three-way-merge insight the
+body already leans on (`grafana_syncedHash` is the body's baseline); tags need the analogous
+baseline. Resolution:
+
+- **Bank a new metadata key `grafana_syncedTags`** — the reserved-stripped tag set we last
+  reconciled, stored on the file (comma-joined, sorted, alongside `grafana_syncedHash`).
+  Registered like the other banked keys; **written by the tag course, not this round.** With
+  it, each side's delta is computable: `nc_added = NC − baseline`, `nc_removed = baseline −
+  NC`, `g_added = Grafana − baseline`, `g_removed = baseline − Grafana`. The merged result is
+  `baseline ∪ (adds from both sides) − (removes from both sides)` — a true union-of-adds,
+  intersection-of-keeps three-way merge, so **a new tag from *either* side is additive and a
+  removal from *either* side propagates**, with no side clobbering the other's untouched
+  tags.
+- **The genuine conflict** — the same tag added on one side and removed on the other since
+  baseline — is the only case the merge can't auto-resolve. It resolves by the **reconcile's
+  direction of truth** (pull → Grafana wins that tag, push → NC wins), so behaviour stays
+  predictable and matches the body. This keeps the simple manual flows (pull-only, push-only)
+  behaving exactly as points 2–5 describe, and *only* the two-sided-drift case consults the
+  baseline.
+- **Origin, not authorship.** We deliberately track the *baseline set*, **not** a per-tag
+  "created in NC" / "created in Grafana" author stamp. Neither system records tag authorship,
+  and a per-tag origin flag would rot the instant a user re-adds a tag the other side also
+  has. The last-synced baseline is the minimal, honest state that answers the add-vs-remove
+  question without inventing provenance the backends don't keep.
+- **The n8n dimension is the same shape.** For the n8n sibling the identical baseline
+  (`n8n_syncedTags`) answers the identical question; the only backend difference is that n8n
+  tags are id'd resources (`ensureTag` to resolve a name→id before `PUT …/tags`), whereas
+  Grafana tags are bare strings inside the object. The three-way-merge logic — baseline,
+  deltas, direction-of-truth on conflict — is **backend-agnostic** and belongs in the shared
+  module. **This is the tag-provenance note to carry into the n8n saga too** (below).
+
+**Why this matters beyond parity — and a note back to the master.** **n8n has this same
+gap and hasn't closed it either.** n8n workflows carry real tags (`/api/v1/tags`, opaque
+ids, `PUT …/tags` to set them), and the master app uses them only as the *mapping key* +
+reserved control tags — it does **not** reconcile a workflow's content tags into NC system
+tags bidirectionally. So this is a genuinely new capability for **both** extensions, and a
+prime candidate for the eventual shared module: *"reconcile a backend object's label set
+with Nextcloud system tags, minus a reserved control namespace"* is backend-agnostic. The
+per-backend differences are three, all small and injectable: (a) **where tags live / how
+they're written** — inside the object for Grafana (write = upsert the dashboard), a separate
+id'd resource for n8n (write = `ensureTag` name→id then `PUT …/tags`, and n8n's body PUT
+*drops* tags entirely); (b) **the reserved prefix** (`grafana:` vs `n8n:`); and (c) **a
+protected-tags set** — tags the pill-sync may show but must not push a *removal* for. For
+Grafana that set is **empty** (a content tag is never load-bearing); for n8n it's the
+**mapping tags** (n8n binds a folder *by tag*, so removing the mapping pill would unmap the
+workflow — a hazard Grafana's folder-mapping simply doesn't have). The NC-side half — the
+body↔pills projection, systemtag reconcile, reserved-namespace filter, baseline three-way
+merge, direction-of-truth — is **identical**. **No commits to the n8n repo for the design;
+this is a saga note there too (now written up in `nextcloud-n8n` Chapter 5 §5.6) — see the
+cross-note below.**
+
+> **Dr K, turning a dashboard over in his hands:** *"You plated the body and the folder but
+> left the labels on the cutting board. A dish isn't sent without its garnish. Tags live
+> inside the object here — good, that means they ride the same upsert, no new envelope. So
+> make the two label sets *one* set, keep our own `grafana:` pills out of the guest's
+> garnish, and let the direction of the sync decide who's right — same as the body. And
+> here's the sharp bit: **even a `link` pointer gets the real Nextcloud tags** — a pointer
+> body, but a fully *searchable* one, so the mirror filters like the origin no matter the
+> mode. Now the part the guest just taught us: the tags live in **three** places — in
+> Grafana, in the file's own JSON, and on the Nextcloud pills — and a guest might reach for
+> any of the three. So make the **file the hinge**: the pills follow the file, the file goes
+> to Grafana, and it all closes the loop no matter which door they opened. And when a tag
+> shows up on one side and not the other, you can't guess whether it was **born there or died
+> on the other side** — so you keep a little note of what the tags were last time you all
+> agreed. That note is what tells an *add* from a *remove*. Tell the n8n line: they've got the
+> same three doors and the same fix. This is shared-module bait."*
+
+### The decision forks — where I need Dr K at the pass
+
+Some forks Dr K has already called (banked above ✅). These remain open for us to refine
+through the saga before the destructive Courses are cooked:
+
+| # | Fork | Options | Status |
+|---|---|---|---|
+| A | **Metadata key set** | 1:1 `grafana_*` rename **+ bank `grafana_folderUid` + `grafana_apiVersion`** | ✅ **called** — per table above |
+| B | **Shared-module key naming** | per-app keys now (isolation-first) vs. shared discriminated keys later | ✅ **called** — per-app now, revisit at shared-module time |
+| C | **Cascade / subfolders** | per-mapping **"Sync subfolders" checkbox**; **lazy, presence-driven mirror** (a subfolder appears on the far side only once it holds a dashboard); **no** hidden mappings, **no** "two kinds"; subtree stays under the top-level mapping, per-file `grafana_folderUid` records the nesting; deletes use the normal NC-trash gate | ✅ **re-called** — supersedes the earlier hidden-child-mappings sketch |
+| D | **Move-out of a mapping: what happens to the *live* Grafana dashboard?** | (i) leave it live + just unmap the file; (ii) remove it from Grafana and rely on the file's JSON to restore on move-back-in | 🔴 **open** — the archive-verb substitution. (i) is honest + lossless but leaves an orphan live dashboard; (ii) matches the master's "it disappears from Grafana when unmapped" feel but leans 100% on our JSON + upsert-by-uid. |
+| E | **Delete gate mechanics** | NC-trash-as-gate: trash = recoverable (no Grafana call), **purge-from-trash = the one Grafana `DELETE`**, restore = re-upsert | 🟡 **leaning** — needs the trashbin-DAV listener proven on the pod (the master's `@todo` purge leg is unproven here too) |
+| F | **`ignored` mode without an archive verb** | the master archives an ignored dashboard; we can't — so `ignored` just means "skip it in sync," dashboard left fully live | 🟡 **leaning** — simplest honest behaviour |
+| G | **Mapping binds a folder, not a tag** | the feature specs still say "Grafana **tag**" (verbatim from the master); Ch1 already made mappings bind real **folders** | 🔴 **open wording fix** — reword specs to folders (this round's feature edits) |
+| H | **Bidirectional dashboard-tag sync (three surfaces)** | keep **source `dashboard.tags` ↔ file-body `tags` array ↔ NC system tags** one set, minus the reserved `grafana:*` namespace; the **file body is the canonical object** and the pills are a listener-kept projection (edit either NC surface → the other follows → push); **pull reconciles NC tags for BOTH `sync` and `link`** (searchability is mode-independent), **push writes tags for `sync` only**; two-sided drift resolved by a **three-way merge against a banked `grafana_syncedTags` baseline** (add-vs-remove provenance), genuine conflicts fall to the reconcile's direction-of-truth (pull → Grafana, push → NC) | 🟡 **leaning** — Grafana tags measured (live inside `dashboard.tags`, no `labels`, no tag-id API; write = upsert the dashboard). Needs new banked key `grafana_syncedTags` + a body↔pills mirror listener. New capability for **both** extensions → shared-module bait. Course TBD (rides the pull/push spine). |
+| H | **Reserved tags — two origins, don't conflate** | a Nextcloud-origin tag (on the *file*) vs a Grafana-origin tag (on the *dashboard*) are different systems: `grafana:ignore` = NC file tag (app namespace) read on tag events → `ignored` mode; `nextcloud:ignore` = Grafana dashboard tag (`nextcloud:` = addressed-to-NC) read at pull → never pulled. Rule: **tag with the name of the system you're talking to.** | 🟡 **called** — split the two in `reserved-tags.feature`; symmetric with n8n (`n8n:ignore` on the file, `nextcloud:ignore` on the workflow) so the shared base gets one two-axis model |
+
+### Round-2 ticket — the commitment
+
+**Cook (real code, two cooks):**
+1. **Claude:** `FilenameCodec`, `SyncGuard`, `ManagedFile`, `DashboardMetadata` (with the
+   decided key set incl. `grafana_folderUid` + `grafana_apiVersion` registered but only
+   *written* by later courses), `RegisterMimetype`, + unit tests.
+2. **Me:** `GrafanaClient` list/read, `StorageService` + folder resolver, `SyncService`
+   pull (reconcile-by-uid + prune), `SyncController` + `occ …:sync pull`, wire **Sync from
+   Grafana** live.
+
+**Document (driving-truth, no code):**
+3. The **no-archive move/delete model** (file-is-the-backup + NC-trash-as-gate) and the
+   **subfolder/cascade** model, written into the feature specs so they stop describing the
+   master's archive verb.
+
+**The PR ships when:** a mapped folder fills with real dashboards on **Sync from Grafana**
+(and `occ`), a second pull changes nothing, the foundation files are unit-tested green,
+the high-value feature specs (`move`, `delete`, `file-type`, `reserved-tags`, `purge`)
+read against **our** ingredient (folders not tags, no archive verb, NC-trash gate), CI is
+green, and it's **smoke-tested in the live pod**. Destructive verbs stay `@todo` in the
+specs — designed, not wired.
+
+> **Dr K, chalk down:** *"Two cooks, one ticket, and you re-plated the dangerous course
+> before you seared it. Pull the protein down clean, write the delete recipe so the next
+> hand can't lose a guest's data, and leave the knife on the board until I say cut. Fire
+> Round 2."*
+
+---
+
 ## The mise-en-place log — measured vs. assumed (carried from Chapter 1)
 
 - **Measured & banked:** reachability (`cloud`→`observe`), bearer-token auth, the full
   parity map, the live folder picker, mapping CRUD round-trip, admin connection panel.
 - **To prove as we cook:** lossless v2/YAML round-trip on write (Course 6 / risk #1);
   `Editor` role covers delete + folder management (risk #4); content-hash loop guard
-  survives Grafana's per-save `version` bump (Course 3 / risk #6); the archive-verb
-  substitution for the unmapped/ignored edge (Course 4 / risk #2).
+  survives Grafana's per-save `version` bump (Course 3 / risk #6).
+- **Measured in Round 2 (banked):** **a Grafana delete is permanent from our SA's
+  seat** — `DELETE /api/dashboards/uid/{uid}` → instant `404`; app-platform trash
+  (`grafana.app/trash=true`) → 0 items even with `restoreDashboards` on;
+  `/api/search?deleted=true` → 401 to our token. So the archive-verb substitution
+  (risk #2) is **not** "find Grafana's soft-delete" — there isn't one — it's **the file
+  is the backup + the NC trashbin is the reversible gate.**
 
 ### Progress log (Chapter 2)
 - ✅ **Chapter 1 stamped complete;** ending + transition written.
@@ -280,6 +762,40 @@ needed to make the *config surface* honest — the burners light in Course 2.
   `config:app:set`; JS build + eslint green.
 - ⏭ *Next: PR review loop (address valid review-bot comments), then Course 2 — the
   Main Protein (pull). Chapter 2 stays open until Dr K calls it.*
+
+- 🍳 **Round 2 cooking (this PR: the pull + the re-plated delete/move model).**
+  Cut the ticket smaller and put **two cooks on one PR**: Claude on the pure
+  foundation (`FilenameCodec`, `SyncGuard`, `ManagedFile`, `DashboardMetadata` +
+  mimetype migration, all unit-tested), me on the Grafana-facing spine
+  (`GrafanaClient` list/read, `StorageService` + folder resolver, `SyncService`
+  pull, `SyncController` + `occ …:sync pull`, wiring **Sync from Grafana** live).
+  **Proved in the walk-in that a Grafana delete is permanent** (no soft-delete our
+  SA can reach), so the master's archive-verb move/delete recipe **does not
+  translate** — re-plated to **the file is the backup + NC trashbin is the single
+  reversible gate**, written as driving-truth into the feature specs (not yet
+  wired). **Metadata scrutinised, not 1:1 ported:** five `n8n_*` keys → `grafana_*`
+  (isolation is free — NC metadata keys are a flat string-keyed namespace, so no
+  cross-app query bleed), **plus two banked-now Grafana-only keys**
+  `grafana_folderUid` + `grafana_apiVersion`; the *shared-module neutral-key*
+  question is explicitly deferred. **Subfolders designed** — *(this first sketch was
+  hidden child mappings matched by name + "two kinds" + blocked subfolder deletes;
+  **superseded the same round** by the lazy presence-driven mirror — see the next
+  progress bullet and the revised "Subfolders" section)*. Dr K has called forks A/B/C;
+  D (move-out → live dashboard?), E (delete gate mechanics), F (`ignored` without
+  archive), G (specs say "tag", must say "folder") stay open.
+- ✅ **Subfolder model re-decided (Dr K + Claude, other cook napping).** Retired the
+  "hidden child mappings / two kinds of subfolder" sketch in favour of a **lazy,
+  presence-driven mirror**: one per-mapping **"Sync subfolders" checkbox**, and a single
+  rule — *a subfolder exists on the far side exactly when it holds a dashboard* (drop a
+  dashboard into a NC subfolder → the Grafana subfolder magically appears and the dashboard
+  re-parents into it; empty subfolders mirror nothing). No hidden mappings, no manual
+  trigger tag; the subtree stays under the top-level mapping with per-file `grafana_folderUid`
+  recording the nesting; deletes use the normal NC-trash gate (no special subfolder block).
+  Fork C **re-called**. Feature specs (`move`, `admin-mapping`, `mapping-membership`)
+  rewritten to this model.
+- ⏭ *Next: finish Round 2's pull code + spec rewordings, smoke-test in the pod, PR
+  review loop. Destructive verbs stay designed-not-wired until Dr K calls the forks.
+  Chapter 2 stays open until Dr K calls it.*
 
 ---
 

@@ -11,8 +11,8 @@
 #     Grafana. A sync folder is a full backup, so deleting it would be data loss. To wipe
 #     the Nextcloud side deliberately, an admin uses Purge first (see purge.feature).
 #
-# Because the files keep their n8n_id, a reinstall + pull RECONCILES them in place
-# (matched by id, never duplicated) — the reconnect is free, by design.
+# Because the files keep their grafana_uid, a reinstall + pull RECONCILES them in
+# place (matched by uid, never duplicated) — the reconnect is free, by design.
 #
 # The <uninstall> system leg needs a full app remove on a live pod (CI can't drive
 # it), so it stays @todo; the data-orphan + reinstall-reconnect legs are provable via
@@ -20,9 +20,9 @@
 
 # Spec-first / @todo: the SYSTEM leg needs a real app-remove on a live pod (the CI
 # harness can only disable/enable, not remove+reinstall), so it stays manual. The
-# DATA promise — reinstall reconciles existing files in place by id with NO
-# duplicates — is already proven LIVE by reconcile.feature ("existing files are
-# updated in place — matched by dashboard id, never duplicated"); a disable/enable
+  # DATA promise — reinstall reconciles existing files in place by uid with NO
+  # duplicates — is already proven LIVE by reconcile.feature ("existing files are
+  # updated in place — matched by dashboard uid, never duplicated"); a disable/enable
 # changes nothing about that reconcile, so re-proving it here would be redundant.
 @todo
 Feature: Uninstall reverts the system and reinstall reconnects the data
@@ -32,7 +32,7 @@ Feature: Uninstall reverts the system and reinstall reconnects the data
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana tag "nextcloud:alpha"
+    And a folder mapped as "sync" to the Grafana folder "alpha"
 
   # ── system cleanup (needs a live app remove — @todo in CI) ────────────────────
   @todo
@@ -45,15 +45,15 @@ Feature: Uninstall reverts the system and reinstall reconnects the data
 
   # ── data is orphaned, never deleted ───────────────────────────────────────────
   Scenario: Disabling the app leaves the dashboard files (and their identity) in place
-    Given the "nextcloud:alpha" folder has managed sync dashboard files
+    Given the "alpha" folder has managed sync dashboard files
     When the admin disables the app
     Then the ".grafana.json" files are still in the folder
-    And each file still carries its "n8n_id" metadata
+    And each file still carries its "grafana_uid" metadata
 
   # ── reinstall reconnects with no duplicates (the headline) ────────────────────
   Scenario: Re-enabling and syncing reconciles the existing files without duplicates
-    Given the "nextcloud:alpha" folder has managed sync dashboard files
+    Given the "alpha" folder has managed sync dashboard files
     And the admin disables and then re-enables the app
-    When the admin clicks "Sync from Grafana" for the "nextcloud:alpha" mapping
-    Then each existing file is updated in place, matched by its "n8n_id"
+    When the admin clicks "Sync from Grafana" for the "alpha" mapping
+    Then each existing file is updated in place, matched by its "grafana_uid"
     And no file gains a " (2)" collision-suffixed duplicate

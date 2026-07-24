@@ -13,12 +13,11 @@
 # create-dashboard.feature / rename.feature / the bidirectional sync, not here.)
 #
 # Behat can't click the Files-app JS, so the integration steps assert the
-# server-observable backing the front-end keys off (the n8n_mode DAV value + the
-# live/archived dashboard state + raw-JSON readability); the opener DECISION logic
-# itself is unit-tested in tests/js/files-helpers.test.js. Live for sync + unmapped
-# (saga §14.8 A). The `link` rows stay @todo (their decision logic is covered by the
-# JS unit tests) and the `ignored` rows wait on Copilot's reserved-tags / ignored
-# slice (§14.8 B) — both flip in this same PR once ready. CI skips @todo.
+# server-observable backing the front-end keys off (the grafana_mode DAV value + the
+# live dashboard state + raw-JSON readability); the opener DECISION logic
+# itself is unit-tested in tests/js/files-helpers.test.js. The `link` rows stay @todo
+# (their decision logic is covered by the JS unit tests) and the `ignored` rows wait
+# on the reserved-tags / ignored slice — both flip once ready. CI skips @todo.
 
 @todo
 Feature: Opening a dashboard file (Open in Grafana / Open with text editor)

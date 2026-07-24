@@ -35,15 +35,38 @@ use Psr\Log\LoggerInterface;
  *   ping()   — cheapest call to verify URL + token (used by the Test connection
  *              button and the occ smoke command).
  *
- * The dashboard/folder read/upsert surface (listFolders / getDashboard /
- * upsertDashboard / deleteDashboard / deep-link) lands in the sync chapters — it
- * rides this same request() chokepoint, so the auth + egress trade-off is decided
- * once, here.
+ * Read surface (the pull — Grafana → Nextcloud):
+ *
+ *   listFolders()          — the folders the mapping picker discovers uids from.
+ *   listDashboards(folder) — the dashboards to reconcile, scoped by folder (or all).
+ *   readDashboard(uid)     — one dashboard's full `{meta, dashboard}` record.
+ *   deepLink() / deepLinkFromPath() — browser URL to a live dashboard.
+ *
+ * The upsert/delete write surface (upsertDashboard / deleteDashboard) lands with
+ * the push + delete Courses — it rides this same request() chokepoint, so the auth
+ * + egress trade-off is decided once, here.
  *
  * Auth: Grafana takes a **service-account token** as `Authorization: Bearer
  * <token>` (unlike n8n's `X-N8N-API-KEY` header). One credential, one envelope.
  */
 final class GrafanaClient {
+	/**
+	 * Reserved `folderUIDs` value for Grafana's root / "General" area — the
+	 * dashboards that live in no folder. Grafana accepts this literal in
+	 * `/api/search`, so the reserved-root mapping (`/` in the picker) translates to
+	 * exactly `listDashboards(self::FOLDER_GENERAL)`.
+	 */
+	public const FOLDER_GENERAL = 'general';
+
+	/** `/api/search` row type for a dashboard (vs `dash-folder`). */
+	private const TYPE_DASHBOARD = 'dash-db';
+
+	/** Page size for `/api/search` paging. Generous — a homelab rarely spans pages. */
+	private const SEARCH_PAGE_SIZE = 1000;
+
+	/** Hard stop against a server that ignores paging and never returns a short page. */
+	private const MAX_PAGES = 50;
+
 	public function __construct(
 		private IAppConfig $config,
 		private ICrypto $crypto,
@@ -109,6 +132,116 @@ final class GrafanaClient {
 			];
 		}
 		return $out;
+	}
+
+	/**
+	 * List the dashboards Grafana holds, scoped by folder, normalised to the small
+	 * shape the pull reconciler indexes on: `{uid, title, folderUid, url, tags}`.
+	 * This is the "which dashboards exist" half of the pull — the reconciler then
+	 * reads each one's full spec with {@see readDashboard()}.
+	 *
+	 * Scope (`$folderUid`) maps straight onto Grafana's `/api/search` semantics:
+	 *  - **null** — no folder filter → **every** dashboard in the instance. This is
+	 *    what a whole-instance mirror (root mapping + cascade) walks.
+	 *  - **{@see FOLDER_GENERAL}** (`'general'`) — the root / "General" area:
+	 *    dashboards with **no** folder. Grafana accepts the literal `general` in
+	 *    `folderUIDs`, so the reserved-root mapping translates to exactly this.
+	 *  - **a real folder uid** — the **direct** children of that one folder only.
+	 *    Grafana's search is NOT recursive, so cascading a subtree is a walk of
+	 *    child folders (done in the reconciler, not here).
+	 *
+	 * Grafana's `/api/search` returns a flat JSON array and pages with `page` +
+	 * `limit` (1-indexed); we walk pages until a short/empty one, bounded by
+	 * {@see self::MAX_PAGES} against a server that ignores paging.
+	 *
+	 * @return list<array{uid:string, title:string, folderUid:string, url:string, tags:list<string>}>
+	 */
+	public function listDashboards(?string $folderUid = null): array {
+		$query = ['type' => self::TYPE_DASHBOARD, 'limit' => self::SEARCH_PAGE_SIZE];
+		if ($folderUid !== null) {
+			// 'general' selects no-folder dashboards; any other value is a folder uid.
+			$query['folderUIDs'] = $folderUid;
+		}
+		$out = [];
+		for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+			$batch = $this->decode($this->request('GET', '/api/search', $query + ['page' => $page]));
+			$seen = 0;
+			foreach ($batch as $entry) {
+				$seen++;
+				if (!is_array($entry)) {
+					continue;
+				}
+				$uid = (string)($entry['uid'] ?? '');
+				if ($uid === '') {
+					// Folder rows (type=dash-folder) and malformed rows carry no dash uid.
+					continue;
+				}
+				$tags = [];
+				foreach (($entry['tags'] ?? []) as $tag) {
+					if (is_string($tag) && $tag !== '') {
+						$tags[] = $tag;
+					}
+				}
+				$out[] = [
+					'uid' => $uid,
+					'title' => (string)($entry['title'] ?? $uid),
+					'folderUid' => (string)($entry['folderUid'] ?? ''),
+					'url' => (string)($entry['url'] ?? ''),
+					'tags' => $tags,
+				];
+			}
+			// A short page (fewer than the page size) is the last page.
+			if ($seen < self::SEARCH_PAGE_SIZE) {
+				return $out;
+			}
+		}
+		$this->logger->warning('Grafana dashboard search hit MAX_PAGES guard', [
+			'app' => Application::APP_ID,
+			'folderUid' => $folderUid ?? '(all)',
+		]);
+		return $out;
+	}
+
+	/**
+	 * Read one dashboard's full record by uid: `GET /api/dashboards/uid/{uid}`.
+	 * Grafana returns `{meta:{…}, dashboard:{…}}` — `dashboard` is the spec we
+	 * serialize to the file, and `meta` carries the placement/version context
+	 * (`meta.folderUid`, `meta.url`, and the spec's own `version`) the reconciler
+	 * stamps into metadata. Returned verbatim so callers pick what they need.
+	 *
+	 * @return array{meta?:array<string,mixed>, dashboard?:array<string,mixed>}
+	 */
+	public function readDashboard(string $uid): array {
+		$res = $this->request('GET', '/api/dashboards/uid/' . rawurlencode($uid));
+		return $this->decode($res);
+	}
+
+	/**
+	 * Build the browser deep-link to a live dashboard: `<base>/d/<uid>/<slug>`.
+	 * The uid is the stable thread, so the slug is cosmetic — Grafana redirects to
+	 * the canonical slug regardless. When the search/meta `url` is already known
+	 * (it starts with `/d/…`), prefer {@see deepLinkFromPath()} to avoid guessing.
+	 */
+	public function deepLink(string $uid, string $slug = ''): string {
+		$base = rtrim($this->config->getValueString(Application::APP_ID, 'grafana_url', ''), '/');
+		$path = '/d/' . rawurlencode($uid);
+		if ($slug !== '') {
+			$path .= '/' . rawurlencode($slug);
+		}
+		return $base . $path;
+	}
+
+	/**
+	 * Absolute deep-link from a Grafana-supplied relative path (the `url` field on
+	 * a search row or `meta.url`), e.g. `/d/abc123/my-dash` → `<base>/d/abc123/my-dash`.
+	 * A path that isn't relative is returned unchanged (already absolute / empty).
+	 */
+	public function deepLinkFromPath(string $path): string {
+		if ($path === '' || !str_starts_with($path, '/')) {
+			return $path;
+		}
+		$base = rtrim($this->config->getValueString(Application::APP_ID, 'grafana_url', ''), '/');
+		return $base . $path;
 	}
 
 	/**

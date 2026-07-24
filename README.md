@@ -51,6 +51,29 @@ without ever breaking the connection.
 Grafana Operator's `GrafanaDashboard` CRD): they're owned elsewhere and should never be
 written back — a clickable pointer is all you want.
 
+### Tags — synced three ways *(planned)*
+
+A dashboard's **tags** are part of the object, so a real sync keeps them in step too. Grafana
+holds tags *inside* the dashboard (`dashboard.tags: ["dns","linux"]`); Nextcloud has its own
+first-class **system tags** (the searchable coloured pills in Files). Grafana Sync keeps the
+two the same set, so **the mirror is as searchable as Grafana itself** — filter "every
+`linux` dashboard" the Nextcloud-native way.
+
+Because the tags live in the object, there are **three** places to edit them, and all three
+stay in agreement:
+
+- **Edit in Grafana** → a pull brings the tags into the Nextcloud file and onto its pills.
+- **Edit the file's pills** (or the `tags` array in the JSON) → the change pushes back to
+  Grafana.
+- The file body is the hinge: the pills mirror it, and it round-trips to Grafana.
+
+Two rules keep it safe: the app's own control tags (the reserved `grafana:` namespace, e.g.
+`grafana:sync`) are **never** mixed into your dashboard's tags in either direction; and when
+tags have changed on **both** sides since the last sync, a three-way merge (against the
+last-synced set the app remembers) tells an *add* apart from a *remove* so nothing is lost.
+Tag sync runs in **both** `sync` and `link` mappings for searchability — a `link` file is
+read-only, so its tags flow one way, Grafana → Nextcloud.
+
 ### Two dashboard "cuts" (classic JSON and the new YAML schema)
 
 Grafana serves a dashboard two ways, and the mapping records which one a folder uses:

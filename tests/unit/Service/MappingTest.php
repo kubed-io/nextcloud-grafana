@@ -29,6 +29,7 @@ final class MappingTest extends TestCase {
 			'format' => 'yaml',
 			'nc_groups' => ['admin', 'ops'],
 			'use_team_folder' => false,
+			'sync_subfolders' => true,
 		]);
 
 		self::assertSame('abc123', $m->id);
@@ -39,6 +40,7 @@ final class MappingTest extends TestCase {
 		self::assertSame('yaml', $m->format);
 		self::assertSame(['admin', 'ops'], $m->ncGroups);
 		self::assertFalse($m->useTeamFolder);
+		self::assertTrue($m->syncSubfolders);
 	}
 
 	public function testGroupsDefaultToEmptyAndTeamFolderToTrue(): void {
@@ -49,6 +51,18 @@ final class MappingTest extends TestCase {
 		]);
 		self::assertSame([], $m->ncGroups);
 		self::assertTrue($m->useTeamFolder);
+	}
+
+	public function testSyncSubfoldersDefaultsOff(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+		]);
+		self::assertFalse($m->syncSubfolders);
+		// …and round-trips through toArray/fromArray when enabled.
+		$enabled = Mapping::fromArray(['grafana_folder_uid' => 'uid2', 'nc_folder' => 'x', 'mode' => 'sync', 'sync_subfolders' => true]);
+		self::assertTrue(Mapping::fromArray($enabled->toArray())->syncSubfolders);
 	}
 
 	public function testGroupsAreTrimmedDedupedAndReindexed(): void {
