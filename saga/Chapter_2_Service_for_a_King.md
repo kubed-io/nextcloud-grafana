@@ -253,14 +253,210 @@ needed to make the *config surface* honest — the burners light in Course 2.
 
 ---
 
+## Round 2 — the protein, cooked by two hands *(Course 2 · this PR)*
+
+> Course 1 finished the room. Round 2 lights the first burner — **the pull, Grafana →
+> Nextcloud** — but we cut the ticket smaller than the menu implied and we put **two
+> cooks on the same PR** at once. And before a single destructive verb is wired, we go
+> back into the walk-in: the master's move/delete recipes assume an **archive** verb our
+> ingredient doesn't have, so those semantics get **written as driving-truth docs this
+> round, not cooked.** We learned something in prep that changes the recipe, so we
+> re-plate before we sear.
+
+### What we learned in the walk-in (the finding that resizes the ticket)
+
+We put the master's delete/restore recipe to the fire against real Grafana, through the
+`cloud` pod, with the app's own service-account token. The result:
+
+- Classic `DELETE /api/dashboards/uid/{uid}` returns **200 "deleted"** and the dashboard
+  is **gone immediately** — an instant `404`, no grace.
+- The app-platform trash (`labelSelector=grafana.app/trash=true`) returned **0 items**,
+  even with the `restoreDashboards` toggle **on**.
+- `/api/search?deleted=true` — the UI's "Recently deleted" path — returned **401** to our
+  SA token.
+
+**Reading:** from *our* seat, **a Grafana delete is permanent.** The master's whole
+delete/move safety net is `archive` → `unarchive` — a reversible soft-delete Grafana
+simply does not offer us. So the master's core assumption ("the id is the thread; move
+out archives, move back unarchives") **does not translate**. That is exactly the
+data-loss trap Dr K warned about: *treating a Grafana dashboard like an n8n workflow
+would quietly lose data the first time someone drags a file out of a folder.*
+
+### The re-plated model — reversibility lives in **our** kitchen, not Grafana's
+
+Since Grafana won't hold a safety net, **Nextcloud holds it.** Two pillars:
+
+1. **The file *is* the backup.** A `sync`/`unmapped` file carries the **full dashboard
+   JSON**. Move it out of a mapping and we do **not** try to "archive" in Grafana — we
+   keep the JSON in the file, drop the mapping, and (the fork below) decide whether the
+   live Grafana dashboard is left in place or removed. Move it back in and we **re-create
+   / upsert from the JSON we still hold**, re-using the same `uid`. The thread is the
+   `uid` **plus the bytes on disk** — not a Grafana-side archived object.
+
+2. **The Nextcloud trashbin is the single reversible gate.** Delete = move to NC trash
+   (fully recoverable — the JSON is right there). Grafana is only touched when the file
+   is **purged from NC trash** — that is the one moment we issue the irreversible Grafana
+   `DELETE`. Restore-from-trash re-links/re-creates. NC's own two-step trash becomes the
+   soft-delete Grafana never gave us.
+
+> **Dr K, at the walk-in door:** *"You proved the net isn't there. Good. So you build the
+> net on our side of the line — the file is the parachute, the trashbin is the ripcord.
+> Nothing leaves the pass that can lose a guest's dashboard on a careless drag."*
+
+### Two cooks, one PR — the split (async-safe)
+
+We put a second cook — **Claude** — on the line beside me, on the **same PR**, on files
+that don't touch mine, so we cook more at once without colliding.
+
+**Claude's station — the pure foundation (zero Grafana API, no merge surface with mine):**
+- `lib/Service/FilenameCodec.php` — filename ⇄ name/uid parse+format (pure logic; port).
+- `lib/Service/SyncGuard.php` — request-scoped re-entrancy guard (trivial; port).
+- `lib/Service/ManagedFile.php` — typed value object over the metadata keys.
+- `lib/Service/DashboardMetadata.php` — the Files-Metadata wrapper + key **registration**
+  (the master's `WorkflowMetadata`), using the key set **decided below**.
+- `lib/Migration/RegisterMimetype.php` — `application/grafana+json` mimetype + icon.
+- Unit tests for each (the master ships `FilenameCodecTest`, `ManagedFileTest`, etc.).
+
+**My station — the Grafana-facing spine:**
+- `GrafanaClient` gains `listDashboards()` / `readDashboard(uid)` (`/api/search` +
+  `/api/dashboards/uid/{uid}`).
+- `StorageService` + the longest-prefix folder resolver (real folder tree).
+- `SyncService` **pull** — reconcile-by-uid, prune, collision suffixes.
+- `SyncController` + `occ grafana_sync:sync pull` wired to the live **Sync from Grafana**
+  button.
+
+**The seam that keeps us from colliding:** Claude owns *pure/no-API* files + the metadata
+**contract**; I consume that contract from the Grafana side. We agree the metadata key
+names and `ManagedFile` shape **first** (below), commit that as the interface, then cook
+in parallel. Destructive verbs (move/delete/copy) are **docs only** this round — no code,
+so no listener wiring conflicts.
+
+### The metadata — scrutinised, not 1:1 ported
+
+The master's five keys are `n8n_*`. We are **not** blindly renaming to `grafana_*`. Two
+goals pull at once: **(a)** each extension's metadata must stay **isolated** — a
+`grafana_*` file must never surface in an n8n-specific indexed query and vice-versa; and
+**(b)** we want the *meaning* of each key to be **abstractable** into a future shared
+module. Resolution for this round:
+
+| Meaning | n8n key | **Grafana key (this round)** | Kind | Note |
+|---|---|---|---|---|
+| Stable backend id | `n8n_id` | `grafana_uid` | 🟢 rename | dashboard **uid** — survives rename/move. |
+| Last-seen backend revision | `n8n_versionId` | `grafana_version` | 🟡 seasoned | Grafana bumps `version` **every save** — store it, **never hash it** (risk #6). |
+| Loop-guard body hash | `n8n_syncedHash` | `grafana_syncedHash` | 🟢 rename | sha1 of **the spec we sent**, not Grafana's echo. |
+| File mode | `n8n_mode` | `grafana_mode` | 🟢 rename | sync/link/unmapped/ignored; `link` still stored on-wire as `reference`. INDEXED. |
+| Originating mapping id | `n8n_mapping` | `grafana_mapping` | 🟢 rename | INDEXED. |
+| **Source folder uid** | — | **`grafana_folderUid`** | 🔴 new | Grafana has **real nested folders** (n8n had flat tags). Banked now — the move-back-in / cascade model below needs it. |
+| **Serialization schema** | — | **`grafana_apiVersion`** | 🔴 new | classic JSON vs v2 YAML cut (Course 6). A file that **self-describes its schema** reads back losslessly. Banked now. |
+
+**Isolation is safe by construction:** Nextcloud's Files-Metadata keys are a **flat global
+namespace keyed by the exact string**. `grafana_mode` and `n8n_mode` are *different keys*;
+one app's indexed REPORT can only ever match its own registered key. Two apps installed
+side-by-side never cross-contaminate. So we get isolation **and** parallel structure for
+free — no prefix collision, no shared index.
+
+**The abstraction caveat (banked for down the road, NOT this round):** the *cleanest*
+shared module would give these keys a **neutral, extension-agnostic name** (e.g.
+`kubedsync_id` / `kubedsync_mode`) so a single shared library registers **one** key set and
+both extensions consume it — but that would mean a file could carry a key that *both*
+apps' queries match, which is the exact cross-contamination we want to avoid, **unless**
+the shared module also carries a "source backend" discriminator. That is a real design
+question (shared key + discriminator vs. per-extension keys + shared *code* that only
+differs by a prefix constant). **We do not solve it now.** We note it: *when we build the
+shared module, revisit whether the metadata keys in both the n8n and Grafana extensions
+should collapse to a shared, discriminated key set — the per-app `n8n_*` / `grafana_*`
+split we ship today is the conservative, isolation-first choice and can be migrated later.*
+
+> **Dr K:** *"Name them so they can't bleed into each other today, but so a smart reader
+> sees they're the same recipe. The shared pot comes later — don't burn it in now."*
+
+### Subfolders — a real Grafana capability, cooked deliberately (design only)
+
+The master only had flat tags, so "a subfolder inside a mapped folder" was never a real
+question for him. **Grafana has genuine nested folders**, so it *is* a question for us —
+and it's richer than a straight port. The decided model (design this round; wire in a
+later Course):
+
+- **Optional cascade on the mapping.** A mapping gains an optional **cascade** flag: when
+  set, the pull follows Grafana's child folders under the mapped folder and brings them
+  down as nested Nextcloud folders. Off by default (flat, like today).
+- **Two kinds of subfolder, and the difference matters:**
+  - a **Grafana-mapped subfolder** — a child folder that exists in Grafana (has its own
+    `folderUid`), matched **by name** under the parent; vs.
+  - a **plain Nextcloud subfolder** — a normal NC folder a user nested inside a mapped
+    folder, with no Grafana counterpart.
+- **How cascaded subfolders are modelled:** as **dynamically-created, hidden child
+  mappings** — a child mapping carries a hidden **"has-parent"** field so it doesn't
+  clutter the admin list but still resolves like any mapping. (`grafana_folderUid` on the
+  file is what lets a file know which child folder it belongs to.)
+- **Move semantics fall out of the two kinds:**
+  - **top-level mapped → plain NC subfolder (not Grafana-mapped):** *keep the uid from the
+    parent*, exactly as the master keeps the id — the dashboard stays where it is in
+    Grafana; the file is just nested locally.
+  - **top-level mapped → a Grafana-mapped subfolder:** do the **real Grafana move**
+    operation (re-parent the dashboard to the child `folderUid`), then **update the file's
+    metadata** to the new `folderUid` + new (child) mapping.
+- **Safety valve for now:** **block deletes on subfolders entirely** this round — we don't
+  even open that door until the cascade model is cooked. A delete inside a subfolder is
+  refused with a message; top-level delete semantics (NC-trash gate) are unaffected.
+
+### The decision forks — where I need Dr K at the pass
+
+Some forks Dr K has already called (banked above ✅). These remain open for us to refine
+through the saga before the destructive Courses are cooked:
+
+| # | Fork | Options | Status |
+|---|---|---|---|
+| A | **Metadata key set** | 1:1 `grafana_*` rename **+ bank `grafana_folderUid` + `grafana_apiVersion`** | ✅ **called** — per table above |
+| B | **Shared-module key naming** | per-app keys now (isolation-first) vs. shared discriminated keys later | ✅ **called** — per-app now, revisit at shared-module time |
+| C | **Cascade / subfolders** | optional cascade flag; hidden child mappings; name-matched; block subfolder deletes for now | ✅ **called** — per subfolder section |
+| D | **Move-out of a mapping: what happens to the *live* Grafana dashboard?** | (i) leave it live + just unmap the file; (ii) remove it from Grafana and rely on the file's JSON to restore on move-back-in | 🔴 **open** — the archive-verb substitution. (i) is honest + lossless but leaves an orphan live dashboard; (ii) matches the master's "it disappears from Grafana when unmapped" feel but leans 100% on our JSON + upsert-by-uid. |
+| E | **Delete gate mechanics** | NC-trash-as-gate: trash = recoverable (no Grafana call), **purge-from-trash = the one Grafana `DELETE`**, restore = re-upsert | 🟡 **leaning** — needs the trashbin-DAV listener proven on the pod (the master's `@todo` purge leg is unproven here too) |
+| F | **`ignored` mode without an archive verb** | the master archives an ignored dashboard; we can't — so `ignored` just means "skip it in sync," dashboard left fully live | 🟡 **leaning** — simplest honest behaviour |
+| G | **Mapping binds a folder, not a tag** | the feature specs still say "Grafana **tag**" (verbatim from the master); Ch1 already made mappings bind real **folders** | 🔴 **open wording fix** — reword specs to folders (this round's feature edits) |
+
+### Round-2 ticket — the commitment
+
+**Cook (real code, two cooks):**
+1. **Claude:** `FilenameCodec`, `SyncGuard`, `ManagedFile`, `DashboardMetadata` (with the
+   decided key set incl. `grafana_folderUid` + `grafana_apiVersion` registered but only
+   *written* by later courses), `RegisterMimetype`, + unit tests.
+2. **Me:** `GrafanaClient` list/read, `StorageService` + folder resolver, `SyncService`
+   pull (reconcile-by-uid + prune), `SyncController` + `occ …:sync pull`, wire **Sync from
+   Grafana** live.
+
+**Document (driving-truth, no code):**
+3. The **no-archive move/delete model** (file-is-the-backup + NC-trash-as-gate) and the
+   **subfolder/cascade** model, written into the feature specs so they stop describing the
+   master's archive verb.
+
+**The PR ships when:** a mapped folder fills with real dashboards on **Sync from Grafana**
+(and `occ`), a second pull changes nothing, the foundation files are unit-tested green,
+the high-value feature specs (`move`, `delete`, `file-type`, `reserved-tags`, `purge`)
+read against **our** ingredient (folders not tags, no archive verb, NC-trash gate), CI is
+green, and it's **smoke-tested in the live pod**. Destructive verbs stay `@todo` in the
+specs — designed, not wired.
+
+> **Dr K, chalk down:** *"Two cooks, one ticket, and you re-plated the dangerous course
+> before you seared it. Pull the protein down clean, write the delete recipe so the next
+> hand can't lose a guest's data, and leave the knife on the board until I say cut. Fire
+> Round 2."*
+
+---
+
 ## The mise-en-place log — measured vs. assumed (carried from Chapter 1)
 
 - **Measured & banked:** reachability (`cloud`→`observe`), bearer-token auth, the full
   parity map, the live folder picker, mapping CRUD round-trip, admin connection panel.
 - **To prove as we cook:** lossless v2/YAML round-trip on write (Course 6 / risk #1);
   `Editor` role covers delete + folder management (risk #4); content-hash loop guard
-  survives Grafana's per-save `version` bump (Course 3 / risk #6); the archive-verb
-  substitution for the unmapped/ignored edge (Course 4 / risk #2).
+  survives Grafana's per-save `version` bump (Course 3 / risk #6).
+- **Measured in Round 2 (banked):** **a Grafana delete is permanent from our SA's
+  seat** — `DELETE /api/dashboards/uid/{uid}` → instant `404`; app-platform trash
+  (`grafana.app/trash=true`) → 0 items even with `restoreDashboards` on;
+  `/api/search?deleted=true` → 401 to our token. So the archive-verb substitution
+  (risk #2) is **not** "find Grafana's soft-delete" — there isn't one — it's **the file
+  is the backup + the NC trashbin is the reversible gate.**
 
 ### Progress log (Chapter 2)
 - ✅ **Chapter 1 stamped complete;** ending + transition written.
@@ -280,6 +476,29 @@ needed to make the *config surface* honest — the burners light in Course 2.
   `config:app:set`; JS build + eslint green.
 - ⏭ *Next: PR review loop (address valid review-bot comments), then Course 2 — the
   Main Protein (pull). Chapter 2 stays open until Dr K calls it.*
+
+- 🍳 **Round 2 cooking (this PR: the pull + the re-plated delete/move model).**
+  Cut the ticket smaller and put **two cooks on one PR**: Claude on the pure
+  foundation (`FilenameCodec`, `SyncGuard`, `ManagedFile`, `DashboardMetadata` +
+  mimetype migration, all unit-tested), me on the Grafana-facing spine
+  (`GrafanaClient` list/read, `StorageService` + folder resolver, `SyncService`
+  pull, `SyncController` + `occ …:sync pull`, wiring **Sync from Grafana** live).
+  **Proved in the walk-in that a Grafana delete is permanent** (no soft-delete our
+  SA can reach), so the master's archive-verb move/delete recipe **does not
+  translate** — re-plated to **the file is the backup + NC trashbin is the single
+  reversible gate**, written as driving-truth into the feature specs (not yet
+  wired). **Metadata scrutinised, not 1:1 ported:** five `n8n_*` keys → `grafana_*`
+  (isolation is free — NC metadata keys are a flat string-keyed namespace, so no
+  cross-app query bleed), **plus two banked-now Grafana-only keys**
+  `grafana_folderUid` + `grafana_apiVersion`; the *shared-module neutral-key*
+  question is explicitly deferred. **Subfolders designed** (optional cascade,
+  hidden child mappings matched by name, real Grafana move only when the subfolder
+  is itself Grafana-mapped, **deletes on subfolders blocked for now**). Dr K has
+  called forks A/B/C; D (move-out → live dashboard?), E (delete gate mechanics),
+  F (`ignored` without archive), G (specs say "tag", must say "folder") stay open.
+- ⏭ *Next: finish Round 2's pull code + spec rewordings, smoke-test in the pod, PR
+  review loop. Destructive verbs stay designed-not-wired until Dr K calls the forks.
+  Chapter 2 stays open until Dr K calls it.*
 
 ---
 

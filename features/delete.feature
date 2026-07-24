@@ -1,88 +1,126 @@
-# Deletion semantics differ by mode. Mirrors Nextcloud's two-step trash model.
-# The matrix here is the contract the delete listener must satisfy.
-# Modes (saga Chapter 3 §14): sync / link / unmapped. A file with NO Grafana metadata is
-# "untracked" (a plain document) — distinct from "unmapped" (a sync file moved out
-# of its mapping that still carries its id + an archived Grafana dashboard).
-# LIVE: delete/purge/restore go over WebDAV (incl. the trashbin DAV endpoint);
-# DeleteToN8nListener runs synchronously, and the Grafana side is asserted over REST.
+# Deletion semantics differ by mode — and this is the highest-stakes surface in the
+# whole app, because our ingredient has NO undo.
+#
+# THE FINDING THAT SHAPES THIS FILE (saga Ch2 Round 2): we proved on live Grafana
+# that our service account cannot reach any soft-delete/trash. A
+# `DELETE /api/dashboards/uid/{uid}` is PERMANENT — instant 404, nothing in the
+# app-platform trash, `?deleted=true` returns 401. So the master's (n8n) recipe —
+# trash=archive, purge=delete, restore=unarchive — DOES NOT translate: there is no
+# archive to fall back to.
+#
+# THE RE-PLATED MODEL — reversibility lives in Nextcloud, not Grafana:
+#   • The file IS the backup. A sync/unmapped/link file carries what it needs to
+#     rebuild (full JSON for sync/unmapped; the pointer for link).
+#   • The Nextcloud trashbin is the SINGLE reversible gate:
+#       - move-to-trash    → recoverable. Grafana is NOT deleted at this step.
+#       - restore          → the file comes back; re-upsert/re-link as needed.
+#       - purge-from-trash → the ONE moment we issue the irreversible Grafana DELETE.
+#   NC's own two-step trash becomes the soft-delete Grafana never gave us.
+#
+# Modes (saga Ch2 Round 2): sync / link / unmapped. A file with NO Grafana metadata
+# is "untracked" (a plain document) — distinct from "unmapped" (a sync file moved
+# out of its mapping that still carries its UID + full JSON).
+#
+# OPEN FORK E (saga Ch2 Round 2): the exact trash-gate mechanics depend on the
+# trashbin-DAV listener firing BeforeNodeDeletedEvent on the pod — unproven here (the
+# master's purge leg is @todo for the same reason). Until proven, the purge→Grafana-
+# DELETE legs stay @todo.
+#
+# SUBFOLDER SAFETY VALVE (saga Ch2 Round 2): deletes INSIDE a subfolder of a mapped
+# folder are BLOCKED for now — we don't open the cascade delete door until the
+# subfolder model is cooked.
+#
+# DESIGN, NOT WIRED: the whole feature is @todo — CI skips it — until the delete
+# engine is cooked and the forks are called by Dr K.
 
 @todo
 Feature: Deleting a dashboard file
   As a Nextcloud user
   I want delete/trash/restore to do the right thing per mode
-  So that removing a file never silently desyncs the two systems
+  So that removing a file never silently desyncs the two systems — and never loses data
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana tag "nextcloud:alpha"
+    And a folder mapped as "sync" to the Grafana folder "alpha"
 
-  Scenario: Trashing a sync-mode file archives the dashboard
+  # ── sync: trash is recoverable, only PURGE touches Grafana ────────────────────
+
+  Scenario: Trashing a sync-mode file does NOT delete the dashboard (it stays live and recoverable)
     Given a managed "sync" dashboard file
     When I move it to the trash
-    Then the dashboard is archived (hidden, preserved) in Grafana
+    Then the dashboard still exists in Grafana
+    And the file is recoverable from the Nextcloud trash
 
-  # Purge → permanent delete doesn't fire over the trashbin DAV endpoint in CI:
-  # the dashboard stays in Grafana (archived) after the purge. Likely cause — a manual
-  # trashbin DAV DELETE goes through Sabre's trashbin nodes (Trashbin::delete),
-  # which may not dispatch the Files BeforeNodeDeletedEvent the hard-delete leg
-  # hangs off; the trash entry's ".dNNNN" suffix can also defeat the ".grafana.json"
-  # gate. Archive (soft) + restore + tag-strip all pass, so the meaningful
-  # contract is covered; this leg needs a real listener-side investigation.
+  # Purge is the ONE irreversible moment — the file leaves NC trash, so we delete in
+  # Grafana. @todo until the trashbin-DAV listener is proven on the pod (fork E).
   @todo
   Scenario: Purging a sync-mode file permanently deletes the dashboard
     Given a trashed "sync" dashboard file
     When I purge it from the trash
     Then the dashboard is permanently deleted in Grafana
 
-  Scenario: Restoring a sync-mode file unarchives the dashboard
+  Scenario: Restoring a sync-mode file brings the dashboard back from the file's JSON
     Given a trashed "sync" dashboard file
     When I restore it from the trash
-    Then the dashboard is unarchived in Grafana
+    Then the dashboard exists in Grafana with the same "grafana_uid"
 
-  Scenario: Trashing a link only strips the mapping tag
+  # ── link: trash only severs the tie; the dashboard is never deleted ───────────
+
+  Scenario: Trashing a link only unlinks it — the dashboard is untouched
     Given a managed "link" dashboard file
     When I move it to the trash
-    Then the mapping tag is stripped from the dashboard in Grafana
-    And the dashboard itself is not archived or deleted
+    Then the dashboard in Grafana is not deleted
+    And the link is recoverable from the Nextcloud trash
+
+  # ── untracked: never our business ─────────────────────────────────────────────
 
   Scenario: Deleting an untracked dashboard file touches nothing in Grafana
     Given an untracked ".grafana.json" file
     When I delete it
     Then Grafana is not contacted
 
-  # ── unmapped mode (a moved-out sync file: keeps its id, dashboard archived) ────
-  # Unmapped mode has landed (saga §14.2). An unmapped file's dashboard is already
-  # archived and has no live mapping, so trash and restore are both Grafana no-ops:
-  # softDelete/restore fall to the link branch with mapping=null and skip the call.
-  # The "left as-is" assertion proves it — the dashboard stays present and archived.
-  Scenario: Trashing an unmapped file is a no-op in Grafana (already archived)
-    Given an unmapped dashboard file that still carries its "n8n_id"
+  # ── unmapped (a moved-out sync file: keeps its UID + full JSON) ───────────────
+  # An unmapped file has no live mapping, so trash and restore are Grafana no-ops —
+  # the dashboard's fate was already settled by fork D at move-out. The file is still
+  # the backup, so trashing it is safe and recoverable.
+  Scenario: Trashing an unmapped file is recoverable and does not touch Grafana
+    Given an unmapped dashboard file that still carries its "grafana_uid"
     When I move it to the trash
     Then the trash move succeeds
-    And the archived dashboard in Grafana is left as-is
+    And Grafana is not contacted
+    And the file is recoverable from the Nextcloud trash
 
-  # @todo for the same reason the sync purge is @todo: a trashbin-DAV purge doesn't
-  # fire BeforeNodeDeletedEvent in CI, so the hard step never runs. On top of that,
-  # hardDelete is a non-sync no-op today, so even if it fired it wouldn't delete the
-  # archived dashboard — this leg needs both a listener-side fix and a backend rule.
+  # Purging an unmapped file: if fork D left the dashboard live, THIS is where it is
+  # deleted; if fork D already removed it, this is a no-op. @todo until fork D + the
+  # trashbin listener are called.
   @todo
-  Scenario: Purging an unmapped file permanently deletes the archived dashboard
-    Given a trashed unmapped dashboard file that still carries its "n8n_id"
+  Scenario: Purging an unmapped file permanently deletes the dashboard (if still live)
+    Given a trashed unmapped dashboard file that still carries its "grafana_uid"
     When I purge it from the trash
-    Then the (archived) dashboard is permanently deleted in Grafana
+    Then the dashboard is permanently deleted in Grafana (if fork D left it live)
 
   Scenario: Restoring an unmapped file from trash touches nothing in Grafana
-    Given a trashed unmapped dashboard file that still carries its "n8n_id"
+    Given a trashed unmapped dashboard file that still carries its "grafana_uid"
     When I restore it from the trash
-    Then the archived dashboard in Grafana is left as-is
+    Then Grafana is not contacted
+    And the file returns as an unmapped file
 
-  # Error-path branch — documented but not wired. Forcing a real transport
-  # failure mid-DELETE is brittle for an integration test; the cleaner home for
-  # this is a unit test against a mocked N8nClient asserting AbortedEventException.
-  # Left @todo (CI skips it) as a "bow on top" we can add later.
+  # ── subfolder safety valve — blocked for now ─────────────────────────────────
+
+  Scenario: Deleting a file inside a subfolder of a mapped folder is blocked
+    Given a managed "sync" dashboard file in a subfolder of the "alpha" folder
+    When I try to delete the file
+    Then the delete is refused with a message
+    And nothing changes in Grafana
+
+  # ── error path — the irreversible step must never half-happen ────────────────
+  # If the Grafana DELETE can't be confirmed on purge, we abort so the file stays in
+  # NC trash (still recoverable). Forcing a real transport failure mid-DELETE is
+  # brittle in integration; the cleaner home is a unit test against a mocked
+  # GrafanaClient. Left @todo.
   @todo
-  Scenario: A delete is aborted if Grafana is unreachable
-    Given a managed "sync" dashboard file
+  Scenario: A purge is aborted if Grafana is unreachable
+    Given a trashed "sync" dashboard file
     And Grafana is unreachable
-    When I move it to the trash
-    Then the delete is aborted and the file stays in Nextcloud
+    When I purge it from the trash
+    Then the purge is aborted and the file stays in the Nextcloud trash
