@@ -793,9 +793,79 @@ specs — designed, not wired.
   recording the nesting; deletes use the normal NC-trash gate (no special subfolder block).
   Fork C **re-called**. Feature specs (`move`, `admin-mapping`, `mapping-membership`)
   rewritten to this model.
-- ⏭ *Next: finish Round 2's pull code + spec rewordings, smoke-test in the pod, PR
-  review loop. Destructive verbs stay designed-not-wired until Dr K calls the forks.
-  Chapter 2 stays open until Dr K calls it.*
+- ✅ **Round 2 landed — PR #4 merged.** The **metadata contract + foundation** (Claude's
+  station: `DashboardMetadata`, `ManagedFile`, `FilenameCodec`, `SyncGuard`,
+  `DashboardBody` — all unit-tested, incl. the loop-guard hash + `link↔reference` wire)
+  and the **Grafana read surface** (`GrafanaClient.listDashboards`/`readDashboard`/
+  `deepLink`, folder-scoped + root-`general` aware). Metadata keys register on boot; the
+  seam is committed + tested. Review loop run clean (15/15 threads, incl. a real
+  `ArgumentCountError` the bot caught). Live pod updated; **`observe` (team folder +
+  groups) + `nxt-fun` (non-team) mappings staged** as the smoke test — config lives in
+  appconfig, survives every code-only deploy.
+- ⏭ *Next: **Round 3 — the working pull** (below). Chapter 2 stays open until Dr K calls it.*
+
+---
+
+## Round 3 — The Protein Plated *(this PR: the pull works, folders provision)*
+
+> Round 2 built the substrate and the read surface. **Round 3 lights the burner and
+> plates the protein.** Be bold: this PR is the whole pull, end to end — the button
+> stops being disabled and starts moving food. Click **Sync from Grafana** (or `occ`)
+> and a mapped folder is *created* (a real team folder shared to its groups, or a plain
+> admin folder) and *fills* with the live dashboards as `.grafana.json` files —
+> uid-stamped, mode-tagged, mimetyped — and a second pull changes nothing. This is the
+> plate that makes the staged `observe` + `nxt-fun` mappings finally *materialize*.
+
+### The ticket — several interrelated dishes, one PR (be bold)
+
+1. **`RegisterMimetype`** *(finishes the foundation station)* — register
+   `application/grafana+json` + a Grafana filetype icon via an idempotent install/upgrade
+   repair-step (mirror the master's `RegisterMimetype`), with an uninstall reversal so
+   removal leaves core clean (store rule).
+2. **Folder provisioning — the engine finally *acts* on the stored team-folder/groups
+   config** (the "stored-but-not-yet-acted-on" from Course 1 comes alive):
+   - `TeamFolderService` — create an ownerless **groupfolder** at the mapping's
+     `nc_folder`, shared to `nc_groups`, plus a dedicated actor group for the app's own
+     write access (the master's model). `use_team_folder = false` → a plain folder in the
+     admin's files instead.
+   - `ensureFolder(mapping)` picks the path from the flag; idempotent.
+3. **`StorageService` — the file writer.** `Name.<uid>.grafana.json` via `FilenameCodec`
+   (collision suffixes), body via `DashboardBody` (sync = full stripped spec, link =
+   pointer), stamped through `DashboardMetadata` (uid / mode / version / syncedHash /
+   mapping / folderUid), all wrapped in `SyncGuard` so our own writes never bounce back.
+4. **`SyncService` (pull) — reconcile-by-uid.** For a mapping: list its Grafana dashboards
+   (folder-scoped; `general` for a root mapping), read each, write/update **matched by
+   uid** (never duplicate on re-run), **prune** a managed file whose dashboard left the
+   folder. **Flat only** (cascade/subfolders deferred), **classic JSON cut only** (v2/YAML
+   is Course 6).
+5. **Mode tags** — `grafana:sync` / `grafana:link` Nextcloud systemtags mirroring each
+   file's mode (the master's `ModeTagListener`), mutually exclusive, app-maintained.
+6. **`SyncController` + `occ`** — `POST /apps/grafana_sync/mappings/{id}/sync` (pull),
+   `grafana_sync:sync pull [--mapping]`, `grafana_sync:list-dashboards`,
+   `grafana_sync:get-dashboard <uid>`; wire the **Sync from Grafana** bulk button + the
+   per-mapping sync **live** (off "disabled").
+7. **Integration test — the exit gate.** `reconcile.feature`'s "Sync from Grafana pulls
+   the folder's dashboards" flips off `@todo` and passes on the ephemeral Grafana + NC
+   stack: folder provisioned, files land uid-matched, a second pull is a no-op, an
+   unmapped file is untouched.
+8. **Live smoke test.** Deploy; click Sync from Grafana; **`observe`** becomes a real team
+   folder shared to `admin/admins/devs/friends` filled with the observe dashboards, and
+   **`nxt-fun`** a plain folder holding the *Welcome* dashboard.
+
+### Left on the shelf this round (still designed-not-wired)
+
+Push / writeback (Course 3), the move/delete/copy mode machine (Course 4),
+cascade/subfolders, the v2/YAML cut (Course 6), and the scheduled-pull background job
+(dessert). Round 3 is the **pull, flat, classic-JSON** — but *complete and live*.
+
+**Ships when:** Sync from Grafana provisions + fills a mapped folder (team **and**
+non-team), reconcile-by-uid is idempotent, files are mimetyped + mode-tagged +
+uid-stamped, the integration test + unit tests + CI are green, and it's smoke-tested
+live (the two staged mappings materialize).
+
+> **Dr K, ladle up:** *"You've prepped the protein and read the room. Now sear it and put
+> it on the plate — a whole folder of live dashboards, appearing in Nextcloud like they
+> were always there. Be bold: one ticket, the whole pull. Fire Round 3."*
 
 ---
 
