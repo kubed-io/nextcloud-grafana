@@ -57,6 +57,38 @@ trait SyncSteps {
 	}
 
 	/**
+	 * @When the admin pushes to Grafana
+	 */
+	public function theAdminPushesToGrafana(): void {
+		$res = $this->occ('grafana_sync:push');
+		Assert::assertSame(0, $res['exit'], "push failed:\n{$res['output']}");
+	}
+
+	/**
+	 * Edit a pulled dashboard file's title in place (WebDAV GET → change title → PUT),
+	 * the way a user editing the JSON in the Files app would. The file id (and its
+	 * metadata) is preserved, so the push matches it back to the same dashboard.
+	 *
+	 * @When the dashboard file :path is edited to title :title
+	 */
+	public function theDashboardFileIsEditedToTitle(string $path, string $title): void {
+		$spec = json_decode($this->davGet($path), true);
+		Assert::assertIsArray($spec, "dashboard file '$path' is not valid JSON");
+		$spec['title'] = $title;
+		$this->davPut($path, (string)json_encode($spec, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+	}
+
+	/**
+	 * @Then the Grafana dashboard :uid has title :title
+	 */
+	public function theGrafanaDashboardHasTitle(string $uid, string $title): void {
+		$record = $this->grafanaGetDashboard($uid);
+		Assert::assertNotNull($record, "Grafana has no dashboard with uid '$uid'");
+		$actual = $record['dashboard']['title'] ?? null;
+		Assert::assertSame($title, $actual, "dashboard '$uid' title mismatch");
+	}
+
+	/**
 	 * @Then a file named :name appears in :folder
 	 */
 	public function aFileNamedAppearsIn(string $name, string $folder): void {

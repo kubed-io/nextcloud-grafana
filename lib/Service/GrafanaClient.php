@@ -217,6 +217,27 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * Create-or-update a dashboard: `POST /api/dashboards/db` — Grafana's single upsert
+	 * endpoint (the write half of the read surface {@see readDashboard()}). The body is
+	 * built by {@see DashboardBody::toUpsertBody()}: it carries the spec with `id:null`
+	 * and `overwrite:true` so Grafana keys on the stable **uid** and updates the existing
+	 * dashboard in place (never mints a new one), plus the top-level `folderUid` that
+	 * places it. Returns Grafana's decoded ack `{uid, id, version, status, slug, url}` —
+	 * the `version` is the freshly-bumped one the push stamps into metadata.
+	 *
+	 * A bad spec (e.g. a uid that collides with a different title, a malformed panel)
+	 * comes back as a {@see GrafanaApiException} carrying Grafana's own `message`, so the
+	 * push surfaces exactly what to fix.
+	 *
+	 * @param array<string,mixed> $body the `/api/dashboards/db` envelope from DashboardBody::toUpsertBody
+	 * @return array<string,mixed>
+	 */
+	public function upsertDashboard(array $body): array {
+		$res = $this->request('POST', '/api/dashboards/db', [], $body);
+		return $this->decode($res);
+	}
+
+	/**
 	 * Build the browser deep-link to a live dashboard: `<base>/d/<uid>/<slug>`.
 	 * The uid is the stable thread, so the slug is cosmetic — Grafana redirects to
 	 * the canonical slug regardless. When the search/meta `url` is already known

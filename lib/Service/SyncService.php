@@ -48,6 +48,7 @@ final class SyncService {
 		private OwnershipTags $tags,
 		private StorageService $storage,
 		private SyncGuard $guard,
+		private PushService $push,
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
 	) {
@@ -86,6 +87,98 @@ final class SyncService {
 			'failed' => $total['failed'],
 			'pruned' => $total['pruned'],
 			'status' => $errors === [] ? 'ok' : 'error',
+			'message' => $errors === [] ? null : implode('; ', $errors),
+		];
+	}
+
+	/**
+	 * Push every mapping's `sync` files back to Grafana — the bulk "Sync to Grafana"
+	 * action (Nextcloud treated as the source of truth). Delegates per mapping to
+	 * {@see pushOne}; `link` mappings never push.
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, status:string, message:?string}
+	 */
+	public function pushAll(): array {
+		$processed = 0;
+		$succeeded = 0;
+		$failed = 0;
+		$errors = [];
+		foreach ($this->mappings->list() as $mapping) {
+			$res = $this->pushOne($mapping);
+			$processed += $res['processed'];
+			$succeeded += $res['succeeded'];
+			$failed += $res['failed'];
+			if (is_string($res['message'] ?? null) && $res['message'] !== '') {
+				$errors[] = $res['message'];
+			}
+		}
+		return [
+			'processed' => $processed,
+			'succeeded' => $succeeded,
+			'failed' => $failed,
+			'status' => $failed === 0 ? 'ok' : 'error',
+			'message' => $errors === [] ? null : implode('; ', $errors),
+		];
+	}
+
+	/**
+	 * Push a single mapping's `sync` files up to Grafana. Files outside this mapping's
+	 * folder — including every `unmapped` file — are never listed, so never pushed. A
+	 * `link` mapping is a no-op (a pointer has nothing to push).
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, message:?string}
+	 */
+	public function pushOne(Mapping $mapping): array {
+		if ($mapping->mode !== Mapping::MODE_SYNC) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		if (!$this->storage->isAvailable($mapping)) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		$folder = $this->storage->findFolder($mapping);
+		if ($folder === null) {
+			return ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'message' => null];
+		}
+		$processed = 0;
+		$succeeded = 0;
+		$failed = 0;
+		$errors = [];
+		foreach ($folder->getDirectoryListing() as $node) {
+			if (!FilenameCodec::isDashboardFile($node)) {
+				continue;
+			}
+			$managed = $this->metadata->read($node->getId());
+			if (!$managed?->isManaged()) {
+				continue;
+			}
+			// Push only files that are themselves `sync`. A `link`/`ignored` file must not
+			// push even in a sync mapping; a legacy file with no recorded mode is treated
+			// as sync for backward compatibility.
+			if ($managed->mode !== '' && !$managed->isSync()) {
+				continue;
+			}
+			$processed++;
+			try {
+				if ($this->push->push($node)) {
+					$succeeded++;
+				}
+			} catch (\Throwable $e) {
+				// Carry Grafana's own message through to the admin button, curated the
+				// same way as everywhere else so a bad dashboard is fixable from the toast.
+				$failed++;
+				$errors[] = $node->getName() . ': ' . GrafanaClient::describeConnectionError($e);
+				$this->logger->warning('grafana_sync push failed', [
+					'app' => Application::APP_ID,
+					'file' => $node->getName(),
+					'ncFolder' => $mapping->ncFolder,
+					'exception' => $e,
+				]);
+			}
+		}
+		return [
+			'processed' => $processed,
+			'succeeded' => $succeeded,
+			'failed' => $failed,
 			'message' => $errors === [] ? null : implode('; ', $errors),
 		];
 	}

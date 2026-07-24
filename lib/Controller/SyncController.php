@@ -30,8 +30,13 @@ use Psr\Log\LoggerInterface;
  * this same controller in later courses; the panel already renders their buttons,
  * disabled.)
  *
+ * Push (Grafana ← Nextcloud, Course 3) is wired the same way through
+ * {@see SyncService::pushAll}: every mapping's sync files are sent up as upserts on
+ * their uid. (Purge stays out until Course 4's delete machine.)
+ *
  * Routes:
  *   POST /apps/grafana_sync/sync/pull → Grafana → NC (bulk populate)
+ *   POST /apps/grafana_sync/sync/push → NC → Grafana (bulk writeback)
  */
 final class SyncController extends Controller {
 	public function __construct(
@@ -56,6 +61,26 @@ final class SyncController extends Controller {
 			// an unexpected error, so log the detail and show the admin a generic line
 			// rather than leaking raw internals — consistent with the app's other endpoints.
 			$this->logger->error('grafana_sync pull failed', ['exception' => $e]);
+			return new JSONResponse([
+				'status' => 'error',
+				'message' => 'Sync failed — check the server log for details.',
+			], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+		return new JSONResponse($res, Http::STATUS_OK);
+	}
+
+	/**
+	 * Push every mapping's sync files up to Grafana, inline, and return the run counts.
+	 */
+	#[AuthorizedAdminSetting(settings: SyncSettings::class)]
+	public function push(): JSONResponse {
+		try {
+			$res = $this->sync->pushAll();
+		} catch (\Throwable $e) {
+			// Per-mapping/per-file failures are caught + curated inside pushAll (it
+			// returns status=error with a friendly message, never throws). Reaching here
+			// means an unexpected error — log the detail, show the admin a generic line.
+			$this->logger->error('grafana_sync push failed', ['exception' => $e]);
 			return new JSONResponse([
 				'status' => 'error',
 				'message' => 'Sync failed — check the server log for details.',

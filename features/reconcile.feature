@@ -41,15 +41,15 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
     Then no file named "Ephemeral.grafana.json" remains in "delta-dash"
     And a file named "Delta Demo.grafana.json" appears in "delta-dash"
 
-  # Push (Course 3, writeback): sending the mapping's sync files up to Grafana. The
-  # reconciler's push half + the DAV write guard land there; kept @todo until then.
-  @todo
-  Scenario: Sync to Grafana pushes the mapping's sync files up to Grafana
-    Given the "alpha" folder has sync dashboard files with local changes
-    And an unmapped dashboard file exists outside every mapping
-    When the admin clicks "Sync to Grafana" for the "alpha" mapping
-    Then each sync file in the folder is pushed to its dashboard in Grafana
-    And the unmapped file is not pushed (it is outside the mapping's scope)
+  # Push (Course 3, writeback): a local edit to a synced file goes back up to its
+  # Grafana dashboard on the stable uid — same dashboard, not a new one. Uses the
+  # bravo folder so it doesn't mutate the alpha fixture the pull scenarios assert on.
+  Scenario: Sync to Grafana pushes a local edit up to its dashboard
+    Given an admin-owned mapping from Grafana folder "nc-bravo" to Nextcloud folder "bravo-dash"
+    And the admin pulls from Grafana
+    When the dashboard file "bravo-dash/Bravo Demo.grafana.json" is edited to title "Bravo Demo (edited by NC)"
+    And the admin pushes to Grafana
+    Then the Grafana dashboard "nc-bravo-demo" has title "Bravo Demo (edited by NC)"
 
   # The whole-instance mirror (saga Ch2): the Grafana root "/" mapped to a Nextcloud folder
   # with "Sync subfolders" on. The root encloses every folder, so the pull walks the entire
