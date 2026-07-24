@@ -47,6 +47,12 @@ use JsonSerializable;
  * lands in a later chapter (Course 2), so they are stored-but-not-yet-acted-on —
  * config the engine will read, not decoration.
  *
+ * Subfolder model (saga Ch2, revised): `syncSubfolders` is the per-mapping toggle
+ * for the lazy, presence-driven subfolder mirror. **Off by default** (the n8n-like
+ * flat model: a subfolder is cosmetic local Nextcloud organisation, invisible to
+ * Grafana). On: a Nextcloud subfolder mirrors to a Grafana subfolder the moment a
+ * dashboard lands in it. Persists today; the mirroring engine acts on it later.
+ *
  * Invariants:
  *  - `grafanaFolderUid` MUST be non-empty.
  *  - `ncFolder` MUST be non-empty (after normalising away surrounding slashes).
@@ -74,6 +80,7 @@ final class Mapping implements JsonSerializable {
 		public readonly string $format,
 		public readonly array $ncGroups,
 		public readonly bool $useTeamFolder,
+		public readonly bool $syncSubfolders,
 	) {
 	}
 
@@ -109,6 +116,10 @@ final class Mapping implements JsonSerializable {
 		$useTeamFolder = !array_key_exists('use_team_folder', $data)
 			|| filter_var($data['use_team_folder'], FILTER_VALIDATE_BOOLEAN);
 
+		// Subfolder sync. Default FALSE (flat, n8n-like) — an omitted flag means off.
+		$syncSubfolders = array_key_exists('sync_subfolders', $data)
+			&& filter_var($data['sync_subfolders'], FILTER_VALIDATE_BOOLEAN);
+
 		if ($uid === '') {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
 		}
@@ -122,7 +133,7 @@ final class Mapping implements JsonSerializable {
 			throw new \InvalidArgumentException('format must be "json" or "yaml"');
 		}
 
-		return new self($id, $uid, $title, $ncFolder, $mode, $format, $ncGroups, $useTeamFolder);
+		return new self($id, $uid, $title, $ncFolder, $mode, $format, $ncGroups, $useTeamFolder, $syncSubfolders);
 	}
 
 	/** @return array<string,mixed> */
@@ -136,6 +147,7 @@ final class Mapping implements JsonSerializable {
 			'format' => $this->format,
 			'nc_groups' => $this->ncGroups,
 			'use_team_folder' => $this->useTeamFolder,
+			'sync_subfolders' => $this->syncSubfolders,
 		];
 	}
 

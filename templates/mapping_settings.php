@@ -38,6 +38,7 @@ $desc = [
 	'nc' => $l->t('Name of the Nextcloud folder the dashboards appear in.'),
 	'mode' => $l->t('Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
 	'format' => $l->t('JSON: the classic Grafana dashboard model (.grafana.json). YAML: the newer k8s-style dashboard schema (.grafana.yaml).'),
+	'subfolders' => $l->t('Off (default): subfolders are local Nextcloud folders only — the dashboard stays in the mapped folder. On: a subfolder mirrors to a Grafana subfolder the moment a dashboard lands in it. Saved with the mapping; the mirroring engine lands in a later release.'),
 	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 	'groups' => $l->t('Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 ];
@@ -88,6 +89,7 @@ $info = static function (string $tip) use ($icon): string {
 			$label = $title !== '' ? $title . ' (' . $uid . ')' : $uid;
 			$selectedGroups = $m['nc_groups'] ?? [];
 			$useTf = (bool)($m['use_team_folder'] ?? $tfAvailable);
+			$syncSubfolders = (bool)($m['sync_subfolders'] ?? false);
 			?>
 			<div class="grafana-sync-mappings__card" data-id="<?php p($m['id']); ?>">
 				<div class="grafana-sync-mappings__grid">
@@ -102,6 +104,12 @@ $info = static function (string $tip) use ($icon): string {
 						<label><?php p($l->t('Nextcloud folder'));
 			print_unescaped($info($desc['nc'])); ?></label>
 						<input type="text" class="js-nc-folder" value="<?php p($m['nc_folder']); ?>" placeholder="<?php p($l->t('dashboards')); ?>" />
+					</div>
+					<div class="grafana-sync-field gf-subfolders">
+						<label class="grafana-sync-checkbox"><input type="checkbox" class="js-sync-subfolders" <?php if ($syncSubfolders) {
+							print_unescaped('checked');
+						} ?> /> <?php p($l->t('Sync subfolders'));
+			print_unescaped($info($desc['subfolders'])); ?></label>
 					</div>
 					<div class="grafana-sync-field gf-mode">
 						<label><?php p($l->t('Mode'));
