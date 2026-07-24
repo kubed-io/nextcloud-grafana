@@ -157,9 +157,14 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the dashboard in Grafana is tagged "linux" without a manual push
     And the file has no content tag "old"
 
-  # ── the body↔pills projection (n8n "Slice B") — still @todo even in the sibling ─
-  # For Grafana this is simpler than n8n: the body tags ARE what gets pushed, so a
-  # pill edit and a body-tags edit both ride the one upsert. Kept @todo until Slice B.
+  # ── the body↔pills projection (surface 2, n8n "Slice B") — DEFERRED ────────────
+  # The sibling attempted Slice B (body canonical for tags) and REVERTED it: a
+  # body-canonical push regressed its pill-driven mapping push. That regression is
+  # n8n-shaped (its body PUT drops tags; its mapping is a tag) and has no Grafana
+  # analogue — but the body↔pills loop safety (pill listener vs body-write listener
+  # must not chase each other) is real, so we defer surface 2 too until the mode
+  # machine is in and it's verified live. The body-reconcile engine stays dormant.
+  # These scenarios pin the target; the whole feature is @todo regardless.
 
   Scenario: Editing a pill updates the file body's tags array (body is canonical)
     Given a managed "sync" dashboard file in "flows" with body tags "linux"
@@ -227,6 +232,15 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the file's Nextcloud system tags include "staging"
     When the "flows" mapping is instead pushed
     Then "staging" is removed from the dashboard in Grafana
+
+  # Edge case the sibling hit: a purely-numeric tag name must survive the merge as a
+  # string, not be silently cast to an int array key (TagMerge NUL-prefixes its keys).
+  Scenario: A purely-numeric tag name survives the reconcile as a string
+    Given a managed "sync" dashboard file in "flows" with Grafana tags "2024" and "linux"
+    When the admin adds the Nextcloud system tag "prod" to the file
+    And the "flows" mapping is reconciled
+    Then the resulting tag set on both sides is "2024", "linux", and "prod"
+    And the tag "2024" is a string, not coerced to a number
 
   # ── pull change-detection: only write what changed (a branch shorter than n8n) ──
 

@@ -710,10 +710,32 @@ what lands and how our ingredient bends it.
   knob** as the body writeback: `sync` reconciles inline, `async` enqueues a per-file
   **`ReconcileTagsJob`** the cron worker runs next tick. This upgrades §579's "edit the pills →
   the body follows → the *next push* carries it" to **edit the pills → it propagates itself**.
-- **Slices.** n8n shipped **A** (pill → backend reactive) and left **B** (the body↔pills
-  projection — a pill edit also silently rewrites the file-body `tags` array, and a hand-edit
-  of that array updates the pills + pushes) plus **pull change-detection**, the **reactive
-  eject**, and the **optional catalog sweep** as `@todo`. Our feature file mirrors that slicing.
+- **Slices — and the honest scar (updated as the sibling's PR moved).** n8n shipped **A**
+  (pill → backend reactive) live + tested. It then *attempted* **B** — the body↔pills
+  projection: make the file body canonical for tags, so a hand-edit of the `tags` array
+  projects to the pills and pushes, and a pill edit silently rewrites the body array — and
+  **reverted it**: moving the push to reconcile *from the body* regressed the existing
+  pill-driven push (their mapping-tag scenarios). The body-reconcile engine
+  (`TagReconcileService::reconcileFromBody`) survives, **unit-tested but dormant** (not wired
+  to a `NodeWrittenEvent` trigger); the body scenarios stay `@todo`, and the README/changelog
+  no longer claim surface 2 ships. So the **live** surfaces are **1 (source → pills, on pull)**
+  and **3 (pills → source, reactive)**; **surface 2 (the JSON `tags` array as an editable,
+  projected surface) is deferred** — along with **pull change-detection**, the **reactive
+  eject** (n8n-only), and the **optional catalog sweep**. Our feature file mirrors that slicing.
+  - *What it means for us:* the exact regression is **n8n-shaped** — their body PUT drops tags
+    and their mapping is a *tag*, so a body-canonical push collided with the mapping-tag path.
+    **Neither cause exists here** (our body carries tags natively; no mapping tag). So Grafana
+    could likely land surface 2 more cleanly — but the body↔pills **loop safety** (the pill
+    listener and the body-write listener must not chase each other) is real, so we **also defer
+    surface 2** until the mode machine is in and we can verify it live, rather than over-claim.
+- **Edge cases the sibling hit that are ours too (not all solved yet).** (a) **Numeric tag
+  names** — a purely-numeric tag like `"123"` must not be silently cast to an int array key in
+  the merge; `TagMerge` NUL-prefixes its keys and does a value-based set compare so `"123"`
+  survives as the string it was. Grafana tags are bare strings, so this bites us identically —
+  port the guard, don't re-discover it. (b) **Job robustness** — the async reconcile job guards
+  its mapping/id resolve in try/catch so a lookup failure **logs** instead of throwing out of
+  the cron worker. (c) **Sync-only surface** — the reactive tag push is a `sync`-mode surface;
+  the test scaffolding fail-fasts if handed a `link`/`unmapped` file, and so must ours.
 
 **What changes for Grafana (the three injected knobs, all simpler here):**
 1. **Tags are body-native, so there is no tags-only side-channel.** n8n's reactive pill push
