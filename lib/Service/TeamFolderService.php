@@ -17,7 +17,6 @@ use OCP\IAppConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
 use Psr\Container\ContainerInterface;
-use Psr\Log\LoggerInterface;
 
 /**
  * All Team Folder (groupfolders) interaction lives here, so the rest of the
@@ -52,7 +51,6 @@ final class TeamFolderService {
 		private IGroupManager $groupManager,
 		private IRootFolder $rootFolder,
 		private IAppConfig $config,
-		private LoggerInterface $logger,
 	) {
 	}
 

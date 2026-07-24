@@ -28,12 +28,27 @@
 	<extraFiles>
 		<directory name="vendor/nextcloud/ocp" />
 	</extraFiles>
-	<!--
-		The admin-connection POC references only classes shipped in nextcloud/ocp
-		(the App framework, Settings interfaces, IClientService, ICrypto, IAppConfig,
-		Console command bases). It touches none of the private OC internals, Sabre/DAV
-		types, or other-app event classes the master's sync engine did — so there are
-		no issue-handler suppressions to carry here. They return with the code that
-		needs them in the sync chapters.
-	-->
+	<issueHandlers>
+		<!--
+			These reference classes that exist at runtime in a real Nextcloud but are
+			NOT shipped in nextcloud/ocp, so Psalm can't see them: the private OC
+			internals the pull's mimetype repair-steps + Team Folder actor-FS setup
+			reach for (`OC::$SERVERROOT`/`OC::$configDir`, `OC_Util::setupFS`). Not real
+			bugs, and there's no public stub to import. Mirrors the n8n master's
+			psalm.xml (which pulls the same private symbols) and integration_openai.
+		-->
+		<UndefinedClass>
+			<errorLevel type="suppress">
+				<referencedClass name="OC" />
+				<referencedClass name="OC_Util" />
+			</errorLevel>
+		</UndefinedClass>
+		<!--
+			MissingDependency doesn't support <referencedClass> in Psalm 6's schema.
+			The only instances are IRootFolder reporting its base oc\hooks\emitter as
+			missing — purely an OCP-stub artifact, not our code — so suppress the whole
+			(low-value) issue type. Same as the master.
+		-->
+		<MissingDependency errorLevel="suppress" />
+	</issueHandlers>
 </psalm>

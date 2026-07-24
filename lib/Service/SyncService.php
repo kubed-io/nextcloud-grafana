@@ -131,7 +131,7 @@ final class SyncService {
 
 			foreach ($this->grafana->listDashboards($this->grafanaScope($mapping)) as $row) {
 				$processed++;
-				$uid = (string)$row['uid'];
+				$uid = $row['uid'];
 				// A file locally marked `ignored` is left strictly alone — its dashboard
 				// still lives in the mapped folder, but the user opted it out, so skip
 				// re-pulling it (would otherwise write a NEW collision-suffixed file). No
@@ -298,19 +298,19 @@ final class SyncService {
 		array $existingByUid,
 		array &$nameCounts,
 	): void {
-		$uid = (string)$row['uid'];
-		$displayName = (string)($row['title'] !== '' ? $row['title'] : $uid);
+		$uid = $row['uid'];
+		$displayName = $row['title'] !== '' ? $row['title'] : $uid;
 
 		if ($effectiveMode === Mapping::MODE_LINK) {
 			// Lightweight pointer — no full spec read. Version is inert for a link (a
 			// pointer never pushes), so it stays empty.
-			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath((string)$row['url']) : $this->grafana->deepLink($uid);
-			$body = DashboardBody::encodeReference($row, $url, (string)$row['folderUid']);
+			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
+			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
 			$version = '';
 		} else {
 			// Sync — read the full record for the spec we serialize + the version we bank.
 			$record = $this->grafana->readDashboard($uid);
-			$dashboard = is_array($record['dashboard'] ?? null) ? $record['dashboard'] : [];
+			$dashboard = isset($record['dashboard']) && is_array($record['dashboard']) ? $record['dashboard'] : [];
 			$version = (string)($dashboard['version'] ?? '');
 			$body = DashboardBody::encodeSync($dashboard);
 		}
