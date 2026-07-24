@@ -171,13 +171,15 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Given a managed "sync" dashboard file in "flows" for a dashboard tagged "linux"
     When the admin edits the file body's "tags" array to "linux" and "prod"
     Then the file's Nextcloud system tags become "linux" and "prod"
-    And when the "flows" mapping is pushed the dashboard in Grafana is tagged "linux" and "prod"
+    When the "flows" mapping is pushed
+    Then the dashboard in Grafana is tagged "linux" and "prod"
 
   Scenario: Removing a tag from the file body's tags array removes the pill and the Grafana tag
     Given a managed "sync" dashboard file in "flows" for a dashboard tagged "linux" and "old"
     When the admin edits the file body's "tags" array to "linux"
     Then the file's Nextcloud system tags become "linux"
-    And when the "flows" mapping is pushed the dashboard in Grafana is tagged "linux"
+    When the "flows" mapping is pushed
+    Then the dashboard in Grafana is tagged "linux"
 
   Scenario: A link file has no editable body tag surface (pills mirror Grafana only)
     Given a folder mapped as "link" to the Grafana folder "reports"
@@ -223,7 +225,8 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     And someone re-added "staging" in Grafana since the last sync
     When the "flows" mapping is pulled
     Then the file's Nextcloud system tags include "staging"
-    And when the "flows" mapping is instead pushed then "staging" is removed from the dashboard in Grafana
+    When the "flows" mapping is instead pushed
+    Then "staging" is removed from the dashboard in Grafana
 
   # ── pull change-detection: only write what changed (a branch shorter than n8n) ──
 
