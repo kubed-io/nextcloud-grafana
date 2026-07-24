@@ -457,6 +457,127 @@ back. This is the GitOps dream the v2/YAML cut (Course 6) then makes gorgeous.
 > Grafana shows up in Nextcloud folder-for-folder, dashboard-for-dashboard. That's the plate
 > that makes the king put his fork down. Build toward that."*
 
+### Dashboard **tags** — the ingredient we hadn't tasted, and bidirectional tag sync
+
+We had mapped Grafana's **folders** (the placement axis) but never looked at its **tags**
+(the labelling axis). A dashboard is not fully synced if its tags aren't — so we went back
+into the walk-in and tasted how Grafana actually holds tags, live, through the pod.
+
+**What Grafana tags *are* (measured, not assumed):**
+
+- **They live *inside* the dashboard object** — `dashboard.tags: ["dns","external-dns"]`
+  — a flat list of free-text strings. They are **not** a separate resource: there is no
+  create-tag / delete-tag / tag-id API the way n8n has `/api/v1/tags` with opaque ids.
+  A tag exists exactly when some dashboard carries the string; it vanishes when the last
+  dashboard drops it. (Confirmed: `dashboard.tags = ["cert-manager"]` on the full object;
+  the search row echoes the same list.)
+- **No `labels`, no separate metadata map.** We checked — the dashboard object has **no**
+  `labels` key and `meta.*` carries only server-computed placement/permission fields
+  (folderUid, version, canEdit, …), never user tags. So **`dashboard.tags` is the one and
+  only user-labelling surface.** (Grafana's newer app-platform `/apis/` layer *does* add
+  Kubernetes-style `metadata.labels`, but the classic dashboard object — the one our JSON
+  cut serialises — expresses user labels solely as `dashboard.tags`.)
+- **Read-only aggregate + AND-filter search.** `GET /api/dashboards/tags` returns
+  `[{term,count}, …]` across the instance (read-only, derived). `GET /api/search?tag=a&tag=b`
+  AND-matches — a dashboard must carry **all** listed tags (verified: `tag=dns&tag=external-dns`
+  → only *External DNS*). **Folders do NOT have tags** (folder objects are just
+  `{id,title,uid}`) — tags are a dashboard-only axis.
+- **Writing a tag = writing the dashboard.** Because tags live in the object, you change
+  them by upserting the dashboard through `POST /api/dashboards/db` with the edited
+  `tags` array. There is no side-channel — the tag write rides the same upsert as any
+  content edit. **This makes tags trivially part of `sync` mode already:** `encodeSync()`
+  serialises the whole object, so a pulled `sync` file *already carries the Grafana tags on
+  disk*, and a push already round-trips them. **What's missing is the Nextcloud-native
+  half.**
+
+**The gap — and why "sync without tags isn't a full sync."** Nextcloud has its **own**
+first-class labelling system: **collaborative system tags** (the coloured pills in Files,
+`OCP\SystemTag\ISystemTagManager` / `ISystemTagObjectMapper`, searchable via DAV REPORT).
+Today the app uses NC systemtags *only* as an internal control plane — `grafana:sync` /
+`grafana:link` mode pills and the `grafana:ignore` exclude. **A guest's actual dashboard
+tags (`dns`, `linux`, `media`, …) never surface as NC tags.** So a user browsing the
+mirror in Files can't filter "show me every `linux` dashboard" the Nextcloud-native way,
+and can't *re-tag* a dashboard by adding an NC pill and have it reach Grafana. The object's
+label axis is stored-but-invisible on the NC side and one-directional. That's a real
+seam: **we mirror the dashboard's body and folder, but not its labels as labels.**
+
+**The dish — bidirectional dashboard-tag sync (spec, not yet cooked).** Make the two label
+sets *the same set*, minus our reserved control tags, in both directions:
+
+1. **The rule of equality.** After a reconcile, a managed dashboard's **Grafana
+   `dashboard.tags`** and its Nextcloud **system tags** hold **the same strings**, with
+   exactly one exclusion: the app's **reserved namespace** (`grafana:*` — `grafana:sync`,
+   `grafana:link`, `grafana:ignore`, and any future control tag). Reserved tags are the
+   app's control plane and are **never** pushed into Grafana's `tags`, and Grafana tags
+   that happen to collide with the reserved namespace are **never** imported as content
+   (defensive — a user could hand-type `grafana:sync` as a Grafana tag; we ignore it as
+   content so it can't masquerade as a mode pill).
+2. **Pull (Grafana → NC).** On reconcile, read `dashboard.tags`, strip the reserved
+   namespace, and reconcile the file's **NC system tags** to exactly that set: add missing
+   ones (creating the systemtag if absent, via `ISystemTagManager`), remove NC content tags
+   no longer present in Grafana — **without ever touching the reserved mode/ignore pills.**
+   The tags also remain on disk inside the JSON (that's automatic in `sync` mode), so the
+   file stays a complete backup.
+3. **Tag pull is mode-independent — `link` files get NC tags too.** The whole point of the
+   NC systemtag half is **searchability**: browsing the mirror in Files, a guest can filter
+   "every `linux` dashboard" the Nextcloud-native way. That value must not depend on mode.
+   So the **pull-side systemtag reconcile (point 2) runs for `link` mappings exactly as for
+   `sync`** — a `link` file's body is only a tiny pointer, but its **NC system tags still
+   mirror the live Grafana tags**, so the mirror is *as searchable as the origin app*
+   regardless of whether the body is the full spec or a reference. This is the one place a
+   `link` file gets more than a pointer: a pointer body, but real, searchable NC tags. (The
+   pointer JSON also carries a `tags` array for the human reader — see `encodeReference` —
+   but the **NC system tags** are what make it filterable, and those are reconciled on every
+   pull.) A `link` file is still **never pushed** (point 4 push is `sync`-only), so its tags
+   flow **one way only, Grafana → NC** — which is exactly right for a read-only pointer.
+4. **Push (NC → Grafana).** On push (**`sync` mode only** — a `link` file never pushes),
+   read the file's NC system tags, strip the reserved namespace, and write that set into
+   `dashboard.tags` before the `POST /api/dashboards/db` upsert. A user adding a `linux`
+   pill in Files, then pushing, lands `linux` in Grafana's tag list. (In `sync` mode the
+   file's own JSON `tags` array and its NC pills must be reconciled to agree first — see the
+   conflict rule.)
+5. **The conflict rule (two-way, direction-of-truth per reconcile).** Tags are part of the
+   object, so they obey the **same** direction-of-truth the body already does: a **pull**
+   makes Grafana authoritative for that file's tags (both `sync` and `link`); a **push**
+   (only ever `sync`) makes Nextcloud authoritative. There is no separate tag-merge policy —
+   tags travel *with* the body, which is the whole point ("truly syncing the object"). The
+   only always-on invariant is the reserved-namespace exclusion.
+6. **The loop guard already covers it.** Because tags are inside the spec, they're inside
+   the bytes `grafana_syncedHash` hashes — so a tag-only change is a real change the hash
+   catches, and a no-op reconcile stays a no-op. No new guard needed; the tag set is not a
+   side-channel. (For `link` files, whose body is a pointer, the systemtag reconcile is
+   idempotent against the live Grafana tag list — re-pulling an unchanged dashboard adds and
+   removes nothing.)
+7. **Reserved namespace is the seam that makes it safe.** The `grafana:` prefix on our
+   control tags is what lets content tags and control tags coexist in the *same* NC
+   systemtag space without collision. This is why the mode pills were named `grafana:sync`
+   / `grafana:link` and not bare `sync` / `link` — a decision that now pays off: the
+   filter that separates "the user's labels" from "the app's controls" is a single
+   prefix test.
+
+**Why this matters beyond parity — and a note back to the master.** **n8n has this same
+gap and hasn't closed it either.** n8n workflows carry real tags (`/api/v1/tags`, opaque
+ids, `PUT …/tags` to set them), and the master app uses them only as the *mapping key* +
+reserved control tags — it does **not** reconcile a workflow's content tags into NC system
+tags bidirectionally. So this is a genuinely new capability for **both** extensions, and a
+prime candidate for the eventual shared module: *"reconcile a backend object's label set
+with Nextcloud system tags, minus a reserved control namespace"* is backend-agnostic. The
+only per-backend differences are (a) **where tags live** — inside the object for Grafana
+(write = upsert the dashboard), a separate id'd resource for n8n (write = `PUT …/tags`
+with resolved ids) — and (b) **the reserved prefix** (`grafana:` vs `n8n:`). The NC-side
+half — systemtag reconcile, reserved-namespace filter, direction-of-truth — is identical.
+**No commits to the n8n repo; this is a saga note there too if we want it — see the
+cross-note below.**
+
+> **Dr K, turning a dashboard over in his hands:** *"You plated the body and the folder but
+> left the labels on the cutting board. A dish isn't sent without its garnish. Tags live
+> inside the object here — good, that means they ride the same upsert, no new envelope. So
+> make the two label sets *one* set, keep our own `grafana:` pills out of the guest's
+> garnish, and let the direction of the sync decide who's right — same as the body. And
+> here's the sharp bit: **even a `link` pointer gets the real Nextcloud tags** — a pointer
+> body, but a fully *searchable* one, so the mirror filters like the origin no matter the
+> mode. Tell the n8n line: they've got the same hole. This is shared-module bait."*
+
 ### The decision forks — where I need Dr K at the pass
 
 Some forks Dr K has already called (banked above ✅). These remain open for us to refine
@@ -471,6 +592,8 @@ through the saga before the destructive Courses are cooked:
 | E | **Delete gate mechanics** | NC-trash-as-gate: trash = recoverable (no Grafana call), **purge-from-trash = the one Grafana `DELETE`**, restore = re-upsert | 🟡 **leaning** — needs the trashbin-DAV listener proven on the pod (the master's `@todo` purge leg is unproven here too) |
 | F | **`ignored` mode without an archive verb** | the master archives an ignored dashboard; we can't — so `ignored` just means "skip it in sync," dashboard left fully live | 🟡 **leaning** — simplest honest behaviour |
 | G | **Mapping binds a folder, not a tag** | the feature specs still say "Grafana **tag**" (verbatim from the master); Ch1 already made mappings bind real **folders** | 🔴 **open wording fix** — reword specs to folders (this round's feature edits) |
+| H | **Bidirectional dashboard-tag sync** | reconcile `dashboard.tags` ⇄ NC **system tags**, minus the reserved `grafana:*` namespace; **pull reconciles NC tags for BOTH `sync` and `link`** (searchability is mode-independent), **push writes tags into Grafana for `sync` only**; direction-of-truth = same as the body (pull → Grafana wins, push → NC wins) | 🟡 **leaning** — Grafana tags measured (live inside `dashboard.tags`, no `labels`, no tag-id API; write = upsert the dashboard). New capability for **both** extensions → shared-module bait. Course TBD (rides the pull/push spine). |
+| H | **Reserved tags — two origins, don't conflate** | a Nextcloud-origin tag (on the *file*) vs a Grafana-origin tag (on the *dashboard*) are different systems: `grafana:ignore` = NC file tag (app namespace) read on tag events → `ignored` mode; `nextcloud:ignore` = Grafana dashboard tag (`nextcloud:` = addressed-to-NC) read at pull → never pulled. Rule: **tag with the name of the system you're talking to.** | 🟡 **called** — split the two in `reserved-tags.feature`; symmetric with n8n (`n8n:ignore` on the file, `nextcloud:ignore` on the workflow) so the shared base gets one two-axis model |
 
 ### Round-2 ticket — the commitment
 
