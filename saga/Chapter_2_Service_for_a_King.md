@@ -846,8 +846,10 @@ specs — designed, not wired.
      write access (the master's model). `use_team_folder = false` → a plain folder in the
      admin's files instead.
    - `ensureFolder(mapping)` picks the path from the flag; idempotent.
-3. **`StorageService` — the file writer.** `Name.<uid>.grafana.json` via `FilenameCodec`
-   (collision suffixes), body via `DashboardBody` (sync = full stripped spec, link =
+3. **`StorageService` — the file writer.** `Name.grafana.json` via `FilenameCodec`
+   (the uid lives in **metadata**, not the filename — clean names, so a rename never
+   breaks the link; collision suffixes only when two dashboards share a title), body
+   via `DashboardBody` (sync = full stripped spec, link =
    pointer), stamped through `DashboardMetadata` (uid / mode / version / syncedHash /
    mapping / folderUid), all wrapped in `SyncGuard` so our own writes never bounce back.
 4. **`SyncService` (pull) — reconcile-by-uid.** For a mapping: list its Grafana dashboards

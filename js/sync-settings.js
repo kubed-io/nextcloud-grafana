@@ -82,11 +82,19 @@
 				'Accept': 'application/json',
 			},
 		}).then(function (res) {
-			return res.json().then(function (data) {
+			// Parse the body as text first, then JSON-decode only if it actually is
+			// JSON — a proxy/HTML error page or an empty body (common on 500s) must
+			// surface as the real HTTP failure, not a "JSON parse error" from an
+			// unconditional res.json(). Same pattern as mapping-settings.js.
+			return res.text().then(function (text) {
+				var data = null;
+				if (text) {
+					try { data = JSON.parse(text); } catch { data = null; }
+				}
 				if (!res.ok) {
 					return Promise.reject(new Error(data && data.message ? data.message : 'HTTP ' + res.status));
 				}
-				return data;
+				return data || {};
 			});
 		});
 	}
