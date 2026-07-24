@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\AppInfo;
 
+use OCA\GrafanaSync\Listener\CopyListener;
+use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
@@ -18,6 +20,8 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\Node\NodeCopiedEvent;
+use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
 
 /**
@@ -30,10 +34,12 @@ use OCP\Files\Events\Node\NodeWrittenEvent;
  * are wired through info.xml's <settings> block.
  *
  * Writeback (Course 3): the {@see NodeWrittenListener} pushes a saved sync-mode
- * `.grafana.json` back to Grafana, and the {@see Notifier} renders its failure
- * notices. The remaining master listeners (rename/copy/delete/move, the DAV link
- * guard) stay deferred to Course 4 — a save only ever triggers the *update* writeback
- * for a file we already track; nothing else fires yet.
+ * `.grafana.json` back to Grafana, and the {@see Notifier} renders its failure notices.
+ *
+ * Write surface (Course 4 · Slice 1): {@see CreateInGrafanaListener} turns a new file in
+ * a mapped sync folder into a real dashboard, and {@see CopyListener} makes a copy its
+ * own new dashboard. The rest of the mode machine (move → unmapped, delete, rename, the
+ * DAV link-write guard) stays deferred to Slice 2 — it needs the "no archive verb" ruling.
  */
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'grafana_sync';
@@ -57,6 +63,16 @@ final class Application extends App implements IBootstrap {
 		// syncs; the listener's own SyncGuard + content-hash checks keep our own pull
 		// writes from looping back.
 		$context->registerEventListener(NodeWrittenEvent::class, NodeWrittenListener::class);
+
+		// Create-on-land (Course 4 · Slice 1): a new .grafana.json with no uid landing in
+		// a mapped sync folder becomes a real dashboard. NodeWrittenEvent covers make/save/
+		// upload; NodeRenamedEvent covers a move-in from outside a mapping.
+		$context->registerEventListener(NodeWrittenEvent::class, CreateInGrafanaListener::class);
+		$context->registerEventListener(NodeRenamedEvent::class, CreateInGrafanaListener::class);
+
+		// Copy: NC fires NodeCopiedEvent (not NodeWrittenEvent) on a copy, so this routes a
+		// copied file to strip its identity + register a brand-new dashboard.
+		$context->registerEventListener(NodeCopiedEvent::class, CopyListener::class);
 
 		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
 		$context->registerNotifierService(Notifier::class);

@@ -1108,6 +1108,37 @@ after** (import the engine, plate it on our empty-protected-set / body-native in
 > safety net — treat it like one. Set the sides. The garnish (tags) comes once the sibling's
 > reduction is off the heat."*
 
+### Slice 1 — **The Write Surface** *(this PR: make a file → it's a dashboard; copy → a new one)*
+
+Course 4 is ~1.5k lines of listeners; we plate it in coherent slices. **Slice 1 is the
+decision-free half** — the two moves that need *no* archive-verb ruling because they only ever
+*add* or *fork*, never park or bin. It's also the biggest single "feels complete" win after the
+spine: you can now **author a dashboard by making a file**.
+
+| Dish | Master parity | Kind | Grafana cut |
+|---|---|---|---|
+| **Create-on-land** | `CreateService` + `CreateInN8nListener` | 🟢 | A `.grafana.json` with no `grafana_uid` landing in a mapped **sync** folder (New-menu/editor save, WebDAV PUT, move-in) becomes a real dashboard via the existing `POST /api/dashboards/db`, then is uid/mode-stamped + pilled under `SyncGuard`. **Simpler than n8n**: upsert *is* create (no separate create call), and there's **no mapping tag to assign** (we place by `folderUid`). A file that carries a uid upserts on it (free re-adopt); a fresh one lets Grafana mint the uid. |
+| **Copy = a new instance** | `CopyService` + `CopyListener` | 🟢 | On `NodeCopiedEvent`, **strip identity** (clear metadata + ownership pill so the copy never inherits the original's `grafana_uid`) then, if it landed in a mapped sync folder, **create it fresh** (own new uid — never hijacks the source dashboard). A copy outside any mapping stays a plain untracked file. |
+
+Both ride `NodeWrittenEvent` / `NodeCopiedEvent`; both are loop-safe against the Course-3
+writeback listener by the same `SyncGuard` + `grafana_syncedHash` contract (create-then-stamp
+inside the guard; the writeback then sees the stamped hash and bails). Create fires **only for
+`sync` mappings** — a `link` folder is for pointers, not authoring.
+
+**Left for Slice 2** (needs the "no archive verb" ruling): **move → `unmapped` / restore**,
+**delete (two-step trash)**, **rename (three-way title)**, and the **DAV link-write guard** (+
+its `link_edit_blocked` notice — the `SyncNotifier`/`Notifier` seam Course 3 stubbed).
+
+**Exit:** drop a `.grafana.json` into a mapped sync folder (any way NC makes a file) and it
+appears in Grafana as a real dashboard, uid-stamped and pilled; copy a managed file and the copy
+is its own new dashboard, the original untouched. `create.feature` + `copy.feature` come off
+`@todo`; unit-tested; smoke-tested live.
+
+> **Dr K, laying the first two settings:** *"Start with the moves that can't go wrong — a new
+> plate and a second plate. No parking, no binning, no rulings — just *a file becomes a dish, a
+> copy becomes its own dish.* Ours even re-adopts a stray by its uid for free. Send those two
+> clean, then we set the trickier flatware."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
