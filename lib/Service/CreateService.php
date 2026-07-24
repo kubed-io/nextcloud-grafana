@@ -81,8 +81,11 @@ final class CreateService {
 
 	/**
 	 * Decode the file as a stdClass (objects, not assoc) so an empty `{}` round-trips
-	 * correctly. An empty/non-object body is tolerated — Grafana mints a minimal
-	 * dashboard with the filename as its title (via {@see DashboardBody::toUpsertBody}).
+	 * correctly. An **empty** file is tolerated (a fresh "New"-menu file) — Grafana mints
+	 * a minimal dashboard with the filename as its title (via {@see DashboardBody::toUpsertBody}).
+	 * A **non-empty, non-object** body (a JSON array or scalar) is a malformed dashboard and
+	 * fails loudly, consistent with {@see PushService::push} — we never silently coerce it
+	 * into an empty dashboard.
 	 */
 	private function parseFileBody(string $content): \stdClass {
 		if (trim($content) === '') {
@@ -93,7 +96,10 @@ final class CreateService {
 		} catch (\JsonException $e) {
 			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
 		}
-		return $decoded instanceof \stdClass ? $decoded : new \stdClass();
+		if (!$decoded instanceof \stdClass) {
+			throw new \RuntimeException('The dashboard file is not a JSON object.');
+		}
+		return $decoded;
 	}
 
 	/**
