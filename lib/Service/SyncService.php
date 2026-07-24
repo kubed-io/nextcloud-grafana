@@ -41,6 +41,10 @@ use Psr\Log\LoggerInterface;
  * courses; the seams (`effectiveMode`, the ignored-index split) are left in place for them.
  */
 final class SyncService {
+	/** Sync directions — the parity vocabulary shared with the n8n master. */
+	public const DIR_PULL = 'pull';
+	public const DIR_PUSH = 'push';
+
 	public function __construct(
 		private MappingService $mappings,
 		private GrafanaClient $grafana,
@@ -52,6 +56,65 @@ final class SyncService {
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Single parameterized entry point for a manual sync — the same public shape as the
+	 * n8n master's {@see \OCA\N8nSync\Service\SyncService::dispatch}, so the controller,
+	 * the occ command, and (later) a shared base all call one method regardless of
+	 * direction or scope.
+	 *
+	 * Async note: the master enqueues a background job + tracks status when `$async` is
+	 * true. Grafana has no job/status infra yet (it lands with the scheduled-pull
+	 * course), so **every dispatch runs inline** — `$async` is accepted for signature
+	 * parity and honoured as a no-op. The controller/CLI already call through here, so
+	 * wiring the async branch later needs no change at the call sites.
+	 *
+	 * @param string $direction self::DIR_PULL | self::DIR_PUSH
+	 * @param string|null $mappingId a specific mapping id, or null = every mapping
+	 * @param bool $async reserved for the future background-job path; inline for now
+	 * @return array<string,mixed>
+	 */
+	public function dispatch(string $direction, ?string $mappingId, bool $async): array {
+		if ($direction !== self::DIR_PULL && $direction !== self::DIR_PUSH) {
+			throw new \InvalidArgumentException('direction must be "pull" or "push"');
+		}
+		// $async is intentionally ignored until the background-job course; see docblock.
+		unset($async);
+		return $this->runInline($direction, $mappingId);
+	}
+
+	/**
+	 * Synchronous execution of one dispatch — also the seam a future {@see dispatch}
+	 * async job would call. Normalises the return to always carry `status`.
+	 *
+	 * @param string $direction self::DIR_PULL | self::DIR_PUSH
+	 * @return array<string,mixed>
+	 */
+	public function runInline(string $direction, ?string $mappingId): array {
+		if ($direction === self::DIR_PUSH) {
+			if ($mappingId !== null && $mappingId !== '') {
+				$mapping = $this->mappings->getById($mappingId);
+				if ($mapping === null) {
+					throw new \OutOfBoundsException('Mapping not found');
+				}
+				$res = $this->pushOne($mapping);
+				$res['status'] = ($res['failed'] ?? 0) === 0 ? 'ok' : 'error';
+				return $res;
+			}
+			return $this->pushAll();
+		}
+		if ($mappingId !== null && $mappingId !== '') {
+			$mapping = $this->mappings->getById($mappingId);
+			if ($mapping === null) {
+				throw new \OutOfBoundsException('Mapping not found');
+			}
+			$res = $this->pullOne($mapping);
+			$res['status'] = ($res['failed'] ?? 0) === 0 ? 'ok' : 'error';
+			$res['message'] = null;
+			return $res;
+		}
+		return $this->pullAll();
 	}
 
 	/**

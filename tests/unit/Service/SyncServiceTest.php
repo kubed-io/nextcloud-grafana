@@ -328,4 +328,32 @@ final class SyncServiceTest extends TestCase {
 		self::assertNotNull($res['message']);
 		self::assertStringContainsString('Flow.grafana.json', (string)$res['message']);
 	}
+
+	// ── dispatch / runInline (the parity seam) ───────────────────────────────────
+
+	public function testDispatchRejectsAnUnknownDirection(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		$this->service->dispatch('sideways', null, false);
+	}
+
+	public function testDispatchRunsPullInlineOverAllMappings(): void {
+		$this->mappings->method('list')->willReturn([]); // no mappings → clean zero run
+		$res = $this->service->dispatch(SyncService::DIR_PULL, null, false);
+		self::assertSame('ok', $res['status']);
+		self::assertSame(0, $res['processed']);
+	}
+
+	public function testDispatchIgnoresAsyncAndStillRunsInline(): void {
+		// There is no background-job path yet, so async=true must behave exactly like
+		// inline (the seam is signature-only until the scheduled course).
+		$this->mappings->method('list')->willReturn([]);
+		$res = $this->service->dispatch(SyncService::DIR_PUSH, null, true);
+		self::assertSame('ok', $res['status']);
+	}
+
+	public function testRunInlineThrowsForAnUnknownMappingId(): void {
+		$this->mappings->method('getById')->willReturn(null);
+		$this->expectException(\OutOfBoundsException::class);
+		$this->service->runInline(SyncService::DIR_PUSH, 'no-such-id');
+	}
 }

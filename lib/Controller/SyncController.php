@@ -54,7 +54,9 @@ final class SyncController extends Controller {
 	#[AuthorizedAdminSetting(settings: SyncSettings::class)]
 	public function pull(): JSONResponse {
 		try {
-			$res = $this->sync->pullAll();
+			// Through dispatch (inline, all mappings) — the same entry point the master's
+			// controller uses, so the async branch drops in here later without a change.
+			$res = $this->sync->dispatch(SyncService::DIR_PULL, null, false);
 		} catch (\Throwable $e) {
 			// Per-mapping failures are caught + curated inside pullAll (it returns
 			// status=error with a friendly message, never throws). Reaching here means
@@ -75,7 +77,7 @@ final class SyncController extends Controller {
 	#[AuthorizedAdminSetting(settings: SyncSettings::class)]
 	public function push(): JSONResponse {
 		try {
-			$res = $this->sync->pushAll();
+			$res = $this->sync->dispatch(SyncService::DIR_PUSH, null, false);
 		} catch (\Throwable $e) {
 			// Per-mapping/per-file failures are caught + curated inside pushAll (it
 			// returns status=error with a friendly message, never throws). Reaching here

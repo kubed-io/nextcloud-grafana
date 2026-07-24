@@ -52,7 +52,7 @@ trait SyncSteps {
 	 * @When the admin pulls from Grafana
 	 */
 	public function theAdminPullsFromGrafana(): void {
-		$res = $this->occ('grafana_sync:pull');
+		$res = $this->occ('grafana_sync:sync pull');
 		Assert::assertSame(0, $res['exit'], "pull failed:\n{$res['output']}");
 	}
 
@@ -60,7 +60,7 @@ trait SyncSteps {
 	 * @When the admin pushes to Grafana
 	 */
 	public function theAdminPushesToGrafana(): void {
-		$res = $this->occ('grafana_sync:push');
+		$res = $this->occ('grafana_sync:sync push');
 		Assert::assertSame(0, $res['exit'], "push failed:\n{$res['output']}");
 	}
 
