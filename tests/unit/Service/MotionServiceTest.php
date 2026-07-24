@@ -31,9 +31,9 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(MotionService::class)]
 final class MotionServiceTest extends TestCase {
-	private const SRC_PATH = '/src/Dash.grafana.json';
-	private const DST_PATH = '/dst/Dash.grafana.json';
-	private const UNMAPPED_PATH = '/loose/Dash.grafana.json';
+	private const SRC_PATH = '/alice/files/src/Dash.grafana.json';
+	private const DST_PATH = '/alice/files/dst/Dash.grafana.json';
+	private const UNMAPPED_PATH = '/alice/files/loose/Dash.grafana.json';
 
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
