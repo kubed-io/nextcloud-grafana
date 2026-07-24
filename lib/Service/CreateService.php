@@ -1,0 +1,120 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\GrafanaSync\Service;
+
+use OCA\GrafanaSync\AppInfo\Application;
+use OCP\Files\File;
+use OCP\Files\IMimeTypeLoader;
+use Psr\Log\LoggerInterface;
+
+/**
+ * Create-on-land (Course 4 · Slice 1): turn a `*.grafana.json` file in a mapped sync
+ * folder that carries no `grafana_uid` yet into a real Grafana dashboard.
+ *
+ * Triggered by {@see \OCA\GrafanaSync\Listener\CreateInGrafanaListener} when:
+ *  - a new file is made via the Files "New" menu / Text editor into a mapped folder,
+ *  - a hand-made `.grafana.json` is moved/dropped into a mapped folder, or
+ *  - an external WebDAV PUT lands content in a mapped folder.
+ *
+ * **Simpler than the n8n master's `CreateService` in two ways** (the ingredient bends
+ * it): Grafana's `POST /api/dashboards/db` is an **upsert**, so create and update are
+ * the *same* call — there is no separate create endpoint; and we place a dashboard by
+ * **folder** ({@see DashboardBody::toUpsertBody}'s `folderUid`), so there is **no
+ * mapping tag** to assign additively the way n8n must. The body is shaped by the same
+ * `toUpsertBody` the push uses, so a file that round-trips "create then later push" is
+ * byte-stable.
+ *
+ * Re-adopt for free: because the write keys on `dashboard.uid`, a file that *carries* a
+ * uid upserts on it (re-attaching to that dashboard), while a fresh file with no uid
+ * lets Grafana mint one and returns it. Either way the returned uid becomes the file's
+ * stamped identity.
+ *
+ * The post-create stamp (metadata + ownership pill + mimetype re-stamp) is wrapped in
+ * {@see SyncGuard} so the implicit re-write doesn't echo into
+ * {@see \OCA\GrafanaSync\Listener\NodeWrittenListener} as a writeback.
+ */
+final class CreateService {
+	public function __construct(
+		private GrafanaClient $grafana,
+		private DashboardMetadata $metadata,
+		private OwnershipTags $ownershipTags,
+		private SyncGuard $guard,
+		private IMimeTypeLoader $mimeLoader,
+		private LoggerInterface $logger,
+	) {
+	}
+
+	/**
+	 * Create $node's contents as a dashboard in Grafana, placed in $mapping's folder,
+	 * and stamp the file with full sync metadata. Returns the new dashboard uid.
+	 *
+	 * Throws on any unrecoverable failure; the listener turns that into a notification.
+	 */
+	public function createForFile(File $node, Mapping $mapping): string {
+		$content = $node->getContent();
+		$spec = $this->parseFileBody($content);
+
+		// General / root ("/") = no folder; toUpsertBody omits folderUid for it.
+		$folderUid = $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
+		$body = DashboardBody::toUpsertBody($spec, $folderUid, $node->getName());
+		$created = $this->grafana->upsertDashboard($body);
+
+		$uid = (string)($created['uid'] ?? '');
+		if ($uid === '') {
+			throw new \RuntimeException('Grafana create did not return a dashboard uid');
+		}
+		$version = (string)($created['version'] ?? '');
+
+		// Use the ORIGINAL file bytes for the loop-guard hash: NodeWrittenListener
+		// computes sha1($node->getContent()) on the next save, so they must match.
+		$this->stampFile($node, $mapping, $uid, $version, $content);
+
+		return $uid;
+	}
+
+	/**
+	 * Decode the file as a stdClass (objects, not assoc) so an empty `{}` round-trips
+	 * correctly. An empty/non-object body is tolerated — Grafana mints a minimal
+	 * dashboard with the filename as its title (via {@see DashboardBody::toUpsertBody}).
+	 */
+	private function parseFileBody(string $content): \stdClass {
+		if (trim($content) === '') {
+			return new \stdClass();
+		}
+		try {
+			$decoded = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException $e) {
+			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
+		}
+		return $decoded instanceof \stdClass ? $decoded : new \stdClass();
+	}
+
+	/**
+	 * Stamp Files-Metadata (uid + mode + version + syncedHash + mapping), apply the
+	 * ownership pill, and re-stamp the custom mimetype so the icon shows immediately —
+	 * all wrapped in the SyncGuard so the implicit re-writes don't echo into the
+	 * writeback listener.
+	 */
+	private function stampFile(File $node, Mapping $mapping, string $uid, string $version, string $content): void {
+		$this->guard->run(function () use ($node, $mapping, $uid, $version, $content): void {
+			$this->metadata->stampSynced($node->getId(), $uid, $mapping->mode, $version, $content, $mapping->id);
+			$this->ownershipTags->apply($node->getId(), $mapping->mode);
+			try {
+				$this->mimeLoader->updateFilecache('grafana.json', $this->mimeLoader->getId('application/grafana+json'));
+			} catch (\Throwable $e) {
+				$this->logger->warning('grafana_sync: post-create mimetype re-stamp failed', [
+					'app' => Application::APP_ID,
+					'fileId' => $node->getId(),
+					'exception' => $e,
+				]);
+			}
+		});
+	}
+}
