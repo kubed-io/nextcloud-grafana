@@ -904,7 +904,8 @@ live (the two staged mappings materialize).
 ### The ticket — the whole sauce, one PR (be bold)
 
 The full Course 3, cooked in one confident batch (we have the master's `PushService` /
-`NodeWrittenListener` / `PushWorkflowJob` / `SyncNotifier` cards):
+`NodeWrittenListener` / push-job / `SyncNotifier` cards — the job is ported here as
+`PushDashboardJob`):
 
 1. **`GrafanaClient::upsertDashboard()`** *(finishes the adapter)* — `POST /api/dashboards/db`
    through the existing `request()` chokepoint, returning the decoded `{uid, version,

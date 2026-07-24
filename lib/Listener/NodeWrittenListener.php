@@ -13,6 +13,7 @@ use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\BackgroundJob\PushDashboardJob;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
@@ -121,7 +122,9 @@ final class NodeWrittenListener implements IEventListener {
 				'fileId' => $node->getId(),
 				'exception' => $e,
 			]);
-			$this->notifier->failed($uid, $node->getId(), $node->getName(), $e->getMessage());
+			// Curate the toast the same way the rest of the app does: a 401/403 reads as
+			// "token rejected", not Grafana's raw text.
+			$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
 		}
 	}
 

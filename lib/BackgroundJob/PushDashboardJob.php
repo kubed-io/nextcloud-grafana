@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\BackgroundJob;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -75,7 +76,7 @@ final class PushDashboardJob extends QueuedJob {
 				'fileId' => $fileId,
 				'exception' => $e,
 			]);
-			$this->notifier->failed($userId, $fileId, $node->getName(), $e->getMessage());
+			$this->notifier->failed($userId, $fileId, $node->getName(), GrafanaClient::describeConnectionError($e));
 		}
 	}
 }
