@@ -10,12 +10,16 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\AppInfo;
 
 use OCA\DAV\Events\SabrePluginAddEvent;
+use OCA\Files_Trashbin\Events\NodeRestoredEvent;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
+use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
 use OCA\GrafanaSync\Listener\MotionListener;
 use OCA\GrafanaSync\Listener\MoveGuardListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
 use OCA\GrafanaSync\Listener\RegisterDavPluginsListener;
+use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
+use OCA\GrafanaSync\Listener\TrashPurgeHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
@@ -24,6 +28,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\Node\BeforeNodeDeletedEvent;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
 use OCP\Files\Events\Node\NodeRenamedEvent;
@@ -49,10 +54,17 @@ use OCP\Files\Events\Node\NodeWrittenEvent;
  * before it happens, {@see MotionListener} reconciles a completed move (re-parent on
  * mapped→mapped, delete + strip on move-out, bin OFF the default), and
  * {@see RegisterDavPluginsListener} bolts the link-write guard onto every Sabre server.
- * Delete → recycle-bin restore and the recycle-bin ON parking path remain deferred.
+ *
+ * Delete lifecycle (Course 4 · Slice 3): {@see DeleteToGrafanaListener} mirrors a trash/purge
+ * into Grafana (aborting the NC delete if Grafana can't confirm) and {@see RestoreFromTrashListener}
+ * reverses it — both driven by the optional Grafana **recycle-bin folder** setting (OFF = true
+ * delete + re-create on restore; ON = park in the bin folder + move back, id kept).
  */
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'grafana_sync';
+
+	/** Guards the legacy preDelete hook registration so a repeated boot() can't stack it. */
+	private static bool $purgeHookRegistered = false;
 
 	public function __construct(array $params = []) {
 		parent::__construct(self::APP_ID, $params);
@@ -99,6 +111,14 @@ final class Application extends App implements IBootstrap {
 		// file's pointer. The Files UI already routes a link's click to "Open in Grafana".
 		$context->registerEventListener(SabrePluginAddEvent::class, RegisterDavPluginsListener::class);
 
+		// Delete lifecycle (Course 4 · Slice 3): BeforeNodeDeletedEvent fires on the trash-move
+		// (soft step) — the listener parks/deletes the dashboard per the recycle-bin setting and
+		// aborts the NC delete if Grafana can't confirm. Restore-from-trash reverses it (move the
+		// parked dashboard back, or re-create it). The permanent-delete-from-trash (hard step) is
+		// NOT a typed event — it's the legacy \OCP\Trashbin preDelete hook, wired in boot().
+		$context->registerEventListener(BeforeNodeDeletedEvent::class, DeleteToGrafanaListener::class);
+		$context->registerEventListener(NodeRestoredEvent::class, RestoreFromTrashListener::class);
+
 		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
 		$context->registerNotifierService(Notifier::class);
 	}
@@ -115,5 +135,22 @@ final class Application extends App implements IBootstrap {
 		// IAppContainer return type is deprecated by core with no non-deprecated
 		// accessor on IBootContext, so that one Psalm deprecation rides the baseline.
 		$context->getAppContainer()->get(DashboardMetadata::class)->register();
+
+		// Empty-trash (hard delete) for the delete lifecycle: permanently deleting a file from the
+		// Nextcloud trash does NOT fire a typed event — the trashbin emits the legacy
+		// `\OCP\Trashbin` `preDelete` hook just before it unlinks the node. Bin ON: that's when a
+		// parked dashboard is permanently deleted from the Grafana bin. Connect our handler
+		// instance (the legacy hook calls object+method); its deps construct without any I/O.
+		// connectHook APPENDS handlers with no de-duplication, so guard against a second boot()
+		// in the same PHP process (tests, repeated loadApp) stacking the handler — which would
+		// fire TrashPurgeHook::preDelete more than once per purge (repeated deletes / log spam).
+		if (!self::$purgeHookRegistered) {
+			self::$purgeHookRegistered = true;
+			$purgeHook = $context->getAppContainer()->get(TrashPurgeHook::class);
+			// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
+			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
+			/** @psalm-suppress DeprecatedMethod */
+			\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+		}
 	}
 }

@@ -74,3 +74,17 @@ namespace OCA\DAV\Events {
 		}
 	}
 }
+
+namespace OCA\Files_Trashbin\Events {
+	// The restore-from-trash event, owned by the bundled Files_Trashbin app (not shipped in
+	// nextcloud/ocp). Stubbing it — rather than suppressing — lets Psalm resolve it as a real
+	// Event subclass, so the restore listener's `@implements IEventListener<NodeRestoredEvent>`
+	// type-checks cleanly, exactly as an OCP event would.
+	if (!class_exists(NodeRestoredEvent::class, false)) {
+		class NodeRestoredEvent extends \OCP\EventDispatcher\Event {
+			public function getTarget(): \OCP\Files\Node {
+				throw new \RuntimeException('stub');
+			}
+		}
+	}
+}

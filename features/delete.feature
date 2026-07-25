@@ -29,9 +29,13 @@
 # A `link` file is a pointer, so trashing it only severs the tie — the dashboard is never
 # deleted. An untracked `.grafana.json` (no grafana_uid) is never our business.
 #
-# DESIGN, NOT WIRED: the whole feature is @todo — CI skips it — until the delete engine is
-# cooked. Some legs depend on the trashbin-DAV listener firing BeforeNodeDeletedEvent /
-# NodeRestoredEvent on the pod, to be proven live when implemented.
+# STATUS: the delete engine IS cooked (Course 4 · Slice 3) — DeleteService +
+# DeleteToGrafanaListener (BeforeNodeDeletedEvent, soft/hard by trashbin path, aborts on a
+# failed Grafana delete) + RestoreFromTrashListener (NodeRestoredEvent). The rule table is
+# unit-tested (failed-delete-never-strips, bin-ON-parks-not-deletes, bin-OFF-restore-recreates)
+# and verified live on the pod (bin-OFF round-trip, bin-ON round-trip, empty-trash purge). The
+# whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions for trash /
+# restore / empty-trash are written; until then the unit suite + the live smoke carry the proof.
 
 @todo
 Feature: Deleting a dashboard file

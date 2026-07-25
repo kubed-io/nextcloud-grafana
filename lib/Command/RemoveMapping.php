@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Command;
 
-use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MappingTeardownService;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -18,13 +18,14 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * `occ grafana_sync:remove-mapping <id>`
  *
- * CLI binding over `MappingService::delete()` — removes a mapping by its id (as
- * the admin Settings panel's delete does). Exits non-zero if the id is unknown.
- * Removing a mapping only drops the binding; it does not touch files or Grafana.
+ * CLI binding over {@see MappingTeardownService::remove()} — removes a mapping by its id (as the
+ * admin Settings panel's delete does). Exits non-zero if the id is unknown. Tearing down a
+ * mapping trashes its connected files (their delete rides the recycle-bin setting) and leaves
+ * standalone files alone; it never touches Grafana beyond those connected dashboards.
  */
 final class RemoveMapping extends Command {
 	public function __construct(
-		private MappingService $service,
+		private MappingTeardownService $service,
 	) {
 		parent::__construct();
 	}
@@ -41,10 +42,14 @@ final class RemoveMapping extends Command {
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$id = (string)$input->getArgument('id');
 		try {
-			$this->service->delete($id);
+			$this->service->remove($id);
 		} catch (\OutOfBoundsException) {
 			$output->writeln('<error>No mapping with id "' . $id . '".</error>');
 			return 1;
+		} catch (\RuntimeException $e) {
+			// Partial tear-down: the mapping was kept for retry. Surface why.
+			$output->writeln('<error>' . $e->getMessage() . '</error>');
+			return 2;
 		}
 		$output->writeln('<info>Removed mapping ' . $id . '.</info>');
 		return 0;

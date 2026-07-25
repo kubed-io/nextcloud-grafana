@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\Controller;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MappingTeardownService;
 use OCA\GrafanaSync\Settings\MappingSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -39,6 +40,7 @@ final class MappingController extends Controller {
 		IRequest $request,
 		private readonly MappingService $service,
 		private readonly GrafanaClient $client,
+		private readonly MappingTeardownService $teardown,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -86,10 +88,16 @@ final class MappingController extends Controller {
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function destroy(string $id): JSONResponse {
 		try {
-			$this->service->delete($id);
+			// Tear-down cascade: trash the mapping's connected files (their delete rides the
+			// recycle-bin setting) before dropping the binding. Standalone files are left alone.
+			$this->teardown->remove($id);
 			return new JSONResponse(['status' => 'ok']);
 		} catch (\OutOfBoundsException) {
 			return new JSONResponse(['message' => 'Mapping not found'], Http::STATUS_NOT_FOUND);
+		} catch (\RuntimeException $e) {
+			// Partial tear-down (a connected file couldn't be removed, e.g. Grafana unreachable):
+			// the mapping was kept for retry. 409 conveys "not done, try again".
+			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_CONFLICT);
 		}
 	}
 

@@ -78,6 +78,22 @@ final class AutoSyncSettings implements IDeclarativeSettingsForm {
 					'placeholder' => '1h',
 					'default' => '1h',
 				],
+				[
+					'id' => 'bin_enabled',
+					'title' => 'Deleting: preserve dashboards in a Grafana recycle-bin folder',
+					'description' => 'Off (default): trashing a synced dashboard file deletes its dashboard in Grafana right then; restoring re-creates it with a new id (its full JSON is safe in the file). On: trashing instead moves the dashboard into the Grafana folder named below (keeping its id), restoring moves it back, and only emptying the Nextcloud trash deletes it for good. Grafana has no native trash, so this folder is it.',
+					'type' => DeclarativeSettingsTypes::CHECKBOX,
+					// Real bool, not '0' — see schedule_enabled above for why.
+					'default' => false,
+				],
+				[
+					'id' => 'bin_folder',
+					'title' => 'Recycle-bin folder (Grafana folder name)',
+					'description' => 'The name of an existing Grafana folder to use as the recycle bin (e.g. nextcloud-trash). Used only when the option above is on. This folder must not be one you map — it has special meaning.',
+					'type' => DeclarativeSettingsTypes::TEXT,
+					'placeholder' => 'nextcloud-trash',
+					'default' => '',
+				],
 			],
 		];
 	}
