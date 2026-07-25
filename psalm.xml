@@ -51,23 +51,8 @@
 			<errorLevel type="suppress">
 				<referencedClass name="OC" />
 				<referencedClass name="OC_Util" />
-				<!-- Owned by the bundled Files_Trashbin app, not shipped in nextcloud/ocp;
-				     the restore listener references it. Exists at runtime. -->
-				<referencedClass name="OCA\Files_Trashbin\Events\NodeRestoredEvent" />
 			</errorLevel>
 		</UndefinedClass>
-		<UndefinedDocblockClass>
-			<errorLevel type="suppress">
-				<referencedClass name="OCA\Files_Trashbin\Events\NodeRestoredEvent" />
-			</errorLevel>
-		</UndefinedDocblockClass>
-		<!--
-			The restore listener's `@implements IEventListener<NodeRestoredEvent>`: the
-			event DOES extend OCP\EventDispatcher\Event at runtime, but Psalm can't see its
-			parent (not in nextcloud/ocp) so it can't confirm the template bound — same
-			OCP-gap false positive as the suppressed UndefinedClass above. Mirrors n8n.
-		-->
-		<InvalidTemplateParam errorLevel="suppress" />
 		<!--
 			MissingDependency doesn't support <referencedClass> in Psalm 6's schema.
 			The only instances are IRootFolder reporting its base oc\hooks\emitter as

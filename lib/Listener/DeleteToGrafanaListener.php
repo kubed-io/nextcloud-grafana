@@ -51,7 +51,10 @@ final class DeleteToGrafanaListener implements IEventListener {
 
 	#[\Override]
 	public function handle(Event $event): void {
-		if (!$event instanceof BeforeNodeDeletedEvent || $this->guard->active()) {
+		if (!$event instanceof BeforeNodeDeletedEvent) {
+			return;
+		}
+		if ($this->guard->active()) {
 			return;
 		}
 		$node = $event->getNode();

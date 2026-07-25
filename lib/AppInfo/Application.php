@@ -139,6 +139,9 @@ final class Application extends App implements IBootstrap {
 		// parked dashboard is permanently deleted from the Grafana bin. Connect our handler
 		// instance (the legacy hook calls object+method); its deps construct without any I/O.
 		$purgeHook = $context->getAppContainer()->get(TrashPurgeHook::class);
+		// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
+		// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
+		/** @psalm-suppress DeprecatedMethod */
 		\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
 	}
 }

@@ -50,7 +50,10 @@ final class RestoreFromTrashListener implements IEventListener {
 
 	#[\Override]
 	public function handle(Event $event): void {
-		if (!$event instanceof NodeRestoredEvent || $this->guard->active()) {
+		if (!$event instanceof NodeRestoredEvent) {
+			return;
+		}
+		if ($this->guard->active()) {
 			return;
 		}
 		$target = $event->getTarget();

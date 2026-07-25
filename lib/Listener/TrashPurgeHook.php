@@ -60,7 +60,7 @@ final class TrashPurgeHook {
 		if ($this->guard->active()) {
 			return;
 		}
-		$path = (string)($params['path'] ?? '');
+		$path = $params['path'] ?? '';
 		// Cheap pre-filter: a trashed dashboard's name is "<orig>.grafana.json.d<timestamp>".
 		if ($path === '' || !str_contains($path, '.grafana.json')) {
 			return;
