@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Three-way rename**: for a sync file the filename stem, the JSON `title`, and the Grafana dashboard title stay in agreement — rename the file or edit the title, and the other two follow. Stable on the uid, so no rename breaks the link.
 - **Open a dashboard from the Files app**: a `.grafana.json` row offers **Open in Grafana** (default for sync/link — jumps to the live dashboard) and **Open with text editor** (raw JSON, hidden for link pointers), plus a **Grafana dashboard** entry in the **+ New** menu.
 - **Create a dashboard by making a file** in a mapped sync folder — it becomes a real Grafana dashboard, no button needed (a file already carrying a uid re-adopts it).
 - **Copying a dashboard file makes a new dashboard** (new uid); the original is never overwritten.

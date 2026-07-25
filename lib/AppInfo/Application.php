@@ -18,6 +18,7 @@ use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
 use OCA\GrafanaSync\Listener\LoadFilesScriptListener;
 use OCA\GrafanaSync\Listener\MotionListener;
 use OCA\GrafanaSync\Listener\MoveGuardListener;
+use OCA\GrafanaSync\Listener\NameSyncListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
 use OCA\GrafanaSync\Listener\RegisterDavPluginsListener;
 use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
@@ -125,6 +126,14 @@ final class Application extends App implements IBootstrap {
 		// Grafana" / "Open with text editor" row actions and the "Grafana dashboard" New-menu
 		// item, and ship the Grafana base URL via Initial State for its deep links.
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptListener::class);
+
+		// Three-way name sync (Course 5): keep the filename stem, the JSON `title`, and the
+		// Grafana dashboard title in agreement for a managed sync file. Renaming the file
+		// (NodeRenamedEvent) writes the stem into the JSON title + pushes; editing the JSON
+		// title and saving (NodeWrittenEvent) renames the file. The reconcile is deferred to
+		// ReconcileNameJob because the file is locked mid-rename.
+		$context->registerEventListener(NodeWrittenEvent::class, NameSyncListener::class);
+		$context->registerEventListener(NodeRenamedEvent::class, NameSyncListener::class);
 
 		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
 		$context->registerNotifierService(Notifier::class);

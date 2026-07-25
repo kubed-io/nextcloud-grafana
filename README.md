@@ -17,7 +17,8 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 > — **create** a dashboard by making a file, **copy** it to fork a new one, **move** it
 > between mapped folders to re-parent it in Grafana (uid kept) or out to delete it, and
 > **delete/restore** through the Nextcloud trash (with an optional Grafana recycle-bin folder
-> that preserves ids). In the Files app, a dashboard row opens straight in Grafana or in a raw
+> that preserves ids), and **rename** stays three-way (filename ⇄ JSON title ⇄ Grafana). In the
+> Files app, a dashboard row opens straight in Grafana or in a raw
 > JSON editor, and the **+ New** menu makes one. A DAV guard keeps a link file's pointer from
 > being overwritten, and removing a mapping tears it down safely. On top of that sits the full
 > admin surface: point the app at Grafana with a service-account token (live **Test
@@ -161,6 +162,16 @@ So duplicating a dashboard is as simple as copying its file, and a copy never si
 hijacks the original's dashboard.
 
 📋 spec: [`features/copy.feature`](features/copy.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
+
+### Renaming (three-way)
+
+In **sync** mode the filename stem, the JSON `title` field, and the Grafana dashboard title are
+kept in agreement. Rename the file → the JSON and Grafana update. Edit the `title` inside the JSON
+and save → the file is renamed and Grafana updates. The stable link is the dashboard **uid**, so
+no rename ever breaks the connection. (The reconcile runs in a background job because the file is
+locked mid-rename.)
+
+📋 spec: [`features/rename.feature`](features/rename.feature) · 🛠 [`lib/Listener/NameSyncListener.php`](lib/Listener/NameSyncListener.php), [`lib/BackgroundJob/ReconcileNameJob.php`](lib/BackgroundJob/ReconcileNameJob.php)
 
 ### Writeback: edit a file, update the dashboard
 

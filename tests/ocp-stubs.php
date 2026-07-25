@@ -199,6 +199,48 @@ namespace OCP\EventDispatcher {
 		class Event {
 		}
 	}
+	// Implemented by every app listener; needed so a listener class can be autoloaded
+	// (PHP resolves implemented interfaces at declaration time). Declaration-only.
+	if (!interface_exists(IEventListener::class, false)) {
+		interface IEventListener {
+			public function handle(Event $event): void;
+		}
+	}
+}
+
+namespace OCP\Files\Events\Node {
+	// The two node events the name-sync / writeback / move listeners key off. nextcloud/ocp
+	// ships no event classes, so the standalone unit suite needs constructable stubs to exercise
+	// a listener directly. Just enough surface for `instanceof` + the getters the app calls.
+	if (!class_exists(NodeWrittenEvent::class, false)) {
+		class NodeWrittenEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $node,
+			) {
+			}
+
+			public function getNode(): \OCP\Files\Node {
+				return $this->node;
+			}
+		}
+	}
+	if (!class_exists(NodeRenamedEvent::class, false)) {
+		class NodeRenamedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $source,
+				private \OCP\Files\Node $target,
+			) {
+			}
+
+			public function getSource(): \OCP\Files\Node {
+				return $this->source;
+			}
+
+			public function getTarget(): \OCP\Files\Node {
+				return $this->target;
+			}
+		}
+	}
 }
 
 namespace OCP\Settings {

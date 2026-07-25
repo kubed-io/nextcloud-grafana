@@ -1,8 +1,13 @@
 # Three-way name agreement in sync mode: filename stem ⇄ JSON "title" ⇄ Grafana name.
 # The stable link is the dashboard uid, so none of these break the connection.
-# LIVE: rename/edit go over WebDAV; the file-locked reconcile runs in
-# ReconcileNameJob, so the steps drain that job class with the occ worker before
-# asserting both the file (PROPFIND/GET) and Grafana (REST) sides.
+#
+# STATUS: cooked (Course 5) — NameSyncListener enqueues, ReconcileNameJob does the
+# file-locked write/rename, and the writeback carries the title to Grafana. Verified live on
+# the pod: rename file → JSON title + Grafana title follow; edit JSON title → filename follows;
+# uid stable throughout. LIVE steps: rename/edit go over WebDAV; the file-locked reconcile runs
+# in ReconcileNameJob, so the steps drain that job class (+ the async push) with the occ worker
+# before asserting both the file (PROPFIND/GET) and Grafana (REST) sides. Whole feature stays
+# @todo — CI skips it — until those occ+WebDAV step definitions are written.
 
 @todo
 Feature: Renaming keeps file, JSON, and Grafana in agreement
