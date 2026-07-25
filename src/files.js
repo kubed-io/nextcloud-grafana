@@ -105,6 +105,9 @@ async function openInText(node) {
   const path = getRootPath() + node.path
   const client = getClient()
 
+  // Static markup only — all human-readable text (title, translated button labels) is set
+  // via textContent below, never interpolated into innerHTML, so a translation string can
+  // never inject markup.
   const overlay = document.createElement('div')
   overlay.className = 'grafana-sync-text-overlay'
   overlay.innerHTML =
@@ -112,8 +115,8 @@ async function openInText(node) {
     + '<div class="grafana-sync-text-bar">'
     +   '<span class="grafana-sync-text-title"></span>'
     +   '<span class="grafana-sync-text-status"></span>'
-    +   '<button type="button" class="button primary js-save">' + t(APP_ID, 'Save') + '</button>'
-    +   '<button type="button" class="button js-close">' + t(APP_ID, 'Close') + '</button>'
+    +   '<button type="button" class="button primary js-save"></button>'
+    +   '<button type="button" class="button js-close"></button>'
     + '</div>'
     + '<textarea class="grafana-sync-text-area" spellcheck="false" wrap="off"></textarea>'
     + '</div>'
@@ -121,6 +124,8 @@ async function openInText(node) {
 
   const sel = (s) => overlay.querySelector(s)
   sel('.grafana-sync-text-title').textContent = node.basename || 'dashboard.grafana.json'
+  sel('.js-save').textContent = t(APP_ID, 'Save')
+  sel('.js-close').textContent = t(APP_ID, 'Close')
   const ta = sel('.grafana-sync-text-area')
   const setStatus = (m) => { sel('.grafana-sync-text-status').textContent = m }
 
@@ -163,10 +168,11 @@ registerFileAction({
   iconSvgInline: () => grafanaMarkIcon,
 
   // Offered for sync/link (a live dashboard to open); HIDDEN for unmapped/ignored
-  // (deleted / never created — nothing live to jump to). The opener set follows the
-  // file's MODE, not its type (open-with.feature / saga §14.1). enabled() also keeps
-  // it off plain JSON via isDashboardFile.
-  enabled: (context) => isDashboardFile(context) && canOpenInGrafana(getGrafanaMode(context?.nodes?.[0])),
+  // (deleted / never created — nothing live to jump to) and when no Grafana base URL is
+  // configured (there's nowhere to jump — so we hide it rather than show a no-op click).
+  // The opener set follows the file's MODE, not its type (open-with.feature / saga §14.1).
+  // enabled() also keeps it off plain JSON via isDashboardFile.
+  enabled: (context) => !!grafanaUrl && isDashboardFile(context) && canOpenInGrafana(getGrafanaMode(context?.nodes?.[0])),
 
   async exec(context) {
     const url = await resolveUrl(context?.nodes?.[0])
