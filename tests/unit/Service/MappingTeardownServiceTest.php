@@ -10,10 +10,10 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MappingTeardownService;
-use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\StorageService;
 use OCP\Files\File;
 use OCP\Files\Folder;
