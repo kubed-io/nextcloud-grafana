@@ -214,7 +214,9 @@ namespace OCP\Files\Events\Node {
 	// a listener directly. Just enough surface for `instanceof` + the getters the app calls.
 	if (!class_exists(NodeWrittenEvent::class, false)) {
 		class NodeWrittenEvent extends \OCP\EventDispatcher\Event {
-			public function __construct(private \OCP\Files\Node $node) {
+			public function __construct(
+				private \OCP\Files\Node $node,
+			) {
 			}
 
 			public function getNode(): \OCP\Files\Node {
@@ -224,7 +226,10 @@ namespace OCP\Files\Events\Node {
 	}
 	if (!class_exists(NodeRenamedEvent::class, false)) {
 		class NodeRenamedEvent extends \OCP\EventDispatcher\Event {
-			public function __construct(private \OCP\Files\Node $source, private \OCP\Files\Node $target) {
+			public function __construct(
+				private \OCP\Files\Node $source,
+				private \OCP\Files\Node $target,
+			) {
 			}
 
 			public function getSource(): \OCP\Files\Node {
