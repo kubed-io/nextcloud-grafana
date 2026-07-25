@@ -53,12 +53,19 @@ final class MappingTeardownService {
 		}
 
 		$folder = $this->storage->findFolder($mapping);
-		if ($folder !== null) {
-			$this->trashConnectedFiles($folder, $id);
+		$failed = $folder !== null ? $this->trashConnectedFiles($folder, $id) : 0;
+
+		// If any connected file could NOT be trashed (e.g. the delete listener aborted because
+		// Grafana was unreachable), keep the binding so the admin can retry the whole tear-down —
+		// dropping it now would strand a still-managed file with a dead mapping id. We attempted
+		// every file first (one bad dashboard never blocks the rest), then decide on the binding.
+		if ($failed > 0) {
+			throw new \RuntimeException(
+				$failed . ' connected file(s) could not be removed (Grafana may be unreachable); '
+				. 'the mapping was kept so you can retry.',
+			);
 		}
 
-		// Drop the binding last: if a trash step above threw and was swallowed, the mapping is
-		// still there to retry against; only once the files are handled do we forget it.
 		$this->mappings->delete($id);
 	}
 
@@ -66,12 +73,17 @@ final class MappingTeardownService {
 	 * Recursively move every file connected to $mappingId (managed, `grafana_mapping` == id)
 	 * into the Nextcloud trash. Trashing fires {@see \OCP\Files\Events\Node\BeforeNodeDeletedEvent},
 	 * so the delete listener does the Grafana side per the recycle-bin setting. Unmanaged /
-	 * unconnected files are skipped — never touched.
+	 * unconnected files are skipped — never touched. A per-file failure is logged and the walk
+	 * continues (one unreachable dashboard must not strand the rest); the count is returned so the
+	 * caller can decide whether the tear-down was complete enough to drop the binding.
+	 *
+	 * @return int the number of connected files that failed to trash
 	 */
-	private function trashConnectedFiles(Folder $folder, string $mappingId): void {
+	private function trashConnectedFiles(Folder $folder, string $mappingId): int {
+		$failed = 0;
 		foreach ($folder->getDirectoryListing() as $node) {
 			if ($node instanceof Folder) {
-				$this->trashConnectedFiles($node, $mappingId);
+				$failed += $this->trashConnectedFiles($node, $mappingId);
 				continue;
 			}
 			if (!FilenameCodec::isDashboardFile($node)) {
@@ -84,6 +96,7 @@ final class MappingTeardownService {
 			try {
 				$node->delete();
 			} catch (\Throwable $e) {
+				$failed++;
 				$this->logger->warning('grafana_sync tear-down: could not trash a connected file; continuing', [
 					'app' => Application::APP_ID,
 					'fileId' => $node->getId(),
@@ -92,5 +105,6 @@ final class MappingTeardownService {
 				]);
 			}
 		}
+		return $failed;
 	}
 }

@@ -65,15 +65,28 @@ final class TrashPurgeHook {
 		if ($path === '' || !str_contains($path, '.grafana.json')) {
 			return;
 		}
-		$user = $this->userSession->getUser();
-		if ($user === null) {
-			return; // no session to resolve the trash node against
+		// Whose trash is this? An interactive purge has a session user; a background retention
+		// cleanup ({@see \OCA\Files_Trashbin\BackgroundJob\ExpireTrash}) has none, but it sets up
+		// the filesystem for the user it's processing, so \OC_User::getUser() names them. Try the
+		// session first, then that FS context — otherwise a retention purge would leak the parked
+		// dashboard, breaking the "emptying the trash deletes it for good" guarantee.
+		$uid = $this->userSession->getUser()?->getUID();
+		if ($uid === null || $uid === '') {
+			$fsUser = \OC_User::getUser();
+			$uid = $fsUser === false ? '' : $fsUser;
+		}
+		if ($uid === '') {
+			$this->logger->warning('grafana_sync empty-trash: no user context to resolve the trashed node; skipping', [
+				'app' => Application::APP_ID,
+				'path' => $path,
+			]);
+			return;
 		}
 
 		try {
 			// The user's home is …/<uid>/files; the trash lives at …/<uid>/files_trashbin, so we
 			// resolve the hook path against the home's parent. The node still exists (pre-unlink).
-			$node = $this->rootFolder->getUserFolder($user->getUID())->getParent()->get(ltrim($path, '/'));
+			$node = $this->rootFolder->getUserFolder($uid)->getParent()->get(ltrim($path, '/'));
 		} catch (\Throwable) {
 			return; // couldn't resolve — nothing we can safely act on
 		}

@@ -51,6 +51,7 @@
 			<errorLevel type="suppress">
 				<referencedClass name="OC" />
 				<referencedClass name="OC_Util" />
+				<referencedClass name="OC_User" />
 			</errorLevel>
 		</UndefinedClass>
 		<!--

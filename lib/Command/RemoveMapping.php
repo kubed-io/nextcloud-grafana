@@ -46,6 +46,10 @@ final class RemoveMapping extends Command {
 		} catch (\OutOfBoundsException) {
 			$output->writeln('<error>No mapping with id "' . $id . '".</error>');
 			return 1;
+		} catch (\RuntimeException $e) {
+			// Partial tear-down: the mapping was kept for retry. Surface why.
+			$output->writeln('<error>' . $e->getMessage() . '</error>');
+			return 2;
 		}
 		$output->writeln('<info>Removed mapping ' . $id . '.</info>');
 		return 0;

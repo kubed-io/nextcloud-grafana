@@ -94,6 +94,10 @@ final class MappingController extends Controller {
 			return new JSONResponse(['status' => 'ok']);
 		} catch (\OutOfBoundsException) {
 			return new JSONResponse(['message' => 'Mapping not found'], Http::STATUS_NOT_FOUND);
+		} catch (\RuntimeException $e) {
+			// Partial tear-down (a connected file couldn't be removed, e.g. Grafana unreachable):
+			// the mapping was kept for retry. 409 conveys "not done, try again".
+			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_CONFLICT);
 		}
 	}
 

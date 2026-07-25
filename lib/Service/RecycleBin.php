@@ -27,6 +27,11 @@ use OCP\IAppConfig;
  * DeleteService} asks; the two settings live on the "Sync Settings" declarative card.
  */
 final class RecycleBin {
+	/** Request-scoped memo of the resolved bin folder uid, so a bulk trash (e.g. a mapping
+	 *  tear-down of many files) resolves `/api/folders` once, not once per file. */
+	private ?string $memoUid = null;
+	private bool $memoed = false;
+
 	public function __construct(
 		private IAppConfig $config,
 		private GrafanaClient $grafana,
@@ -52,8 +57,11 @@ final class RecycleBin {
 	 * @throws \RuntimeException when enabled but the folder is unusable
 	 */
 	public function activeFolderUid(): ?string {
+		if ($this->memoed) {
+			return $this->memoUid;
+		}
 		if (!$this->isEnabled()) {
-			return null;
+			return $this->remember(null);
 		}
 		$title = $this->folderTitle();
 		if ($title === '') {
@@ -63,6 +71,13 @@ final class RecycleBin {
 		if ($uid === null) {
 			throw new \RuntimeException('The configured Grafana recycle-bin folder "' . $title . '" was not found in Grafana.');
 		}
+		return $this->remember($uid);
+	}
+
+	/** Memoise a successfully resolved value (a throw is never cached, so a fixed config retries). */
+	private function remember(?string $uid): ?string {
+		$this->memoUid = $uid;
+		$this->memoed = true;
 		return $uid;
 	}
 }
