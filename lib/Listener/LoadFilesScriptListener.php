@@ -1,0 +1,57 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\GrafanaSync\Listener;
+
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\GrafanaSync\AppInfo\Application;
+use OCP\AppFramework\Services\IInitialState;
+use OCP\EventDispatcher\Event;
+use OCP\EventDispatcher\IEventListener;
+use OCP\IAppConfig;
+use OCP\Util;
+
+/**
+ * Loads the Files-app frontend bundle (`grafana_sync-files`) and ships the Grafana
+ * base URL through Initial State so the bundle can build deep links without a
+ * round-trip.
+ *
+ * Wired to {@see LoadAdditionalScriptsEvent}, which the Files app fires once per
+ * page render right before its <script> tags are emitted — exactly the moment NC's
+ * CSP nonce is in scope.
+ *
+ * @implements IEventListener<LoadAdditionalScriptsEvent>
+ */
+final class LoadFilesScriptListener implements IEventListener {
+	public function __construct(
+		private IAppConfig $config,
+		private IInitialState $initialState,
+	) {
+	}
+
+	#[\Override]
+	public function handle(Event $event): void {
+		if (!$event instanceof LoadAdditionalScriptsEvent) {
+			return;
+		}
+		$this->initialState->provideInitialState(
+			'grafana_url',
+			rtrim($this->config->getValueString(Application::APP_ID, 'grafana_url', ''), '/'),
+		);
+		// Bundle lives under dist/ (built by `npm run build`, gitignored). NC's
+		// Util::addScript appends `js/<file>.js` to `apps/<appid>/`, so the
+		// `../dist/` prefix walks back out and into the dist directory.
+		//
+		// No `afterAppId` (was 'files'): we want this to run as early as possible
+		// so registerDavProperty() lands in the shared scope BEFORE the Files app
+		// issues its first directory PROPFIND — otherwise the first folder view
+		// races and our metadata-grafana_uid prop misses that request.
+		Util::addScript(Application::APP_ID, '../dist/' . Application::APP_ID . '-files');
+	}
+}

@@ -17,13 +17,14 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 > — **create** a dashboard by making a file, **copy** it to fork a new one, **move** it
 > between mapped folders to re-parent it in Grafana (uid kept) or out to delete it, and
 > **delete/restore** through the Nextcloud trash (with an optional Grafana recycle-bin folder
-> that preserves ids). A DAV guard keeps a link file's pointer from being overwritten, and
-> removing a mapping tears it down safely. On top of that sits the full admin surface: point
-> the app at Grafana with a service-account token (live **Test connection**), set the sync
-> schedule and recycle-bin behaviour, and define folder mappings — all persisted and
-> scriptable over `occ`. Still to come: bidirectional tag sync, the in-Files openers, and the
-> v2/YAML dashboard cut. Behaviour is written up front as executable specs under
-> [`features/`](features/), so docs, tests, and roadmap stay aligned.
+> that preserves ids). In the Files app, a dashboard row opens straight in Grafana or in a raw
+> JSON editor, and the **+ New** menu makes one. A DAV guard keeps a link file's pointer from
+> being overwritten, and removing a mapping tears it down safely. On top of that sits the full
+> admin surface: point the app at Grafana with a service-account token (live **Test
+> connection**), set the sync schedule and recycle-bin behaviour, and define folder mappings —
+> all persisted and scriptable over `occ`. Still to come: bidirectional tag sync and the v2/YAML
+> dashboard cut. Behaviour is written up front as executable specs under [`features/`](features/),
+> so docs, tests, and roadmap stay aligned.
 
 ---
 
@@ -238,6 +239,22 @@ is a fast DAV `REPORT`, not a folder walk. A `grafana:sync` / `grafana:link` col
 (a system tag) mirrors each managed file's mode automatically.
 
 📋 spec: [`features/file-type.feature`](features/file-type.feature) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
+
+### Opening a dashboard: Open in Grafana vs text editor
+
+Driven by the file's **mode**. Two row actions in the Files app:
+
+- **Open in Grafana** — jumps straight to the live dashboard (built from the file's `grafana_uid`).
+  Offered for **sync** and **link** files (there's a dashboard to open), and it's their default click.
+- **Open with text editor** — edits the raw JSON in a monospace modal; saving pushes back to Grafana.
+  Offered for every mode that holds the full JSON (**sync**, **unmapped**, **ignored**); hidden for
+  **link** (a pointer — nothing to edit). For unmapped/ignored files there's no live dashboard, so the
+  text editor is the default click.
+
+There's also a **Grafana dashboard** entry in the **+ New** menu — drop the new `.grafana.json`
+into a mapped sync folder and create-on-land makes it real in Grafana.
+
+📋 spec: [`features/open-with.feature`](features/open-with.feature) · 🛠 [`src/files.js`](src/files.js), [`lib/Listener/LoadFilesScriptListener.php`](lib/Listener/LoadFilesScriptListener.php)
 
 ### Manual sync (Sync from / Sync to Grafana)
 

@@ -1381,6 +1381,31 @@ now that it's built) and the recycle-bin's finer edges live in the specs; the in
 > a real plate in your hand — that's the only way anyone ever finds it. The machine's whole. Family
 > meal's on me."*
 
+### Course 5 cooked — **Front of House: the Openers** *(this PR: the Files-app row actions)*
+
+Back-of-house is whole; this is the dining room. A `.grafana.json` row in the Files app now
+does something when you click it, and *what* it does follows the file's **mode** — the same
+single source of truth the whole machine keys off:
+
+- **Open in Grafana** — the default click for **sync**/**link**; builds the deep link from the
+  file's `grafana_uid` (rides the directory PROPFIND, no extra round-trip) and jumps to the live
+  dashboard. Hidden for `unmapped`/`ignored` — nothing live to open.
+- **Open with text editor** — a verbatim monospace JSON modal (never Text's Markdown editor,
+  which reflows JSON); saving rides the normal writeback. Offered for every mode that holds the
+  JSON; hidden for **link** (a pointer — nothing to edit). That's the visible line between a sync
+  file and a link.
+- **+ New → Grafana dashboard** — writes a starter `.grafana.json`; drop it in a mapped folder and
+  create-on-land makes it real.
+
+A near-verbatim port of the n8n master's `files.js`, adapted to our mime / uid / deep-link — and
+the branchy decision logic (which opener, which default, per mode) is pinned by 30 Vitest cases in
+`files-helpers.test.js`, the JS analog of `FilenameCodec`'s PHP tests. The `@nextcloud/*` deps two
+PRs back stocked the larder, and got used exactly as planned: this PR was behaviour, not tooling.
+
+> **Dr K, propping the dining-room door open:** *"Prep, cook, plate, clear — and now the guest can
+> actually reach for it. A row you can click, a dish you can open where it lives or read raw on the
+> spot. Same rule as everything else: the file's mode says which door. Front of house is lit."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

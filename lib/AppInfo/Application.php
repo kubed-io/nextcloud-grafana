@@ -10,10 +10,12 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\AppInfo;
 
 use OCA\DAV\Events\SabrePluginAddEvent;
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Files_Trashbin\Events\NodeRestoredEvent;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
+use OCA\GrafanaSync\Listener\LoadFilesScriptListener;
 use OCA\GrafanaSync\Listener\MotionListener;
 use OCA\GrafanaSync\Listener\MoveGuardListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
@@ -118,6 +120,11 @@ final class Application extends App implements IBootstrap {
 		// NOT a typed event — it's the legacy \OCP\Trashbin preDelete hook, wired in boot().
 		$context->registerEventListener(BeforeNodeDeletedEvent::class, DeleteToGrafanaListener::class);
 		$context->registerEventListener(NodeRestoredEvent::class, RestoreFromTrashListener::class);
+
+		// Files-app openers (Course 5): load the frontend bundle that adds the "Open in
+		// Grafana" / "Open with text editor" row actions and the "Grafana dashboard" New-menu
+		// item, and ship the Grafana base URL via Initial State for its deep links.
+		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptListener::class);
 
 		// Renders the push-failure bell/toast (SyncNotifier stores {subject, params}).
 		$context->registerNotifierService(Notifier::class);
