@@ -1406,6 +1406,23 @@ PRs back stocked the larder, and got used exactly as planned: this PR was behavi
 > actually reach for it. A row you can click, a dish you can open where it lives or read raw on the
 > spot. Same rule as everything else: the file's mode says which door. Front of house is lit."*
 
+### Course 5 cooked — **The Nameplate** *(this PR: three-way rename)*
+
+The last non-tag lifecycle verb. For a sync file, three names are kept as one: the **filename
+stem**, the JSON **`title`**, and the **Grafana dashboard title** — and the stable link under all
+three is the uid, so renaming never cuts the wire. Rename the file and the JSON title + Grafana
+follow; edit the JSON title and the filename follows. `NameSyncListener` only *decides + enqueues*;
+the write itself runs in **`ReconcileNameJob`**, because during a rename the file is locked and a
+synchronous `putContent` throws — the one wrinkle that makes this a background job, ported straight
+from the master. Tasted live: renamed A→B (title + Grafana became B), edited the title B→C (the
+file became `C.grafana.json`, Grafana became C), uid never budged. A near-verbatim port of the n8n
+`NameSyncListener`/`ReconcileNameJob`, `title` in place of `name`.
+
+> **Dr K, hanging the day's specials board:** *"A plate can move, change, come back — but the guest
+> always knows which dish is which by the name on the card. Change the card, change the dish's name,
+> change the ticket in the window: they all say the same thing, always. That's the last fork on the
+> mode machine. Only the tags left — and those are the sommelier's, waiting on the other kitchen."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
