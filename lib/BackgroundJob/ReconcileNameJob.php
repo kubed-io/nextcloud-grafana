@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\BackgroundJob;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\PushService;
@@ -51,6 +52,9 @@ final class ReconcileNameJob extends QueuedJob {
 
 	#[\Override]
 	protected function run(mixed $argument): void {
+		if (!is_array($argument)) {
+			return; // malformed / legacy payload — nothing to reconcile
+		}
 		$fileId = (int)($argument['fileId'] ?? 0);
 		$uid = (string)($argument['userId'] ?? '');
 		$action = (string)($argument['action'] ?? '');
@@ -83,10 +87,9 @@ final class ReconcileNameJob extends QueuedJob {
 					return; // already in sync
 				}
 				$spec->title = $stem;
-				$encoded = json_encode($spec, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-				if ($encoded === false) {
-					return;
-				}
+				// The codebase's shared encode flags (includes JSON_THROW_ON_ERROR, so an encode
+				// failure throws → caught + logged by the outer try, never a silent bad write).
+				$encoded = json_encode($spec, DashboardBody::JSON_PRETTY);
 				// Write the JSON title guarded (so the writeback / name-sync don't echo),
 				// then push to Grafana ourselves — one tick, one push.
 				$this->guard->run(function () use ($node, $encoded): void {

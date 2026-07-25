@@ -78,10 +78,11 @@ final class NameSyncListener implements IEventListener {
 		}
 
 		// Read (shared lock — safe even during a rename) to compare names and only enqueue on a
-		// real mismatch.
+		// real mismatch. JSON_THROW_ON_ERROR makes an unparseable file a cheap explicit bail
+		// (so we never enqueue a reconcile for a file that isn't valid JSON).
 		try {
-			$spec = json_decode($node->getContent(), false);
-		} catch (\Throwable) {
+			$spec = json_decode($node->getContent(), false, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
 			return;
 		}
 		$jsonTitle = ($spec instanceof \stdClass && isset($spec->title) && is_string($spec->title)) ? trim($spec->title) : '';
