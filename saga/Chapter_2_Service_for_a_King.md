@@ -1326,6 +1326,61 @@ burner's on the move engine.
 > the room for good, you plate it fresh from the recipe — because we kept the recipe. Happy Pie
 > and Beer Day. Eat something. Then set the trashbin — that's the last fork."*
 
+### Slice 3 cooked — **The Last Fork: Delete & the Recycle Bin** *(this PR: the delete lifecycle)*
+
+The last fork on the mode machine, and the one over a real drop: Grafana has **no undo**. The whole
+design (recorded in Slice 2's rulings) turns on making the *Nextcloud trash* Grafana's undo, gated by
+one optional setting — the **Grafana recycle-bin folder**.
+
+**What went on the pass:**
+
+- **`DeleteService` — the rule table in one place.** Three steps: **softDelete** (trash-move),
+  **hardDelete** (empty-trash / purge), **restore**. Bin **OFF** (default): trashing a sync file is a
+  *true* Grafana delete right then — the recipe is safe in the trashed file — and we strip the file's
+  id; restoring rides create-on-land for a fresh dashboard, new uid. Bin **ON**: trashing **moves the
+  dashboard into the bin folder** (id kept, metadata left whole), restoring moves it back, and only
+  emptying the trash does the real, permanent delete — of *only* the cleared item. A **link** never
+  owned its dashboard, so trashing it deletes nothing. And the load-bearing safety rule: on bin-OFF we
+  **delete first, strip second**, so a Grafana that can't confirm the delete leaves the file's id
+  intact and the whole trash **aborts** — never a desync, never a lost dashboard.
+- **`RecycleBin` — the one branch, in one tiny service.** Reads the two settings and resolves the bin
+  folder's *title* (what the admin types) to a uid at use-time. Enabled-but-unusable throws, so we
+  abort rather than silently fall back to a destructive true-delete the admin didn't ask for.
+- **`MappingTeardownService` — removing a mapping is the trash, cascaded.** Delete a mapping and every
+  file *connected* to it is moved to the NC trash — so its dashboard follows the recycle-bin setting
+  for free — while standalone files it never owned are left strictly alone. Restore the trash (or
+  re-map the folder) and they reconnect. Wired to both `occ remove-mapping` and the admin panel.
+
+**The dish the kitchen taught us — the empty-trash is a *different door*.** The master's recipe assumes
+one event (`BeforeNodeDeletedEvent`) fires for *both* the trash-move and the final purge. We put it on
+the live pod and watched: **it doesn't.** Move-to-trash fires the typed event (our soft step, perfect),
+but permanently emptying the trash fires **no typed event at all** — Nextcloud emits the *legacy*
+`\OCP\Trashbin` `preDelete` hook, just before it unlinks the node. So the "real delete when the bin is
+on" needed a second hand at a second door: **`TrashPurgeHook`**, connected via `\OCP\Util::connectHook`
+in `boot()`. Without watching real plates we'd have shipped a bin that never emptied. (It also taught us
+a test-harness quirk — a bare CLI script registers listeners but doesn't `boot()` apps, so the hook
+only armed once we forced the app to boot; a real request boots every time.)
+
+**We tasted every course on the live pod, against Grafana's own API:**
+- **bin OFF:** made a file → dashboard appeared; trashed it → **dashboard gone from Grafana (404), file
+  id stripped**; restored it → **a brand-new dashboard, new uid**, sync again.
+- **bin ON:** made a file → trashed it → **dashboard moved into the bin folder, uid kept** (still there,
+  `folderTitle` = the bin); restored it → **moved back to its folder, same uid**; trashed again + emptied
+  the trash → **permanently gone (404)** — and *only* that one.
+- **tear-down:** a temp mapping with two connected dashboards → `occ remove-mapping` → **both dashboards
+  deleted, both files in the recoverable trash, the binding gone.**
+
+*Still on the shelf:* Team-Folder re-homing (which, as Slice 2b found, rides this very delete/create seam
+now that it's built) and the recycle-bin's finer edges live in the specs; the integration step-defs stay
+`@todo` while the unit suite + the live smoke carry the proof. The mode machine — create, copy, move,
+**delete** — is whole.
+
+> **Dr K, hanging up the apron as the last plate clears:** *"There it is — the whole service. They can
+> make a dish, copy it, carry it, and now scrape it — and if they change their mind, it's right there in
+> the bin, same plate or a fresh one, their call. You found the second door yourself, on the line, with
+> a real plate in your hand — that's the only way anyone ever finds it. The machine's whole. Family
+> meal's on me."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

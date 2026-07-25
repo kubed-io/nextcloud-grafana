@@ -25,8 +25,11 @@
 #     cleanest with the recycle bin ON (the dashboards were only parked, so restore
 #     re-links the SAME uids); with the bin OFF, a restore is a re-create (new uids).
 #
-# DESIGN, NOT WIRED: the whole feature is @todo — CI skips it — until the mode/delete
-# engine (Course 4 · Slice 2) is cooked. Some legs live-verify the trashbin listener.
+# STATUS: the tear-down cascade IS cooked (Course 4 · Slice 3) — MappingTeardownService trashes
+# the mapping's connected files (their delete rides the recycle-bin setting via the delete
+# listener) and leaves standalone files alone, wired to both `occ remove-mapping` and the admin
+# panel. The whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions are
+# written; until then the delete-engine unit suite + the live smoke carry the proof.
 
 @todo
 Feature: Removing a folder mapping tears down the connection safely

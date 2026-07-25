@@ -14,15 +14,16 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 > **Status: active development.** The sync engine is live: mapped folders provision and
 > fill with dashboards as `.grafana.json` files (**pull**), editing a synced file pushes
 > the dashboard back to Grafana on save (**writeback**), and the full file lifecycle works
-> — **create** a dashboard by making a file, **copy** it to fork a new one, and **move** it
-> between mapped folders to re-parent it in Grafana (uid kept) or out to delete it. A DAV
-> guard keeps a link file's pointer from being overwritten. On top of that sits the full
-> admin surface: point the app at Grafana with a service-account token (live **Test
-> connection**), set the sync schedule, and define folder mappings — all persisted and
-> scriptable over `occ`. Still to come: delete-through-trash reconcile, bidirectional tag
-> sync, the in-Files openers, and the v2/YAML dashboard cut. Behaviour is written up front
-> as executable specs under [`features/`](features/), so docs, tests, and roadmap stay
-> aligned.
+> — **create** a dashboard by making a file, **copy** it to fork a new one, **move** it
+> between mapped folders to re-parent it in Grafana (uid kept) or out to delete it, and
+> **delete/restore** through the Nextcloud trash (with an optional Grafana recycle-bin folder
+> that preserves ids). A DAV guard keeps a link file's pointer from being overwritten, and
+> removing a mapping tears it down safely. On top of that sits the full admin surface: point
+> the app at Grafana with a service-account token (live **Test connection**), set the sync
+> schedule and recycle-bin behaviour, and define folder mappings — all persisted and
+> scriptable over `occ`. Still to come: bidirectional tag sync, the in-Files openers, and the
+> v2/YAML dashboard cut. Behaviour is written up front as executable specs under
+> [`features/`](features/), so docs, tests, and roadmap stay aligned.
 
 ---
 
@@ -184,6 +185,37 @@ knows is a link.
 
 🧪 tested: [`tests/unit/DAV/LinkWriteGuardPluginTest.php`](tests/unit/DAV/LinkWriteGuardPluginTest.php) · 🛠 [`lib/DAV/LinkWriteGuardPlugin.php`](lib/DAV/LinkWriteGuardPlugin.php), [`lib/Listener/RegisterDavPluginsListener.php`](lib/Listener/RegisterDavPluginsListener.php)
 
+### Deleting — the Nextcloud trash is Grafana's undo
+
+Grafana has **no native trash** — a delete is permanent. So deleting a dashboard file is native
+Nextcloud trash on our side, plus a Grafana action that turns on one optional setting, the
+**Grafana recycle-bin folder** (admin → Sync Settings):
+
+- **Bin off** (default, honest): trashing a synced file **deletes** its dashboard in Grafana right
+  then (the full JSON is safe in the trashed file), and **restoring** it re-creates the dashboard
+  with a **new id**. Emptying the trash is then a Nextcloud-only act.
+- **Bin on** (id-preserving): trashing instead **moves the dashboard into the named folder**,
+  keeping its id; **restoring** moves it back, same id. The one irreversible moment is **emptying
+  the Nextcloud trash** — that permanently deletes from the Grafana bin, and **only** the items you
+  cleared (never a wholesale bin-clear; the bin may hold dashboards Nextcloud doesn't manage).
+
+A **link** file is a pointer, so trashing it only severs the tie — its dashboard is never deleted.
+An untracked `.grafana.json` is never touched. And whichever step issues the real Grafana delete,
+if Grafana can't confirm it the trash is **aborted** so the file stays recoverable — deleting can
+never silently desync the two systems or lose a dashboard's content.
+
+📋 spec: [`features/delete.feature`](features/delete.feature) · 🛠 [`lib/Service/DeleteService.php`](lib/Service/DeleteService.php), [`lib/Listener/DeleteToGrafanaListener.php`](lib/Listener/DeleteToGrafanaListener.php), [`lib/Listener/RestoreFromTrashListener.php`](lib/Listener/RestoreFromTrashListener.php)
+
+### Removing a folder mapping tears it down safely
+
+Deleting a mapping (admin panel or `occ grafana_sync:remove-mapping`) **trashes its connected
+files** — so their dashboards follow the recycle-bin setting above (deleted, or parked for a clean
+reconnect) — while **standalone files that were never part of the mapping are left strictly
+alone**. Restore the trash, or re-map the folder, and they reconnect. This is the tear-down, not
+the Purge button (which keeps the mapping and never touches Grafana).
+
+📋 spec: [`features/remove-mapping.feature`](features/remove-mapping.feature) · 🛠 [`lib/Service/MappingTeardownService.php`](lib/Service/MappingTeardownService.php)
+
 ### A first-class file type: custom mimetype, icon, queryable metadata
 
 A managed dashboard isn't a generic JSON blob — it's a proper file type. The app registers
@@ -249,6 +281,7 @@ the `occ` command.
 | **Nextcloud → Grafana push timing** | **async** (recommended): the push runs in the background after you save a dashboard file. **sync**: the push runs inline during the save for immediate feedback. Only sync-mode mappings push back. |
 | **Grafana → Nextcloud scheduled sync** | Master toggle for automatic pulls (read-only — nothing changes in Grafana). When off, use the "Sync from Grafana" button. |
 | **Sync interval** | How often to pull, as `<number><unit>` — e.g. `15m`, `1h`, `6h`, `1d`. A plain number is seconds; minimum 1 minute. |
+| **Grafana recycle-bin folder** | Off (default): trashing a synced file deletes its dashboard in Grafana; restoring re-creates it (new id). On: names an existing Grafana folder as the bin — trashing moves the dashboard there (id kept), restoring moves it back, and only emptying the Nextcloud trash deletes it for good. Don't map the bin folder — it has special meaning. |
 
 These settings are stored now and read by the sync engine when it lands — a scheduled
 pull doesn't run until that release.

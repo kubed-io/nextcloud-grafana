@@ -135,6 +135,26 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * Resolve a Grafana folder's uid from its title. The admin names the recycle-bin
+	 * folder by its human title (e.g. "nextcloud-trash"), so the delete engine maps it
+	 * to a uid at use-time. Case-sensitive exact match; returns null when no folder
+	 * carries that title. Grafana permits duplicate titles, so the bin folder should be
+	 * given a unique name — the first match wins.
+	 */
+	public function resolveFolderUidByTitle(string $title): ?string {
+		$title = trim($title);
+		if ($title === '') {
+			return null;
+		}
+		foreach ($this->listFolders() as $folder) {
+			if ($folder['title'] === $title) {
+				return $folder['uid'];
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * List the dashboards Grafana holds, scoped by folder, normalised to the small
 	 * shape the pull reconciler indexes on: `{uid, title, folderUid, url, tags}`.
 	 * This is the "which dashboards exist" half of the pull — the reconciler then
