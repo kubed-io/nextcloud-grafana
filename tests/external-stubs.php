@@ -75,6 +75,16 @@ namespace OCA\DAV\Events {
 	}
 }
 
+namespace OCA\Files\Event {
+	// Fired by the bundled Files app right before it emits its <script> tags (not shipped
+	// in nextcloud/ocp). Stubbed so the script-load listener's
+	// `@implements IEventListener<LoadAdditionalScriptsEvent>` type-checks cleanly.
+	if (!class_exists(LoadAdditionalScriptsEvent::class, false)) {
+		class LoadAdditionalScriptsEvent extends \OCP\EventDispatcher\Event {
+		}
+	}
+}
+
 namespace OCA\Files_Trashbin\Events {
 	// The restore-from-trash event, owned by the bundled Files_Trashbin app (not shipped in
 	// nextcloud/ocp). Stubbing it — rather than suppressing — lets Psalm resolve it as a real

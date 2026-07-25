@@ -12,12 +12,13 @@
 # (Whether editing+saving pushes to Grafana follows the file's mode — see
 # create-dashboard.feature / rename.feature / the bidirectional sync, not here.)
 #
-# Behat can't click the Files-app JS, so the integration steps assert the
-# server-observable backing the front-end keys off (the grafana_mode DAV value + the
-# live dashboard state + raw-JSON readability); the opener DECISION logic
-# itself is unit-tested in tests/js/files-helpers.test.js. The `link` rows stay @todo
-# (their decision logic is covered by the JS unit tests) and the `ignored` rows wait
-# on the reserved-tags / ignored slice — both flip once ready. CI skips @todo.
+# STATUS: the openers ARE cooked (Course 5) — src/files.js registers "Open in Grafana" +
+# "Open with text editor" (+ the "Grafana dashboard" New-menu item), loaded by
+# LoadFilesScriptListener. Behat can't click the Files-app JS, so the opener DECISION logic
+# is unit-tested in tests/js/files-helpers.test.js (30 cases); the integration steps here
+# assert the server-observable state the front-end keys off (the grafana_mode DAV value + the
+# live dashboard + raw-JSON readability). The whole feature stays @todo — CI skips it — until
+# those occ+WebDAV step definitions are written; the JS unit suite carries the decision proof.
 
 @todo
 Feature: Opening a dashboard file (Open in Grafana / Open with text editor)
