@@ -63,6 +63,9 @@ use OCP\Files\Events\Node\NodeWrittenEvent;
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'grafana_sync';
 
+	/** Guards the legacy preDelete hook registration so a repeated boot() can't stack it. */
+	private static bool $purgeHookRegistered = false;
+
 	public function __construct(array $params = []) {
 		parent::__construct(self::APP_ID, $params);
 	}
@@ -138,10 +141,16 @@ final class Application extends App implements IBootstrap {
 		// `\OCP\Trashbin` `preDelete` hook just before it unlinks the node. Bin ON: that's when a
 		// parked dashboard is permanently deleted from the Grafana bin. Connect our handler
 		// instance (the legacy hook calls object+method); its deps construct without any I/O.
-		$purgeHook = $context->getAppContainer()->get(TrashPurgeHook::class);
-		// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
-		// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
-		/** @psalm-suppress DeprecatedMethod */
-		\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+		// connectHook APPENDS handlers with no de-duplication, so guard against a second boot()
+		// in the same PHP process (tests, repeated loadApp) stacking the handler — which would
+		// fire TrashPurgeHook::preDelete more than once per purge (repeated deletes / log spam).
+		if (!self::$purgeHookRegistered) {
+			self::$purgeHookRegistered = true;
+			$purgeHook = $context->getAppContainer()->get(TrashPurgeHook::class);
+			// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
+			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
+			/** @psalm-suppress DeprecatedMethod */
+			\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+		}
 	}
 }
