@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The **Grafana glyph in the Files context menu and the + New menu** now themes to the menu colour instead of rendering as a solid yellow tile.
 - Creating a dashboard from a non-object JSON body now errors clearly instead of making an empty dashboard.
 - The **scheduled-sync toggle** now saves (its checkbox default was a string where a real boolean is required).
 - **Test connection** now tells a **missing** token from a **rejected** one (HTTP 401).

@@ -1,0 +1,32 @@
+<!--
+  SPDX-FileCopyrightText: 2026 Kelly Ferrone
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  The Grafana Sync mark — a folder holding a small bar chart — themed via
+  currentColor so it follows the surface it lands on: white in the Files context
+  menu and the "New" menu, where Nextcloud paints menu glyphs light, and dark on
+  a light background. Imported (?raw) and inlined by src/files.js, so this folder
+  is the single source of truth for the menu mark.
+
+  THE FILETYPE ICON IS A SEPARATE FILE (img/grafana.svg) AND MUST STAY THAT WAY.
+  That one hardcodes its fills because Nextcloud does NOT recolour mimetype
+  icons — RegisterMimetype copies it into core/img/filetypes/ and
+  GenerateMimetypeFileBuilder renders it as-is. Collapsing the two fails in both
+  directions: inline the coloured one here and the menu gets a solid yellow tile,
+  copy this one there and the file row gets an invisible icon. Same geometry, two
+  treatments — the arrangement nextcloud-n8n uses (img/n8n.svg +
+  img/icons/n8n.svg).
+
+  Monochrome needs the geometry inverted relative to img/grafana.svg: there, a
+  filled folder carries white bars knocked out of it. With one colour that would
+  be a solid blob, so the folder becomes an outline and the bars become the
+  filled elements.
+
+  Deliberately NOT the Grafana logo (a trademark of Grafana Labs); this is a
+  community integration carrying its own original mark, and is not affiliated
+  with or endorsed by Grafana Labs.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="none" stroke="currentColor" stroke-width="1.6" d="M2.8 5.5A1.5 1.5 0 0 1 4.3 4h4.3a1.5 1.5 0 0 1 1.06.44l1 1a1.5 1.5 0 0 0 1.06.44h8.02a1.5 1.5 0 0 1 1.5 1.5V18.5a1.5 1.5 0 0 1-1.5 1.5h-16a1.5 1.5 0 0 1-1.5-1.5v-13Z"/>
+  <path fill="currentColor" d="M7.4 17.2a.75.75 0 0 0 .75-.75v-2.1a.75.75 0 0 0-1.5 0v2.1c0 .414.336.75.75.75Zm3.35-.75v-4.6a.75.75 0 0 0-1.5 0v4.6a.75.75 0 0 0 1.5 0Zm3.25.75a.75.75 0 0 0 .75-.75v-3.1a.75.75 0 0 0-1.5 0v3.1c0 .414.336.75.75.75Zm3.75-.75v-5.4a.75.75 0 0 0-1.5 0v5.4a.75.75 0 0 0 1.5 0Z"/>
+</svg>
