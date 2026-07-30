@@ -17,16 +17,23 @@
   treatments — the arrangement nextcloud-n8n uses (img/n8n.svg +
   img/icons/n8n.svg).
 
-  Monochrome needs the geometry inverted relative to img/grafana.svg: there, a
-  filled folder carries white bars knocked out of it. With one colour that would
-  be a solid blob, so the folder becomes an outline and the bars become the
-  filled elements.
+  ONE FILLED PATH WITH fill-rule="evenodd", never a stroke. img/grafana.svg is a
+  filled folder with white bars painted over it; with a single colour those bars
+  would disappear, so here they are HOLES punched through the folder by the
+  even-odd rule instead.
+
+  The first cut of this file drew the folder as a stroked outline with
+  fill="none". That is broken in exactly the way this whole change is about:
+  Nextcloud's menu styling applies its own `fill: currentColor` to inline icons,
+  which overrides fill="none" and floods the outline into a solid tile — the same
+  symptom, one layer down. A filled path cannot fail that way; a surface
+  recolouring it just recolours it. (nextcloud-n8n's mark is a single filled
+  evenodd path for this reason.)
 
   Deliberately NOT the Grafana logo (a trademark of Grafana Labs); this is a
   community integration carrying its own original mark, and is not affiliated
   with or endorsed by Grafana Labs.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <path fill="none" stroke="currentColor" stroke-width="1.6" d="M2.8 5.5A1.5 1.5 0 0 1 4.3 4h4.3a1.5 1.5 0 0 1 1.06.44l1 1a1.5 1.5 0 0 0 1.06.44h8.02a1.5 1.5 0 0 1 1.5 1.5V18.5a1.5 1.5 0 0 1-1.5 1.5h-16a1.5 1.5 0 0 1-1.5-1.5v-13Z"/>
-  <path fill="currentColor" d="M7.4 17.2a.75.75 0 0 0 .75-.75v-2.1a.75.75 0 0 0-1.5 0v2.1c0 .414.336.75.75.75Zm3.35-.75v-4.6a.75.75 0 0 0-1.5 0v4.6a.75.75 0 0 0 1.5 0Zm3.25.75a.75.75 0 0 0 .75-.75v-3.1a.75.75 0 0 0-1.5 0v3.1c0 .414.336.75.75.75Zm3.75-.75v-5.4a.75.75 0 0 0-1.5 0v5.4a.75.75 0 0 0 1.5 0Z"/>
+  <path fill="currentColor" fill-rule="evenodd" d="M2 5.5A1.5 1.5 0 0 1 3.5 4h5.1a1.5 1.5 0 0 1 1.06.44l1 1a1.5 1.5 0 0 0 1.06.44H20.5A1.5 1.5 0 0 1 22 7.38V18.5A1.5 1.5 0 0 1 20.5 20h-17A1.5 1.5 0 0 1 2 18.5v-13Zm5 11.5a.75.75 0 0 0 .75-.75v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .414.336.75.75.75Zm3.75-.75V11a.75.75 0 0 0-1.5 0v5.25a.75.75 0 0 0 1.5 0Zm3.25.75a.75.75 0 0 0 .75-.75v-3.5a.75.75 0 0 0-1.5 0v3.5c0 .414.336.75.75.75Zm3.75-.75v-6a.75.75 0 0 0-1.5 0v6a.75.75 0 0 0 1.5 0Z"/>
 </svg>
