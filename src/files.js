@@ -27,11 +27,18 @@ import { loadState } from '@nextcloud/initial-state'
 import { translate as t } from '@nextcloud/l10n'
 import { emit } from '@nextcloud/event-bus'
 import { getGrafanaUid, buildUrl, isDashboardFile, getGrafanaMode, canOpenInGrafana, canEditAsText } from './files-helpers.js'
-// Glyphs live as real SVG files under img/ (the single source of truth for the
-// app's marks); Vite inlines them at build time via ?raw, so nothing is
+// Glyphs live as real SVG files under img/icons/ (the single source of truth for
+// the app's MENU marks); Vite inlines them at build time via ?raw, so nothing is
 // hand-pasted here. The Grafana-branded entries ("Open in Grafana", "New →
 // Grafana dashboard") use the app's Grafana mark; "Open with text editor" a pencil.
-import grafanaMarkIcon from '../img/grafana.svg?raw'
+//
+// Every glyph here is `fill="currentColor"`, because Nextcloud themes menu icons
+// to the surface they land on. That is why the Grafana mark is imported from
+// img/icons/ and NOT from img/grafana.svg: the latter is the FILETYPE icon, which
+// hardcodes its fills because NC renders mimetype icons out of
+// core/img/filetypes/ without recolouring them. Two treatments of one mark, two
+// files — same arrangement as nextcloud-n8n.
+import grafanaMarkIcon from '../img/icons/grafana.svg?raw'
 import textIcon from '../img/icons/text.svg?raw'
 
 const APP_ID = 'grafana_sync'
