@@ -93,7 +93,10 @@ trait LifecycleSteps {
 
 	/** @Given a folder that is not mapped */
 	public function aFolderThatIsNotMapped(): void {
-		$this->unmappedFolder();
+		// Make it "that folder" for the create step below, exactly as arranging a
+		// mapping does. Both phrasings end with the same sentence — "I create a file
+		// in that folder" — and it must mean whichever folder the Given set up.
+		$this->currentFolder = $this->unmappedFolder();
 	}
 
 	// ── create ────────────────────────────────────────────────────────────────
@@ -105,9 +108,18 @@ trait LifecycleSteps {
 		$this->putDashboardFile($this->currentFolder, 'New Board ' . bin2hex(random_bytes(3)));
 	}
 
-	/** @When I create a :ext file in that folder */
+	/**
+	 * "That folder" is whichever folder the preceding Given arranged — a mapping, or
+	 * a deliberately unmapped one. Hard-coding the unmapped folder here made the
+	 * link-mapping scenario pass for the wrong reason: it asserted no dashboard was
+	 * created while writing the file somewhere no mapping could have adopted it,
+	 * which proves nothing about link mappings.
+	 *
+	 * @When I create a :ext file in that folder
+	 */
 	public function iCreateAFileInThatFolder(string $ext): void {
-		$this->putDashboardFile($this->unmappedFolder(), 'Unmanaged ' . bin2hex(random_bytes(3)));
+		Assert::assertNotSame('', $this->currentFolder, 'no folder was arranged for "that folder"');
+		$this->putDashboardFile($this->currentFolder, 'Unmanaged ' . bin2hex(random_bytes(3)));
 	}
 
 	/** @When I create :filename in that folder */
