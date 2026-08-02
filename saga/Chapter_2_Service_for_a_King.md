@@ -1423,6 +1423,115 @@ file became `C.grafana.json`, Grafana became C), uid never budged. A near-verbat
 > change the ticket in the window: they all say the same thing, always. That's the last fork on the
 > mode machine. Only the tags left — and those are the sommelier's, waiting on the other kitchen."*
 
+### Course 6 cooked — **The Health Inspection** *(this PR: parity with the siblings)*
+
+Not a new dish. The inspector came through the kitchen, and four things that were fixed in
+the other two kitchens had never been fixed in ours — because Grafana was forked from n8n
+*before* those fixes landed, so we inherited the pre-fix version of each and never diffed.
+
+**1. The service window was propped open.** `ConfigController` kept `#[NoCSRFRequired]` on
+the test-connection endpoint. n8n had already removed it and written down why: with it, any
+page an authenticated admin happens to visit can make *our server* issue an outbound request
+to the configured Grafana URL and report back whether it answered. `#[AuthorizedAdminSetting]`
+does not close that — it proves *who* the session belongs to, not that the admin *intended*
+the request. The default CSRF check is the part that establishes intent.
+
+**2. The recycle-bin switch could never be flipped.** `AutoSyncSettings` was
+`IDeclarativeSettingsForm` + `SECTION_TYPE_ADMIN` + `STORAGE_TYPE_INTERNAL` carrying two
+`CHECKBOX` fields. Core types both the internal setter and the schema default `string`, so
+under `strict_types=1` a bool TypeErrors on the write **and** on the read — broken in both
+directions at once, which is why the toggle simply sprang back with nothing shown.
+
+n8n found the core limitation first, but n8n had only the cheap checkbox to lose. Here one of
+the two is **`bin_enabled`** — the switch that selects the whole delete model. An admin opting
+into id-preserving deletes, watching the toggle revert, and then trashing a dashboard was doing
+a **permanent Grafana delete every time**. Grafana has no undo. That is the difference between
+a recoverable dashboard and a destroyed one, hidden behind a settings form that looked merely
+buggy. Fixed with `IDeclarativeSettingsFormWithHandlers` + EXTERNAL storage (min-version 30 → 31,
+which that interface requires), plus a matching rescue in `RecycleBin::isEnabled` so a legacy
+string value cannot throw inside `BeforeNodeDeletedEvent`.
+
+**3. The purge hook was a perfectly correct method nobody ever called.** No
+`<types><filesystem/></types>` in `info.xml`, so `boot()` never ran on a WebDAV request — and
+`TrashPurgeHook` is the one thing wired in `boot()`. Every other listener lives in `register()`
+and worked fine, which is exactly what made it invisible. With the bin on, emptying the
+Nextcloud trash never deleted the parked dashboard: Grafana quietly kept every "deleted"
+dashboard forever. The n8n sibling had the same hole (its saga §5.7) and closed it; the fix
+never crossed over.
+
+**The lesson, third time it has now been learned in this family of apps: port the whole diff,
+not the paragraph about it.** All three of these were *already written down* in a sibling repo.
+None of them were found by reading code — they were found by diffing against the siblings on
+purpose, which is a thing nobody had done since the fork.
+
+**4. And one that was ours alone.** The pull decoded dashboards `assoc` and re-encoded them to
+disk, rewriting every empty JSON object in the spec — `timepicker: {}`, a panel's `options: {}`,
+`fieldConfig.defaults: {}` — as `[]`. The mirrored file stopped matching the dashboard, and
+because the push reads that file, the `[]` went back to Grafana.
+
+The galling part: `PushService` **already** decodes the file as objects and carries a comment
+explaining precisely this hazard. The pull was the half silently undoing what the push was
+carefully preserving. Now `GrafanaClient::readDashboardSpec` + `DashboardBody::encodeSync(\stdClass)`,
+with a regression test that asserts on the **raw JSON text** — because `{}` and `[]` both decode
+to `[]` under assoc, and that blindness is exactly what let it ship past a green suite.
+
+#### The menu got rewritten, not just re-tagged
+
+The specs had 0 axis tags, 54 `@todo`, and — the real problem — a status tag above `Feature:`
+on **11 of 17 files**. Gherkin applies that to every scenario inside, so a delete engine that
+was built, unit-tested and verified live on the pod reported as exactly the same kind of
+missing as a feature nobody had started. `--tags @todo` was useless as a work queue, which is
+the one thing a work queue is for.
+
+Two structural changes came out of fixing it.
+
+**Files are now `<action>-<noun>`** — `move-dashboard` beside `move-folder`, and so on for
+create/copy/rename/delete. The siblings organise by verb alone and that is right *there*: n8n
+maps by TAG and has no folder concept, so a folder is pure Nextcloud convenience with nothing
+on the far side. Here it hid something. Splitting them out revealed that `GrafanaClient` has
+exactly three folder methods and **all three are reads** — no `createFolder`, no `renameFolder`,
+no `deleteFolder`, no `moveFolder` anywhere in `lib/`. The entire folder surface is `@unbuilt`.
+A missing subsystem had been sitting behind a single `@todo`.
+
+**Every action file now covers both directions**, banner-split into what a user does in
+Nextcloud and what a reconcile brings back from Grafana. A mirror has two sides; a spec that
+writes down one of them is half a spec.
+
+And the folder model changed to match penpot's: **the mapped folder needs no tag** (the mapping
+*is* its identity), and subfolders become Grafana folders by carrying the `grafana` tag. That is
+what lets a mapped folder hold ordinary, non-Grafana folders — notes, exports, references — which
+a mapped folder must be able to do. It replaces the per-mapping "Sync subfolders" checkbox, which
+was all-or-nothing, inferred intent from a folder's mere existence, and was inert anyway:
+`syncSubfolders` is stored and validated and **no code path reads it**.
+
+Two more defects fell out of writing the folder specs, neither of which anyone had noticed:
+
+- **A mapping is a PATH STRING.** `MappingService::resolveForPath` matches with
+  `str_starts_with`, so renaming or moving a mapped folder does not move the mapping — it
+  silently **orphans** it. Every file inside resolves to no mapping and nothing says so. The
+  whole app tracks dashboards by a stable `uid` precisely so names can change freely; the one
+  identifier that is *not* stable is the one the entire mapping rests on.
+- **`NodeRenamedEvent` fires for the folder, not per file**, so moving a folder full of
+  dashboards changes their mapping membership without telling Grafana anything at all.
+
+Final count: **205 scenarios**, every one carrying exactly one actor, at most one origin, its
+real channels, and one status — verified mechanically, not by eye. 104 `@todo` (built, untested),
+80 `@unbuilt` (specified, not built), 10 `@blocked` (each now naming the capability the harness
+lacks), 11 live in CI. The biggest single correction: all 25 `tag-sync` scenarios are `@unbuilt`,
+because there is no content tag-sync code in `lib/` whatsoever — `OwnershipTags` writes the mode
+pills and stops. The old file-level `@todo` had been advertising 25 jobs that no test could ever
+have passed.
+
+CI now runs `behat --strict`, so leaving a scenario untagged is a claim the build enforces.
+
+> **Dr K, running a white glove along the pass:** *"Two doors down they'd already found the
+> propped window, the switch that doesn't switch, and the extractor fan wired to a light nobody
+> turns on. Nobody walked down and looked. That's not a cooking problem, that's a not-visiting-
+> the-neighbours problem. And the menu — you can't run a kitchen off a board that says 'maybe'
+> next to every dish. Now it says built, or not built, or can't-be-tasted-in-this-room. Some of
+> those lines are honest empty plates. An honest empty plate is worth ten dishonest full ones."*
+
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
