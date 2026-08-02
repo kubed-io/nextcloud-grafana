@@ -312,7 +312,7 @@ trait LifecycleSteps {
 		Assert::assertNull($this->davReadMetadata($this->currentFilePath, self::META_UID), 'the file still carries a uid');
 	}
 
-	/** @Then a brand-new dashboard is created in Grafana from the file's JSON */
+	/** @Then a brand-new dashboard is created in Grafana from the file's JSON body */
 	public function aBrandNewDashboardIsCreated(): void {
 		$newUid = $this->davReadMetadata($this->currentFilePath, self::META_UID);
 		Assert::assertNotNull($newUid, 'the file was not adopted on landing');

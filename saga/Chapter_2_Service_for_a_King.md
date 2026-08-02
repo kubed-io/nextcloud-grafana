@@ -1666,6 +1666,105 @@ we can too.
 > you moved it, so when the answer turned out to be 'the soup never changed', you knew it
 > instead of guessing it."*
 
+### Course 8 — **The Clock on the Plate** *(this PR: a mirror wears the dashboard's dates)*
+
+Course 7 stopped the pull touching what it had not changed. That exposed the question
+underneath, which Command put in four lines:
+
+```
+3:00  dashboard edited in Grafana
+3:02  reconciler pulls, rewrites file
+3:02  Nextcloud stamps mtime          ← what the file reports
+```
+
+The mtime was never lying — it recorded when the app wrote that node. It was answering
+a question nobody asks. And the two-minute case is the **best** it did: a dashboard
+nobody had touched since March reported the moment its mirror was created, off by
+months. `creation_time` was wrong the same way and worse, because once the file exists
+there is no "before" left to reconstruct it from.
+
+The master shipped this first (`n8n_sync` §5.12) and left us `MirrorTimes` to port. What
+did **not** port is where the numbers come from, and that turned out to be the whole
+course.
+
+#### The correction: it is one call, not two — we were throwing the answer away
+
+The first read of this said Grafana needs a second request for the timestamps. **Wrong,
+and worth recording as a lesson in reading our own code before blaming the API.**
+`GET /api/dashboards/uid/{uid}` returns *both* halves:
+
+```
+top level : meta, dashboard
+meta      : …, created, updated, updatedBy, createdBy, version, …
+              "2026-02-14T06:03:53Z"
+```
+
+`GrafanaClient::readDashboardSpec()` ends with `return $record->dashboard` — so the
+timestamps arrive on every sync pull already and are dropped on the floor one line
+before they could be used. Nothing to fetch. Something to stop discarding.
+
+Better still, the ordering is already right for free. `readDashboardSpec()` runs
+**before** `bodyDiffers()`, because the spec is what the comparison body is built from.
+So for `sync` the clocks cost **zero** additional requests, and Command's instinct —
+*"check whether the files differ first, then get timestamps, and save a trip"* — has
+nothing left to optimise. The trip was never separate.
+
+#### Where it is genuinely not free: `link`
+
+A `link` never reads the spec. It builds its pointer from the `/api/search` row, and
+that row carries no timestamps at all — measured, not assumed:
+
+```
+id, uid, orgId, title, uri, url, slug, type, tags, isStarred, description,
+sortMeta, isDeleted
+```
+
+So a link's clocks cost **one new GET per link per pull**, and Command's
+save-a-trip instinct inverts here into a genuine trap: *you cannot tell whether a
+link's clock is stale without fetching the very thing you were trying to avoid
+fetching.* Three honest options, and this is a decision rather than a detail:
+
+| | cost | what it gets wrong |
+|---|---|---|
+| **A — stamp links too, always** | one GET per link, per pull, forever | nothing; it is simply the expensive answer |
+| **B — never stamp links** | free | a link's dates stay sync-dates. Half the app tells the truth and half does not, which is worse than either |
+| **C — stamp a link only when its pointer body changed, or its clock is unset** | one GET at birth, then ~zero | a Grafana edit that does not alter title/url/tags (i.e. **most** edits — a panel tweak) will not move a link's mtime until something else does |
+
+**Leaning A**, and the reason is the one this whole thread keeps landing on: a mirror
+that tells the truth about *some* of its files is not a feature, it is a bug you have
+to explain. C is the clever answer and its failure mode is silent and common — a
+dashboard edited daily whose link never moves — which is exactly the class of defect
+Course 7 existed to remove. If the request count ever bites, the honest fix is caching
+or a bulk endpoint, not a mirror that quietly lies about `link` files.
+
+Recorded as a fork rather than settled by assertion, because A is a real cost on an
+instance with many `link` mappings.
+
+#### What the pull owes, and what it does not
+
+Pull-only, both clocks. On a **Nextcloud-side** edit, Nextcloud sets the mtime itself,
+correctly, at the moment of the edit — there is nothing to intercept and no listener to
+add. The push then moves Grafana's own `meta.updated`, and the next pull reconciles the
+two. `meta.updated` moving because *our* push saved the dashboard is not a wrinkle; it
+is the same fact arriving by the other door.
+
+#### The trap the master measured for us
+
+`touch()` looks harmless and is not. Measured on the live instance (§5.12): it leaves
+the file's **own** etag alone, but propagates a **fresh etag to the parent folder** —
+and a folder etag is exactly what sync clients poll to decide *"something in here
+changed, re-scan it."* So an unconditional stamp would not churn the files; it would
+churn the folder, on every tick, forever. Course 7's defect, relocated one level up
+where nobody is looking. Every write stays conditional, which also makes it
+self-healing: a mirror written before this existed is corrected on the next pull and
+then left alone.
+
+> **Dr K, tapping the date stamp on a crate:** *"You told the king the fish came in
+> Tuesday because Tuesday is when YOU carried it through the door. He doesn't care
+> about your door. And before you go blaming the supplier for not printing the date —
+> turn the crate over. It's been on there the whole time; you've been reading the wrong
+> side of the box."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

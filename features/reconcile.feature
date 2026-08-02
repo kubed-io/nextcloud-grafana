@@ -27,6 +27,12 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
     Then a file named "Alpha Demo.grafana.json" appears in "alpha-dash"
     And the file "alpha-dash/Alpha Demo.grafana.json" is a "sync" dashboard for uid "nc-alpha-demo"
     And "alpha-dash" holds exactly 1 dashboard file
+    # The mirror's two clocks are END STATES of this behaviour, not features of their
+    # own — a modification time is the shared result of edit/move/copy/rename, each
+    # already owned elsewhere. Here the mirror comes into existence AND takes its
+    # content from Grafana, so both clocks are answerable in one place.
+    And the file "alpha-dash/Alpha Demo.grafana.json" is dated when its dashboard changed in Grafana
+    And the file "alpha-dash/Alpha Demo.grafana.json" was created when its dashboard was created in Grafana
     # A second pull updates in place by uid — no duplicate, no "(2)" collision file.
     When the admin pulls from Grafana
     Then "alpha-dash" holds exactly 1 dashboard file

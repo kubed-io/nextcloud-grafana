@@ -59,6 +59,7 @@ final class SyncService {
 		private SyncGuard $guard,
 		private PushService $push,
 		private IMimeTypeLoader $mimeLoader,
+		private MirrorTimes $times,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -501,19 +502,25 @@ final class SyncService {
 		$uid = $row['uid'];
 		$displayName = $row['title'] !== '' ? $row['title'] : $uid;
 
+		// One read serves both modes now (saga Ch2, Course 8). A `sync` file needs it for
+		// the spec it serializes; a `link` needs it ONLY for `meta.updated`/`meta.created`,
+		// because `/api/search` — the row a pointer is built from — carries no timestamps
+		// at all. That makes the clocks free for sync (the read already happened, and
+		// happens BEFORE the change check, since the spec is what the comparison body is
+		// built from) and one extra GET per link, per pull. Deliberate: a mirror that is
+		// honest about its dates for only half its files is a bug you have to keep
+		// explaining, and the cheap alternatives fail silently.
+		$read = $this->readSource($uid);
+
 		if ($effectiveMode === Mapping::MODE_LINK) {
-			// Lightweight pointer — no full spec read. Version is inert for a link (a
-			// pointer never pushes), so it stays empty.
+			// Lightweight pointer built from the search row. Version is inert for a link
+			// (a pointer never pushes), so it stays empty. A read that failed costs the
+			// link its clocks, never its body.
 			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
 			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
 			$version = '';
 		} else {
-			// Sync — read the full record for the spec we serialize + the version we bank.
-			// Object decode (readDashboardSpec, not readDashboard): this is the one read
-			// whose result is written verbatim to a file, and an assoc round-trip would
-			// rewrite every empty `{}` in the spec as `[]`. See DashboardBody::encodeSync.
-			$dashboard = $this->grafana->readDashboardSpec($uid);
-			if ($dashboard === null) {
+			if ($read === null) {
 				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
 					'app' => Application::APP_ID,
 					'uid' => $uid,
@@ -524,9 +531,8 @@ final class SyncService {
 				// reading as a clean no-op.
 				return false;
 			}
-			$rawVersion = $dashboard->version ?? null;
-			$version = is_scalar($rawVersion) ? (string)$rawVersion : '';
-			$body = DashboardBody::encodeSync($dashboard);
+			$version = $read->version();
+			$body = DashboardBody::encodeSync($read->spec);
 		}
 
 		$existing = $existingByUid[$uid] ?? null;
@@ -561,6 +567,7 @@ final class SyncService {
 			}
 			$this->metadata->stampSynced($fileId, $uid, $effectiveMode, $version, $body, $mapping->id);
 			$this->tags->apply($fileId, $effectiveMode);
+			$this->times->apply($existing, $read?->updated, $read?->created, $differs);
 			return !$differs;
 		}
 
@@ -581,7 +588,30 @@ final class SyncService {
 		$file = $folder->newFile($candidate, $body);
 		$this->metadata->stampSynced($file->getId(), $uid, $effectiveMode, $version, $body, $mapping->id);
 		$this->tags->apply($file->getId(), $effectiveMode);
+		$this->times->apply($file, $read?->updated, $read?->created, true);
 		return false; // a brand-new mirror is always a write
+	}
+
+	/**
+	 * Read the dashboard record behind $uid, best-effort.
+	 *
+	 * A `sync` file cannot be written without it, so its caller turns null into a skip.
+	 * A `link` only wants the timestamps, and a pointer body that cannot be dated is
+	 * still a perfectly good pointer — so a failed read must not cost a link its file.
+	 * Swallowing here rather than at each call site is what keeps that asymmetry in one
+	 * place instead of two.
+	 */
+	private function readSource(string $uid): ?DashboardSpec {
+		try {
+			return $this->grafana->readDashboardSpec($uid);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync pull: could not read the dashboard record', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return null;
+		}
 	}
 
 	/**
@@ -603,7 +633,12 @@ final class SyncService {
 	 * unreadable mirror degrades to "always rewrite" rather than to "never repair".
 	 */
 	private function bodyDiffers(File $file, string $body): bool {
-		if ((int)$file->getSize() !== strlen($body)) {
+		// Both sides to float, not `(int)$file->getSize()`: getSize() is `int|float` and
+		// returns a float once a size exceeds PHP_INT_MAX, where an int cast overflows.
+		// Float is exact for every integral value up to 2^53, so this compares two sizes
+		// numerically at any scale — and `!==` on two floats stays a strict comparison,
+		// which casting only one side would have quietly given up.
+		if ((float)$file->getSize() !== (float)strlen($body)) {
 			return true;
 		}
 		try {

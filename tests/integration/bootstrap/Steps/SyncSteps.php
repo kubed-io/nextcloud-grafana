@@ -64,6 +64,53 @@ trait SyncSteps {
 	}
 
 	/**
+	 * The mirror's "Modified" is the dashboard's own `meta.updated`, not the moment the
+	 * pull ran.
+	 *
+	 * There is deliberately no "and it is not the time the pull ran" companion: the
+	 * fixture is pulled moments after it is seeded, so the two clocks are seconds apart
+	 * by construction and asserting they differ would assert the harness's scheduling
+	 * rather than the behaviour. Clocks that are far apart are covered where they can
+	 * be — the unit suite drives them arbitrarily far apart, and the live smoke test
+	 * showed February dates on an August pull.
+	 *
+	 * @Then the file :path is dated when its dashboard changed in Grafana
+	 */
+	public function theFileIsDatedWhenItsDashboardChanged(string $path): void {
+		$record = $this->grafanaGetDashboard($this->dashboardUidFor($path));
+		Assert::assertIsArray($record, "the dashboard behind $path is gone from Grafana");
+		$updated = strtotime((string)($record['meta']['updated'] ?? ''));
+		Assert::assertIsInt($updated, 'Grafana reported no meta.updated to compare against');
+
+		Assert::assertSame(
+			$updated,
+			$this->davReadTime($path, 'getlastmodified'),
+			"the mirror's modification time is not the dashboard's meta.updated",
+		);
+	}
+
+	/** @Then the file :path was created when its dashboard was created in Grafana */
+	public function theFileWasCreatedWhenItsDashboardWas(string $path): void {
+		$record = $this->grafanaGetDashboard($this->dashboardUidFor($path));
+		Assert::assertIsArray($record, "the dashboard behind $path is gone from Grafana");
+		$created = strtotime((string)($record['meta']['created'] ?? ''));
+		Assert::assertIsInt($created, 'Grafana reported no meta.created to compare against');
+
+		Assert::assertSame(
+			$created,
+			$this->davReadTime($path, 'creation_time'),
+			"the mirror's creation time is not the dashboard's meta.created",
+		);
+	}
+
+	/** The uid a mirror is stamped with — the link between the file and its dashboard. */
+	private function dashboardUidFor(string $path): string {
+		$uid = $this->davReadMetadata($path, self::META_UID);
+		Assert::assertNotNull($uid, "the file $path carries no dashboard uid");
+		return $uid;
+	}
+
+	/**
 	 * Pin every mirror's etag in $folder, so a later Then can say whether the run
 	 * under test wrote anything.
 	 *

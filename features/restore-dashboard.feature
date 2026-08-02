@@ -85,7 +85,7 @@ Feature: Restoring a dashboard file from the trash
     Given the Grafana recycle-bin folder is off
     And a trashed sync dashboard file whose dashboard is already deleted
     When I restore it from the trash
-    Then a dashboard is re-created in Grafana from the file's JSON
+    Then a dashboard is re-created in Grafana from the file's JSON body
     And it has a NEW "grafana_uid"
     And the file's mode becomes "sync" under its original mapping
 

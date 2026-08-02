@@ -120,7 +120,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Given the Grafana recycle-bin folder is off
     And a plain ".grafana.json" file whose Grafana identity was stripped, outside any mapping
     When I move the file into the "beta" folder
-    Then a brand-new dashboard is created in Grafana from the file's JSON
+    Then a brand-new dashboard is created in Grafana from the file's JSON body
     And it is created in the "beta" folder with a NEW "grafana_uid"
     And the file's mode becomes "sync" under the "beta" mapping
 
