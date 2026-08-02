@@ -97,26 +97,25 @@ trait TrashSteps {
 	 * a line neither definition looks like. Keep asides in comments, not step text.
 	 */
 	public function theTrashedFileCarriesNoMetadata(): void {
-		$this->withTheFileTemporarilyRestored(function (): void {
-			foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
-				$this->check(
-					$this->davReadMetadata($this->currentFilePath, $key) === null,
-					"the trashed file still carries $key — bin-off must strip the dead identity",
-				);
-			}
-		});
+		$entry = $this->requireTrashEntry();
+		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
+			$actual = $this->davReadTrashMetadata($entry, $key);
+			$this->check(
+				$actual === null || $actual === '',
+				"the trashed file still carries $key = " . var_export($actual, true)
+				. ' — bin-off must strip the dead identity',
+			);
+		}
 	}
 
 	/** @Then the trashed file KEEPS its :key */
 	public function theTrashedFileKeepsIts(string $key): void {
-		$this->withTheFileTemporarilyRestored(function () use ($key): void {
-			$actual = $this->davReadMetadata($this->currentFilePath, $key);
-			$this->check(
-				$actual === $this->lastUid,
-				"bin-on must keep the $key — the dashboard was parked, not deleted "
-				. "(expected '{$this->lastUid}', got " . var_export($actual, true) . ')',
-			);
-		});
+		$actual = $this->davReadTrashMetadata($this->requireTrashEntry(), $key);
+		$this->check(
+			$actual === $this->lastUid,
+			"bin-on must keep the $key — the dashboard was parked, not deleted. "
+			. "Expected '{$this->lastUid}', got " . var_export($actual, true),
+		);
 	}
 
 	/** @Then the dashboard is moved into the :folder Grafana folder and not deleted */
@@ -263,29 +262,6 @@ trait TrashSteps {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
-
-	/**
-	 * Read a trashed file's metadata WITHOUT leaving it restored.
-	 *
-	 * A trashed file cannot be PROPFOUND at its old path, so the only way to read its
-	 * `nc:metadata-*` is to bring it back — but a `Then` must not mutate the state a
-	 * LATER `Then` asserts on. Leaving it restored is exactly what broke
-	 * "…and the file is recoverable from the Nextcloud trash": by the time that ran,
-	 * this step had already taken the file out of the trash, so it was quite correctly
-	 * reported as not being there.
-	 *
-	 * Restore, read, put it straight back. The re-trash is idempotent in both models —
-	 * bin on re-parks the same uid, bin off has nothing left to delete.
-	 */
-	private function withTheFileTemporarilyRestored(callable $read): void {
-		$this->iRestoreItFromTheTrash();
-		try {
-			$read();
-		} finally {
-			$this->davDelete($this->currentFilePath);
-			$this->trashedFrom = $this->currentFilePath;
-		}
-	}
 
 	/**
 	 * The trashbin entry for the file this scenario deleted. Fails loudly rather

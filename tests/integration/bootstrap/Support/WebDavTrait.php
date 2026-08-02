@@ -194,6 +194,46 @@ trait WebDavTrait {
 		return $this->davReadMetadata($path, self::META_UID);
 	}
 
+	/**
+	 * PROPFIND an `nc:metadata-<key>` on a node **in the trashbin**, without disturbing it.
+	 *
+	 * Restoring the file to read its metadata is NOT a neutral peek: under bin-off a
+	 * restore re-creates the dashboard and stamps a FRESH uid, so the read manufactures
+	 * exactly the state it was meant to observe. That mistake made
+	 * "the trashed file carries no Grafana metadata" fail while the app was behaving
+	 * perfectly.
+	 *
+	 * The bin-on and bin-off scenarios keep each other honest across this surface: one
+	 * asserts a uid IS readable here, the other that it is NOT. If the trashbin DAV
+	 * endpoint served no `nc:metadata-*` at all, the absence assertion would pass
+	 * vacuously — but the presence assertion would fail loudly, so the pair cannot both
+	 * be wrong in the same direction.
+	 */
+	private function davReadTrashMetadata(string $entry, string $key): ?string {
+		$ns = 'http://nextcloud.org/ns';
+		$res = $this->davClient()->request('PROPFIND', $this->trashHref($entry), [
+			'headers' => ['Depth' => '0', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:nc="' . $ns . '">'
+				. '<d:prop><nc:metadata-' . $key . '/></d:prop></d:propfind>',
+		]);
+		$this->assertStatus($res, [207], "trashbin PROPFIND $entry");
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		$doc->registerXPathNamespace('nc', $ns);
+		foreach ($doc->xpath('//d:propstat') ?: [] as $propstat) {
+			$propstat->registerXPathNamespace('d', 'DAV:');
+			$propstat->registerXPathNamespace('nc', $ns);
+			if (!str_contains((string)($propstat->xpath('d:status')[0] ?? ''), '200')) {
+				continue;
+			}
+			$node = $propstat->xpath('d:prop/nc:metadata-' . $key);
+			if ($node) {
+				return trim((string)$node[0]);
+			}
+		}
+		return null;
+	}
+
 	/** Percent-encode each path segment but keep the slashes. */
 	private function davEncode(string $path): string {
 		return implode('/', array_map('rawurlencode', explode('/', ltrim($path, '/'))));

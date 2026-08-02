@@ -233,7 +233,13 @@ final class GrafanaClient {
 	 */
 	public function readDashboard(string $uid): array {
 		$res = $this->request('GET', '/api/dashboards/uid/' . rawurlencode($uid));
-		return $this->decode($res);
+		// decode() is typed array<string,mixed> because it serves every endpoint; this
+		// one endpoint's shape is known, and asserting it here is what lets callers rely
+		// on `meta.folderUid` without re-checking. Both keys stay optional: Grafana has
+		// answered 200 with a partial body before now.
+		/** @var array{meta?:array<string,mixed>, dashboard?:array<string,mixed>} $record */
+		$record = $this->decode($res);
+		return $record;
 	}
 
 	/**
