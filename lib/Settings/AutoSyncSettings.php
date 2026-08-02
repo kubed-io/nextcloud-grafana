@@ -89,7 +89,7 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 	private const TIMING_SYNC = 'sync';
 
 	public function __construct(
-		private IAppConfig $config,
+		private readonly IAppConfig $config,
 	) {
 	}
 
