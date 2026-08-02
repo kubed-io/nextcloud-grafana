@@ -24,7 +24,6 @@
   # duplicates — is already proven LIVE by reconcile.feature ("existing files are
   # updated in place — matched by dashboard uid, never duplicated"); a disable/enable
 # changes nothing about that reconcile, so re-proving it here would be redundant.
-@todo
 Feature: Uninstall reverts the system and reinstall reconnects the data
   As a Nextcloud admin
   I want removing the app to leave Nextcloud clean and reinstalling to just resync
@@ -34,8 +33,12 @@ Feature: Uninstall reverts the system and reinstall reconnects the data
     Given the app is connected to Grafana
     And a folder mapped as "sync" to the Grafana folder "alpha"
 
-  # ── system cleanup (needs a live app remove — @todo in CI) ────────────────────
-  @todo
+  # ── system cleanup ───────────────────────────────────────────────────────────
+  # @blocked, and the missing capability is named: this harness can only DISABLE and
+  # ENABLE the app, never remove and reinstall it, so the uninstall repair step
+  # (UnregisterMimetype) is unreachable from CI. The two scenarios below stay live
+  # because disable/enable is exactly what they need.
+  @admin @occ @blocked
   Scenario: Removing the app reverts the custom mimetype registration
     Given the app registered the "application/grafana+json" mimetype on install
     When the app is removed
@@ -44,6 +47,7 @@ Feature: Uninstall reverts the system and reinstall reconnects the data
     And a ".grafana.json" file resolves to "application/json" again
 
   # ── data is orphaned, never deleted ───────────────────────────────────────────
+  @admin @occ @ui @todo
   Scenario: Disabling the app leaves the dashboard files (and their identity) in place
     Given the "alpha" folder has managed sync dashboard files
     When the admin disables the app
@@ -51,6 +55,7 @@ Feature: Uninstall reverts the system and reinstall reconnects the data
     And each file still carries its "grafana_uid" metadata
 
   # ── reinstall reconnects with no duplicates (the headline) ────────────────────
+  @admin @occ @ui @todo
   Scenario: Re-enabling and syncing reconciles the existing files without duplicates
     Given the "alpha" folder has managed sync dashboard files
     And the admin disables and then re-enables the app

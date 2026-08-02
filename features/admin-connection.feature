@@ -18,6 +18,7 @@ Feature: Admin configures the Grafana connection
   Background:
     Given the app is installed and enabled
 
+  @admin @occ @ui
   Scenario: Set up and verify the connection
     When the admin sets the Grafana base URL
     And the admin provides the Grafana service-account token
@@ -28,6 +29,7 @@ Feature: Admin configures the Grafana connection
   # Test connection result is the admin's diagnostic — and it must tell the two
   # failure modes apart: "you haven't added a token" vs "the token you added was
   # rejected". Same distinct messages on the button and the occ command.
+  @admin @occ @ui
   Scenario: The connection test tells an unset token apart from a rejected one
     Given the admin has set the Grafana base URL
     And no service-account token is set

@@ -1,6 +1,6 @@
 # How the app reacts to every move a Nextcloud user can make on a dashboard file.
 # The stable thread is the dashboard UID **plus the full JSON we hold in the file**.
-# (COPY is the opposite — always a new instance; see copy.feature.)
+# (COPY is the opposite — always a new instance; see copy-dashboard.feature.)
 #
 # THE CORE NUANCE (resolved with Dr K) — MOVE and DELETE are NOT the same, and where
 # a file moves decides everything. Grafana has NO soft-delete/archive (proven live: a
@@ -27,7 +27,7 @@
 #        • BIN ON: we **MOVE the Grafana dashboard into the designated recycle-bin folder**
 #          (uid **preserved**) — the analogue of n8n's archive, done with a real folder.
 #          Moving the file back into a mapping **moves the dashboard back** out of the bin
-#          to the destination folder, **same uid**. (See delete.feature — trash uses the
+#          to the destination folder, **same uid**. (See delete-dashboard.feature — trash uses the
 #          exact same bin machinery.)
 #
 # THE ID-STRIP RULE (precise): we strip the file's grafana_uid **only when we are about

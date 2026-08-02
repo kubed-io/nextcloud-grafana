@@ -1,4 +1,4 @@
-# Copying a dashboard file. Where a MOVE is "the same dashboard" (see move.feature),
+# Copying a dashboard file. Where a MOVE is "the same dashboard" (see move-dashboard.feature),
 # a COPY is ALWAYS a brand-new instance. A copy never inherits the original's Grafana
 # identity — its metadata (grafana_uid, version, mapping, mode) is stripped the moment
 # it is copied. Copy is therefore the single safest point to strip metadata:

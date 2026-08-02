@@ -12,35 +12,78 @@ This file is the authority on layout and tags. The review checklist that follows
 from it lives in [`.github/instructions/gherkin.instructions.md`](../.github/instructions/gherkin.instructions.md);
 where the two disagree, this file wins.
 
-## The organising rule: a feature is a BEHAVIOUR, not a mechanism
+## The organising rule: one VERB, one NOUN, one file
 
-Files are named for **what a person did**, never for the kind of thing they did it
-to. Renaming a dashboard file and renaming a mapped folder are both *renames* and
-belong in one file, so a reader comparing them sees one table instead of hunting
-two.
+Files are named `<action>-<noun>`. Not for a mechanism, not for a subsystem — for
+the gesture a person performs and the thing they perform it on.
 
 The failure this prevents is silent: two files describing one behaviour drift
 apart, and nobody reads two files to answer one question.
 
+**Why the noun is part of it, when the sibling apps organise by verb alone.**
+n8n keeps `rename.feature` for everything renameable, and that is right *there*,
+because n8n maps by TAG and has no folder concept — a folder is pure Nextcloud
+convenience with nothing on the far side. Here, renaming a dashboard and renaming
+a folder are not two cases of one behaviour. They have different far-side calls,
+different failure modes, different blast radii, and — as it turned out — different
+build states. Collapsing them into one file is what hid an entire missing
+subsystem behind a single `@todo`.
+
+Two nouns, one verb each. Grafana has **real folders**, so a folder is a
+first-class object here in a way it is not in the n8n sibling (which maps by tag
+and has no folder concept at all). Acting on a dashboard and acting on a folder are
+different questions with different blast radii, so they get different files:
+
+| Dashboard (the file) | Folder |
+|---|---|
+| `create-dashboard.feature` | `create-folder.feature` |
+| `copy-dashboard.feature` | `copy-folder.feature` |
+| `move-dashboard.feature` | `move-folder.feature` |
+| `rename-dashboard.feature` | `rename-folder.feature` |
+| `delete-dashboard.feature` | `delete-folder.feature` |
+
+That split earned its keep immediately. `GrafanaClient` has exactly three folder
+methods and all three are READS — there is no `createFolder`, `renameFolder`,
+`deleteFolder` or `moveFolder` anywhere in `lib/`. **The entire folder surface is
+`@unbuilt`.** While folder scenarios lived inside the file features under one
+file-level `@todo`, a missing subsystem looked like a handful of missing tests.
+
+Everything that is not a verb on a file or a folder keeps its own file:
+
 | File | Owns |
 |---|---|
-| `create-dashboard.feature` | A dashboard coming into existence, on either side |
-| `copy.feature` | Duplicating a dashboard file, and what the copy is *not* |
-| `move.feature` | A file changing folder — into a mapping, out of one, between two |
-| `rename.feature` | A file or dashboard changing name, and the filename↔`title` reconcile |
-| `delete.feature` | Everything that removes a dashboard: both trash steps, the recycle-bin folder, restore |
-| `purge.feature` | The admin's deliberate wipe of the Nextcloud side |
-| `tag-sync.feature` | A dashboard's tags, across all three surfaces |
-| `reserved-tags.feature` | The `nextcloud:*` / `grafana:*` control plane — `ignore` and the mode pills |
+| `tag-sync.feature` | A dashboard's content tags, across all surfaces |
+| `reserved-tags.feature` | The control plane — the `ignore` markers and the mode pills |
 | `mapping-membership.feature` | Which files a mapping owns, and what "unmapped" means |
 | `file-type.feature` | A mirror as a first-class file type: mimetype, icon, DAV props |
 | `open-with.feature` | What clicking a mirror does |
 | `admin-connection.feature` | Reaching Grafana at all: URL, token, and how failure reads |
 | `admin-mapping.feature` | Creating and configuring a mapping |
 | `remove-mapping.feature` | Tearing a mapping down, and what happens to what it owned |
+| `purge.feature` | The admin's deliberate wipe of the Nextcloud side |
 | `reconcile.feature` | What a sync run does *as a run*: completeness, idempotency, what it reports |
 | `lifecycle.feature` | Install and enable |
 | `uninstall.feature` | Removal, and what survives it |
+
+## Every action file covers BOTH directions
+
+A mirror has two sides, and a spec that only writes down one of them is only half a
+spec. Each `<action>-<noun>` file is split by banner into the two:
+
+```gherkin
+  # ══ RENAMED IN NEXTCLOUD ═══════════════════════════════════════════════════════
+  ...
+  # ══ RENAMED IN GRAFANA ═════════════════════════════════════════════════════════
+```
+
+The Nextcloud side is a gesture in the Files app; the Grafana side is a change on
+the far side that a reconcile brings back. They are not symmetric — Nextcloud
+drives, and Grafana only ever answers a pull — and reading them next to each other
+is how that asymmetry stays visible instead of being rediscovered.
+
+**A file with only one banner is incomplete.** If the other direction genuinely has
+no behaviour, say so in a comment; do not leave the reader to guess whether it was
+considered.
 
 **A scenario describing a behaviour another file owns is a defect**, even when it
 passes. Move it.
@@ -77,7 +120,7 @@ So Nextcloud's recycle bin *is* the feature this app adds to Grafana, and the
 **Every delete scenario must say which model it is in.** A delete scenario that
 does not is ambiguous by construction, because the two models disagree about
 everything: what happens to the dashboard, what happens to the uid, and which step
-is the point of no return. This is why `delete.feature` is banner-grouped by model
+is the point of no return. This is why `delete-dashboard.feature` is banner-grouped by model
 rather than by gesture.
 
 The second-order rule: the bin folder **is not a mapping**. It holds dashboards
@@ -187,7 +230,7 @@ configuration rather than gesture, they need a filter of their own.
 
 `--tags '@recycle-bin'` is the one query that answers *"everything the bin setting
 changes"*, which is the question asked before touching `DeleteService`. It spans
-`delete.feature`, `move.feature` and `remove-mapping.feature` — three files, one
+`delete-dashboard.feature`, `move-dashboard.feature` and `remove-mapping.feature` — three files, one
 setting, and that is precisely why grepping does not work.
 
 ### `sync` vs `link` is NOT an axis

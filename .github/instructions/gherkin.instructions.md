@@ -159,7 +159,7 @@ Tag any scenario whose outcome would differ under the other setting. Review
 checklist for this axis:
 
 - **A delete scenario that does not state its model is ambiguous.** Flag any
-  `delete.feature` / `move.feature` / `remove-mapping.feature` scenario that does
+  `delete-dashboard.feature` / `move-dashboard.feature` / `remove-mapping.feature` scenario that does
   not arrange the bin as on or off.
 - **`bin on` and `bin off` are not `Examples` rows.** They are different rules
   sharing a shape. Flag an Outline that tries.
@@ -211,7 +211,7 @@ The owners are listed in `features/README.md`. **Flag a scenario that describes 
 behaviour another file owns**, even when it passes — the failure mode is silent
 drift, and nobody reads two files to answer one question.
 
-The pair most likely to drift here is `delete.feature` and `move.feature`: moving a
+The pair most likely to drift here is `delete-dashboard.feature` and `move-dashboard.feature`: moving a
 file out of every mapping and trashing it are the *same* Grafana operation, chosen
 by the same setting. They stay in separate files because the gestures differ, so
 check that their rules still agree whenever either changes.

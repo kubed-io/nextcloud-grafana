@@ -15,7 +15,6 @@
 # Two intended flows: purge → "Sync from Grafana" (everything reappears), and
 # purge → uninstall (Nextcloud looks like the app was never there).
 
-@todo
 Feature: Purge the app's restorable files from Nextcloud
   As a Nextcloud admin
   I want a button that removes the dashboard files this app created
@@ -25,6 +24,7 @@ Feature: Purge the app's restorable files from Nextcloud
     Given the app is connected to Grafana
     And a folder mapped as "sync" to the Grafana folder "alpha"
 
+  @admin @in-nextcloud @occ @ui @todo
   Scenario: Purge deletes the synced file but leaves its dashboard in Grafana and the mapping intact
     Given a managed "sync" dashboard file in the "alpha" folder
     When the admin purges the Nextcloud files
@@ -32,6 +32,7 @@ Feature: Purge the app's restorable files from Nextcloud
     And the dashboard still exists in Grafana
     And the "alpha" mapping is still configured
 
+  @admin @in-nextcloud @occ @ui @todo
   Scenario: Purge keeps an unmapped file — a standalone copy is never lost
     Given an unmapped dashboard file that still carries its "grafana_uid"
     And I remember the unmapped file
@@ -40,6 +41,7 @@ Feature: Purge the app's restorable files from Nextcloud
     Then no managed dashboard files remain in the "alpha" folder
     And the remembered file is left in place
 
+  @admin @in-grafana @occ @ui @todo
   Scenario: Sync from Grafana brings the file back after a purge
     Given a managed "sync" dashboard file in the "alpha" folder
     And the admin purges the Nextcloud files
@@ -49,7 +51,7 @@ Feature: Purge the app's restorable files from Nextcloud
   # The in-folder mode-check (ignored stays put) and the untracked-file case are
   # covered by the SyncServiceTest unit test; their integration arrange (tagging
   # grafana:ignore / a never-tracked file) is left @todo to keep this suite lean.
-  @todo
+  @admin @in-nextcloud @occ @ui @unbuilt
   Scenario: Purge keeps an ignored file
     Given a managed "ignored" dashboard file in the "alpha" folder
     When the admin purges the Nextcloud files

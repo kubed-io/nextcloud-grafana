@@ -1,6 +1,6 @@
 # Folder mappings are metadata on the folder, so membership is resolved by where a
 # file lives. (How the app reacts when you MOVE a file across that boundary is in
-# move.feature — a sync file moved out becomes "unmapped"; a link can't leave.)
+# move-dashboard.feature — a sync file moved out becomes "unmapped"; a link can't leave.)
 #
 # The resolver matches the deepest mapped folder that encloses a file, so nested
 # mappings work and the nearest enclosing one wins. Each scenario lands a real file
@@ -8,7 +8,6 @@
 # server-observable assertions of the mapping resolver.
 #
 # @todo — the mapping engine lands with the sync chapter; executable spec only.
-@todo
 Feature: Mapping membership is resolved by folder
   As a Nextcloud admin
   I want mappings to be per-folder metadata
@@ -21,17 +20,20 @@ Feature: Mapping membership is resolved by folder
   Background:
     Given the app is connected to Grafana
 
+  @user @in-nextcloud @occ @ui @todo
   Scenario: A file's mapping is the folder it lives in
     Given a folder mapped to the Grafana folder "demo"
     When a managed dashboard file lives in that folder
     Then the file belongs to the "demo" mapping
 
+  @user @in-nextcloud @occ @ui @todo
   Scenario: A file outside every mapped folder belongs to no mapping
     Given a folder that is not mapped
     When a dashboard file lives in that folder
     Then the file belongs to no mapping
     And it is "untracked" if it has no Grafana uid, or "unmapped" if it carries one
 
+  @admin @occ @ui @todo
   Scenario: Folder mappings are metadata, so a mapped folder can nest in another
     Given a folder mapped to the Grafana folder "outer"
     And a subfolder of it mapped to the Grafana folder "inner"
@@ -43,6 +45,7 @@ Feature: Mapping membership is resolved by folder
   # mapping: with the parent's "Sync subfolders" on, a subfolder needs no mapping of its
   # own. The file stays under the PARENT mapping; its grafana_folderUid records which
   # (auto-created, presence-driven) Grafana subfolder it sits in.
+  @admin @occ @ui @todo
   Scenario: A cascaded subfolder needs no mapping of its own
     Given a folder mapped to the Grafana folder "outer" with "Sync subfolders" on
     And a subfolder of it with no mapping of its own

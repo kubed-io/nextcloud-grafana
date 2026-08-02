@@ -27,7 +27,6 @@
 # REPORT-by-indexed-mode query (the DAV search plumbing for nc:metadata-* is unproven
 # against the pod). CI skips @todo.
 
-@todo
 Feature: Grafana dashboard is a first-class file type
   As a Nextcloud user
   I want .grafana.json files to be a real, purpose-built file type
@@ -36,11 +35,13 @@ Feature: Grafana dashboard is a first-class file type
   Background:
     Given the app is connected to Grafana
 
+  @user @ui @todo
   Scenario: Dashboard files get the custom mimetype and Grafana icon
     Given a managed dashboard file
     Then its mimetype is "application/grafana+json"
     And the Files app shows the Grafana icon instead of a generic JSON icon
 
+  @user @gesture @ui @todo
   Scenario: WebDAV PROPFIND exposes the dashboard metadata in the XML
     Given a managed dashboard file
     When a WebDAV client requests the file's properties (PROPFIND)
@@ -53,6 +54,7 @@ Feature: Grafana dashboard is a first-class file type
       | nc:metadata-grafana_folderUid  |
       | nc:metadata-grafana_apiVersion |
 
+  @user @gesture @ui @todo
   Scenario Outline: The mode property carries the descriptive value
     Given a managed dashboard file in "<mode>" mode
     Then its "nc:metadata-grafana_mode" property is "<dav value>"
@@ -65,7 +67,7 @@ Feature: Grafana dashboard is a first-class file type
 
   # link stores as "reference" (the literal "link" is is_callable() → crashes core
   # PROPFIND); link integration is uncertain (no create-on-land path).
-  @todo
+  @user @gesture @ui @todo
   Scenario Outline: The mode property carries the descriptive value (link)
     Given a managed dashboard file in "<mode>" mode
     Then its "nc:metadata-grafana_mode" property is "<dav value>"
@@ -74,6 +76,7 @@ Feature: Grafana dashboard is a first-class file type
       | mode | dav value |
       | link | reference |
 
+  @user @gesture @ui @todo
   Scenario: The metadata is read-only over DAV
     Given a managed dashboard file
     When a client tries to change "nc:metadata-grafana_uid" via PROPPATCH
@@ -81,7 +84,11 @@ Feature: Grafana dashboard is a first-class file type
 
   # grafana_mode is indexed → "find every sync / unmapped / ignored file" is a fast
   # query. @todo until the DAV-search plumbing for nc:metadata-* is confirmed.
-  @todo
+  # @blocked, and the missing capability is named: there is no proven DAV REPORT
+  # search over `nc:metadata-*` in this harness. The index itself is real — the mode
+  # is registered as an indexed metadata key precisely so "find every unmapped file"
+  # is a query rather than a folder walk — but nothing here can issue that query.
+  @user @gesture @ui @blocked
   Scenario: Files are queryable by their indexed mode
     Given a "sync" dashboard file and a "link" dashboard file in the same user's storage
     When a DAV REPORT searches for files where "nc:metadata-grafana_mode" is "sync"

@@ -20,6 +20,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   Background:
     Given the app is connected to Grafana
 
+  @admin @in-grafana @occ @ui
   Scenario: Sync from Grafana fills the mapped folder, matched by dashboard uid
     Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-dash"
     When the admin pulls from Grafana
@@ -30,6 +31,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
     When the admin pulls from Grafana
     Then "alpha-dash" holds exactly 1 dashboard file
 
+  @admin @in-grafana @occ @ui
   Scenario: Sync from Grafana prunes a file whose dashboard left the folder
     Given an admin-owned mapping from Grafana folder "nc-delta" to Nextcloud folder "delta-dash"
     And a throwaway Grafana dashboard "Ephemeral" with uid "nc-ephemeral" in folder "nc-delta"
@@ -44,6 +46,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   # Push (Course 3, writeback): a local edit to a synced file goes back up to its
   # Grafana dashboard on the stable uid — same dashboard, not a new one. Uses the
   # bravo folder so it doesn't mutate the alpha fixture the pull scenarios assert on.
+  @admin @in-nextcloud @occ @ui
   Scenario: Sync to Grafana pushes a local edit up to its dashboard
     Given an admin-owned mapping from Grafana folder "nc-bravo" to Nextcloud folder "bravo-dash"
     And the admin pulls from Grafana
@@ -54,7 +57,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   # The whole-instance mirror (saga Ch2): the Grafana root "/" mapped to a Nextcloud folder
   # with "Sync subfolders" on. The root encloses every folder, so the pull walks the entire
   # Grafana folder tree — a perfect one-to-one mirror. Lands with the subfolder course.
-  @todo
+  @admin @in-grafana @occ @ui @unbuilt
   Scenario: Sync from Grafana on a root mapping with subfolder sync mirrors the whole instance
     Given a folder mapped as "sync" to the Grafana root "/" with "Sync subfolders" on
     And Grafana has dashboards at the root and inside nested folders
