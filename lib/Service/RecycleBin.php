@@ -38,9 +38,29 @@ final class RecycleBin {
 	) {
 	}
 
-	/** Whether the admin turned on id-preserving deletes (the bin folder is in use). */
+	/**
+	 * Whether the admin turned on id-preserving deletes (the bin folder is in use).
+	 *
+	 * The rescue is not defensive padding. `bin_enabled` was written as a *string* by
+	 * the old INTERNAL declarative path, so on any instance that saved the form before
+	 * {@see \OCA\GrafanaSync\Settings\AutoSyncSettings} moved to EXTERNAL storage,
+	 * `getValueBool` raises an AppConfigTypeConflict. Letting that escape would throw
+	 * inside `BeforeNodeDeletedEvent` — turning "is the bin on?" into a failed delete.
+	 * Parsing the legacy string instead keeps the admin's opted-in id preservation
+	 * intact until their next save rewrites it as a real bool.
+	 */
 	public function isEnabled(): bool {
-		return $this->config->getValueBool(Application::APP_ID, 'bin_enabled', false);
+		try {
+			return $this->config->getValueBool(Application::APP_ID, 'bin_enabled', false);
+		} catch (\Throwable) {
+			$raw = '';
+			try {
+				$raw = $this->config->getValueString(Application::APP_ID, 'bin_enabled', '');
+			} catch (\Throwable) {
+				// Neither type reads — treat as off, the conservative default.
+			}
+			return in_array(strtolower(trim($raw)), ['1', 'true', 'yes', 'on'], true);
+		}
 	}
 
 	/** The configured bin folder's human title (empty when unset). */

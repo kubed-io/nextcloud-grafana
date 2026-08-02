@@ -13,7 +13,6 @@ use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Settings\AdminTest;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
-use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
@@ -26,6 +25,17 @@ use OCP\IRequest;
  * The 401/403/404 friendly mapping stays here because those codes are
  * HTTP-transport noise that only the connection test cares about; deeper callers
  * want raw exceptions to drive retry/backoff.
+ *
+ * No `#[NoCSRFRequired]`: it was here out of habit from read-only endpoints, but
+ * nothing needs it — the admin JS sends `requesttoken` on every request, so the
+ * check passes. Keeping the attribute meant any page an authenticated admin
+ * happened to visit could make this server issue an outbound request to the
+ * configured Grafana URL and report back whether it answered — a cross-site
+ * trigger for a server-side probe. `#[AuthorizedAdminSetting]` does not close
+ * that: it proves *who* the session belongs to, not that the admin intended the
+ * request. Removing the attribute restores Nextcloud's default CSRF check, which
+ * is the part that establishes intent. Ported from the n8n sibling, where the
+ * DebugController had already documented deliberately *not* having it.
  */
 final class ConfigController extends Controller {
 	public function __construct(
@@ -36,7 +46,6 @@ final class ConfigController extends Controller {
 		parent::__construct($appName, $request);
 	}
 
-	#[NoCSRFRequired]
 	#[AuthorizedAdminSetting(settings: AdminTest::class)]
 	public function testConnection(): JSONResponse {
 		try {

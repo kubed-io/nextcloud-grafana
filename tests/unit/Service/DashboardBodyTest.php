@@ -29,14 +29,17 @@ final class DashboardBodyTest extends TestCase {
 		return json_decode($json, true, 512, JSON_THROW_ON_ERROR);
 	}
 
+	/** Decode a literal spec the way the pull does — objects, not assoc arrays. */
+	private function spec(string $json): \stdClass {
+		$o = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+		self::assertInstanceOf(\stdClass::class, $o);
+		return $o;
+	}
+
 	public function testEncodeSyncStripsVolatileFieldsButKeepsUid(): void {
-		$body = DashboardBody::encodeSync([
-			'id' => 42,
-			'version' => 7,
-			'uid' => 'kel4vkt',
-			'title' => 'CPU',
-			'panels' => [],
-		]);
+		$body = DashboardBody::encodeSync($this->spec(
+			'{"id":42,"version":7,"uid":"kel4vkt","title":"CPU","panels":[]}',
+		));
 		$decoded = $this->decode($body);
 		self::assertArrayNotHasKey('id', $decoded, 'internal numeric id stripped');
 		self::assertArrayNotHasKey('version', $decoded, 'per-save version stripped (never hashed)');
@@ -46,9 +49,46 @@ final class DashboardBodyTest extends TestCase {
 
 	public function testEncodeSyncIsStableAcrossVersionBumps(): void {
 		// The whole point: the same dashboard at version 7 vs 8 hashes identically.
-		$v7 = DashboardBody::encodeSync(['uid' => 'u1', 'title' => 'T', 'version' => 7]);
-		$v8 = DashboardBody::encodeSync(['uid' => 'u1', 'title' => 'T', 'version' => 8]);
+		$v7 = DashboardBody::encodeSync($this->spec('{"uid":"u1","title":"T","version":7}'));
+		$v8 = DashboardBody::encodeSync($this->spec('{"uid":"u1","title":"T","version":8}'));
 		self::assertSame(sha1($v7), sha1($v8));
+	}
+
+	/**
+	 * The regression this signature change exists for. A real dashboard is full of
+	 * empty JSON objects — `timepicker: {}`, a panel's `options: {}`,
+	 * `fieldConfig.defaults: {}`. Under the previous `array` signature these arrived
+	 * as empty PHP arrays and were written to the file as `[]`, so the mirrored file
+	 * no longer matched the dashboard, and the push (which decodes the file as
+	 * objects, carefully) sent the `[]` on to Grafana.
+	 *
+	 * Asserting on the raw JSON text, not on a decoded structure: `{}` and `[]` both
+	 * decode to `[]` under assoc, which is exactly the blindness that let this ship.
+	 */
+	public function testEncodeSyncPreservesEmptyObjectsAsObjects(): void {
+		$body = DashboardBody::encodeSync($this->spec(
+			'{"uid":"u1","title":"T","timepicker":{},"templating":{"list":[]},'
+			. '"panels":[{"id":1,"options":{},"fieldConfig":{"defaults":{},"overrides":[]}}]}',
+		));
+
+		self::assertStringNotContainsString('"timepicker": []', $body, 'an empty object must not flatten to an array');
+		self::assertStringNotContainsString('"options": []', $body);
+		self::assertStringNotContainsString('"defaults": []', $body);
+		self::assertStringContainsString('"timepicker": {}', $body);
+		self::assertStringContainsString('"options": {}', $body);
+		self::assertStringContainsString('"defaults": {}', $body);
+		// …and the genuinely-empty ARRAYS stay arrays. A blanket JSON_FORCE_OBJECT
+		// "fix" would pass every assertion above and corrupt these instead.
+		self::assertStringContainsString('"list": []', $body);
+		self::assertStringContainsString('"overrides": []', $body);
+	}
+
+	/** The caller reads `version` off the spec after encoding, so encodeSync must not mutate it. */
+	public function testEncodeSyncDoesNotMutateTheCallersSpec(): void {
+		$spec = $this->spec('{"uid":"u1","title":"T","id":42,"version":9}');
+		DashboardBody::encodeSync($spec);
+		self::assertSame(9, $spec->version, 'version still readable for the metadata stamp');
+		self::assertSame(42, $spec->id);
 	}
 
 	public function testEncodeReferenceBuildsAPointer(): void {

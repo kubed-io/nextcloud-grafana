@@ -12,12 +12,18 @@
 #   NC_BASE_URL, NC_ADMIN_USER, NC_ADMIN_PASS, GRAFANA_URL, OCC
 
 default:
-  # @todo scenarios are the documented spec for stages not yet wired (their step
-  # defs don't exist yet); skip them so CI runs only live scenarios. Drop the
-  # filter (or retag) as each stage's steps land.
+  # The four status tags all mean "do not run me", for four different reasons —
+  # @todo (code exists, test missing), @unbuilt (spec awaiting code), @blocked
+  # (the harness cannot reach it), @decision (there is no operation to run). Only
+  # @todo is a work queue; the others are documentation. See features/README.md.
+  #
+  # All four must be excluded here. An untagged scenario is CLAIMING to be live,
+  # and --strict makes CI enforce that claim by failing on any undefined step —
+  # which is the whole safety net. Leaving @unbuilt out of this filter would make
+  # every spec-only scenario a build failure the moment it was tagged honestly.
   gherkin:
     filters:
-      tags: '~@todo'
+      tags: '~@todo&&~@unbuilt&&~@blocked&&~@decision'
 
   suites:
     default:

@@ -468,9 +468,19 @@ final class SyncService {
 			$version = '';
 		} else {
 			// Sync — read the full record for the spec we serialize + the version we bank.
-			$record = $this->grafana->readDashboard($uid);
-			$dashboard = $record['dashboard'] ?? [];
-			$version = (string)($dashboard['version'] ?? '');
+			// Object decode (readDashboardSpec, not readDashboard): this is the one read
+			// whose result is written verbatim to a file, and an assoc round-trip would
+			// rewrite every empty `{}` in the spec as `[]`. See DashboardBody::encodeSync.
+			$dashboard = $this->grafana->readDashboardSpec($uid);
+			if ($dashboard === null) {
+				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
+					'app' => Application::APP_ID,
+					'uid' => $uid,
+				]);
+				return;
+			}
+			$rawVersion = $dashboard->version ?? null;
+			$version = is_scalar($rawVersion) ? (string)$rawVersion : '';
 			$body = DashboardBody::encodeSync($dashboard);
 		}
 
