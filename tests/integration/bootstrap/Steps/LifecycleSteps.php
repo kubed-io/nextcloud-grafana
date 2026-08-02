@@ -441,7 +441,6 @@ trait LifecycleSteps {
 		return $names[array_key_last($names)];
 	}
 
-
 	/**
 	 * The mapping name when a scenario arranged exactly one. Steps like "a managed
 	 * sync dashboard file" (no folder named) rely on this; throwing when it is
