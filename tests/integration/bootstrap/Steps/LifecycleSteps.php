@@ -47,7 +47,7 @@ trait LifecycleSteps {
 	 * @Given a managed :mode dashboard file in the :mapping folder
 	 */
 	public function aManagedDashboardFile(string $mode, ?string $mapping = null): void {
-		$mapping ??= $this->soleMappingName();
+		$mapping ??= $this->mappingForMode($mode);
 		$title = 'Board ' . bin2hex(random_bytes(3));
 		if ($mode === 'link') {
 			// A link file is authored by the PULL, not by a local write — a link mapping
@@ -442,13 +442,30 @@ trait LifecycleSteps {
 	}
 
 	/**
-	 * The mapping name when a scenario arranged exactly one. Steps like "a managed
-	 * sync dashboard file" (no folder named) rely on this; throwing when it is
-	 * ambiguous is better than silently picking the wrong mapping.
+	 * The mapping to use when a scenario says "a managed sync dashboard file" without
+	 * naming a folder.
+	 *
+	 * It resolves BY MODE, not by position, and that is load-bearing. A Background
+	 * commonly maps a sync folder and a scenario then adds a link one; picking the
+	 * first mapping would hand a "link" arrangement the SYNC mapping, quietly produce
+	 * a sync file, and the scenario would fail somewhere far away — or worse, pass
+	 * while proving the opposite of its title. Failing loudly when no mapping of that
+	 * mode exists is the only safe answer.
 	 */
+	private function mappingForMode(string $mode): string {
+		$matches = array_keys($this->mappingModes, $mode, true);
+		Assert::assertNotEmpty(
+			$matches,
+			"this scenario asked for a '$mode' file but arranged no '$mode' mapping — "
+			. 'arranged: ' . (json_encode($this->mappingModes) ?: '{}'),
+		);
+		return $matches[array_key_last($matches)];
+	}
+
+	/** The mapping name when a scenario arranged exactly one, regardless of mode. */
 	private function soleMappingName(): string {
-		$syncish = array_keys($this->mappedFolders);
-		Assert::assertNotEmpty($syncish, 'no mapping was arranged in this scenario');
-		return $syncish[0];
+		$names = array_keys($this->mappedFolders);
+		Assert::assertNotEmpty($names, 'no mapping was arranged in this scenario');
+		return $names[0];
 	}
 }

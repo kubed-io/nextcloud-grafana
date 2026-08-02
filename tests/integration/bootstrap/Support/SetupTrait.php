@@ -96,6 +96,7 @@ trait SetupTrait {
 
 		$this->davMkdir($ncFolder);
 		$this->mappedFolders[$name] = $ncFolder;
+		$this->mappingModes[$name] = $mode;
 		$this->currentFolder = $ncFolder;
 		return $ncFolder;
 	}
@@ -233,6 +234,7 @@ trait SetupTrait {
 		$this->createdDashboardUids = [];
 		$this->createdGrafanaFolders = [];
 		$this->mappedFolders = [];
+		$this->mappingModes = [];
 		$this->unmappedFolder = '';
 		$this->lastUid = '';
 		// Leave no bin setting behind for the next scenario.

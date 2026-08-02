@@ -157,14 +157,16 @@ Feature: Deleting a dashboard file
 
   @user @in-nextcloud @gesture @ui
   Scenario: Trashing a link never deletes the dashboard
-    Given a managed "link" dashboard file
+    Given a folder mapped as "link" to the Grafana folder "links"
+    And a managed "link" dashboard file in that folder
     When I move it to the trash
     Then the dashboard in Grafana is not deleted
     And the link is recoverable from the Nextcloud trash
 
   @user @in-nextcloud @gesture @ui
   Scenario: Purging a link never deletes the dashboard
-    Given a trashed "link" dashboard file
+    Given a folder mapped as "link" to the Grafana folder "links"
+    And a trashed "link" dashboard file
     When I purge it from the trash
     Then the dashboard in Grafana is not deleted
 

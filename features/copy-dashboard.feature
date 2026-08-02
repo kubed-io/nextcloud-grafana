@@ -68,7 +68,7 @@ Feature: Copying a dashboard file always makes a new instance
     Given a folder mapped as "link" to the Grafana folder "links"
     And a managed "link" dashboard file in that folder
     When I copy the file within the "links" folder
-    Then no dashboard is created in Grafana
+    Then no dashboard is created in Grafana for the copy
     And the copy carries no inherited "grafana_uid"
 
   # ══ COPIED IN GRAFANA ══════════════════════════════════════════════════════════

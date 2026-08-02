@@ -104,6 +104,8 @@ final class FeatureContext implements Context {
 	 * @var array<string,string> spec-friendly mapping name → Nextcloud folder
 	 */
 	private array $mappedFolders = [];
+	/** @var array<string,string> mapping name → sync|link */
+	private array $mappingModes = [];
 	private string $unmappedFolder = '';
 	private string $lastUid = '';
 	private string $newUid = '';
