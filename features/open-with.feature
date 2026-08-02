@@ -35,7 +35,7 @@
 Feature: Opening a dashboard file (Open in Grafana / Open with text editor)
   As a Nextcloud user
   I want the right openers for a dashboard file, defaulting to the right one for its mode
-  So that I'm never sent to a dashboard that isn't there, and can always edit the JSON
+  So that I'm never sent to a dashboard that isn't there, and can always edit the JSON.
 
   Background:
     Given the app is connected to Grafana

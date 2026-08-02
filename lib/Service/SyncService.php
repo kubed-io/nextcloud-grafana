@@ -59,6 +59,7 @@ final class SyncService {
 		private SyncGuard $guard,
 		private PushService $push,
 		private IMimeTypeLoader $mimeLoader,
+		private MirrorTimes $times,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -501,19 +502,31 @@ final class SyncService {
 		$uid = $row['uid'];
 		$displayName = $row['title'] !== '' ? $row['title'] : $uid;
 
+		// Both modes read the record now (saga Ch2, Course 8) — but for opposite reasons,
+		// and so with opposite error handling. A `sync` file CANNOT be written without
+		// the spec, so a failed read is a failed file and must reach {@see pullOne}'s
+		// counter. A `link` wants the record ONLY for `meta.updated`/`meta.created`
+		// (because `/api/search`, the row a pointer is built from, carries no timestamps
+		// at all), and a pointer that cannot be dated is still a perfectly good pointer —
+		// so there a failure costs the clocks and nothing else.
+		//
+		// Reading per branch rather than once up front is what keeps that asymmetry
+		// visible. A single shared read has to pick one error policy for both, and
+		// picking the lenient one turns a Grafana outage into a run that reports success
+		// over stale mirrors.
 		if ($effectiveMode === Mapping::MODE_LINK) {
-			// Lightweight pointer — no full spec read. Version is inert for a link (a
-			// pointer never pushes), so it stays empty.
+			// Lightweight pointer built from the search row. Version is inert for a link
+			// (a pointer never pushes), so it stays empty.
+			$read = $this->readClocksForLink($uid);
 			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
 			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
 			$version = '';
 		} else {
-			// Sync — read the full record for the spec we serialize + the version we bank.
-			// Object decode (readDashboardSpec, not readDashboard): this is the one read
-			// whose result is written verbatim to a file, and an assoc round-trip would
-			// rewrite every empty `{}` in the spec as `[]`. See DashboardBody::encodeSync.
-			$dashboard = $this->grafana->readDashboardSpec($uid);
-			if ($dashboard === null) {
+			// Deliberately UNGUARDED: a transient 500/timeout throws, pullOne catches it,
+			// and the file counts as failed. Swallowing it here would report a clean pull
+			// over content we never managed to read.
+			$read = $this->grafana->readDashboardSpec($uid);
+			if ($read === null) {
 				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
 					'app' => Application::APP_ID,
 					'uid' => $uid,
@@ -524,9 +537,8 @@ final class SyncService {
 				// reading as a clean no-op.
 				return false;
 			}
-			$rawVersion = $dashboard->version ?? null;
-			$version = is_scalar($rawVersion) ? (string)$rawVersion : '';
-			$body = DashboardBody::encodeSync($dashboard);
+			$version = $read->version();
+			$body = DashboardBody::encodeSync($read->spec);
 		}
 
 		$existing = $existingByUid[$uid] ?? null;
@@ -561,6 +573,7 @@ final class SyncService {
 			}
 			$this->metadata->stampSynced($fileId, $uid, $effectiveMode, $version, $body, $mapping->id);
 			$this->tags->apply($fileId, $effectiveMode);
+			$this->times->apply($existing, $read?->updated, $read?->created, $differs);
 			return !$differs;
 		}
 
@@ -581,7 +594,31 @@ final class SyncService {
 		$file = $folder->newFile($candidate, $body);
 		$this->metadata->stampSynced($file->getId(), $uid, $effectiveMode, $version, $body, $mapping->id);
 		$this->tags->apply($file->getId(), $effectiveMode);
+		$this->times->apply($file, $read?->updated, $read?->created, true);
 		return false; // a brand-new mirror is always a write
+	}
+
+	/**
+	 * Read a **link's** clocks, best-effort — the ONLY thing a link wants the dashboard
+	 * record for, since its body comes from the search row.
+	 *
+	 * Swallowing is right here and wrong for `sync`: a pointer that cannot be dated is
+	 * still a perfectly good pointer, so a transient Grafana error must cost the link its
+	 * timestamps and nothing else. The `sync` path deliberately does NOT come through
+	 * here — there the same error has to reach {@see pullOne}'s failure counter, because
+	 * a file we could not read is a file we did not sync.
+	 */
+	private function readClocksForLink(string $uid): ?DashboardSpec {
+		try {
+			return $this->grafana->readDashboardSpec($uid);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync pull: could not read a link\'s dashboard record; keeping its pointer undated', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return null;
+		}
 	}
 
 	/**
@@ -603,7 +640,12 @@ final class SyncService {
 	 * unreadable mirror degrades to "always rewrite" rather than to "never repair".
 	 */
 	private function bodyDiffers(File $file, string $body): bool {
-		if ((int)$file->getSize() !== strlen($body)) {
+		// Both sides to float, not `(int)$file->getSize()`: getSize() is `int|float` and
+		// returns a float once a size exceeds PHP_INT_MAX, where an int cast overflows.
+		// Float is exact for every integral value up to 2^53, so this compares two sizes
+		// numerically at any scale — and `!==` on two floats stays a strict comparison,
+		// which casting only one side would have quietly given up.
+		if ((float)$file->getSize() !== (float)strlen($body)) {
 			return true;
 		}
 		try {

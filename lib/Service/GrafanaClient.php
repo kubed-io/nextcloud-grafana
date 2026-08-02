@@ -253,10 +253,16 @@ final class GrafanaClient {
 	 * and an assoc round-trip rewrites every one of them as `[]`. See
 	 * {@see DashboardBody::encodeSync()} for what that costs.
 	 *
+	 * It also carries back `meta.updated` / `meta.created`, which arrive in the **same
+	 * response** as the spec. Returning them together is deliberate: they were being
+	 * discarded one line below, which made "when did this dashboard actually change?"
+	 * look like it needed a second request when it never did (saga Ch2, Course 8). A
+	 * caller cannot forget them now, because they come attached to the thing it wanted.
+	 *
 	 * Returns null when Grafana's response carries no usable `dashboard` object, so the
 	 * caller can skip the file rather than write a body that means nothing.
 	 */
-	public function readDashboardSpec(string $uid): ?\stdClass {
+	public function readDashboardSpec(string $uid): ?DashboardSpec {
 		$res = $this->request('GET', '/api/dashboards/uid/' . rawurlencode($uid));
 		$body = (string)$res->getBody();
 		if ($body === '') {
@@ -272,7 +278,15 @@ final class GrafanaClient {
 			return null;
 		}
 		$spec = $record->dashboard ?? null;
-		return $spec instanceof \stdClass ? $spec : null;
+		if (!$spec instanceof \stdClass) {
+			return null;
+		}
+		$meta = $record->meta ?? null;
+		return new DashboardSpec(
+			$spec,
+			DashboardSpec::parseTime($meta->updated ?? null),
+			DashboardSpec::parseTime($meta->created ?? null),
+		);
 	}
 
 	/**

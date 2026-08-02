@@ -11,11 +11,13 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\StorageService;
@@ -53,6 +55,7 @@ final class SyncServiceTest extends TestCase {
 	private OwnershipTags $tags;
 	private StorageService $storage;
 	private PushService $push;
+	private MirrorTimes $times;
 	private SyncService $service;
 
 	protected function setUp(): void {
@@ -72,6 +75,10 @@ final class SyncServiceTest extends TestCase {
 		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
 		$mimeLoader->method('getId')->willReturn(1);
 
+		// MirrorTimes reaches into the storage/cache stack, so it is mocked here and
+		// covered on its own in MirrorTimesTest — the reconciler only owes the mapping.
+		$this->times = $this->createMock(MirrorTimes::class);
+
 		$this->service = new SyncService(
 			$this->mappings,
 			$this->grafana,
@@ -81,6 +88,7 @@ final class SyncServiceTest extends TestCase {
 			$guard,
 			$this->push,
 			$mimeLoader,
+			$this->times,
 			new NullLogger(),
 		);
 	}
@@ -149,7 +157,7 @@ final class SyncServiceTest extends TestCase {
 
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
 		$this->grafana->method('readDashboardSpec')->with('d1')
-			->willReturn((object)['uid' => 'd1', 'title' => 'Board', 'version' => 5]);
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 5], null, null));
 
 		// The core contract: uid + mode + version stamped, and the sync pill applied.
 		$this->metadata->expects(self::once())
@@ -183,7 +191,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('ensureFolder')->willReturn($folder);
 		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
-		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6]);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6], null, null));
 
 		$res = $this->service->pullOne($this->mapping());
 
@@ -201,6 +209,74 @@ final class SyncServiceTest extends TestCase {
 	// The comparison only works because DashboardBody strips the VOLATILE fields
 	// (`id`, `version`) Grafana rewrites on every save — hence the `version` bump in
 	// the "unchanged" fixture below, which must NOT count as a change.
+
+	public function testASyncReadFailureCountsAsFailedNotSucceeded(): void {
+		// A transient Grafana error while reading the spec means we never learned what
+		// the dashboard holds. Reporting that as a clean pull would tell an admin the
+		// mapping is in step while its mirrors sit stale — so it has to reach the
+		// failure counter, which means the sync path must NOT swallow the exception.
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willThrowException(new \RuntimeException('Grafana 500'));
+
+		$res = $this->service->pullOne($this->mapping(Mapping::MODE_SYNC));
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(1, $res['failed']);
+		self::assertSame(0, $res['succeeded']);
+		self::assertSame(0, $res['unchanged']);
+	}
+
+	public function testPullHandsGrafanasOwnTimestampsToTheClockStamper(): void {
+		// The reconciler owes one thing here: pass through the two clocks the client
+		// already decoded, and say whether the body was just rewritten. The
+		// write-only-what-differs rule is MirrorTimes' — see MirrorTimesTest.
+		$spec = (object)['uid' => 'd1', 'title' => 'Board', 'version' => 6];
+		$body = DashboardBody::encodeSync($spec);
+
+		$existing = $this->mirror(10, FilenameCodec::format('Board', 'd1', false, 0), $body);
+
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$existing]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec($spec, 1771000000, 1739500000));
+
+		// Unchanged body → $force is false, so MirrorTimes decides by comparison.
+		$this->times->expects(self::once())
+			->method('apply')
+			->with($existing, 1771000000, 1739500000, false);
+
+		self::assertSame(1, $this->service->pullOne($this->mapping())['unchanged']);
+	}
+
+	public function testAJustWrittenMirrorForcesTheClockRestamp(): void {
+		// The body was rewritten, so the file's mtime is `now` — comparing would read a
+		// value we already know is wrong. The reconciler says so with $force = true.
+		$spec = (object)['uid' => 'd1', 'title' => 'Board'];
+
+		$existing = $this->createMock(File::class);
+		$existing->method('getId')->willReturn(10);
+		$existing->method('getName')->willReturn(FilenameCodec::format('Board', 'd1', false, 0));
+		$existing->method('getSize')->willReturn(1); // differs → rewritten
+
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$existing]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec($spec, 1771000000, null));
+
+		$this->times->expects(self::once())->method('apply')->with($existing, 1771000000, null, true);
+
+		self::assertSame(0, $this->service->pullOne($this->mapping())['unchanged']);
+	}
 
 	public function testPullDoesNotRewriteAMirrorThatAlreadyMatchesGrafana(): void {
 		$spec = (object)['uid' => 'd1', 'title' => 'Board', 'version' => 6];
@@ -303,7 +379,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($folder);
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
-		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd1', 'title' => 'Board']);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board'], null, null));
 
 		$res = $this->service->pullOne($this->mapping());
 
@@ -340,7 +416,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('ensureFolder')->willReturn($folder);
 		$this->metadata->method('read')->willReturn($this->managed($spec->uid, Mapping::MODE_SYNC, 'map-alpha'));
 		$this->grafana->method('listDashboards')->willReturn([$this->row($spec->uid, $spec->title)]);
-		$this->grafana->method('readDashboardSpec')->willReturn($spec);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec($spec, null, null));
 
 		return $this->service->pullOne($this->mapping());
 	}
@@ -373,7 +449,7 @@ final class SyncServiceTest extends TestCase {
 		});
 		// Grafana still returns only the "keep" dashboard.
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d-keep', 'Keep')]);
-		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd-keep', 'title' => 'Keep']);
+		$this->grafana->method('readDashboardSpec')->willReturn(new DashboardSpec((object)['uid' => 'd-keep', 'title' => 'Keep'], null, null));
 
 		$res = $this->service->pullOne($this->mapping(Mapping::MODE_SYNC, 'map-alpha'));
 
@@ -406,8 +482,38 @@ final class SyncServiceTest extends TestCase {
 
 	// ── link mode ────────────────────────────────────────────────────────────────
 
-	public function testPullOneLinkModeWritesPointerWithoutReadingTheSpec(): void {
+	public function testPullOneLinkModeWritesAPointerBodyNotTheSpec(): void {
+		// A link's BODY is still the pointer built from the search row — the spec is
+		// never serialized into it. What changed in Course 8 is that the record IS now
+		// read, because `/api/search` carries no timestamps and a link's clocks have to
+		// come from somewhere. One GET per link, per pull, deliberately (saga Ch2 §8).
 		$folder = $this->createMock(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$folder->method('nodeExists')->willReturn(false);
+		$folder->method('newFile')
+			->with('Board.grafana.json', self::stringContains('grafana.reference/v1'))
+			->willReturn($this->file(200, 'Board.grafana.json'));
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('deepLinkFromPath')->willReturn('https://grafana.example/d/d1/x');
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board'], 1700, 900));
+
+		$this->tags->expects(self::once())->method('apply')->with(200, Mapping::MODE_LINK);
+		// The point of paying for that GET: a link's clocks are real too.
+		$this->times->expects(self::once())->method('apply')->with(self::anything(), 1700, 900, true);
+
+		$res = $this->service->pullOne($this->mapping(Mapping::MODE_LINK));
+
+		self::assertSame(1, $res['succeeded']);
+	}
+
+	public function testALinkStillGetsItsPointerWhenTheRecordCannotBeRead(): void {
+		// The record is only wanted for the clocks here, so a read that fails must cost
+		// the link its dates, never its file.
+		$folder = $this->createStub(Folder::class);
 		$folder->method('getDirectoryListing')->willReturn([]);
 		$folder->method('nodeExists')->willReturn(false);
 		$folder->method('newFile')->willReturn($this->file(200, 'Board.grafana.json'));
@@ -416,14 +522,11 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('ensureFolder')->willReturn($folder);
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
 		$this->grafana->method('deepLinkFromPath')->willReturn('https://grafana.example/d/d1/x');
-		// A link never reads the full dashboard spec.
-		$this->grafana->expects(self::never())->method('readDashboardSpec');
+		$this->grafana->method('readDashboardSpec')->willThrowException(new \RuntimeException('Grafana 500'));
 
-		$this->tags->expects(self::once())->method('apply')->with(200, Mapping::MODE_LINK);
+		$this->times->expects(self::once())->method('apply')->with(self::anything(), null, null, true);
 
-		$res = $this->service->pullOne($this->mapping(Mapping::MODE_LINK));
-
-		self::assertSame(1, $res['succeeded']);
+		self::assertSame(1, $this->service->pullOne($this->mapping(Mapping::MODE_LINK))['succeeded']);
 	}
 
 	// ── push (bulk Sync to Grafana) ──────────────────────────────────────────────

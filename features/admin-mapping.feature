@@ -81,7 +81,7 @@ Feature: Admin configures folder mappings
   # Difference #2 — the serialization cut is a per-mapping field. It defaults to the
   # classic JSON dashboard model and can opt into the newer k8s-style YAML schema.
   @admin @occ @ui
-  Scenario: A mapping records its serialization format, defaulting to json
+  Scenario: A mapping records its serialization format, defaulting to "json"
     When the admin adds these mappings:
       | grafana folder | folder    | mode |
       | network        | network   | sync |

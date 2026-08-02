@@ -59,7 +59,7 @@ Feature: Create a dashboard from Nextcloud
   Scenario: A file carrying a uid that no longer exists is created fresh
     Given a folder mapped as "sync" to the Grafana folder "demo"
     When I place a ".grafana.json" file whose JSON carries a uid no dashboard uses in that folder
-    Then a dashboard is created in Grafana from the file's JSON
+    Then a dashboard is created in Grafana from the file's JSON body
     And the file is stamped with the uid it was given
 
   # The dashboard's name comes from the filename, because that is what the user just
@@ -73,7 +73,7 @@ Feature: Create a dashboard from Nextcloud
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A file that is not valid JSON creates nothing and says so
     Given a folder mapped as "sync" to the Grafana folder "demo"
-    When I create a ".grafana.json" file in that folder whose contents are not valid JSON
+    When I create a ".grafana.json" file with invalid JSON in that folder
     Then no dashboard is created in Grafana
     And the failure is reported to the user
     And the file is left where the user put it
@@ -121,7 +121,7 @@ Feature: Create a dashboard from Nextcloud
     When a dashboard is created in the "links" Grafana folder
     And the "links" mapping is pulled
     Then a pointer file appears in the mapped folder
-    And it holds no dashboard JSON
+    And it holds no dashboard JSON body
 
   # Two dashboards can share a title; a filename cannot be shared. The collision
   # suffix is what keeps one dashboard to one file when that happens.
