@@ -502,24 +502,30 @@ final class SyncService {
 		$uid = $row['uid'];
 		$displayName = $row['title'] !== '' ? $row['title'] : $uid;
 
-		// One read serves both modes now (saga Ch2, Course 8). A `sync` file needs it for
-		// the spec it serializes; a `link` needs it ONLY for `meta.updated`/`meta.created`,
-		// because `/api/search` — the row a pointer is built from — carries no timestamps
-		// at all. That makes the clocks free for sync (the read already happened, and
-		// happens BEFORE the change check, since the spec is what the comparison body is
-		// built from) and one extra GET per link, per pull. Deliberate: a mirror that is
-		// honest about its dates for only half its files is a bug you have to keep
-		// explaining, and the cheap alternatives fail silently.
-		$read = $this->readSource($uid);
-
+		// Both modes read the record now (saga Ch2, Course 8) — but for opposite reasons,
+		// and so with opposite error handling. A `sync` file CANNOT be written without
+		// the spec, so a failed read is a failed file and must reach {@see pullOne}'s
+		// counter. A `link` wants the record ONLY for `meta.updated`/`meta.created`
+		// (because `/api/search`, the row a pointer is built from, carries no timestamps
+		// at all), and a pointer that cannot be dated is still a perfectly good pointer —
+		// so there a failure costs the clocks and nothing else.
+		//
+		// Reading per branch rather than once up front is what keeps that asymmetry
+		// visible. A single shared read has to pick one error policy for both, and
+		// picking the lenient one turns a Grafana outage into a run that reports success
+		// over stale mirrors.
 		if ($effectiveMode === Mapping::MODE_LINK) {
 			// Lightweight pointer built from the search row. Version is inert for a link
-			// (a pointer never pushes), so it stays empty. A read that failed costs the
-			// link its clocks, never its body.
+			// (a pointer never pushes), so it stays empty.
+			$read = $this->readClocksForLink($uid);
 			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
 			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
 			$version = '';
 		} else {
+			// Deliberately UNGUARDED: a transient 500/timeout throws, pullOne catches it,
+			// and the file counts as failed. Swallowing it here would report a clean pull
+			// over content we never managed to read.
+			$read = $this->grafana->readDashboardSpec($uid);
 			if ($read === null) {
 				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
 					'app' => Application::APP_ID,
@@ -593,19 +599,20 @@ final class SyncService {
 	}
 
 	/**
-	 * Read the dashboard record behind $uid, best-effort.
+	 * Read a **link's** clocks, best-effort — the ONLY thing a link wants the dashboard
+	 * record for, since its body comes from the search row.
 	 *
-	 * A `sync` file cannot be written without it, so its caller turns null into a skip.
-	 * A `link` only wants the timestamps, and a pointer body that cannot be dated is
-	 * still a perfectly good pointer — so a failed read must not cost a link its file.
-	 * Swallowing here rather than at each call site is what keeps that asymmetry in one
-	 * place instead of two.
+	 * Swallowing is right here and wrong for `sync`: a pointer that cannot be dated is
+	 * still a perfectly good pointer, so a transient Grafana error must cost the link its
+	 * timestamps and nothing else. The `sync` path deliberately does NOT come through
+	 * here — there the same error has to reach {@see pullOne}'s failure counter, because
+	 * a file we could not read is a file we did not sync.
 	 */
-	private function readSource(string $uid): ?DashboardSpec {
+	private function readClocksForLink(string $uid): ?DashboardSpec {
 		try {
 			return $this->grafana->readDashboardSpec($uid);
 		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync pull: could not read the dashboard record', [
+			$this->logger->warning('grafana_sync pull: could not read a link\'s dashboard record; keeping its pointer undated', [
 				'app' => Application::APP_ID,
 				'uid' => $uid,
 				'exception' => $e,

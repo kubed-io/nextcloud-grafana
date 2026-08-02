@@ -210,6 +210,26 @@ final class SyncServiceTest extends TestCase {
 	// (`id`, `version`) Grafana rewrites on every save — hence the `version` bump in
 	// the "unchanged" fixture below, which must NOT count as a change.
 
+	public function testASyncReadFailureCountsAsFailedNotSucceeded(): void {
+		// A transient Grafana error while reading the spec means we never learned what
+		// the dashboard holds. Reporting that as a clean pull would tell an admin the
+		// mapping is in step while its mirrors sit stale — so it has to reach the
+		// failure counter, which means the sync path must NOT swallow the exception.
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willThrowException(new \RuntimeException('Grafana 500'));
+
+		$res = $this->service->pullOne($this->mapping(Mapping::MODE_SYNC));
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(1, $res['failed']);
+		self::assertSame(0, $res['succeeded']);
+		self::assertSame(0, $res['unchanged']);
+	}
+
 	public function testPullHandsGrafanasOwnTimestampsToTheClockStamper(): void {
 		// The reconciler owes one thing here: pass through the two clocks the client
 		// already decoded, and say whether the body was just rewritten. The
