@@ -292,8 +292,14 @@ every scenario in the file shares one fate.
 A `@blocked` that does not say what is missing is a `@todo` nobody checked. The
 ones that exist here are: **no browser** (the Files-app menu surface), **no way to
 make Grafana unreachable mid-request**, **no app remove/reinstall in CI** (the
-harness can only disable and enable), and **no proven DAV REPORT search over
-`nc:metadata-*`**.
+harness can only disable and enable), **no proven DAV REPORT search over
+`nc:metadata-*`**, and **no `nc:metadata-*` served on the trashbin endpoint**.
+
+That last one has a lesson attached. A trashed file's metadata reads as null for
+every key, whether it was stripped or not — so an absence assertion against it
+passes vacuously. It was caught only because the opposite scenario asserted the
+same property was PRESENT and failed loudly. **When a property can be absent for
+the wrong reason, pair the assertion with one that fails if the surface is dead.**
 
 If the stated reason stops being true, the tag is stale and the scenario is
 probably promotable.

@@ -86,38 +86,6 @@ trait TrashSteps {
 		Assert::assertObjectHasProperty('title', $body, 'the trashed file no longer holds a dashboard spec');
 	}
 
-	/**
-	 * @Then the trashed file carries no Grafana metadata at all
-	 * @Then the trashed file carries no Grafana metadata
-	 *
-	 * NOTE: no parentheses in either pattern. Behat's step syntax reads `(...)` as an
-	 * OPTIONAL GROUP, so a pattern like `Grafana is not contacted (…)` silently also
-	 * matches the bare `Grafana is not contacted` — and then collides with the step
-	 * that legitimately owns that sentence. The failure reads as an ambiguous match on
-	 * a line neither definition looks like. Keep asides in comments, not step text.
-	 */
-	public function theTrashedFileCarriesNoMetadata(): void {
-		$entry = $this->requireTrashEntry();
-		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
-			$actual = $this->davReadTrashMetadata($entry, $key);
-			$this->check(
-				$actual === null || $actual === '',
-				"the trashed file still carries $key = " . var_export($actual, true)
-				. ' — bin-off must strip the dead identity',
-			);
-		}
-	}
-
-	/** @Then the trashed file KEEPS its :key */
-	public function theTrashedFileKeepsIts(string $key): void {
-		$actual = $this->davReadTrashMetadata($this->requireTrashEntry(), $key);
-		$this->check(
-			$actual === $this->lastUid,
-			"bin-on must keep the $key — the dashboard was parked, not deleted. "
-			. "Expected '{$this->lastUid}', got " . var_export($actual, true),
-		);
-	}
-
 	/** @Then the dashboard is moved into the :folder Grafana folder and not deleted */
 	public function theDashboardIsParkedIn(string $folder): void {
 		$record = $this->grafanaGetDashboard($this->lastUid);

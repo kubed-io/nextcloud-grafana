@@ -112,8 +112,16 @@ Feature: Deleting a dashboard file
     And a managed "sync" dashboard file
     When I move it to the trash
     Then the dashboard is deleted in Grafana
-    And the trashed file carries no Grafana metadata at all
     And the file is recoverable from the Nextcloud trash with its JSON intact
+    # The other half of the rule — that the dead uid is STRIPPED — cannot be observed
+    # here: Nextcloud's trashbin DAV endpoint serves no `nc:metadata-*`, so every key
+    # reads null for a trashed file whether it was stripped or not. Asserting it here
+    # passed vacuously until its bin-on counterpart proved the surface was dead.
+    #
+    # It is observable one step later, and restore-dashboard.feature asserts it there:
+    # a stripped file restores as a NEW dashboard with a NEW uid, a kept one restores
+    # to the same dashboard. Identity is proven by what comes back, not by reading a
+    # property off a file in the bin.
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Emptying the trash for a bin-off file touches nothing in Grafana
@@ -146,8 +154,10 @@ Feature: Deleting a dashboard file
     And a managed "sync" dashboard file
     When I move it to the trash
     Then the dashboard is moved into the "nextcloud-trash" Grafana folder and not deleted
-    And the trashed file KEEPS its "grafana_uid"
     And the file is recoverable from the Nextcloud trash
+    # That the file KEEPS its uid is asserted in restore-dashboard.feature, where it
+    # is observable: the parked dashboard comes back with the same id. See the bin-off
+    # scenario above for why it cannot be read off the trashed file directly.
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Emptying the trash permanently deletes only the cleared file's dashboard from the bin (bin on)

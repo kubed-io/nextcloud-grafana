@@ -48,9 +48,11 @@ without adding it to that filter has just made those scenarios fail the build.
 
 - A scenario tagged `@todo` whose feature has no code → it is `@unbuilt`.
 - A `@blocked` that does not **name the missing capability** → it is a `@todo`
-  nobody checked. The four that exist here: no browser, no way to make Grafana
+  nobody checked. The five that exist here: no browser, no way to make Grafana
   unreachable mid-request, no app remove/reinstall in CI, no proven DAV REPORT
-  search over `nc:metadata-*`.
+  search over `nc:metadata-*`, and **no `nc:metadata-*` on the trashbin endpoint
+  at all** (a trashed file's metadata cannot be read without restoring it, and
+  restoring is a state transition, not a peek).
 - **A `@blocked` whose stated reason is no longer true.** When a tag cites a
   reason, check the reason still holds.
 - A `@decision` on something with a real gesture. `@decision` is for the
