@@ -72,9 +72,15 @@ trait SyncSteps {
 	 * @When the dashboard file :path is edited to title :title
 	 */
 	public function theDashboardFileIsEditedToTitle(string $path, string $title): void {
-		$spec = json_decode($this->davGet($path), true);
-		Assert::assertIsArray($spec, "dashboard file '$path' is not valid JSON");
-		$spec['title'] = $title;
+		// Object decode, because this PUTs the whole body back. An assoc round-trip
+		// would rewrite every empty `{}` in the spec (`timepicker`, a panel's
+		// `options`, `fieldConfig.defaults`) as `[]` — so a step that arranges "the
+		// user changed the title" would quietly reshape the rest of the dashboard,
+		// and the push assertion downstream would be checking a body this step
+		// corrupted. Same rule the production pull and push paths follow.
+		$spec = json_decode($this->davGet($path), false, 512, JSON_THROW_ON_ERROR);
+		Assert::assertInstanceOf(\stdClass::class, $spec, "dashboard file '$path' is not a JSON object");
+		$spec->title = $title;
 		$this->davPut($path, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 	}
 

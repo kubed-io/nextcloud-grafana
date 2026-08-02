@@ -63,13 +63,31 @@ final class DashboardBody {
 	 * file and what {@see DashboardMetadata::stampSynced()} hashes — stable across
 	 * Grafana re-saves.
 	 *
-	 * @param array<string,mixed> $dashboard the `dashboard` object from GET /api/dashboards/uid/{uid}
+	 * TAKES A `\stdClass`, NOT AN ARRAY, AND THAT IS THE WHOLE POINT. A dashboard spec
+	 * is full of empty JSON objects — `timepicker: {}`, a panel's `options: {}`,
+	 * `fieldConfig.defaults: {}`, `annotations`/`templating` wrappers. `json_decode`
+	 * with `assoc = true` turns every one of them into an empty PHP array, and
+	 * `json_encode` then writes them back out as `[]`. The file on disk stops matching
+	 * the dashboard it mirrors, and because the push reads that file, the `[]` is
+	 * eventually sent back to Grafana.
+	 *
+	 * {@see PushService} already decodes the *file* as objects and says so in its own
+	 * comment — the pull was the half that silently undid it, writing the flattened
+	 * shapes the push then carefully preserved. Same defect the n8n sibling hit from
+	 * the other direction. Keeping stdClass end to end is what makes the round-trip
+	 * shape-exact.
+	 *
+	 * @param \stdClass $dashboard the `dashboard` object from GET /api/dashboards/uid/{uid},
+	 *                             decoded with `assoc = false`
 	 */
-	public static function encodeSync(array $dashboard): string {
+	public static function encodeSync(\stdClass $dashboard): string {
+		// Clone: the caller's object may still be read for its `version` afterwards,
+		// and unsetting properties in place would take that away.
+		$spec = clone $dashboard;
 		foreach (self::VOLATILE as $k) {
-			unset($dashboard[$k]);
+			unset($spec->{$k});
 		}
-		return json_encode($dashboard, self::JSON_PRETTY);
+		return json_encode($spec, self::JSON_PRETTY);
 	}
 
 	/**

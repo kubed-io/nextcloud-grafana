@@ -233,7 +233,46 @@ final class GrafanaClient {
 	 */
 	public function readDashboard(string $uid): array {
 		$res = $this->request('GET', '/api/dashboards/uid/' . rawurlencode($uid));
-		return $this->decode($res);
+		// decode() is typed array<string,mixed> because it serves every endpoint; this
+		// one endpoint's shape is known, and asserting it here is what lets callers rely
+		// on `meta.folderUid` without re-checking. Both keys stay optional: Grafana has
+		// answered 200 with a partial body before now.
+		/** @var array{meta?:array<string,mixed>, dashboard?:array<string,mixed>} $record */
+		$record = $this->decode($res);
+		return $record;
+	}
+
+	/**
+	 * The same read as {@see readDashboard()}, but returning the `dashboard` spec as a
+	 * **`\stdClass`** — object shapes intact.
+	 *
+	 * This exists because {@see decode()} is `assoc = true` everywhere, which is right
+	 * for the places that just want `$row['uid']`, and wrong for the one place that
+	 * re-serializes a whole dashboard to disk. A dashboard is full of empty JSON
+	 * objects (`timepicker: {}`, a panel's `options: {}`, `fieldConfig.defaults: {}`),
+	 * and an assoc round-trip rewrites every one of them as `[]`. See
+	 * {@see DashboardBody::encodeSync()} for what that costs.
+	 *
+	 * Returns null when Grafana's response carries no usable `dashboard` object, so the
+	 * caller can skip the file rather than write a body that means nothing.
+	 */
+	public function readDashboardSpec(string $uid): ?\stdClass {
+		$res = $this->request('GET', '/api/dashboards/uid/' . rawurlencode($uid));
+		$body = (string)$res->getBody();
+		if ($body === '') {
+			return null;
+		}
+		try {
+			$record = json_decode($body, false, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException $e) {
+			$this->logger->warning('Grafana response was not valid JSON', ['exception' => $e]);
+			throw new \RuntimeException('Grafana response was not valid JSON.', 0, $e);
+		}
+		if (!$record instanceof \stdClass) {
+			return null;
+		}
+		$spec = $record->dashboard ?? null;
+		return $spec instanceof \stdClass ? $spec : null;
 	}
 
 	/**

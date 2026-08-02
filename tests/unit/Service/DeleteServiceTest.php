@@ -16,6 +16,7 @@ use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\OwnershipTags;
+use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -36,6 +37,7 @@ final class DeleteServiceTest extends TestCase {
 	private DashboardMetadata $metadata;
 	private OwnershipTags $tags;
 	private CreateService $create;
+	private RecycleBin $recycleBin;
 	private DeleteService $service;
 
 	protected function setUp(): void {
@@ -43,11 +45,13 @@ final class DeleteServiceTest extends TestCase {
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->tags = $this->createMock(OwnershipTags::class);
 		$this->create = $this->createMock(CreateService::class);
+		$this->recycleBin = $this->createMock(RecycleBin::class);
 		$this->service = new DeleteService(
 			$this->grafana,
 			$this->metadata,
 			$this->tags,
 			$this->create,
+			$this->recycleBin,
 			new SyncGuard(),
 			new NullLogger(),
 		);
@@ -117,6 +121,7 @@ final class DeleteServiceTest extends TestCase {
 	// ── hardDelete (purge / trash-bypass) ────────────────────────────────────────────
 
 	public function testHardDeleteRemovesAManagedSyncDashboard(): void {
+		$this->recycleBin->method('isEnabled')->willReturn(false);
 		$this->grafana->expects(self::once())->method('deleteDashboard')->with('dash-1');
 		$this->service->hardDelete($this->managed('dash-1'));
 	}
@@ -173,5 +178,52 @@ final class DeleteServiceTest extends TestCase {
 		$this->create->expects(self::never())->method('createForFile');
 
 		$this->service->restore($this->file(5), $this->managed('dash-1', Mapping::MODE_LINK), $this->mapping());
+	}
+
+	/**
+	 * THE RESCUE CASE. The "recycle bin" is an ordinary Grafana folder, visible in
+	 * Grafana's own UI, so anyone can drag a parked dashboard back out of it. If the
+	 * purge still deleted by uid, emptying a Nextcloud trash weeks later would destroy
+	 * a live dashboard somebody had deliberately saved — and Grafana has no undo.
+	 */
+	public function testHardDeleteLeavesADashboardThatWasRescuedOutOfTheBin(): void {
+		$this->recycleBin->method('isEnabled')->willReturn(true);
+		$this->recycleBin->method('activeFolderUid')->willReturn(self::BIN_UID);
+		// Someone moved it back to its real folder.
+		$this->grafana->method('readDashboard')->willReturn(['meta' => ['folderUid' => 'gf-alpha']]);
+		$this->grafana->expects(self::never())->method('deleteDashboard');
+
+		$this->service->hardDelete($this->managed('d1'));
+	}
+
+	public function testHardDeleteStillDeletesADashboardThatIsActuallyParked(): void {
+		$this->recycleBin->method('isEnabled')->willReturn(true);
+		$this->recycleBin->method('activeFolderUid')->willReturn(self::BIN_UID);
+		$this->grafana->method('readDashboard')->willReturn(['meta' => ['folderUid' => self::BIN_UID]]);
+		$this->grafana->expects(self::once())->method('deleteDashboard')->with('d1');
+
+		$this->service->hardDelete($this->managed('d1'));
+	}
+
+	/**
+	 * Cannot prove it is still parked → do not delete. Leaving a dashboard alive that
+	 * could have gone is a recoverable leak; deleting one that should have lived is not.
+	 */
+	public function testHardDeleteSkipsTheDeleteWhenGrafanaCannotBeAsked(): void {
+		$this->recycleBin->method('isEnabled')->willReturn(true);
+		$this->recycleBin->method('activeFolderUid')->willReturn(self::BIN_UID);
+		$this->grafana->method('readDashboard')->willThrowException(new \RuntimeException('Grafana is down'));
+		$this->grafana->expects(self::never())->method('deleteDashboard');
+
+		$this->service->hardDelete($this->managed('d1'));
+	}
+
+	/** Bin OFF has no bin to check: a still-managed file here is a trash-bypass, and this is its only delete. */
+	public function testHardDeleteWithTheBinOffDeletesWithoutCheckingAnyFolder(): void {
+		$this->recycleBin->method('isEnabled')->willReturn(false);
+		$this->grafana->expects(self::never())->method('readDashboard');
+		$this->grafana->expects(self::once())->method('deleteDashboard')->with('d1');
+
+		$this->service->hardDelete($this->managed('d1'));
 	}
 }

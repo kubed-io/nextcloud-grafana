@@ -147,8 +147,8 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('ensureFolder')->willReturn($folder);
 
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
-		$this->grafana->method('readDashboard')->with('d1')
-			->willReturn(['dashboard' => ['uid' => 'd1', 'title' => 'Board', 'version' => 5], 'meta' => ['folderUid' => 'gf-alpha']]);
+		$this->grafana->method('readDashboardSpec')->with('d1')
+			->willReturn((object)['uid' => 'd1', 'title' => 'Board', 'version' => 5]);
 
 		// The core contract: uid + mode + version stamped, and the sync pill applied.
 		$this->metadata->expects(self::once())
@@ -182,7 +182,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->method('ensureFolder')->willReturn($folder);
 		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
-		$this->grafana->method('readDashboard')->willReturn(['dashboard' => ['uid' => 'd1', 'title' => 'Board', 'version' => 6]]);
+		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6]);
 
 		$res = $this->service->pullOne($this->mapping());
 
@@ -219,7 +219,7 @@ final class SyncServiceTest extends TestCase {
 		});
 		// Grafana still returns only the "keep" dashboard.
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d-keep', 'Keep')]);
-		$this->grafana->method('readDashboard')->willReturn(['dashboard' => ['uid' => 'd-keep', 'title' => 'Keep']]);
+		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd-keep', 'title' => 'Keep']);
 
 		$res = $this->service->pullOne($this->mapping(Mapping::MODE_SYNC, 'map-alpha'));
 
@@ -263,7 +263,7 @@ final class SyncServiceTest extends TestCase {
 		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
 		$this->grafana->method('deepLinkFromPath')->willReturn('https://grafana.example/d/d1/x');
 		// A link never reads the full dashboard spec.
-		$this->grafana->expects(self::never())->method('readDashboard');
+		$this->grafana->expects(self::never())->method('readDashboardSpec');
 
 		$this->tags->expects(self::once())->method('apply')->with(200, Mapping::MODE_LINK);
 

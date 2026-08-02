@@ -171,6 +171,12 @@ jobs:
     # Behat runs from the integration dir; OCC points back at the server root so
     # `occ` resolves. Formatters (pretty → stdout, junit → junit/) are configured
     # in behat.dist.yml, so no --format flags needed here.
+    #
+    # --strict is what makes the status tags mean something. Without it an
+    # undefined step is reported as "undefined" and the run still passes, so an
+    # untagged scenario can silently describe behaviour nothing tests — the exact
+    # ambiguity the four status tags exist to remove. With it, leaving a scenario
+    # untagged is a claim that CI enforces. Matches the penpot sibling.
     - name: Run Behat
       working-directory: apps/${{ env.APP_ID }}/tests/integration
       env:
@@ -178,7 +184,7 @@ jobs:
         NC_BASE_URL: http://localhost:8080
         # The minted token, available to scenarios as an "admin already has a token".
         GRAFANA_TOKEN: ${{ steps.grafana_token.outputs.token }}
-      run: vendor/bin/behat --config behat.dist.yml
+      run: vendor/bin/behat --config behat.dist.yml --strict
 
     - name: Publish integration results
       if: always()

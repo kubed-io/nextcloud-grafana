@@ -13,10 +13,14 @@ use Behat\Behat\Context\Context;
 use GuzzleHttp\Client;
 use OCA\GrafanaSync\Tests\Integration\Steps\AdminSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\AppLifecycleSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\LifecycleSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\RenameSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\SyncSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\TrashSteps;
 use OCA\GrafanaSync\Tests\Integration\Support\GrafanaApiTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\OccTrait;
+use OCA\GrafanaSync\Tests\Integration\Support\SetupTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\WebDavTrait;
 
 /**
@@ -43,10 +47,14 @@ final class FeatureContext implements Context {
 	use OccTrait;
 	use WebDavTrait;
 	use GrafanaApiTrait;
+	use SetupTrait;
 	use AppLifecycleSteps;
 	use AdminSteps;
 	use MappingSteps;
 	use SyncSteps;
+	use LifecycleSteps;
+	use TrashSteps;
+	use RenameSteps;
 
 	private const APP_ID = 'grafana_sync';
 
@@ -87,6 +95,23 @@ final class FeatureContext implements Context {
 	/** State carried between steps within a scenario. */
 	private string $currentFolder = '';
 	private string $currentFilePath = '';
+
+	/**
+	 * Lifecycle state. `$lastUid` is the thread the whole app is built on — the
+	 * dashboard uid a scenario arranged — so most assertions are really "is this uid
+	 * still where it should be".
+	 *
+	 * @var array<string,string> spec-friendly mapping name → Nextcloud folder
+	 */
+	private array $mappedFolders = [];
+	/** @var array<string,string> mapping name → sync|link */
+	private array $mappingModes = [];
+	private string $unmappedFolder = '';
+	private string $lastUid = '';
+	private string $newUid = '';
+	private string $copyTarget = '';
+	private string $trashedFrom = '';
+	private int $lastMoveStatus = 0;
 
 	public function __construct() {
 		$this->occ = getenv('OCC') ?: 'php occ';

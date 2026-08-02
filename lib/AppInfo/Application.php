@@ -147,10 +147,14 @@ final class Application extends App implements IBootstrap {
 		// and it registers nothing but the key *schema*; nothing writes a value until
 		// the pull/push spine lands, so a save still triggers no Grafana behaviour yet.
 		//
-		// getAppContainer() resolves THIS app's services (DashboardMetadata). Its
-		// IAppContainer return type is deprecated by core with no non-deprecated
-		// accessor on IBootContext, so that one Psalm deprecation rides the baseline.
-		$context->getAppContainer()->get(DashboardMetadata::class)->register();
+		// injectFn(), not getAppContainer(): the latter returns IAppContainer, which core
+		// has deprecated. injectFn resolves the argument through the same container by
+		// type-hint, so this is ordinary dependency injection rather than a container
+		// lookup — no deprecated surface touched, and the dependency is now visible in
+		// the signature instead of buried in a get() call.
+		$context->injectFn(static function (DashboardMetadata $metadata): void {
+			$metadata->register();
+		});
 
 		// Empty-trash (hard delete) for the delete lifecycle: permanently deleting a file from the
 		// Nextcloud trash does NOT fire a typed event — the trashbin emits the legacy
@@ -162,7 +166,7 @@ final class Application extends App implements IBootstrap {
 		// fire TrashPurgeHook::preDelete more than once per purge (repeated deletes / log spam).
 		if (!self::$purgeHookRegistered) {
 			self::$purgeHookRegistered = true;
-			$purgeHook = $context->getAppContainer()->get(TrashPurgeHook::class);
+			$purgeHook = $context->injectFn(static fn (TrashPurgeHook $hook): TrashPurgeHook => $hook);
 			// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
 			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
 			/** @psalm-suppress DeprecatedMethod */

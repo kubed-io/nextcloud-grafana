@@ -38,9 +38,44 @@ final class RecycleBin {
 	) {
 	}
 
-	/** Whether the admin turned on id-preserving deletes (the bin folder is in use). */
+	/**
+	 * Whether the admin turned on id-preserving deletes (the bin folder is in use).
+	 *
+	 * The rescue is not defensive padding. `bin_enabled` was written as a *string* by
+	 * the old INTERNAL declarative path, so on any instance that saved the form before
+	 * {@see \OCA\GrafanaSync\Settings\AutoSyncSettings} moved to EXTERNAL storage,
+	 * `getValueBool` raises an AppConfigTypeConflict. Letting that escape would throw
+	 * inside `BeforeNodeDeletedEvent` — turning "is the bin on?" into a failed delete.
+	 * Parsing the legacy string instead keeps the admin's opted-in id preservation
+	 * intact until their next save rewrites it as a real bool.
+	 */
 	public function isEnabled(): bool {
-		return $this->config->getValueBool(Application::APP_ID, 'bin_enabled', false);
+		try {
+			return $this->config->getValueBool(Application::APP_ID, 'bin_enabled', false);
+		} catch (\Throwable $boolError) {
+			try {
+				$raw = $this->config->getValueString(Application::APP_ID, 'bin_enabled', '');
+			} catch (\Throwable $stringError) {
+				// NOT "treat as off". Returning false here would be the single most
+				// destructive thing this class can do: activeFolderUid() would answer
+				// null, DeleteService would take the BIN-OFF branch, and the next
+				// trashed dashboard would be PERMANENTLY deleted in Grafana — which has
+				// no undo — even though the admin had explicitly opted into preserving
+				// it. A config-backend failure must never silently downgrade a
+				// preservation guarantee into destruction.
+				//
+				// Throwing instead aborts the delete (the listener propagates it and the
+				// file stays put), which is the same answer this class already gives when
+				// bin mode is on but the folder is unusable: refuse rather than guess.
+				throw new \RuntimeException(
+					'Could not read the Grafana recycle-bin setting, so the delete was refused '
+					. 'rather than risk a permanent deletion the admin did not ask for.',
+					0,
+					$stringError,
+				);
+			}
+			return in_array(strtolower(trim($raw)), ['1', 'true', 'yes', 'on'], true);
+		}
 	}
 
 	/** The configured bin folder's human title (empty when unset). */
