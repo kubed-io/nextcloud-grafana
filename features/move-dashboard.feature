@@ -72,7 +72,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
 
   # ── 1. within the same mapping: only the name ────────────────────────────────────
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Moving/renaming within the same mapping keeps it managed
     Given a managed "sync" dashboard file in the "alpha" folder
     When I rename the file within the "alpha" folder
@@ -105,7 +105,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
 
   # ── 3. mapped → unmapped: DELETE in Grafana, strip identity (BIN OFF, default) ────
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Moving a sync file out of every mapping deletes it in Grafana and strips the file's identity
     Given the Grafana recycle-bin folder is off
     And a managed "sync" dashboard file in the "alpha" folder
@@ -115,7 +115,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And the full dashboard JSON is still in the Nextcloud file
     And the file is now a plain, untracked ".grafana.json"
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Moving that stripped file back into a mapping creates a brand-new dashboard
     Given the Grafana recycle-bin folder is off
     And a plain ".grafana.json" file (once a dashboard, identity stripped) outside any mapping
@@ -147,7 +147,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
 
   # ── move a brand-new (untracked) file into a mapping → create-on-land ─────────────
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Moving a brand-new dashboard file into a mapping creates it
     Given a ".grafana.json" file that was never tracked in Grafana
     When I move the file into the "alpha" folder
@@ -156,7 +156,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
 
   # ── link move-out is refused (a link is a read-only pointer) ─────────────────────
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Moving a link out of its mapping is blocked
     Given a managed "link" dashboard file in the "links" folder
     When I try to move the file to a folder that is not mapped

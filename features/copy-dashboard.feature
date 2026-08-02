@@ -35,7 +35,7 @@ Feature: Copying a dashboard file always makes a new instance
     And the original file and dashboard are unchanged
     And there are now two distinct dashboards in Grafana
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Copy to outside any mapping is a plain untracked file
     Given a managed "sync" dashboard file in the "alpha" folder
     When I copy the file to a folder that is not mapped
@@ -63,7 +63,7 @@ Feature: Copying a dashboard file always makes a new instance
   # It must not inherit the pointer's identity, and it cannot become a sync file by
   # accident — there are no bytes to create a dashboard from.
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Copying a link never creates a second dashboard
     Given a folder mapped as "link" to the Grafana folder "links"
     And a managed "link" dashboard file in that folder

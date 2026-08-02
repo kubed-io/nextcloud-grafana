@@ -23,7 +23,7 @@ Feature: Create a dashboard from Nextcloud
 
   # ══ CREATED IN NEXTCLOUD ═══════════════════════════════════════════════════════
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: New file in a mapped sync folder becomes a real dashboard
     Given a folder mapped as "sync" to the Grafana folder "demo"
     When I create a new ".grafana.json" file in that folder via the Files "New" menu
@@ -64,7 +64,7 @@ Feature: Create a dashboard from Nextcloud
 
   # The dashboard's name comes from the filename, because that is what the user just
   # typed. A body with no title must not produce an untitled dashboard.
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: A new dashboard is named after the file
     Given a folder mapped as "sync" to the Grafana folder "demo"
     When I create "CPU Load.grafana.json" in that folder
@@ -82,7 +82,7 @@ Feature: Create a dashboard from Nextcloud
   # A link folder is a read-only projection of Grafana. A file appearing in one is a
   # local file, not an instruction to create a dashboard.
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: A new file in a link-mapped folder creates no dashboard
     Given a folder mapped as "link" to the Grafana folder "links"
     When I create a ".grafana.json" file in that folder

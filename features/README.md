@@ -41,6 +41,7 @@ different questions with different blast radii, so they get different files:
 | `move-dashboard.feature` | `move-folder.feature` |
 | `rename-dashboard.feature` | `rename-folder.feature` |
 | `delete-dashboard.feature` | `delete-folder.feature` |
+| `restore-dashboard.feature` | `restore-folder.feature` |
 
 That split earned its keep immediately. `GrafanaClient` has exactly three folder
 methods and all three are READS — there is no `createFolder`, `renameFolder`,
@@ -83,7 +84,20 @@ is how that asymmetry stays visible instead of being rediscovered.
 
 **A file with only one banner is incomplete.** If the other direction genuinely has
 no behaviour, say so in a comment; do not leave the reader to guess whether it was
-considered.
+considered. `restore-dashboard.feature` is the worked example: there is no
+Grafana-side restore, and it says so under a banner rather than simply omitting one.
+
+### Restore is a verb, not an appendix to delete
+
+It has its own pair of files for the same reason everything else does: a restore can
+be specified from a *state* rather than from a gesture. `Given a trashed sync
+dashboard file whose dashboard is parked in "nextcloud-trash"` — then restore. It
+never has to re-perform the delete it is not testing.
+
+Delete owns *what leaves*. Restore owns *what comes back, and as what* — which is
+where the two recycle-bin models diverge most visibly, because that is the moment
+the user finds out whether they got their dashboard back or merely a new dashboard
+holding the same content.
 
 **A scenario describing a behaviour another file owns is a defect**, even when it
 passes. Move it.

@@ -183,9 +183,15 @@ trait WebDavTrait {
 		return null;
 	}
 
-	/** Convenience: read just the dashboard uid (used right after a create to capture it). */
+	/**
+	 * Convenience: read just the dashboard uid (used right after a create to capture it).
+	 *
+	 * This referenced a `self::META_ID` that FeatureContext never defined — a fatal
+	 * the moment anything called it, latent only because nothing did. The constant is
+	 * `META_UID`.
+	 */
 	private function davReadMetadataId(string $path): ?string {
-		return $this->davReadMetadata($path, self::META_ID);
+		return $this->davReadMetadata($path, self::META_UID);
 	}
 
 	/** Percent-encode each path segment but keep the slashes. */

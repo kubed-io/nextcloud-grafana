@@ -63,22 +63,6 @@ Feature: Deleting a folder
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
     And all three files KEEP their "grafana_uid"
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a trashed subfolder brings its dashboards back with the same ids (bin on)
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed subfolder whose three dashboards are parked in "nextcloud-trash"
-    When I restore the subfolder from the trash
-    Then all three dashboards are back in the "alpha" Grafana folder
-    And each keeps the uid it had before
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a trashed subfolder re-creates its dashboards with new ids (bin off)
-    Given the Grafana recycle-bin folder is off
-    And a trashed subfolder holding three dashboard files whose dashboards were deleted
-    When I restore the subfolder from the trash
-    Then three dashboards exist in Grafana holding the files' content
-    And each has a new uid
-
   # ── the mapped folder itself ─────────────────────────────────────────────────────
   # Deleting the folder a mapping points at is the widest gesture available to a
   # non-admin. The mapping survives — it is configuration, not a file — so the next

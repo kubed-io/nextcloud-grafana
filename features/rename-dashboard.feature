@@ -25,15 +25,16 @@
 #
 # ── STATUS ───────────────────────────────────────────────────────────────────────
 #
-# The Nextcloud-side legs are cooked (Course 5) — NameSyncListener enqueues,
-# ReconcileNameJob does the file-locked write/rename, and the writeback carries the
-# title to Grafana. Verified live on the pod: rename file → JSON title + Grafana
-# title follow; edit JSON title → filename follows; uid stable throughout. They are
-# @todo because the occ+WebDAV step definitions do not exist yet, not because the
-# code does not.
+# The Nextcloud-side legs are cooked (Course 5) and now RUN IN CI — NameSyncListener
+# enqueues, ReconcileNameJob does the file-locked write/rename, and the writeback
+# carries the title to Grafana.
 #
-# The Grafana-side legs ride the ordinary pull (SyncService renames the file in
-# place when a title changes) and are @todo for the same reason. The refusals are
+# The deferral is not an optimisation: during a rename the file is LOCKED, so a
+# synchronous putContent throws. That is why every rename step drains
+# PushDashboardJob and then ReconcileNameJob before asserting — a test that checked
+# immediately after the MOVE would be racing a job that had not started.
+#
+# The Grafana-side legs ride the ordinary pull and are still @todo. The refusals are
 # @unbuilt: NameSyncListener bails on an empty stem rather than reporting anything,
 # so nothing tells the user their rename went nowhere.
 
@@ -43,26 +44,26 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
   So that the file name, its JSON name, and the Grafana dashboard name never drift
 
   Background:
-    Given the app is installed and enabled
+    Given the app is connected to Grafana
     And a folder mapped as "sync" to the Grafana folder "alpha"
 
   # ══ RENAMED IN NEXTCLOUD ═══════════════════════════════════════════════════════
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Renaming the file updates the backend JSON name and Grafana
     Given a managed "sync" dashboard file named "Old Name.grafana.json"
     When I rename the file to "New Name.grafana.json"
     Then the JSON "title" field inside the file becomes "New Name"
     And the dashboard is renamed to "New Name" in Grafana
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Editing the JSON name renames the file and updates Grafana
     Given a managed "sync" dashboard file
     When I edit the file and change the JSON "title" field to "Renamed In JSON"
     Then the file is renamed to "Renamed In JSON.grafana.json"
     And the dashboard is renamed to "Renamed In JSON" in Grafana
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Renaming never breaks the link
     Given a managed "sync" dashboard file with a known "grafana_uid"
     When the file is renamed by any of the above means
@@ -79,14 +80,14 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
   # A link is a read-only pointer with no dashboard JSON to rewrite and nothing to
   # push. Renaming the pointer file is a local act; the dashboard keeps its name and
   # the next pull re-derives the filename from Grafana.
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Renaming a link never renames the dashboard
     Given a folder mapped as "link" to the Grafana folder "links"
     And a managed "link" dashboard file in that folder
     When I rename the file
     Then the dashboard keeps its name in Grafana
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Renaming an untracked ".grafana.json" file is not a failure
     Given an untracked ".grafana.json" file outside any mapping
     When I rename the file

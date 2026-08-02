@@ -51,9 +51,14 @@
 # DeleteToGrafanaListener + RestoreFromTrashListener + TrashPurgeHook. The rule table is
 # unit-tested (failed-delete-never-strips, bin-ON-parks-not-deletes, bin-OFF-restore-
 # recreates) and verified live on the pod. The scenarios below are tagged per-scenario:
-# @todo where the engine is built and only the WebDAV trash/restore/empty-trash steps are
-# missing, @unbuilt where there is genuinely no code, @blocked where the harness cannot
+# live where the WebDAV trash/restore/purge steps now exist, @todo where they do not
+# yet, @unbuilt where there is genuinely no code, @blocked where the harness cannot
 # reach it. The file-level @todo this used to carry hid that distinction entirely.
+#
+# THE PURGE SCENARIOS ARE THE REGRESSION TEST FOR THIS PR'S <types> FIX. A purge fires
+# no typed Nextcloud event — only the legacy `\OCP\Trashbin` `preDelete` hook, which
+# runs only if the app is LOADED on a WebDAV request. Before `<types><filesystem/></types>`
+# they would have failed; that they can pass at all is the proof.
 
 Feature: Deleting a dashboard file
   As a Nextcloud user
@@ -69,7 +74,7 @@ Feature: Deleting a dashboard file
   # immediately and the file's uid is stripped — the id is dead and must not be
   # reused. Restore therefore cannot "put it back"; it re-creates.
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trashing a sync file deletes it in Grafana and strips ALL its metadata (bin off)
     Given the Grafana recycle-bin folder is off
     And a managed "sync" dashboard file
@@ -78,31 +83,7 @@ Feature: Deleting a dashboard file
     And the trashed file carries NO Grafana metadata (uid, mode, mapping, version, hash all cleared)
     And the file is recoverable from the Nextcloud trash (its JSON is intact)
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a sync file re-creates the dashboard with a new id (bin off)
-    Given the Grafana recycle-bin folder is off
-    And a trashed sync dashboard file (its Grafana dashboard already deleted)
-    When I restore it from the trash
-    Then a dashboard is re-created in Grafana from the file's JSON
-    And it has a NEW "grafana_uid"
-    And the file's mode becomes "sync" under its original mapping
-
-  # The full round-trip, stated end to end: the content never leaves Nextcloud, the
-  # Grafana dashboard blips out on trash and comes back fresh on restore. No data
-  # loss; only the Grafana id and its version history are not preserved.
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Round-trip — delete then restore re-creates the dashboard (bin off)
-    Given the Grafana recycle-bin folder is off
-    And a managed "sync" dashboard file for a dashboard "uid-A"
-    When I move it to the trash
-    Then dashboard "uid-A" no longer exists in Grafana
-    And the trashed file carries no Grafana metadata
-    When I restore it from the trash
-    Then a dashboard exists in Grafana again with the same content
-    And its uid is new (not "uid-A")
-    And the file is managed "sync" again
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Emptying the trash for a bin-off file touches nothing in Grafana
     Given the Grafana recycle-bin folder is off
     And a trashed sync dashboard file (its Grafana dashboard already deleted)
@@ -127,7 +108,7 @@ Feature: Deleting a dashboard file
   # restore is a move back rather than a re-creation — id and version history
   # survive the whole round trip.
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trashing a sync file parks its dashboard in the bin, keeping the id (bin on)
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And a managed "sync" dashboard file
@@ -135,27 +116,6 @@ Feature: Deleting a dashboard file
     Then the dashboard is moved into the "nextcloud-trash" Grafana folder (not deleted)
     And the trashed file KEEPS its "grafana_uid"
     And the file is recoverable from the Nextcloud trash
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a parked file moves its dashboard back with the same id (bin on)
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
-    When I restore it from the trash
-    Then the dashboard is moved out of "nextcloud-trash" back into its mapped folder
-    And the dashboard keeps the same "grafana_uid"
-
-  # The round-trip that bin-on exists for: the move happens in BOTH systems and both
-  # come back together, id preserved. This is the whole payoff of the setting.
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Round-trip — delete moves to the bin in both systems, restore moves both back (bin on)
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a managed "sync" dashboard file for a dashboard "uid-B"
-    When I move it to the trash
-    Then the file is in the Nextcloud trash
-    And dashboard "uid-B" is in the "nextcloud-trash" Grafana folder (still exists)
-    When I restore it from the trash
-    Then the file is back in its mapped folder
-    And dashboard "uid-B" is back in its mapped Grafana folder with the same uid
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Emptying the trash permanently deletes only the cleared file's dashboard from the bin (bin on)
@@ -195,20 +155,20 @@ Feature: Deleting a dashboard file
   # A link is a pointer, so trashing it severs the tie and nothing else. Neither
   # model applies, which is why these carry no @recycle-bin tag.
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Trashing a link never deletes the dashboard
     Given a managed "link" dashboard file
     When I move it to the trash
     Then the dashboard in Grafana is not deleted
     And the link is recoverable from the Nextcloud trash
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Purging a link never deletes the dashboard
     Given a trashed "link" dashboard file
     When I purge it from the trash
     Then the dashboard in Grafana is not deleted
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Deleting an untracked dashboard file touches nothing in Grafana
     Given an untracked ".grafana.json" file
     When I delete it
@@ -224,44 +184,6 @@ Feature: Deleting a dashboard file
     And the dashboard still exists in Grafana
 
   # ══ RESTORE EDGE CASES: the world moved while the file sat in the trash ════════
-
-  # The mapping was torn down while the file waited in the trash, so there is no
-  # longer anywhere for it to belong. Restoring must still succeed as a Nextcloud
-  # operation — the user's undo is not this app's to veto — and simply leave the
-  # file unmanaged. RestoreFromTrashListener already handles the unresolvable
-  # mapping; what is untested is that the file comes back at all.
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Restoring into a mapping that no longer exists leaves a plain file
-    Given a trashed sync dashboard file
-    And its mapping has since been removed
-    When I restore it from the trash
-    Then the file is back in Nextcloud
-    And it is not managed by any mapping
-    And Grafana is not contacted
-
-  # Bin ON, but someone deleted the parked dashboard in Grafana directly. The kept
-  # uid now names nothing. The restore is an idempotent upsert on that uid, so it
-  # re-creates rather than failing — the file's JSON is the surviving copy.
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a parked file whose dashboard was deleted in Grafana re-creates it
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
-    And that parked dashboard has since been permanently deleted in Grafana
-    When I restore it from the trash
-    Then a dashboard exists in Grafana again holding the file's content
-    And the file points at that dashboard
-
-  # The race the scheduled pull makes easy to hit: someone moves the dashboard back
-  # out of the bin in Grafana, then the user restores in Nextcloud. Moving an
-  # already-in-place dashboard must be a no-op, not a conflict — the same
-  # idempotency every other write in this app relies on.
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a file whose dashboard is already back in place is not a conflict
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed sync dashboard file whose dashboard has already been moved back to its mapped folder
-    When I restore it from the trash
-    Then the file is back in its mapped folder
-    And the dashboard exists exactly once, in its mapped Grafana folder
 
   # ══ CHANGES MADE ON THE GRAFANA SIDE ═══════════════════════════════════════════
   # Everything above starts in Nextcloud. These start in Grafana, and they are where

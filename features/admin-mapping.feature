@@ -118,7 +118,7 @@ Feature: Admin configures folder mappings
   # folder picker offers a reserved "/" entry for it. Mapping "/" pulls the no-folder
   # dashboards; "/" → Nextcloud "/" with subfolder sync on mirrors the WHOLE instance
   # (see reconcile.feature). @todo — needs the reserved-root handling.
-  @admin @occ @ui @todo
+  @admin @occ @ui
   Scenario: The Grafana root can be mapped via the reserved "/" folder
     When the admin adds these mappings:
       | grafana folder | folder     | mode |
