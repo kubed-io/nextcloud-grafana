@@ -327,7 +327,7 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
 
   @admin @occ @unbuilt
   Scenario: The optional catalog sweep keeps any tag still used, and is NC-side only
-    Given a non-reserved Nextcloud system tag "shared" that is orphaned (on no managed file)
+    Given a non-reserved Nextcloud system tag "shared" that is on no managed file
     But the tag "shared" is still pinned on an unrelated non-dashboard file
     When an admin runs the optional catalog sweep
     Then the "shared" definition is kept

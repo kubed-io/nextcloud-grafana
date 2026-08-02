@@ -255,6 +255,19 @@ state **starts as** …"* vs *"the tag state **is** …"*.
 
 **A `Then` that only asks this app.** See the observable-outcome rule above.
 
+**PARENTHESES IN A STEP PATTERN ARE AN OPTIONAL GROUP.** Behat's step syntax reads
+`(...)` as *optional*, and the only intended use is a plural: `holds :n file(s)`.
+Any other parenthetical silently makes the step ALSO match without it — so
+`Grafana is not contacted (the dashboard was already deleted)` matches the bare
+`Grafana is not contacted` too, and collides with the step that legitimately owns
+that sentence. Behat reports an **ambiguous match on a line that looks like neither
+pattern**, which is why it costs a cycle to place. This has already happened here,
+in six steps at once.
+
+Keep asides in a comment above the scenario, not in the step text. Parentheses
+*inside a quoted parameter* (`title "Bravo Demo (edited)"`) are fine — the
+parameter captures them.
+
 ## Scenario Outline: an input, or a different rule?
 
 `Examples` is right when the rows are **one rule over different inputs** and the

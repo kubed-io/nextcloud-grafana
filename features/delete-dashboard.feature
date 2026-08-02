@@ -10,6 +10,38 @@
 # deleting a dashboard file is native NC trash on the Nextcloud side + a Grafana action
 # that depends on ONE optional setting — the **Grafana recycle-bin folder**.
 #
+# ── THE BIN IS A SHIM WE BUILT, NOT A FEATURE GRAFANA HAS ────────────────────────
+#
+# This is the single most important sentence in the file. **Grafana has no trashbin at
+# all.** Not a hidden one, not an admin-only one — a service account cannot reach any
+# soft-delete, and `DELETE /api/dashboards/uid/{uid}` is final. The n8n sibling has
+# archive/unarchive and Penpot has its own bin; Grafana has nothing, so we could not
+# port either recipe.
+#
+# What the "Grafana recycle-bin folder" setting does is EMULATE one, by designating an
+# ordinary Grafana folder as a parking space. Everything follows from the word
+# *ordinary*:
+#
+#   - It is **visible in Grafana's own UI.** Anyone browsing folders sees it and the
+#     dashboards in it. There is no "deleted items" chrome telling them what it means.
+#   - **Anyone can move things out of it** — a colleague spotting a dashboard they still
+#     need can simply drag it back. That is a rescue, and it must be respected.
+#   - **Anyone can delete things in it,** or delete the folder itself.
+#   - **It can hold dashboards Nextcloud never managed.** It is a folder; people put
+#     things in folders.
+#   - **It outlives this app.** Uninstalling does not empty it.
+#
+# A real trashbin is privileged storage the owning system controls. This is a shared
+# folder with a name we agreed on. Every rule below that looks paranoid is paranoid for
+# that reason, and the sharpest one is on the purge: we delete a parked dashboard only
+# while it is **still in the bin**. If it has been moved out, emptying a Nextcloud trash
+# is not authority to chase it down and destroy it.
+#
+# WITH THE SHIM OFF — the default — none of that exists and the model is simply: trash
+# the file, the dashboard is gone, and the file's JSON in the Nextcloud trash is the only
+# copy left. Every scenario below states which world it is in, because they share almost
+# no behaviour.
+#
 # ── RULE: TWO DELETE MODELS, AND THEY AGREE ABOUT NOTHING ────────────────────────
 #
 #   |                        | bin OFF (default)          | bin ON (opt-in)              |
@@ -80,15 +112,15 @@ Feature: Deleting a dashboard file
     And a managed "sync" dashboard file
     When I move it to the trash
     Then the dashboard is deleted in Grafana
-    And the trashed file carries NO Grafana metadata (uid, mode, mapping, version, hash all cleared)
-    And the file is recoverable from the Nextcloud trash (its JSON is intact)
+    And the trashed file carries no Grafana metadata at all
+    And the file is recoverable from the Nextcloud trash with its JSON intact
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Emptying the trash for a bin-off file touches nothing in Grafana
     Given the Grafana recycle-bin folder is off
-    And a trashed sync dashboard file (its Grafana dashboard already deleted)
+    And a trashed sync dashboard file whose dashboard is already deleted
     When I purge it from the trash
-    Then Grafana is not contacted (the dashboard was already deleted at trash time)
+    Then no Grafana call is made by the purge
 
   # The safety rule that makes bin-off survivable: the dashboard is deleted FIRST and
   # the uid is stripped only on success. Strip-then-delete would, on a failed call,
@@ -113,7 +145,7 @@ Feature: Deleting a dashboard file
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And a managed "sync" dashboard file
     When I move it to the trash
-    Then the dashboard is moved into the "nextcloud-trash" Grafana folder (not deleted)
+    Then the dashboard is moved into the "nextcloud-trash" Grafana folder and not deleted
     And the trashed file KEEPS its "grafana_uid"
     And the file is recoverable from the Nextcloud trash
 
@@ -129,6 +161,45 @@ Feature: Deleting a dashboard file
   # Purging one of several parked dashboards must not sweep the rest. Same rule as
   # above, stated for the case people actually hit — a trash holding several of OUR
   # files, only one of which is being cleared.
+  # ── THE RESCUE: the shim is a folder, so people take things back out of it ───────
+  # A colleague browsing Grafana sees a dashboard they still need sitting in
+  # "nextcloud-trash" and drags it back where it belongs. Weeks later the original user
+  # empties their Nextcloud trash. The purge must NOT chase the rescued dashboard down.
+  # Deleting by uid alone would destroy a live, in-use dashboard, and Grafana has no undo.
+
+  @user @in-nextcloud @gesture @ui @recycle-bin
+  Scenario: Purging never deletes a dashboard someone rescued out of the bin
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    And someone moves that dashboard back to its mapped folder in Grafana
+    When I purge it from the trash
+    Then the dashboard still exists in Grafana
+    And it is still in its mapped folder
+    And the file is gone from the Nextcloud trash
+
+  # …and the same rule from the other direction: if the dashboard is simply GONE — a
+  # Grafana admin deleted it out of the bin by hand — the purge is a local matter. No
+  # error, nothing to chase; the Nextcloud file just goes.
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: Purging a parked dashboard that has already been deleted in Grafana just clears the file
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    And that parked dashboard has since been permanently deleted in Grafana
+    When I purge it from the trash
+    Then the purge succeeds
+    And the file is gone from the Nextcloud trash
+
+  # Cannot prove it is still parked → do not delete. Leaving a dashboard alive that
+  # could have gone is a recoverable leak; deleting one that should have lived is not.
+  @user @in-nextcloud @gesture @ui @recycle-bin @blocked
+  Scenario: A purge that cannot reach Grafana clears the file without deleting anything
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    And Grafana is unreachable
+    When I purge it from the trash
+    Then no dashboard is deleted in Grafana
+    And the file is gone from the Nextcloud trash
+
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Purging one parked file leaves the other parked dashboards alone (bin on)
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
@@ -150,6 +221,17 @@ Feature: Deleting a dashboard file
     When I move it to the trash
     Then the delete is aborted and the file stays in Nextcloud
     And the dashboard still exists in its mapped Grafana folder
+
+  # The shim folder is shared space. Nothing in this app may ever treat "empty the
+  # Nextcloud trash" as "empty the bin folder" — it holds dashboards we never managed,
+  # and dashboards belonging to other users' trashes.
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: A purge never clears the bin folder wholesale
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    And two dashboards in "nextcloud-trash" that Nextcloud never managed
+    When I purge it from the trash
+    Then both unmanaged dashboards are still in "nextcloud-trash"
 
   # ══ MODE: what a link and an untracked file are owed ═══════════════════════════
   # A link is a pointer, so trashing it severs the tie and nothing else. Neither
@@ -203,25 +285,6 @@ Feature: Deleting a dashboard file
     When the "alpha" mapping is pulled
     Then the file is still in the Nextcloud trash
     And nothing is restored or pruned because of it
-
-  # THE SAME BLINDNESS, HARMFUL THIS TIME — and not what happens today. The pull
-  # finds no file for that uid (the trashed one is invisible to it), so it writes a
-  # BRAND-NEW file and leaves the trashed copy orphaned. Restore that copy
-  # afterwards and TWO files carry the same uid — the duplicate the reconcile is
-  # otherwise careful to avoid.
-  #
-  # The fix is a trash-aware reconcile: before creating a file for an unseen uid,
-  # look for a trashed mirror carrying it and restore that instead. The penpot
-  # sibling built exactly this (penpot saga §6.37); neither n8n nor Grafana has it.
-  @grafana @in-grafana @ui @occ @recycle-bin @unbuilt
-  Scenario: Moving a dashboard out of the bin in Grafana brings its file back out of the trash
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
-    When the dashboard is moved back to its mapped folder in Grafana
-    And the "alpha" mapping is pulled
-    Then the file is back in its mapped folder
-    And it holds the dashboard's current content
-    And only one file carries that dashboard's uid
 
   # ══ THE GESTURE THAT SKIPS THE TRASH ═══════════════════════════════════════════
 

@@ -286,7 +286,14 @@ trait LifecycleSteps {
 		Assert::assertNull($this->grafanaGetDashboard($this->lastUid), "dashboard '{$this->lastUid}' still exists in Grafana");
 	}
 
-	/** @Then the file's Grafana identity is stripped (no :uidKey, no :mappingKey) */
+	/**
+	 * No parentheses in the pattern — Behat reads `(...)` as an optional group, so
+	 * this would also have matched a bare "the file's Grafana identity is stripped"
+	 * and collided with any step owning that sentence. It passed only because nothing
+	 * else claimed it yet.
+	 *
+	 * @Then the file's Grafana identity is stripped of :uidKey and :mappingKey
+	 */
 	public function theIdentityIsStripped(string $uidKey, string $mappingKey): void {
 		Assert::assertNull($this->davReadMetadata($this->currentFilePath, $uidKey), "the file still carries a $uidKey");
 		Assert::assertNull($this->davReadMetadata($this->currentFilePath, $mappingKey), "the file still carries a $mappingKey");
@@ -427,7 +434,7 @@ trait LifecycleSteps {
 	 * A plain dashboard file that was once managed and has had its identity stripped —
 	 * exactly what a bin-off move-out leaves behind.
 	 *
-	 * @Given a plain :ext file (once a dashboard, identity stripped) outside any mapping
+	 * @Given a plain :ext file whose Grafana identity was stripped, outside any mapping
 	 */
 	public function aStrippedPlainFileOutsideAnyMapping(string $ext): void {
 		$this->setBinOff();

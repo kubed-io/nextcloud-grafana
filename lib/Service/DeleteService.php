@@ -30,7 +30,9 @@ use Psr\Log\LoggerInterface;
  *  - **hardDelete** — the final purge from the trash, OR a trash-bypassed direct delete. Only a
  *    still-managed sync file reaches here (bin OFF stripped the id at softDelete, so its purge is
  *    a no-op the listener bails on): **permanently delete** the dashboard. This is the one
- *    irreversible moment when the bin is ON.
+ *    irreversible moment when the bin is ON — and it deletes ONLY while the dashboard is still
+ *    sitting in the bin folder, because that "bin" is an ordinary Grafana folder anyone can
+ *    rescue a dashboard out of. See {@see hardDelete} for the full reasoning.
  *  - **restore** — user restored the file from the NC trash.
  *      · still managed (bin ON parked it, id kept) → **move the dashboard back** into its mapped
  *        folder, same uid (an idempotent upsert on the kept uid, so it also self-heals if the
@@ -49,6 +51,7 @@ final class DeleteService {
 		private DashboardMetadata $metadata,
 		private OwnershipTags $ownershipTags,
 		private CreateService $createService,
+		private RecycleBin $recycleBin,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -80,16 +83,74 @@ final class DeleteService {
 	}
 
 	/**
-	 * Hard step (trash-purge, or a trash-bypassed direct delete). Reaching here with a managed
-	 * sync file always means "delete it in Grafana now" — bin ON: the real, permanent delete of
-	 * the parked dashboard when the trash is emptied; bin OFF trash-bypass: the file was never
-	 * soft-deleted, so this is its only delete. Throws so the caller can abort.
+	 * Hard step (trash-purge, or a trash-bypassed direct delete). Bin ON: the real, permanent
+	 * delete of the parked dashboard when the trash is emptied. Bin OFF trash-bypass: the file
+	 * was never soft-deleted, so this is its only delete. Throws so the caller can abort.
+	 *
+	 * ── THE BIN IS A SHIM, SO THE PURGE MUST CHECK IT IS STILL THERE ─────────────────
+	 *
+	 * Grafana has no trashbin. What we call the recycle bin is an ORDINARY GRAFANA FOLDER
+	 * the admin nominated, which means it is visible in Grafana's own UI and anyone with
+	 * access can browse it, move things out of it, or delete it. A real trashbin is
+	 * privileged storage; this is not.
+	 *
+	 * So a parked dashboard may legitimately have been RESCUED — someone saw it in the bin
+	 * folder and dragged it back where it belonged. If this method still deleted by uid, the
+	 * user emptying their Nextcloud trash weeks later would permanently destroy a live,
+	 * in-use dashboard that somebody had deliberately saved. Grafana has no undo.
+	 *
+	 * The rule: **purge deletes the dashboard only while it is still sitting in the bin.**
+	 * If it has moved somewhere else, or is already gone, we leave Grafana alone and let the
+	 * Nextcloud purge proceed on its own. Emptying a Nextcloud trash is never authority to
+	 * delete something that is no longer in the bin we put it in.
+	 *
+	 * Bin OFF is unaffected: there is no bin, the soft step already deleted the dashboard and
+	 * stripped the id, so a still-managed file reaching here is a trash-bypass and its only
+	 * delete.
 	 */
 	public function hardDelete(ManagedFile $managed): void {
 		if (!$managed->isManaged() || $managed->isLink()) {
 			return; // already stripped (bin OFF purge) or a link — nothing to delete
 		}
+
+		if ($this->recycleBin->isEnabled() && !$this->isStillParked($managed->uid)) {
+			// Rescued, re-filed, or already gone. Not ours to delete any more.
+			$this->logger->info('grafana_sync purge: dashboard is no longer in the recycle-bin folder; leaving Grafana alone', [
+				'app' => Application::APP_ID,
+				'uid' => $managed->uid,
+			]);
+			return;
+		}
+
 		$this->grafana->deleteDashboard($managed->uid);
+	}
+
+	/**
+	 * Is this dashboard still sitting in the configured bin folder?
+	 *
+	 * Answers **false** whenever we cannot prove otherwise — the dashboard is gone, the bin
+	 * folder cannot be resolved, or Grafana will not answer. Every one of those is a reason
+	 * NOT to issue an irreversible delete: the safe direction here is to leave a dashboard
+	 * alive that could have been removed, never to remove one that should have lived. The
+	 * leftover is a recoverable leak; the alternative is data loss with no undo.
+	 */
+	private function isStillParked(string $uid): bool {
+		try {
+			$binUid = $this->recycleBin->activeFolderUid();
+			if ($binUid === null) {
+				return false;
+			}
+			$record = $this->grafana->readDashboard($uid);
+			$folderUid = $record['meta']['folderUid'] ?? null;
+			return is_string($folderUid) && $folderUid === $binUid;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync purge: could not confirm the dashboard is still in the bin; skipping the delete', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return false;
+		}
 	}
 
 	/**

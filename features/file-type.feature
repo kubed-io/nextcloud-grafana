@@ -44,7 +44,7 @@ Feature: Grafana dashboard is a first-class file type
   @user @gesture @ui @todo
   Scenario: WebDAV PROPFIND exposes the dashboard metadata in the XML
     Given a managed dashboard file
-    When a WebDAV client requests the file's properties (PROPFIND)
+    When a WebDAV client requests the file's properties over PROPFIND
     Then the raw XML includes:
       | property                       |
       | nc:metadata-grafana_uid        |

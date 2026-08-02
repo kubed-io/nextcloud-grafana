@@ -89,7 +89,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And a managed "sync" dashboard file in the "alpha" folder
     When I move the file into a Nextcloud subfolder of the "alpha" folder
     Then the file stays fully managed in "sync" mode under the "alpha" mapping
-    And it keeps its "grafana_uid", "grafana_mapping", and "grafana_folderUid" (still the "alpha" folder)
+    And it keeps its "grafana_uid", "grafana_mapping", and "grafana_folderUid" pointing at the "alpha" folder
     And nothing changes in Grafana — the subfolder is local Nextcloud organization only
 
   # ── 2. mapped → mapped: a real Grafana folder move, UID preserved ─────────────────
@@ -111,14 +111,14 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And a managed "sync" dashboard file in the "alpha" folder
     When I move the file to a folder that is not mapped
     Then the dashboard is deleted in Grafana
-    And the file's Grafana identity is stripped (no "grafana_uid", no "grafana_mapping")
+    And the file's Grafana identity is stripped of "grafana_uid" and "grafana_mapping"
     And the full dashboard JSON is still in the Nextcloud file
     And the file is now a plain, untracked ".grafana.json"
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Moving that stripped file back into a mapping creates a brand-new dashboard
     Given the Grafana recycle-bin folder is off
-    And a plain ".grafana.json" file (once a dashboard, identity stripped) outside any mapping
+    And a plain ".grafana.json" file whose Grafana identity was stripped, outside any mapping
     When I move the file into the "beta" folder
     Then a brand-new dashboard is created in Grafana from the file's JSON
     And it is created in the "beta" folder with a NEW "grafana_uid"
@@ -131,8 +131,8 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And a managed "sync" dashboard file in the "alpha" folder
     When I move the file to a folder that is not mapped
-    Then the dashboard is moved into the "nextcloud-trash" Grafana folder (not deleted)
-    And the file KEEPS its "grafana_uid" (the id is not stripped — it was not a true delete)
+    Then the dashboard is moved into the "nextcloud-trash" Grafana folder and not deleted
+    And the file KEEPS its "grafana_uid", because it was not a true delete
     And the file's mode becomes "unmapped"
     And the full dashboard JSON is still in the Nextcloud file
 

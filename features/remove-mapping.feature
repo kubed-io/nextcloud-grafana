@@ -63,7 +63,7 @@ Feature: Removing a folder mapping tears down the connection safely
     And dashboard "uid-A" no longer exists in Grafana
     When the admin empties the Nextcloud trash
     Then the trashed file is permanently gone
-    And Grafana is not contacted again (the dashboard was already deleted)
+    And Grafana is not contacted again
 
   # ── recycle-bin ON: the connected dashboard is parked in the bin (uid kept) ───────
 
@@ -73,7 +73,7 @@ Feature: Removing a folder mapping tears down the connection safely
     And a managed "sync" dashboard file in the "alpha" folder for a dashboard "uid-B"
     When the admin removes the "alpha" mapping
     Then the connected file is in the Nextcloud trash
-    And dashboard "uid-B" is parked in the "nextcloud-trash" Grafana folder (still exists)
+    And dashboard "uid-B" is parked in the "nextcloud-trash" Grafana folder and still exists
     When the admin empties the Nextcloud trash
     Then dashboard "uid-B" is permanently deleted from the Grafana bin
     And unmanaged dashboards in "nextcloud-trash" are left untouched
@@ -84,7 +84,7 @@ Feature: Removing a folder mapping tears down the connection safely
   Scenario: Re-mapping the folder and restoring from trash reconnects the dashboards (bin on)
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And a managed "sync" dashboard file in the "alpha" folder for a dashboard "uid-B"
-    And the admin removed the "alpha" mapping (the file is trashed, the dashboard parked)
+    And the admin removed the "alpha" mapping, so the file is trashed and the dashboard parked
     When the admin adds a "sync" mapping for grafana folder "alpha" in folder "alpha" again
     And the admin restores the trashed file
     Then the file is back in the "alpha" folder, managed "sync" under the new mapping
@@ -97,7 +97,7 @@ Feature: Removing a folder mapping tears down the connection safely
   @admin @in-nextcloud @occ @ui @recycle-bin @todo
   Scenario: Re-mapping and restoring reconnects by re-creating the dashboards (bin off)
     Given the Grafana recycle-bin folder is off
-    And a trashed file (once connected to a removed "alpha" mapping, metadata stripped)
+    And a trashed file once connected to a removed "alpha" mapping, its metadata stripped
     When the admin adds a "sync" mapping for grafana folder "alpha" in folder "alpha" again
     And the admin restores the trashed file
     Then the file is re-created as a dashboard in Grafana under a new uid
@@ -111,4 +111,4 @@ Feature: Removing a folder mapping tears down the connection safely
     And a managed "link" file in the "reports" folder for a dashboard "uid-R"
     When the admin removes the "reports" mapping
     Then the link file is moved to the Nextcloud trash
-    And dashboard "uid-R" is NOT deleted in Grafana (a link never owned it)
+    And dashboard "uid-R" is NOT deleted in Grafana

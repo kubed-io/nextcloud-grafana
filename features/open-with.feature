@@ -46,7 +46,7 @@ Feature: Opening a dashboard file (Open in Grafana / Open with text editor)
   Scenario: Open in Grafana opens the live dashboard (sync)
     Given a managed dashboard file in "sync" mode with a live dashboard in Grafana
     When I choose "Open in Grafana" from its context menu
-    Then Grafana opens at that dashboard (not a download, not the text editor)
+    Then Grafana opens at that dashboard, not a download and not the text editor
 
   @user @ui @blocked
   Scenario: Open in Grafana is hidden when there is no live dashboard (unmapped)

@@ -42,7 +42,7 @@ Feature: Admin configures folder mappings
   Scenario: The Nextcloud folder is stored as the Grafana folder name when omitted at create
     When the admin adds a mapping for grafana folder "observability" with no Nextcloud folder
     Then the stored mapping for grafana folder "observability" has Nextcloud folder "observability"
-    And both folder fields are set in the saved mapping (nothing left blank)
+    And both folder fields are set in the saved mapping, with nothing left blank
 
   # Four fields are IMMUTABLE once a mapping exists — each would otherwise force a live
   # migration that's easier to avoid by re-creating the mapping:

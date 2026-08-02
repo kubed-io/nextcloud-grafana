@@ -360,6 +360,13 @@ mention it. The failure reads as "the app is broken", not "your step is wrong". 
 arrange and an assertion need different sentences: *"the tag state **starts as** …"*
 vs *"the tag state **is** …"*.
 
+**Never put parentheses in a step line.** Behat reads `(...)` as an optional group,
+so `Grafana is not contacted (already deleted)` also matches the bare `Grafana is not
+contacted` and collides with it — reported as an ambiguous match on a line resembling
+neither pattern. The one legitimate use is the optional plural, `holds :n file(s)`.
+Parentheses inside a quoted parameter are fine; the parameter captures them. Asides
+belong in a comment above the scenario.
+
 **Setup says what IS TRUE, not who did what to make it true.** `Given the admin
 runs a pull` reads as though an admin were permanently on call before every gesture
 a user makes. That is not the system being described.

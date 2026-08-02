@@ -75,7 +75,7 @@ trait TrashSteps {
 	 * Nextcloud. Reads the trashed copy's bytes back and checks it is still a
 	 * dashboard spec — "it is in the trash" alone would not prove recoverability.
 	 *
-	 * @Then the file is recoverable from the Nextcloud trash (its JSON is intact)
+	 * @Then the file is recoverable from the Nextcloud trash with its JSON intact
 	 */
 	public function theFileIsRecoverableWithItsJson(): void {
 		$entry = $this->requireTrashEntry();
@@ -87,8 +87,14 @@ trait TrashSteps {
 	}
 
 	/**
-	 * @Then the trashed file carries NO Grafana metadata (uid, mode, mapping, version, hash all cleared)
+	 * @Then the trashed file carries no Grafana metadata at all
 	 * @Then the trashed file carries no Grafana metadata
+	 *
+	 * NOTE: no parentheses in either pattern. Behat's step syntax reads `(...)` as an
+	 * OPTIONAL GROUP, so a pattern like `Grafana is not contacted (…)` silently also
+	 * matches the bare `Grafana is not contacted` — and then collides with the step
+	 * that legitimately owns that sentence. The failure reads as an ambiguous match on
+	 * a line neither definition looks like. Keep asides in comments, not step text.
 	 */
 	public function theTrashedFileCarriesNoMetadata(): void {
 		// The file is in the trash, so it cannot be PROPFOUND at its old path. Restore
@@ -113,7 +119,7 @@ trait TrashSteps {
 		);
 	}
 
-	/** @Then the dashboard is moved into the :folder Grafana folder (not deleted) */
+	/** @Then the dashboard is moved into the :folder Grafana folder and not deleted */
 	public function theDashboardIsParkedIn(string $folder): void {
 		$record = $this->grafanaGetDashboard($this->lastUid);
 		Assert::assertNotNull($record, "dashboard '{$this->lastUid}' was DELETED — bin-on must park it, not delete it");
@@ -129,12 +135,12 @@ trait TrashSteps {
 		Assert::assertNull($this->grafanaGetDashboard($this->lastUid), 'the dashboard still exists in Grafana');
 	}
 
-	/** @Then dashboard :label is in the :folder Grafana folder (still exists) */
+	/** @Then dashboard :label is in the :folder Grafana folder and still exists */
 	public function dashboardIsInTheBinFolder(string $label, string $folder): void {
 		$this->theDashboardIsParkedIn($folder);
 	}
 
-	/** @Then Grafana is not contacted (the dashboard was already deleted at trash time) */
+	/** @Then no Grafana call is made by the purge */
 	public function grafanaIsNotContactedOnPurge(): void {
 		// The specific failure matters: the dashboard must be absent because trashing
 		// deleted it, not because the purge deleted it a second time. Either way it is
@@ -174,7 +180,7 @@ trait TrashSteps {
 	// so the arrangement itself proves the earlier leg still works. A hand-stamped
 	// fixture would let the scenario pass over a broken trash path.
 
-	/** @Given a trashed sync dashboard file (its Grafana dashboard already deleted) */
+	/** @Given a trashed sync dashboard file whose dashboard is already deleted */
 	public function aTrashedSyncFileWhoseDashboardIsGone(): void {
 		$this->setBinOff();
 		$this->aManagedDashboardFile('sync');
@@ -197,6 +203,53 @@ trait TrashSteps {
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveItToTheTrash();
 		$this->theDashboardIsParkedIn($folder);
+	}
+
+	/**
+	 * The rescue. The "bin" is an ordinary Grafana folder, so a colleague can simply
+	 * move a parked dashboard back where it belongs — done here through Grafana's own
+	 * API, with no involvement from this app, exactly as it would happen in the UI.
+	 *
+	 * @Given someone moves that dashboard back to its mapped folder in Grafana
+	 * @When someone moves that dashboard back to its mapped folder in Grafana
+	 */
+	public function someoneMovesTheDashboardBackInGrafana(): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		Assert::assertNotNull($record, "dashboard '{$this->lastUid}' is not in Grafana to rescue");
+		$spec = $record['dashboard'] ?? [];
+		$res = $this->grafanaClient()->request('POST', '/api/dashboards/db', [
+			'json' => [
+				'dashboard' => ['id' => null] + $spec,
+				'folderUid' => $this->grafanaFolderUid($this->rescueFolder()),
+				'overwrite' => true,
+				'message' => 'rescued out of the bin by a Grafana user',
+			],
+		]);
+		Assert::assertSame(200, $res->getStatusCode(), 'the rescue move failed: ' . (string)$res->getBody());
+	}
+
+	/** @Then it is still in its mapped folder */
+	public function theDashboardIsStillInItsMappedFolder(): void {
+		Assert::assertSame(
+			$this->grafanaFolderUid($this->rescueFolder()),
+			$this->dashboardFolderUid($this->lastUid),
+			'the rescued dashboard is not in its mapped folder',
+		);
+	}
+
+	/** @Then the file is gone from the Nextcloud trash */
+	public function theFileIsGoneFromTheTrash(): void {
+		Assert::assertNull($this->trashbinPathFor($this->trashedFrom), 'the file is still in the Nextcloud trash');
+	}
+
+	/** @Then no dashboard is deleted in Grafana */
+	public function noDashboardIsDeletedInGrafana(): void {
+		Assert::assertNotNull($this->grafanaGetDashboard($this->lastUid), "dashboard '{$this->lastUid}' was deleted");
+	}
+
+	/** The mapping a rescued dashboard belongs back in — the sole sync mapping the scenario arranged. */
+	private function rescueFolder(): string {
+		return $this->mappingForMode('sync');
 	}
 
 	/** @When I purge the trashed file from the trash */

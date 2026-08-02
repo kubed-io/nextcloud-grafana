@@ -62,7 +62,7 @@ Feature: Reserved tags exclude individual dashboards — from either side
   Scenario: With no reserved tag, a dashboard takes the mapping's mode
     Given Grafana has a dashboard in the "flows" folder with no reserved tag
     When the "flows" mapping is pulled
-    Then that dashboard's file is in "sync" mode (the mapping mode)
+    Then that dashboard's file is in "sync" mode, the mapping mode
 
   # Grafana-origin exclude: the tag lives on the DASHBOARD in Grafana.
   @grafana @in-grafana @occ @unbuilt
@@ -79,7 +79,7 @@ Feature: Reserved tags exclude individual dashboards — from either side
     When the admin adds the Nextcloud tag "grafana:ignore" to the file
     Then the file's mode becomes "ignored"
     And the file stays in the mapped folder and keeps its "grafana_uid"
-    And the dashboard is left fully live in Grafana (no archive)
+    And the dashboard is left fully live in Grafana
     And subsequent pulls/pushes for "flows" skip it
 
   @user @in-nextcloud @gesture @ui @occ @unbuilt

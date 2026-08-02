@@ -59,7 +59,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restoring a sync file re-creates the dashboard with a new id (bin off)
     Given the Grafana recycle-bin folder is off
-    And a trashed sync dashboard file (its Grafana dashboard already deleted)
+    And a trashed sync dashboard file whose dashboard is already deleted
     When I restore it from the trash
     Then a dashboard is re-created in Grafana from the file's JSON
     And it has a NEW "grafana_uid"
@@ -85,7 +85,7 @@ Feature: Restoring a dashboard file from the trash
     And the trashed file carries no Grafana metadata
     When I restore it from the trash
     Then a dashboard exists in Grafana again with the same content
-    And its uid is new (not "uid-A")
+    And its uid is not "uid-A"
     And the file is managed "sync" again
 
   # The round-trip that bin-on exists for: the move happens in BOTH systems and both
@@ -96,7 +96,7 @@ Feature: Restoring a dashboard file from the trash
     And a managed "sync" dashboard file for a dashboard "uid-B"
     When I move it to the trash
     Then the file is in the Nextcloud trash
-    And dashboard "uid-B" is in the "nextcloud-trash" Grafana folder (still exists)
+    And dashboard "uid-B" is in the "nextcloud-trash" Grafana folder and still exists
     When I restore it from the trash
     Then the file is back in its mapped folder
     And dashboard "uid-B" is back in its mapped Grafana folder with the same uid
@@ -139,17 +139,50 @@ Feature: Restoring a dashboard file from the trash
     Then the file is back in its mapped folder
     And the dashboard exists exactly once, in its mapped Grafana folder
 
-  # ══ NOTHING RESTORES FROM THE GRAFANA SIDE ═════════════════════════════════════
+  # ══ RESTORED IN GRAFANA ════════════════════════════════════════════════════════
   #
-  # There is no Grafana-side counterpart to a restore, and that is a decision rather
-  # than a gap. Nextcloud's trash is the user's own undo history; this app does not
-  # reach into it in either direction. A dashboard reappearing in Grafana does not
-  # pull a file back out of someone's trash.
+  # Because the bin is a SHIM — an ordinary Grafana folder anyone can browse — a
+  # restore can legitimately start on the Grafana side: someone drags a dashboard out
+  # of "nextcloud-trash" and back where it belongs. That IS a restore, performed by a
+  # person who never touched Nextcloud, and the mirror should follow.
   #
-  # The one case where that blindness arguably costs something — a parked dashboard
-  # moved back in Grafana while its file sits in the trash — is specified as
-  # @unbuilt in delete-dashboard.feature, next to the case where the same blindness
-  # is exactly right. They belong together, so they stay there.
+  # THE DETECTION IS THE UID, NOT THE FILENAME. The reconcile already knows the uid of
+  # every dashboard it sees. What it does not currently do is look in the Nextcloud
+  # TRASH for a file carrying that uid — it indexes `$folder->getDirectoryListing()`,
+  # and a trashed file is not in the folder. So today it writes a brand-new file and
+  # leaves the trashed one orphaned; restore that copy later and two files claim one
+  # dashboard, the exact duplicate the reconcile is otherwise careful to avoid.
+  #
+  # The fix is a trash-aware reconcile: before creating a file for an unseen uid, look
+  # for a trashed mirror carrying it and RESTORE that instead. The penpot sibling built
+  # exactly this (penpot saga §6.37); neither n8n nor Grafana has it.
+
+  @grafana @in-grafana @occ @ui @recycle-bin @unbuilt
+  Scenario: Moving a dashboard out of the bin in Grafana brings its file back out of the trash
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    When someone moves that dashboard back to its mapped folder in Grafana
+    And the "alpha" mapping is pulled
+    Then the trashed file is restored rather than a second file being created
+    And exactly one file carries that dashboard's uid
+    And it holds the dashboard's current content
+
+  # The matching rule, stated on its own because it is the part that is missing: the
+  # reconcile must consult the trash BY UID before it decides a dashboard is new.
+  @grafana @in-grafana @occ @recycle-bin @unbuilt
+  Scenario: A reconcile finds a trashed mirror by uid before creating a new file
+    Given a trashed sync dashboard file
+    When its dashboard is seen again by a pull
+    Then the reconcile matches it to the trashed file by uid
+    And no second file is created for that dashboard
+
+  # ══ WHAT STILL DOES NOT RESTORE FROM THE GRAFANA SIDE ══════════════════════════
+  #
+  # A dashboard merely EXISTING again is not a restore. Nextcloud's trash is the
+  # user's own undo history, and a dashboard being re-created in Grafana by unrelated
+  # means is not permission to empty it. The scenario above is narrow on purpose: it
+  # is about a dashboard we ourselves parked, being taken back out of the bin we
+  # ourselves put it in. Anything wider is the user's call.
 
   @user @in-nextcloud @gesture @ui @decision
   Scenario: A dashboard reappearing in Grafana never empties the Nextcloud trash
