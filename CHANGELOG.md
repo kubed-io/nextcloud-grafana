@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **BREAKING:** requires Nextcloud 31+ (was 30). The Sync Settings form now handles its own storage, which needs an interface added in 31; Nextcloud 30 is end-of-life.
+- **The Sync Settings checkboxes could never be saved** — "scheduled sync" and "preserve dashboards in a recycle-bin folder" sprang back on reload. The recycle-bin one is the serious half: the toggle silently reverting meant every trashed dashboard was permanently deleted in Grafana instead of parked, and Grafana has no undo.
+- **Emptying the Nextcloud trash never deleted parked dashboards.** With the recycle bin on, Grafana kept every "deleted" dashboard forever; the app was not being loaded on WebDAV requests, so the purge hook never ran.
+- **Test connection** is no longer reachable without a CSRF token, so another site can no longer make your server probe the configured Grafana URL.
+- **Pulled dashboards no longer have their empty JSON objects turned into empty arrays** (`timepicker`, a panel's `options`, `fieldConfig.defaults`), which corrupted the mirrored file and was then pushed back to Grafana.
+
 ### Added
 
 - **Three-way rename**: for a sync file the filename stem, the JSON `title`, and the Grafana dashboard title stay in agreement — rename the file or edit the title, and the other two follow. Stable on the uid, so no rename breaks the link.
