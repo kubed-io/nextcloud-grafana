@@ -30,6 +30,28 @@
 # is the invariant that makes bin-off survivable at all. What bin-on buys is
 # **identity**: the uid, the version history, and every Grafana-side reference to it.
 #
+# ── SAY IT PLAINLY: WITH THE SHIM OFF, A RESTORE MAKES A NEW DASHBOARD ───────────
+#
+# It is not the old dashboard coming back. Grafana deleted that one permanently at
+# trash time and cannot return it. What a restore does is take the JSON out of the
+# Nextcloud file and CREATE a dashboard from it — the same panels, the same queries,
+# the same title, and a brand-new uid.
+#
+# For most people that is indistinguishable from a restore, which is why it is a
+# reasonable default. What it costs is everything keyed to the old uid, and none of
+# it is recoverable:
+#
+#   - the **URL**. `/d/<uid>/…` is the uid. Bookmarks, wiki links, runbooks, Slack
+#     messages and screenshots pointing at that dashboard all 404.
+#   - **version history.** Grafana's per-save revisions belonged to the deleted
+#     dashboard. The restored one starts at version 1.
+#   - **anything referencing it inside Grafana** — a panel link, a playlist entry, an
+#     annotation query, an alert's dashboardUID.
+#
+# That is the trade the default makes: content is always safe, identity is not. An
+# admin who cannot afford to lose the identity turns the shim on, and that is the
+# whole reason the setting exists.
+#
 # ── THE HARD PART IS THAT THE WORLD MOVED ────────────────────────────────────────
 #
 # A file can sit in the trash for weeks. By the time it comes back, its mapping may
@@ -56,6 +78,8 @@ Feature: Restoring a dashboard file from the trash
 
   # ══ RESTORED IN NEXTCLOUD ══════════════════════════════════════════════════════
 
+  # THE DEFAULT PATH. The dashboard was destroyed at trash time; this creates one
+  # from the file's JSON. Same content, new object.
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restoring a sync file re-creates the dashboard with a new id (bin off)
     Given the Grafana recycle-bin folder is off
@@ -138,6 +162,20 @@ Feature: Restoring a dashboard file from the trash
     When I restore it from the trash
     Then the file is back in its mapped folder
     And the dashboard exists exactly once, in its mapped Grafana folder
+
+  # The consequence of "a new dashboard", written down because it is the part users
+  # discover the hard way and the part no amount of care on our side can prevent.
+  # @decision, not @unbuilt: preserving the uid across a true Grafana delete is not a
+  # feature we have declined to build, it is not possible — Grafana destroyed the
+  # object. The recycle-bin shim exists precisely so an admin can opt out of this.
+  @user @in-nextcloud @gesture @ui @recycle-bin @decision
+  Scenario: A bin-off restore cannot preserve the old dashboard's URL or history
+    Given the Grafana recycle-bin folder is off
+    And a trashed sync dashboard file whose dashboard is already deleted
+    When I restore it from the trash
+    Then the dashboard's previous URL no longer resolves in Grafana
+    And the restored dashboard has no version history from before the delete
+    And nothing in Grafana that referenced the old uid points at it
 
   # ══ RESTORED IN GRAFANA ════════════════════════════════════════════════════════
   #
