@@ -147,7 +147,7 @@ folder tree.
 If Grafana can't confirm the delete, the file **keeps its identity** and stays reconcilable
 rather than being silently orphaned.
 
-📋 spec: [`features/move.feature`](features/move.feature) · 🛠 [`lib/Listener/MoveGuardListener.php`](lib/Listener/MoveGuardListener.php), [`lib/Listener/MotionListener.php`](lib/Listener/MotionListener.php), [`lib/Service/MotionService.php`](lib/Service/MotionService.php)
+📋 spec: [`features/move-dashboard.feature`](features/move-dashboard.feature) · 🛠 [`lib/Listener/MoveGuardListener.php`](lib/Listener/MoveGuardListener.php), [`lib/Listener/MotionListener.php`](lib/Listener/MotionListener.php), [`lib/Service/MotionService.php`](lib/Service/MotionService.php)
 
 ### Copying a dashboard (always a brand-new instance)
 
@@ -161,7 +161,7 @@ carries the original's Grafana identity — its metadata is stripped the moment 
 So duplicating a dashboard is as simple as copying its file, and a copy never silently
 hijacks the original's dashboard.
 
-📋 spec: [`features/copy.feature`](features/copy.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
+📋 spec: [`features/copy-dashboard.feature`](features/copy-dashboard.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
 
 ### Renaming (three-way)
 
@@ -171,7 +171,7 @@ and save → the file is renamed and Grafana updates. The stable link is the das
 no rename ever breaks the connection. (The reconcile runs in a background job because the file is
 locked mid-rename.)
 
-📋 spec: [`features/rename.feature`](features/rename.feature) · 🛠 [`lib/Listener/NameSyncListener.php`](lib/Listener/NameSyncListener.php), [`lib/BackgroundJob/ReconcileNameJob.php`](lib/BackgroundJob/ReconcileNameJob.php)
+📋 spec: [`features/rename-dashboard.feature`](features/rename-dashboard.feature) · 🛠 [`lib/Listener/NameSyncListener.php`](lib/Listener/NameSyncListener.php), [`lib/BackgroundJob/ReconcileNameJob.php`](lib/BackgroundJob/ReconcileNameJob.php)
 
 ### Writeback: edit a file, update the dashboard
 
@@ -216,7 +216,7 @@ An untracked `.grafana.json` is never touched. And whichever step issues the rea
 if Grafana can't confirm it the trash is **aborted** so the file stays recoverable — deleting can
 never silently desync the two systems or lose a dashboard's content.
 
-📋 spec: [`features/delete.feature`](features/delete.feature) · 🛠 [`lib/Service/DeleteService.php`](lib/Service/DeleteService.php), [`lib/Listener/DeleteToGrafanaListener.php`](lib/Listener/DeleteToGrafanaListener.php), [`lib/Listener/RestoreFromTrashListener.php`](lib/Listener/RestoreFromTrashListener.php)
+📋 spec: [`features/delete-dashboard.feature`](features/delete-dashboard.feature) · 🛠 [`lib/Service/DeleteService.php`](lib/Service/DeleteService.php), [`lib/Listener/DeleteToGrafanaListener.php`](lib/Listener/DeleteToGrafanaListener.php), [`lib/Listener/RestoreFromTrashListener.php`](lib/Listener/RestoreFromTrashListener.php)
 
 ### Removing a folder mapping tears it down safely
 
