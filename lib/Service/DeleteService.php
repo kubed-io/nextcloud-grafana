@@ -113,7 +113,20 @@ final class DeleteService {
 			return; // already stripped (bin OFF purge) or a link — nothing to delete
 		}
 
-		if ($this->recycleBin->isEnabled() && !$this->isStillParked($managed->uid)) {
+		try {
+			$binOn = $this->recycleBin->isEnabled();
+		} catch (\Throwable $e) {
+			// Cannot tell which model we are in. Do not guess in the irreversible
+			// direction: skip the Grafana delete and let the Nextcloud purge proceed.
+			$this->logger->warning('grafana_sync purge: could not read the recycle-bin setting; leaving Grafana alone', [
+				'app' => Application::APP_ID,
+				'uid' => $managed->uid,
+				'exception' => $e,
+			]);
+			return;
+		}
+
+		if ($binOn && !$this->isStillParked($managed->uid)) {
 			// Rescued, re-filed, or already gone. Not ours to delete any more.
 			$this->logger->info('grafana_sync purge: dashboard is no longer in the recycle-bin folder; leaving Grafana alone', [
 				'app' => Application::APP_ID,

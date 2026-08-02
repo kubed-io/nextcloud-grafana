@@ -52,12 +52,27 @@ final class RecycleBin {
 	public function isEnabled(): bool {
 		try {
 			return $this->config->getValueBool(Application::APP_ID, 'bin_enabled', false);
-		} catch (\Throwable) {
-			$raw = '';
+		} catch (\Throwable $boolError) {
 			try {
 				$raw = $this->config->getValueString(Application::APP_ID, 'bin_enabled', '');
-			} catch (\Throwable) {
-				// Neither type reads — treat as off, the conservative default.
+			} catch (\Throwable $stringError) {
+				// NOT "treat as off". Returning false here would be the single most
+				// destructive thing this class can do: activeFolderUid() would answer
+				// null, DeleteService would take the BIN-OFF branch, and the next
+				// trashed dashboard would be PERMANENTLY deleted in Grafana — which has
+				// no undo — even though the admin had explicitly opted into preserving
+				// it. A config-backend failure must never silently downgrade a
+				// preservation guarantee into destruction.
+				//
+				// Throwing instead aborts the delete (the listener propagates it and the
+				// file stays put), which is the same answer this class already gives when
+				// bin mode is on but the folder is unusable: refuse rather than guess.
+				throw new \RuntimeException(
+					'Could not read the Grafana recycle-bin setting, so the delete was refused '
+					. 'rather than risk a permanent deletion the admin did not ask for.',
+					0,
+					$stringError,
+				);
 			}
 			return in_array(strtolower(trim($raw)), ['1', 'true', 'yes', 'on'], true);
 		}

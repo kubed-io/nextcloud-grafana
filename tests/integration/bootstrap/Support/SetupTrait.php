@@ -60,11 +60,18 @@ trait SetupTrait {
 		$res = $this->grafanaClient()->request('POST', '/api/folders', [
 			'json' => ['uid' => $uid, 'title' => $name],
 		]);
-		// 200 created, 409/412 already there — all fine.
-		if (!in_array($res->getStatusCode(), [200, 409, 412], true)) {
-			throw new \RuntimeException("creating Grafana folder '$name' failed: HTTP {$res->getStatusCode()}\n" . (string)$res->getBody());
+		$code = $res->getStatusCode();
+		// 200 created, 409/412 already there — both usable.
+		if (!in_array($code, [200, 409, 412], true)) {
+			throw new \RuntimeException("creating Grafana folder '$name' failed: HTTP $code\n" . (string)$res->getBody());
 		}
-		if (!in_array($uid, $this->createdGrafanaFolders, true)) {
+		// REGISTER FOR TEARDOWN ONLY WHAT WE ACTUALLY CREATED. A 409/412 means the
+		// folder was already there — possibly holding dashboards nobody in this suite
+		// knows about — and deleting a Grafana folder takes its contents with it. The
+		// suite must be safe to run against a Grafana that is not freshly built, and
+		// tearing down other people's folders is exactly how a test suite earns a
+		// reputation for being unrunnable outside CI.
+		if ($code === 200 && !in_array($uid, $this->createdGrafanaFolders, true)) {
 			$this->createdGrafanaFolders[] = $uid;
 		}
 		return $uid;
