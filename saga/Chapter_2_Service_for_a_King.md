@@ -1532,6 +1532,140 @@ CI now runs `behat --strict`, so leaving a scenario untagged is a claim the buil
 > those lines are honest empty plates. An honest empty plate is worth ten dishonest full ones."*
 
 
+### Course 7 cooked — **The Ticking Clock** *(this PR: the pull stops touching what it did not change)*
+
+Another inherited defect, and this time the inspection ran across **all three kitchens at
+once** — the honest way to do it, since a bug forked from the master is a bug in every fork
+until somebody checks.
+
+#### The complaint, from a real folder
+
+The master's owner turned his schedule down to five minutes and watched the Files app:
+
+> *"the last updated changes on every single round … every 5 minutes it says every single
+> n8n file has been updated. i did not change anything in n8n in between."*
+
+`writeWorkflow` — and our `writeDashboard`, character for character — called
+`putContent($body)` **unconditionally**, for every record, on every pull. On a five-minute
+schedule that means nothing in a mapped folder is ever older than five minutes, and the one
+file a human actually touched is buried among thirteen the sweep touched for no reason.
+
+#### Measured, in the pod, before a line was changed
+
+The tempting move is to fix the write. The right first move is to ask **whether the source
+was handing back a different body each round** — because if it were, this would be a
+normalisation bug and skipping the write would be *wrong*.
+
+Two consecutive pulls with nothing changed upstream, on the live homelab instance:
+
+| | n8n (before → after) | grafana (before → after) |
+|---|---|---|
+| filecache `mtime` | `14:38:41` → `14:43:42` | `15:25:23` → `15:25:47` |
+| `*_syncedHash` | `550017e1482c…` → **same** | `d31128e259db…` → **same** |
+| version stamp | `7b83daf0…` → **same** | `12` → **same** |
+
+The stamped hash *is* `sha1($body)` of the body the pull just wrote. Unchanged across two
+rounds, with the mtime moved, is proof the bytes were identical and written anyway. Both
+sources are stable; only our write was not.
+
+#### The three-kitchen audit — and the one that was already right
+
+| | churn on an unchanged pull? | why |
+|---|---|---|
+| **n8n** | **yes** — fixed first ([#54](https://github.com/kubed-io/nextcloud-n8n/pull/54)) | unconditional `putContent` |
+| **grafana** | **yes** — this course | the same line, forked before anyone noticed |
+| **penpot** | **no** | solved independently, and better |
+
+Penpot is the interesting column. It guards **both** its write paths:
+
+- `ArchiveService::storeLink()` opens with `if ($node->getSize() === 0) return;`, and its
+  docblock names our exact complaint before we had it — *"rewriting an already-empty file
+  would still move its mtime and etag — which makes every desktop client re-sync every
+  `link` file after every pull."*
+- `storeArchive()` runs only when `driftedOrMissing()` says so, off a `revn` + `modified-at`
+  signal rather than the bytes.
+
+And that second choice is **not** the one we made, correctly. A Penpot export is a binary
+`.penpot` archive — a zip, not byte-reproducible across exports — so a content comparison
+there would report a change every time and fix nothing. It has to compare the source's own
+revision stamps. Our body is deterministic JSON, so we compare bytes. *Same rule, different
+instrument, because the ingredient is different.* Verified live: a full penpot pull moved six
+mirrors' mtimes and etags **not at all**, and its own report said `0 archive(s) exported`.
+
+#### Why the fix works here at all — a debt that paid itself back
+
+Comparing bytes only works if the body is stable, and ours is **only because
+`DashboardBody::VOLATILE` already strips `id` and `version`** — the two fields Grafana
+rewrites on every save. That was done for a different reason (keeping `grafana_syncedHash`
+stable across version bumps) and it turns out to be the precondition for this entire course.
+Without it every read would differ and there would be nothing to skip. There is a unit test
+pinning it now (`testAVersionBumpAloneIsNotAChange`), because it is load-bearing in a way
+nothing pointed at before.
+
+#### Compare the bytes, not the stamp
+
+`grafana_syncedHash` is the obvious change-detector and it is the wrong one. It records what
+the last sync *agreed on*, not what is on disk now — so a mirror that drifted since (a failed
+push, a hand edit, a half-written file) would compare equal to Grafana's body and stay broken
+**forever**, and the pull would have quietly stopped being able to heal anything. Comparing
+the file's real bytes keeps "Grafana is authoritative" exactly as it was. The filecache `size`
+is a free pre-check that can only ever answer *differs*, so a genuinely-changed dashboard
+never pays for the read. An unreadable mirror answers "differs" too: degrade toward the old
+behaviour, never toward silence.
+
+#### The half that was already handled by the house
+
+The first draft also made `stampSynced` conditional. Reading Nextcloud core deleted that code:
+`FilesMetadata::setString()` returns early on an unchanged value and never sets its `updated`
+flag, and `FilesMetadataManager::saveMetadata()` returns immediately on `!updated()`. The
+metadata layer had been no-oping unchanged writes all along, and the pill write is diff-based
+for the same reason. **`putContent` was the only write in the method without a guard of its
+own** — which is exactly why it was the only one anybody noticed.
+
+#### Where the scenarios go — two things that are not behaviours
+
+The specs got re-cut twice, both times by the same rule (`features/README.md`: *a feature is
+a BEHAVIOUR, not a mechanism*) applied to something that is not a file:
+
+| Not a behaviour | Because | So it is specified as |
+|---|---|---|
+| a modification time changing | the shared *result* of edit / move / copy / rename | nothing — the gesture's own file already owns it |
+| the reconciler running | the *mechanism* a `@in-grafana` behaviour arrives by | the behaviour; the pull is just the `When` |
+
+> *"There is only one behavior that directly results in a pull, and that is an admin button
+> that syncs from Grafana. The scheduled reconcile is a machine … 'rename in Grafana' is the
+> behavior and the reconciler is the how."*
+
+Which leaves exactly one scenario, in `reconcile.feature`: **the admin presses the button and
+nothing has changed.** Our two `tag-sync` change-detection scenarios stay `@unbuilt` — the
+*body* half is built now, but they also assert pills, and there is still no content tag-sync
+code in `lib/` at all. The banner there now says which half is which, so nobody reads them as
+one blocked thing.
+
+#### The next dish this unblocks — and the order it has to come in
+
+None of the three apps ever maps the **source's own timestamp** onto the Nextcloud one (zero
+`touch` / `setMTime` / `creation_time` writes across all three `lib/` trees). So "Modified"
+has always meant *when we last synced*, never *when the dashboard actually changed* — sorting
+a mapped folder by date sorts by sync activity. Penpot has already specified the fix
+(`file-type.feature`, three scenarios, `@unbuilt`) including the trap:
+
+> *a naive implementation writes the timestamp every run, which is exactly the churn
+> `reconcile.feature` forbids — and which the sibling app demonstrably has.*
+
+They were right about the sibling, twice over. And note the dependency this course creates:
+**the churn fix is a prerequisite for the real-timestamp feature.** You cannot set mtime from
+the source until writes are conditional, or you reintroduce the churn through the front door.
+Penpot, already clean, was the only one of the three that could have safely built it — now
+we can too.
+
+> **Dr K, tapping the clock over the pass:** *"Every plate stamped 'fresh' is the same as no
+> plate stamped 'fresh.' You had one kitchen that never had the problem, and nobody asked it
+> why — it had the answer written on the wall in its own handwriting. Go and read the
+> neighbour's wall BEFORE you cook, not after. And the good part: you measured the pot before
+> you moved it, so when the answer turned out to be 'the soup never changed', you knew it
+> instead of guessing it."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

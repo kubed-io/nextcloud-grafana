@@ -35,6 +35,11 @@ use Psr\Log\LoggerInterface;
  * the file writes don't trip a future writeback listener into pushing them straight back
  * (the loop the guard exists to prevent).
  *
+ * **A pull writes only what actually changed** (saga Ch2, Course 7): a mirror whose bytes
+ * already match Grafana is not rewritten, so a pull over a quiet folder leaves every mtime
+ * alone. Without that, every scheduled tick reported every mirrored file as modified — see
+ * {@see writeDashboard}.
+ *
  * Scope note: this course is the **flat** pull — every dashboard in the mapped Grafana
  * folder lands directly in the one Nextcloud folder. The subfolder mirror + whole-instance
  * cascade (and the `grafana:ignore` reserved-tag override) ride this same loop in later
@@ -120,10 +125,10 @@ final class SyncService {
 	/**
 	 * Pull every mapping in order — the bulk "Sync from Grafana" action.
 	 *
-	 * @return array{processed:int, succeeded:int, failed:int, pruned:int, status:string, message:?string}
+	 * @return array{processed:int, succeeded:int, failed:int, pruned:int, unchanged:int, status:string, message:?string}
 	 */
 	public function pullAll(): array {
-		$total = ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0];
+		$total = ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0, 'unchanged' => 0];
 		$errors = [];
 		foreach ($this->mappings->list() as $mapping) {
 			try {
@@ -132,6 +137,7 @@ final class SyncService {
 				$total['succeeded'] += $res['succeeded'];
 				$total['failed'] += $res['failed'];
 				$total['pruned'] += $res['pruned'];
+				$total['unchanged'] += $res['unchanged'];
 			} catch (\Throwable $e) {
 				// Curate the message the same way the rest of the app does: a Grafana
 				// auth/transport failure becomes a friendly line rather than raw upstream
@@ -149,6 +155,7 @@ final class SyncService {
 			'succeeded' => $total['succeeded'],
 			'failed' => $total['failed'],
 			'pruned' => $total['pruned'],
+			'unchanged' => $total['unchanged'],
 			'status' => $errors === [] ? 'ok' : 'error',
 			'message' => $errors === [] ? null : implode('; ', $errors),
 		];
@@ -249,10 +256,14 @@ final class SyncService {
 	/**
 	 * Pull a single mapping into its Nextcloud folder.
 	 *
-	 * @return array{processed:int, succeeded:int, failed:int, pruned:int}
+	 * `unchanged` counts the succeeded dashboards whose mirror already matched Grafana
+	 * and so was NOT rewritten — a subset of `succeeded`, not a separate outcome. On a
+	 * quiet folder it equals `succeeded`, which is what "nothing to do" looks like.
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, pruned:int, unchanged:int}
 	 */
 	public function pullOne(Mapping $mapping): array {
-		$empty = ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0];
+		$empty = ['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0, 'unchanged' => 0];
 
 		// A Team Folder with no groups is invisible to everyone — skip rather than
 		// create dead storage. The admin-owned backend is always visible to the actor,
@@ -282,6 +293,7 @@ final class SyncService {
 			$processed = 0;
 			$succeeded = 0;
 			$failed = 0;
+			$unchanged = 0;
 
 			$ignoredUids = [];
 			$existingByUid = $this->indexByUid($targetFolder, $mapping, $ignoredUids);
@@ -305,7 +317,9 @@ final class SyncService {
 				$effectiveMode = $mapping->mode;
 				$seenUids[$uid] = true;
 				try {
-					$this->writeDashboard($targetFolder, $mapping, $row, $effectiveMode, $existingByUid, $nameCounts);
+					if ($this->writeDashboard($targetFolder, $mapping, $row, $effectiveMode, $existingByUid, $nameCounts)) {
+						$unchanged++;
+					}
 					$succeeded++;
 				} catch (\Throwable $e) {
 					$failed++;
@@ -321,7 +335,13 @@ final class SyncService {
 			$pruned = $this->pruneStale($existingByUid, $seenUids, $mapping);
 
 			$this->fixupFilecacheMimetype();
-			return ['processed' => $processed, 'succeeded' => $succeeded, 'failed' => $failed, 'pruned' => $pruned];
+			return [
+				'processed' => $processed,
+				'succeeded' => $succeeded,
+				'failed' => $failed,
+				'pruned' => $pruned,
+				'unchanged' => $unchanged,
+			];
 		} finally {
 			$this->guard->leave();
 		}
@@ -444,6 +464,27 @@ final class SyncService {
 	 * Reconcile a single dashboard into $folder (update-in-place by uid, else fresh write
 	 * with a collision suffix). Metadata + ownership pill follow the body.
 	 *
+	 * **Change-detected** (saga Ch2, Course 7): an existing mirror is rewritten only when
+	 * its bytes differ from what Grafana would write. This used to be an unconditional
+	 * `putContent`, which bumped the mtime of every mirrored file on every pull — a
+	 * folder-wide "Modified a few seconds ago" on every tick, burying the files a human
+	 * had really touched. Inherited from the n8n master, fixed there first.
+	 *
+	 * That the comparison works at all is owed to {@see DashboardBody::VOLATILE}: Grafana
+	 * rewrites `id` and `version` on every save, and stripping them is what makes the body
+	 * (and so `grafana_syncedHash`) stable across version bumps. Without it the spec would
+	 * differ on every read and there would be nothing to skip.
+	 *
+	 * Returns **true when the mirror was left untouched** because it already matched
+	 * Grafana — the caller's `unchanged` counter.
+	 *
+	 * The polarity is "unchanged", not "wrote", because of the spec-less branch below:
+	 * that dashboard is neither written nor *confirmed* to match, since we never learned
+	 * what Grafana holds. A "wrote" flag would have to call it one or the other and lie
+	 * either way; "was it confirmed unchanged?" answers `false` honestly. (The n8n master
+	 * has no such branch and so reads the other way round; the reported counter is the
+	 * same either side.)
+	 *
 	 * @param array{uid:string, title:string, folderUid:string, url:string, tags:list<string>} $row
 	 * @param string $effectiveMode Mapping::MODE_SYNC|MODE_LINK for this dashboard
 	 * @param array<string,Node> $existingByUid
@@ -456,7 +497,7 @@ final class SyncService {
 		string $effectiveMode,
 		array $existingByUid,
 		array &$nameCounts,
-	): void {
+	): bool {
 		$uid = $row['uid'];
 		$displayName = $row['title'] !== '' ? $row['title'] : $uid;
 
@@ -477,7 +518,11 @@ final class SyncService {
 					'app' => Application::APP_ID,
 					'uid' => $uid,
 				]);
-				return;
+				// NOT "unchanged": nothing was written, but nothing was verified either —
+				// we never learned what Grafana holds, so we cannot claim the mirror
+				// matches it. Keeping it out of the count stops a spec-less dashboard
+				// reading as a clean no-op.
+				return false;
 			}
 			$rawVersion = $dashboard->version ?? null;
 			$version = is_scalar($rawVersion) ? (string)$rawVersion : '';
@@ -501,10 +546,22 @@ final class SyncService {
 					]);
 				}
 			}
-			$existing->putContent($body);
-			$this->metadata->stampSynced($existing->getId(), $uid, $effectiveMode, $version, $body, $mapping->id);
-			$this->tags->apply($existing->getId(), $effectiveMode);
-			return;
+			$fileId = $existing->getId();
+			// Course 7: the body is the only write here that is not already
+			// self-suppressing. Core's metadata layer no-ops an unchanged value
+			// (`FilesMetadata::setString` returns early, `saveMetadata` skips when
+			// nothing was updated) and the ownership-pill write is diff-based, so
+			// stamping and re-tagging an untouched mirror costs nothing and stays
+			// unconditional — they also self-heal a mirror whose stamp drifted.
+			// `putContent` has no such guard: it rewrote the file, and the mtime, on
+			// every single tick.
+			$differs = $this->bodyDiffers($existing, $body);
+			if ($differs) {
+				$existing->putContent($body);
+			}
+			$this->metadata->stampSynced($fileId, $uid, $effectiveMode, $version, $body, $mapping->id);
+			$this->tags->apply($fileId, $effectiveMode);
+			return !$differs;
 		}
 
 		$basename = $displayName === '' ? $uid : $displayName;
@@ -524,5 +581,40 @@ final class SyncService {
 		$file = $folder->newFile($candidate, $body);
 		$this->metadata->stampSynced($file->getId(), $uid, $effectiveMode, $version, $body, $mapping->id);
 		$this->tags->apply($file->getId(), $effectiveMode);
+		return false; // a brand-new mirror is always a write
+	}
+
+	/**
+	 * Does the mirror on disk differ from the body Grafana would write?
+	 *
+	 * The size check is a free, EXACT "differs" signal — it reads the filecache, not the
+	 * storage, so a genuinely changed dashboard never costs a download. Only when the
+	 * sizes agree do we read the bytes; that read is the price of not writing, and it is
+	 * strictly cheaper than the unconditional write it replaces (on object storage a GET
+	 * beats a PUT, and a skipped write is also a skipped etag/mtime bump and a skipped
+	 * `NodeWrittenEvent`).
+	 *
+	 * Compared against the file's REAL bytes rather than the stamped
+	 * `grafana_syncedHash`: the stamp records what the last sync *agreed on*, so a mirror
+	 * that drifted since (a failed push, a hand edit, a half-written file) would compare
+	 * equal to Grafana's body and be left broken forever. A pull has to stay able to heal.
+	 *
+	 * A read we cannot perform answers **true** — writing is the old behaviour, so an
+	 * unreadable mirror degrades to "always rewrite" rather than to "never repair".
+	 */
+	private function bodyDiffers(File $file, string $body): bool {
+		if ((int)$file->getSize() !== strlen($body)) {
+			return true;
+		}
+		try {
+			return $file->getContent() !== $body;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: could not read mirror for change detection; rewriting it', [
+				'app' => Application::APP_ID,
+				'file' => $file->getName(),
+				'exception' => $e,
+			]);
+			return true;
+		}
 	}
 }

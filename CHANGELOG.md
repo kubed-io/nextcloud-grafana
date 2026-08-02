@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A sync no longer marks every dashboard file as modified.** Each sync rewrote every mirrored file whether or not anything had changed in Grafana, so the whole folder read "Modified a few seconds ago" after every run and a file you had actually touched was impossible to spot — a pull now writes only the files whose dashboard really changed, and reports the rest as "unchanged".
 - **BREAKING:** requires Nextcloud 31+ (was 30). The Sync Settings form now handles its own storage, which needs an interface added in 31; Nextcloud 30 is end-of-life.
 - **The Sync Settings checkboxes could never be saved** — "scheduled sync" and "preserve dashboards in a recycle-bin folder" sprang back on reload. The recycle-bin one is the serious half: the toggle silently reverting meant every trashed dashboard was permanently deleted in Grafana instead of parked, and Grafana has no undo.
 - **Emptying the Nextcloud trash never deleted parked dashboards.** With the recycle bin on, Grafana kept every "deleted" dashboard forever; the app was not being loaded on WebDAV requests, so the purge hook never ran.

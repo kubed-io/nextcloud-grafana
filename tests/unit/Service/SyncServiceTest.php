@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
@@ -121,7 +122,7 @@ final class SyncServiceTest extends TestCase {
 		// before any provisioning (ensureFolder is never reached; storage stays a stub).
 		$res = $this->service->pullOne($this->mapping(useTeamFolder: true, groups: []));
 
-		self::assertSame(['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0], $res);
+		self::assertSame(['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0, 'unchanged' => 0], $res);
 	}
 
 	public function testPullOneSkipsWhenStorageUnavailable(): void {
@@ -189,6 +190,159 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $res['processed']);
 		self::assertSame(1, $res['succeeded']);
 		self::assertSame(0, $res['pruned']);
+	}
+
+	// ── pull change-detection (saga Ch2, Course 7) ───────────────────────────────
+	//
+	// The defect, inherited from the n8n master and fixed there first: writeDashboard
+	// called putContent() unconditionally, so every pull rewrote every mirror and the
+	// whole folder read "Modified a few seconds ago" after every tick.
+	//
+	// The comparison only works because DashboardBody strips the VOLATILE fields
+	// (`id`, `version`) Grafana rewrites on every save — hence the `version` bump in
+	// the "unchanged" fixture below, which must NOT count as a change.
+
+	public function testPullDoesNotRewriteAMirrorThatAlreadyMatchesGrafana(): void {
+		$spec = (object)['uid' => 'd1', 'title' => 'Board', 'version' => 6];
+		$body = DashboardBody::encodeSync($spec);
+
+		$existing = $this->mirror(10, FilenameCodec::format('Board', 'd1', false, 0), $body);
+		$existing->expects(self::never())->method('putContent');
+
+		self::assertSame(1, $this->pullWith($existing, $spec)['unchanged']);
+	}
+
+	public function testAVersionBumpAloneIsNotAChange(): void {
+		// Grafana bumps `version` on every save, including saves that changed nothing
+		// we mirror. VOLATILE strips it, so the body is identical and the mirror must
+		// not be rewritten — this is the assumption the whole skip rests on.
+		$onDisk = DashboardBody::encodeSync((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6]);
+		$fromGrafana = (object)['uid' => 'd1', 'title' => 'Board', 'version' => 41];
+
+		$existing = $this->mirror(10, FilenameCodec::format('Board', 'd1', false, 0), $onDisk);
+		$existing->expects(self::never())->method('putContent');
+
+		// The stamp still advances to the new version — only the BODY is skipped.
+		$this->metadata->expects(self::once())
+			->method('stampSynced')
+			->with(10, 'd1', Mapping::MODE_SYNC, '41', self::isType('string'), 'map-alpha');
+
+		self::assertSame(1, $this->pullWith($existing, $fromGrafana)['unchanged']);
+	}
+
+	public function testPullRewritesAMirrorWhoseDashboardChangedInGrafana(): void {
+		// Same length as the stale mirror, so only the CONTENT comparison can catch it
+		// — proof the cheap size check is a shortcut, never the whole test.
+		$spec = (object)['uid' => 'd1', 'title' => 'Board B'];
+		$body = DashboardBody::encodeSync($spec);
+		$stale = str_replace('Board B', 'Board A', $body);
+		self::assertSame(strlen($body), strlen($stale), 'fixture must be same-length to exercise the content compare');
+
+		$existing = $this->mirror(10, FilenameCodec::format('Board B', 'd1', false, 0), $stale);
+		$existing->expects(self::once())->method('putContent')->with($body);
+
+		$res = $this->pullWith($existing, $spec);
+
+		self::assertSame(1, $res['succeeded']);
+		self::assertSame(0, $res['unchanged']);
+	}
+
+	public function testPullRewritesWithoutReadingWhenTheSizeAlreadyDiffers(): void {
+		// A differing size is an exact "changed" answer straight from the filecache, so
+		// a changed dashboard never pays for a storage read.
+		$spec = (object)['uid' => 'd1', 'title' => 'Board'];
+
+		$existing = $this->createMock(File::class);
+		$existing->method('getId')->willReturn(10);
+		$existing->method('getName')->willReturn(FilenameCodec::format('Board', 'd1', false, 0));
+		$existing->method('getSize')->willReturn(1);
+		$existing->expects(self::never())->method('getContent');
+		$existing->expects(self::once())->method('putContent');
+
+		self::assertSame(0, $this->pullWith($existing, $spec)['unchanged']);
+	}
+
+	public function testPullRewritesWhenTheMirrorCannotBeRead(): void {
+		// An unreadable mirror must degrade to the old always-write behaviour, never to
+		// "leave it alone" — a pull still has to be able to repair a broken file.
+		$spec = (object)['uid' => 'd1', 'title' => 'Board'];
+		$body = DashboardBody::encodeSync($spec);
+
+		$existing = $this->createMock(File::class);
+		$existing->method('getId')->willReturn(10);
+		$existing->method('getName')->willReturn(FilenameCodec::format('Board', 'd1', false, 0));
+		$existing->method('getSize')->willReturn(strlen($body));
+		$existing->method('getContent')->willThrowException(new \RuntimeException('storage unreachable'));
+		$existing->expects(self::once())->method('putContent')->with($body);
+
+		self::assertSame(0, $this->pullWith($existing, $spec)['unchanged']);
+	}
+
+	public function testASpecLessDashboardIsNotCountedAsUnchanged(): void {
+		// Nothing was written, but nothing was verified either — we never learned what
+		// Grafana holds, so it must not read as a clean no-op.
+		$existing = $this->mirror(10, FilenameCodec::format('Board', 'd1', false, 0), 'whatever');
+
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$existing]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willReturn(null);
+
+		self::assertSame(0, $this->service->pullOne($this->mapping())['unchanged']);
+	}
+
+	public function testAFreshWriteIsNeverCountedAsUnchanged(): void {
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$folder->method('nodeExists')->willReturn(false);
+		$folder->method('newFile')->willReturn($this->file(100, 'Board.grafana.json'));
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')->willReturn((object)['uid' => 'd1', 'title' => 'Board']);
+
+		$res = $this->service->pullOne($this->mapping());
+
+		self::assertSame(1, $res['succeeded']);
+		self::assertSame(0, $res['unchanged']);
+	}
+
+	/**
+	 * A managed mirror File mock whose size and content both report $body — what
+	 * {@see SyncService::bodyDiffers} reads. A mock (not a stub) so the caller can
+	 * assert on putContent.
+	 */
+	private function mirror(int $id, string $name, string $body): File {
+		$node = $this->createMock(File::class);
+		$node->method('getId')->willReturn($id);
+		$node->method('getName')->willReturn($name);
+		$node->method('getSize')->willReturn(strlen($body));
+		$node->method('getContent')->willReturn($body);
+		return $node;
+	}
+
+	/**
+	 * Pull one mapping holding exactly $mirror, with Grafana returning exactly $spec.
+	 * The mirror is already canonically named and owned by the mapping, so the only
+	 * decision left in writeDashboard is whether to write the body.
+	 *
+	 * @return array{processed:int, succeeded:int, failed:int, pruned:int, unchanged:int}
+	 */
+	private function pullWith(File $mirror, \stdClass $spec): array {
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$mirror]);
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed($spec->uid, Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row($spec->uid, $spec->title)]);
+		$this->grafana->method('readDashboardSpec')->willReturn($spec);
+
+		return $this->service->pullOne($this->mapping());
 	}
 
 	// ── prune ────────────────────────────────────────────────────────────────────

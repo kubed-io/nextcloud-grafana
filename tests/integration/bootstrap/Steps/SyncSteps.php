@@ -25,6 +25,12 @@ use PHPUnit\Framework\Assert;
  * minus the groupfolders dependency.
  */
 trait SyncSteps {
+	/** The decoded JSON the last `grafana_sync:sync pull` printed — what the run reports. */
+	private array $lastPullReport = [];
+
+	/** Mirror etags (name ⇒ etag) as of the last "the mirrors in … are noted". */
+	private array $pinnedEtags = [];
+
 	/**
 	 * Create an admin-owned sync mapping from a preloaded Grafana folder to a
 	 * Nextcloud folder, and register the folder for teardown.
@@ -54,6 +60,78 @@ trait SyncSteps {
 	public function theAdminPullsFromGrafana(): void {
 		$res = $this->occ('grafana_sync:sync pull');
 		Assert::assertSame(0, $res['exit'], "pull failed:\n{$res['output']}");
+		$this->lastPullReport = self::decodeSyncReport((string)$res['output']);
+	}
+
+	/**
+	 * Pin every mirror's etag in $folder, so a later Then can say whether the run
+	 * under test wrote anything.
+	 *
+	 * @Given the mirrors in :folder are noted
+	 */
+	public function theMirrorsAreNoted(string $folder): void {
+		$this->pinnedEtags = $this->mirrorEtags($folder);
+		Assert::assertNotEmpty($this->pinnedEtags, "nothing was mirrored into $folder, so a second pull proves nothing");
+	}
+
+	/**
+	 * Every dashboard the run succeeded on was one it did NOT have to rewrite.
+	 * `unchanged` is a subset of `succeeded`, so equality is the strongest available
+	 * statement of "this run wrote nothing" — and it is a number, which is what an
+	 * admin reads.
+	 *
+	 * @Then the run reports every dashboard as unchanged
+	 */
+	public function theRunReportsEveryDashboardAsUnchanged(): void {
+		Assert::assertArrayHasKey('unchanged', $this->lastPullReport, 'the run reported no `unchanged` count: ' . json_encode($this->lastPullReport));
+		Assert::assertSame(
+			(int)($this->lastPullReport['succeeded'] ?? -1),
+			(int)$this->lastPullReport['unchanged'],
+			'the run rewrote files even though nothing changed in Grafana',
+		);
+	}
+
+	/** @Then no file in :folder was rewritten */
+	public function noFileInWasRewritten(string $folder): void {
+		Assert::assertNotEmpty($this->pinnedEtags, 'no mirror etags were pinned before the run');
+		Assert::assertSame(
+			$this->pinnedEtags,
+			$this->mirrorEtags($folder),
+			'a pull rewrote mirrors whose bodies already matched Grafana',
+		);
+	}
+
+	/**
+	 * Every `.grafana.json` mirror under $folder as `name ⇒ etag`, sorted by name so
+	 * two snapshots compare as whole maps. Nextcloud mints a fresh etag on every
+	 * write, so an identical map means nothing under the folder was written.
+	 *
+	 * @return array<string,string>
+	 */
+	private function mirrorEtags(string $folder): array {
+		$etags = [];
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$etags[$name] = $this->davReadEtag($folder . '/' . $name);
+		}
+		ksort($etags);
+		return $etags;
+	}
+
+	/**
+	 * Pull the run's JSON report out of the command's stdout. `occ` may prefix its own
+	 * lines (deprecations, warnings), so we decode from the first `{` rather than
+	 * assuming the whole stream is JSON. An undecodable stream yields `[]` — the
+	 * counters are then absent, and the Then that wanted them says so.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function decodeSyncReport(string $output): array {
+		$start = strpos($output, '{');
+		if ($start === false) {
+			return [];
+		}
+		$decoded = json_decode(substr($output, $start), true);
+		return is_array($decoded) ? $decoded : [];
 	}
 
 	/**
