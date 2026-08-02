@@ -274,6 +274,19 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     And the tag "2024" is a string, not coerced to a number
 
   # ── pull change-detection: only write what changed (a branch shorter than n8n) ──
+  # THE BODY HALF IS BUILT (Course 7): a mirror whose bytes already match Grafana is
+  # not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
+  # content tag-sync code in `lib/` at all, so no scenario here can pass yet.
+  #
+  # The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
+  # a tag behaviour and does not wait on tags: it is LIVE in reconcile.feature, which
+  # owns what a run does as a run. Do not restate it here.
+  #
+  # Note what makes the skip possible at all, because it is a Grafana-specific gift:
+  # `DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
+  # rewrites on every save. Without that the spec would differ on every read and
+  # there would be nothing to skip. A tag change lives in the body, so it IS a body
+  # difference — which is the branch n8n needs and we do not.
 
   @admin @occ @unbuilt
   Scenario: An unchanged dashboard is skipped by the pull
