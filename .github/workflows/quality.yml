@@ -61,6 +61,14 @@ jobs:
           exit $status
         fi
 
+    # Two Behat mistakes that each cost a full integration cycle — duplicate step
+    # text (fails the WHOLE suite with "already defined") and stray parentheses in a
+    # pattern (an optional group, reported as an ambiguous match). Both are pure text
+    # checks, so catching them here takes a second instead of minutes plus a live
+    # Nextcloud and Grafana. See the script for the full autopsy.
+    - name: Behat step definitions
+      run: bash tests/integration/bin/check-step-definitions.sh
+
     - name: Coding standard (php-cs-fixer)
       run: composer run cs:check
 

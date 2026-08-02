@@ -210,7 +210,12 @@ trait TrashSteps {
 	 * move a parked dashboard back where it belongs — done here through Grafana's own
 	 * API, with no involvement from this app, exactly as it would happen in the UI.
 	 *
-	 * @Given someone moves that dashboard back to its mapped folder in Grafana
+	 * ONE annotation, not one per keyword. Behat ignores the keyword when matching, so
+	 * the same sentence under `@Given` and `@When` is the SAME step registered twice —
+	 * a duplicate definition that fails every scenario in the suite, including ones
+	 * that never mention it. This step is used in a Given position by the delete
+	 * rescue and a When position by the restore; both match this single pattern.
+	 *
 	 * @When someone moves that dashboard back to its mapped folder in Grafana
 	 */
 	public function someoneMovesTheDashboardBackInGrafana(): void {
