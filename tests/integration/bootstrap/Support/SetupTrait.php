@@ -34,13 +34,23 @@ use PHPUnit\Framework\Assert;
  * different behaviours and the specs keep them apart.
  */
 trait SetupTrait {
-	/** Preloaded Grafana folders (see bin/preload-grafana.sh), by the name the specs use. */
-	private const FOLDER_UIDS = [
-		'alpha' => 'nc-alpha',
-		'beta' => 'nc-bravo',
-		'links' => 'nc-charlie',
-		'gamma' => 'nc-delta',
-	];
+	/**
+	 * THE LIFECYCLE SUITES DELIBERATELY DO NOT USE THE PRELOADED FOLDERS.
+	 *
+	 * `bin/preload-grafana.sh` builds nc-alpha…nc-delta as a CONTROL CASE, and
+	 * `reconcile.feature` asserts against them exactly — *"alpha-dash holds exactly 1
+	 * dashboard file"*. If the lifecycle scenarios created their dashboards in
+	 * nc-alpha, every one they left behind would show up in that count.
+	 *
+	 * That is not hypothetical: it is what happened. A `Board f1e168` created by a
+	 * delete scenario survived into the reconcile run and made a passing test fail —
+	 * and the failure pointed at reconcile, which was innocent.
+	 *
+	 * So the spec-friendly names resolve to folders this suite creates and tears down
+	 * itself. Nothing here touches the fixtures, and nothing here depends on them
+	 * either: a scenario that needs a dashboard makes one.
+	 */
+	private const FOLDER_UIDS = [];
 
 	/** Grafana folders this scenario created on demand, torn down afterwards. */
 	private array $createdGrafanaFolders = [];
@@ -170,6 +180,45 @@ trait SetupTrait {
 		$this->lastUid = $uid;
 		$this->createdDashboardUids[] = $uid;
 		return $path;
+	}
+
+	/**
+	 * Put a dashboard straight into a Grafana folder, through Grafana's own API and
+	 * with no involvement from this app — the control case a `link` scenario needs,
+	 * since a link file is authored by the PULL and never by a local write.
+	 */
+	private function seedGrafanaDashboard(string $folderName, string $title): string {
+		$uid = 'nc-seed-' . bin2hex(random_bytes(4));
+		$res = $this->grafanaClient()->request('POST', '/api/dashboards/db', [
+			'json' => [
+				// Object decode, not assoc — this fixture carries an empty `timepicker: {}`
+				// precisely so the flattening bug would be caught, and an assoc round-trip
+				// here would quietly seed `[]` and defeat that.
+				'dashboard' => json_decode($this->dashboardBody($title, $uid), false, 512, JSON_THROW_ON_ERROR),
+				'folderUid' => $this->grafanaFolderUid($folderName),
+				'overwrite' => true,
+				'message' => 'integration fixture',
+			],
+		]);
+		$this->check($res->getStatusCode() === 200, "seeding '$title' into '$folderName' failed: " . (string)$res->getBody());
+		$this->createdDashboardUids[] = $uid;
+		return $uid;
+	}
+
+	/**
+	 * Fail with a plain exception rather than a PHPUnit assertion.
+	 *
+	 * PHPUnit 12's failure exporter reaches into `PHPUnit\TextUI\Configuration\Registry`,
+	 * which is null under Behat (there is no TextUI bootstrap). So a FAILING PHPUnit
+	 * assertion surfaces as an opaque
+	 * `Registry::get(): ... null returned` TypeError that hides the real reason — and
+	 * costs a whole CI cycle to place. WebDavTrait already documents this for HTTP
+	 * statuses; this is the same escape hatch for value checks in the step definitions.
+	 */
+	private function check(bool $ok, string $message): void {
+		if (!$ok) {
+			throw new \RuntimeException($message);
+		}
 	}
 
 	/** Pin the push to run inside the request, so assertions do not race a background job. */

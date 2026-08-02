@@ -51,11 +51,12 @@ trait LifecycleSteps {
 		$title = 'Board ' . bin2hex(random_bytes(3));
 		if ($mode === 'link') {
 			// A link file is authored by the PULL, not by a local write — a link mapping
-			// never adopts a file the user drops in. Pull the mapping and take what
-			// landed; the preloaded folders each hold a dashboard, so there is one.
+			// never adopts a file the user drops in. Seed a dashboard through Grafana's
+			// own API (no involvement from this app), then pull it down.
+			$this->seedGrafanaDashboard($mapping, 'Linked ' . bin2hex(random_bytes(3)));
 			$this->theAdminPullsFromGrafana();
 			$files = $this->davListDashboardFiles($this->mappedFolder($mapping));
-			Assert::assertNotEmpty($files, "the pull produced no link file in the '$mapping' mapping");
+			$this->check($files !== [], "the pull produced no link file in the '$mapping' mapping");
 			$this->currentFilePath = $this->mappedFolder($mapping) . '/' . $files[0];
 			$uid = $this->davReadMetadata($this->currentFilePath, self::META_UID);
 			Assert::assertNotNull($uid, 'the pulled link file carries no uid');
