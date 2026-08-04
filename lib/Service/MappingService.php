@@ -34,6 +34,7 @@ final class MappingService {
 
 	public function __construct(
 		private readonly IAppConfig $config,
+		private StorageService $storage,
 	) {
 	}
 
@@ -71,67 +72,94 @@ final class MappingService {
 		return null;
 	}
 
-	public function add(Mapping $mapping): Mapping {
+	/**
+	 * Store a new mapping, and provision its folder.
+	 *
+	 * `$groups` travels alongside the mapping rather than being part of it: they
+	 * are applied to the folder and read back from it, never stored.
+	 *
+	 * THE FOLDER IS MADE BEFORE THE MAPPING IS PERSISTED, so a mapping that cannot
+	 * be provisioned is not saved at all. A Team Folder mapping on an instance
+	 * without groupfolders used to save happily and then fail on every sync, which
+	 * reads as "the sync is broken" rather than "that backend is not installed".
+	 *
+	 * @param array<array-key, mixed>|string $groups
+	 */
+	public function add(Mapping $mapping, array|string $groups = []): Mapping {
 		$all = $this->list();
 		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, null);
 		$this->assertIdUnique($all, $mapping->id);
+		$this->storage->ensureFolder($mapping, $groups);
 		$all[] = $mapping;
 		$this->persist($all);
 		return $mapping;
 	}
 
-	public function update(string $id, Mapping $mapping): Mapping {
-		$all = $this->list();
-		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, $id);
-		$updated = null;
-		foreach ($all as $i => $existing) {
-			if ($existing->id === $id) {
-				// Four fields are IMMUTABLE once a mapping exists, because each would force a
-				// live migration that's easier to avoid by just re-creating the mapping:
-				//   - the Grafana folder + the Nextcloud folder — re-pointing either would have
-				//     to rename/move both trees of already-synced files and re-stamp metadata;
-				//   - the Team Folder flag — switching the storage backend (ownerless Team
-				//     Folder ⇄ admin-owned shared folder) would have to migrate the provisioned
-				//     folder + its shares (the n8n master reinforces this same rule);
-				//   - subfolder-sync — flipping it would restructure the folder tree on the far
-				//     side (ON→OFF flattens mirrored Grafana subfolders + re-parents dashboards;
-				//     OFF→ON lazily grows them), another migration. Immutable for now; the saga
-				//     records what a safe on-the-fly flip could look like later.
-				// To change any of them, delete the mapping and add a new one. Everything else
-				// (mode / format / groups) stays editable.
-				if ($mapping->grafanaFolderUid !== $existing->grafanaFolderUid) {
-					throw new \InvalidArgumentException('A mapping\'s Grafana folder cannot be changed after it is created — delete it and add a new one.');
-				}
-				if ($mapping->ncFolder !== $existing->ncFolder) {
-					throw new \InvalidArgumentException('A mapping\'s Nextcloud folder cannot be changed after it is created — delete it and add a new one.');
-				}
-				if ($mapping->useTeamFolder !== $existing->useTeamFolder) {
-					throw new \InvalidArgumentException('A mapping\'s Team Folder setting cannot be changed after it is created — delete it and add a new one.');
-				}
-				if ($mapping->syncSubfolders !== $existing->syncSubfolders) {
-					throw new \InvalidArgumentException('A mapping\'s subfolder-sync setting cannot be changed after it is created — delete it and add a new one.');
-				}
-				// Preserve the original id even if the caller sent a different one.
-				$updated = new Mapping(
-					$id,
-					$mapping->grafanaFolderUid,
-					$mapping->grafanaFolderTitle,
-					$mapping->ncFolder,
-					$mapping->mode,
-					$mapping->format,
-					$mapping->ncGroups,
-					$mapping->useTeamFolder,
-					$mapping->syncSubfolders,
-				);
-				$all[$i] = $updated;
-				break;
-			}
-		}
-		if ($updated === null) {
+	/**
+	 * Re-share a mapping's folder with the given groups — THE ONLY EDIT THERE IS.
+	 *
+	 * ## IMMUTABILITY IS NOW THE API'S SHAPE, NOT A LIST OF GUARDS
+	 *
+	 * This replaced an `update(string $id, Mapping $mapping)` that took a whole
+	 * mapping and then rejected changes to four fields one by one. Guarding is
+	 * weaker than not offering: it left `mode` and `format` editable by omission,
+	 * and it meant the admin card PUT every field on every save whether or not any
+	 * of them could change. Now no caller can EXPRESS a change to anything but the
+	 * groups, so there is no path to check.
+	 *
+	 * Each field the old guards protected is still fixed, for the reason it always
+	 * was — every one would force a live migration:
+	 *
+	 *   - the **Grafana folder** and the **Nextcloud folder** — re-pointing either
+	 *     renames or moves a whole tree of already-synced files and re-stamps their
+	 *     metadata (doubly fiddly when both change at once);
+	 *   - the **Team Folder** flag — switching backend migrates the provisioned
+	 *     folder and all of its shares;
+	 *   - **subfolder-sync** — flipping it restructures the far side (on→off
+	 *     flattens mirrored Grafana subfolders and re-parents their dashboards;
+	 *     off→on lazily grows them).
+	 *
+	 * `mode` and `format` join them: both decide how every existing file under the
+	 * mapping was written, so changing one silently invalidates what is on disk.
+	 *
+	 * To change any of it: delete the mapping and add a new one. That makes the
+	 * migration cost visible instead of hiding it behind a dropdown.
+	 *
+	 * IT WRITES TO THE FOLDER AND PERSISTS NOTHING. The return value is what the
+	 * folder reports afterwards, which is not always what was submitted — a group
+	 * that does not exist cannot be shared with.
+	 *
+	 * @param array<array-key, mixed>|string $ncGroups
+	 * @return list<string>
+	 */
+	public function updateGroups(string $id, array|string $ncGroups): array {
+		$mapping = $this->getById($id);
+		if ($mapping === null) {
 			throw new \OutOfBoundsException('mapping not found');
 		}
-		$this->persist($all);
-		return $updated;
+
+		$this->storage->ensureFolder($mapping, $ncGroups);
+
+		return $this->storage->groupsOf($mapping);
+	}
+
+	/**
+	 * The groups a mapping's folder is currently shared with.
+	 *
+	 * @return list<string>
+	 */
+	public function groupsOf(Mapping $mapping): array {
+		return $this->storage->groupsOf($mapping);
+	}
+
+	/**
+	 * The stored shape PLUS the folder's current groups — what the admin page and
+	 * `list-mappings` render, as opposed to what is written to appconfig.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function describe(Mapping $mapping): array {
+		return $mapping->toArray() + ['nc_groups' => $this->groupsOf($mapping)];
 	}
 
 	public function delete(string $id): void {

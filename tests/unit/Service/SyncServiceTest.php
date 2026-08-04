@@ -93,14 +93,13 @@ final class SyncServiceTest extends TestCase {
 		);
 	}
 
-	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false, array $groups = ['admin']): Mapping {
+	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false): Mapping {
 		return Mapping::fromArray([
 			'id' => $id,
 			'grafana_folder_uid' => 'gf-alpha',
 			'grafana_folder_title' => 'alpha',
 			'nc_folder' => 'alpha',
 			'mode' => $mode,
-			'nc_groups' => $groups,
 			'use_team_folder' => $useTeamFolder,
 		]);
 	}

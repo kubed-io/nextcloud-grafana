@@ -154,41 +154,70 @@ real uid, so the folder picker offers a reserved `/` entry for it. Mapping `/`
 pulls the no-folder dashboards; `/` with subfolder sync on mirrors the whole
 instance (see `reconcile.feature`).
 
-### What a mapping locks, it locks for a reason
+### There is no way to change a mapping except its groups
 
-Four fields are immutable once a mapping exists, each because changing it would
-force a live migration:
+`@decision`, not `@unbuilt`: **there is no operation to test, and that is the
+design.**
 
-- the **Grafana folder** and the **Nextcloud folder** — re-pointing either would
-  rename or move a whole tree of already-synced files and re-stamp their metadata
-  (doubly fiddly if both change at once);
+Immutability is enforced by the API SHAPE rather than by guards.
+`MappingService::updateGroups()` takes an id and groups; the PUT endpoint takes
+`nc_groups` and nothing else; there is no update command. A caller cannot
+*express* a change to the Grafana folder, the Nextcloud folder, the storage
+backend, subfolder-sync, the mode or the format — so there is no rejection to
+observe. Guarding is weaker than not offering, because a guard has to enumerate
+what it protects and this one left `mode` and `format` out.
+
+Each field is fixed for the reason it always was — every change would force a
+live migration:
+
+- the **Grafana folder** and the **Nextcloud folder** — re-pointing either
+  renames or moves a whole tree of already-synced files and re-stamps their
+  metadata (doubly fiddly when both change at once);
 - the **Team Folder** flag — switching backend migrates the provisioned folder
-  and all its shares;
-- **subfolder-sync** — flipping it restructures the far-side tree (on→off
-  flattens mirrored subfolders and re-parents dashboards; off→on lazily grows
-  them).
+  and all of its shares;
+- **subfolder-sync** — flipping it restructures the far side (on→off flattens
+  mirrored Grafana subfolders and re-parents their dashboards; off→on lazily
+  grows them);
+- **mode** and **format** — both decided how every existing file under the
+  mapping was written, so changing one silently invalidates what is on disk.
 
-Mode, format and groups stay editable. To change anything else, delete the
-mapping and add a new one — which makes the migration cost visible instead of
-hiding it behind a dropdown.
+This replaced a scenario that performed four `When`s in a row against a
+full-mapping `update()`. It read as a script rather than as instances of one
+rule, could only ever report the first failure, and described a guard list that
+was incomplete.
 
-`@unbuilt` rather than `@todo`: there is no update command to drive this over, so
-`MappingServiceTest` is where the rule is actually held. It is written here as one
-outline whose Examples are the fields, replacing a scenario that performed four
-`When`s in a row — which read as a script rather than as four instances of one
-rule, and could only ever report the first failure.
+### The groups a mapped folder is shared with can be changed
 
-**THE STANDARD IS STRONGER THAN WHAT IS ENFORCED, and the difference is the API
-shape.** The Penpot sibling's `MappingController::update()` takes an id and
-`ncGroups` and nothing else, so no caller can *express* a change to anything
-else. This app instead accepts a whole Mapping and checks four fields — which
-leaves `mode` and `format` editable, and means the admin card PUTs every field on
-every save whether or not it may change one.
+The one edit a mapping has, and the only one it should ever have.
 
-Guarding is weaker than not offering. Adopting the sibling's shape is the
-intended end state, and it arrives with the groups pass-through: once groups are
-read from the folder rather than stored (the sibling's §C6.35), "editing a
-mapping" stops existing as a concept and the object is wholly immutable.
+**NARROWING AND CLEARING ARE THE POINT.** The old `syncGroupShares()` wrote the
+listed groups and left the rest alone, so a group could be granted and never
+revoked, and "set the groups to nothing" silently did nothing at all. It could
+only prune safely once the sync stopped re-asserting a stored list — a sync that
+pruned from a stored list would have been silently revoking access an admin
+granted by hand.
+
+The folder name differs per storage kind deliberately: removing a mapping deletes
+nothing, so a folder outlives the mapping that made it, and a later Examples row
+reusing the name would inherit a folder of the wrong kind.
+
+### Groups are read from the folder, not from the mapping
+
+**The scenario that explains why the whole change exists.** Three apps in this
+family — this one, n8n and Penpot — can map to the same folder. While each stored
+its own group list, every sync stamped that list over the others', so all three
+fought for control of one folder forever and none of them was wrong. Reading the
+groups off the folder makes the folder the single answer.
+
+The share is made through **groupfolders' own `occ` command**, so it comes from
+something that is not this app — otherwise the scenario would prove only that the
+app agrees with itself.
+
+It is written on a Team Folder for a checked reason: **core ships no `occ` command
+that creates a plain group share.** Verified against a live Nextcloud rather than
+assumed — core has `sharing:cleanup-remote-storages`, `delete-orphan-shares`,
+`expiration-notification` and `fix-share-owners`, and nothing that shares. A first
+draft called `occ sharing:share`, which does not exist.
 
 ### The recycle-bin folder
 
