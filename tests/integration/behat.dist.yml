@@ -25,18 +25,81 @@ default:
     filters:
       tags: '~@todo&&~@unbuilt&&~@blocked&&~@decision'
 
+  # THREE SUITES, AND THEY ARE A PARTITION — every feature file belongs to exactly
+  # one. `bin/check-suites.sh` enforces that mechanically, because the failure
+  # mode of getting it wrong is SILENT: a file in no suite is simply never run,
+  # and a green build says so confidently.
+  #
+  # Running plain `behat` runs all three in sequence, which is exactly the old
+  # single-suite coverage — the split is inert until something selects a suite.
+  # That is deliberate: it lets CI prove the partition covers everything BEFORE
+  # the workflow starts depending on it (`behat --suite=dashboard` per leg).
+  #
+  # THE AXIS IS THE FILENAME, NOT A TAG. Tags look like the obvious split and are
+  # the wrong tool: `@occ`, `@ui` and `@in-grafana` are carried by some scenarios
+  # and not others, so any tag partition leaks — the untagged ones would match no
+  # leg and quietly stop running, with every leg still green. A path partition
+  # cannot leak, because `ls features/*.feature` minus the union must be empty and
+  # that is one line to check.
+  #
+  #   admin      the settings surface — the connection, the mapping list, and
+  #              removing a mapping. Grouped because admin work is a different
+  #              SESSION from user work, not merely a different tag.
+  #   dashboard  the six verbs, as they apply to a dashboard (a .grafana.json
+  #              file): create, copy, move, rename, delete, restore.
+  #   core       everything else: the same six verbs on a FOLDER, plus identity,
+  #              file type, tags, the manual sync buttons, purge and the app
+  #              lifecycle.
+  #
+  # WHY `folder` IS NOT ITS OWN SUITE YET, though it is the obvious fourth and is
+  # exactly how nextcloud-penpot splits (admin/design/project/core): all 56 of its
+  # scenarios are specification — the folder-mirroring engine lands in a later
+  # course — so the leg would boot a Nextcloud and a Grafana to run nothing at
+  # all. It splits out with the engine, which is a one-line move that
+  # check-suites.sh verifies.
   suites:
-    default:
+    admin:
       paths:
-        # Gherkin lives at the repo root (features/) so the human-readable use
-        # cases are prominent and linkable from docs; behat.dist.yml stays under
-        # tests/integration/ with the rest of the test plumbing.
-        - '%paths.base%/../../features'
-      contexts:
-        # Context class lives with the test code (tests/integration/bootstrap/),
-        # loaded via the integration composer autoload — features/ stays pure
-        # Gherkin.
-        - OCA\GrafanaSync\Tests\Integration\FeatureContext
+      - '%paths.base%/../../features/admin-connection.feature'
+      - '%paths.base%/../../features/admin-mapping.feature'
+      - '%paths.base%/../../features/remove-mapping.feature'
+      # Context class lives with the test code (tests/integration/bootstrap/),
+      # loaded via the integration composer autoload — features/ stays pure
+      # Gherkin.
+      contexts: &contexts
+      - OCA\GrafanaSync\Tests\Integration\FeatureContext
+
+    dashboard:
+      paths:
+      - '%paths.base%/../../features/create-dashboard.feature'
+      - '%paths.base%/../../features/copy-dashboard.feature'
+      - '%paths.base%/../../features/delete-dashboard.feature'
+      - '%paths.base%/../../features/move-dashboard.feature'
+      - '%paths.base%/../../features/rename-dashboard.feature'
+      - '%paths.base%/../../features/restore-dashboard.feature'
+      contexts: *contexts
+
+    core:
+      paths:
+      # The folder verbs live here until they have an engine to exercise — see
+      # the note above. Kept together and first, so promoting them to a `folder`
+      # suite is a cut and a paste.
+      - '%paths.base%/../../features/create-folder.feature'
+      - '%paths.base%/../../features/copy-folder.feature'
+      - '%paths.base%/../../features/delete-folder.feature'
+      - '%paths.base%/../../features/move-folder.feature'
+      - '%paths.base%/../../features/rename-folder.feature'
+      - '%paths.base%/../../features/restore-folder.feature'
+      - '%paths.base%/../../features/reconcile.feature'
+      - '%paths.base%/../../features/mapping-membership.feature'
+      - '%paths.base%/../../features/file-type.feature'
+      - '%paths.base%/../../features/open-with.feature'
+      - '%paths.base%/../../features/tag-sync.feature'
+      - '%paths.base%/../../features/reserved-tags.feature'
+      - '%paths.base%/../../features/purge.feature'
+      - '%paths.base%/../../features/lifecycle.feature'
+      - '%paths.base%/../../features/uninstall.feature'
+      contexts: *contexts
 
   formatters:
     # Human-readable progress in the log…

@@ -52,14 +52,37 @@ env:
 jobs:
 
   integration:
-    name: Integration Tests
+    name: Integration ${{ matrix.suite }}
     runs-on: ubuntu-latest
 
+    # ── THE SUITE AXIS DIVIDES THE SCENARIOS ─────────────────────────────────
+    # Three legs each run a slice of features/, in parallel. The split is by
+    # FILENAME (behat.dist.yml explains why a tag partition leaks), and
+    # `bin/check-suites.sh` fails the quality job if features/ is not covered
+    # exactly once.
+    #
+    # BE HONEST ABOUT WHAT THIS BUYS TODAY: 36 of the repo's 215 scenarios are
+    # live, so the wall-clock win is small — `dashboard` is 23 of them and the
+    # other two legs are short. The win is structural. The partition is the thing
+    # that stops a feature file from silently falling out of the run, it is what
+    # the family's other two apps already do, and it is the axis a second one
+    # multiplies against: as the specification goes live (the folder engine alone
+    # is 56 scenarios) the legs are already there to absorb it.
+    #
+    # NOT ADDED YET: a storage-backend axis (Team Folder vs admin-owned). Every
+    # behaviour is valid on both, and the groupfolders path has never run in CI
+    # here — but `add-mapping` only persists, it does not provision, so a mapping
+    # has no folder until a sync makes one. The axis lands with the change that
+    # makes creating a mapping provision its folder.
+    #
+    # fail-fast: false is load-bearing. With it on, one flaky leg cancels the
+    # others and you lose the signal from the legs that were fine.
     strategy:
       fail-fast: false
       matrix:
         # NC 33 is the app's max-version; SQLite is the fast integration path.
         server-versions: ['stable33']
+        suite: [admin, dashboard, core]
 
     services:
       # Grafana with its admin user provisioned from env — a background container
@@ -184,24 +207,32 @@ jobs:
         NC_BASE_URL: http://localhost:8080
         # The minted token, available to scenarios as an "admin already has a token".
         GRAFANA_TOKEN: ${{ steps.grafana_token.outputs.token }}
-      run: vendor/bin/behat --config behat.dist.yml --strict
+        # Bound here rather than interpolated into `run:` — a `${{ }}` inside a
+        # shell script is substituted BEFORE the shell sees it, which mixes
+        # templating with logic and is an injection seam. Read as a plain $VAR.
+        SUITE: ${{ matrix.suite }}
+      # No --tags: the status filter lives in behat.dist.yml and a CLI --tags would
+      # REPLACE it rather than add to it. check-suites.sh pins the two together the
+      # moment a leg ever needs to pass one.
+      run: vendor/bin/behat --config behat.dist.yml --strict --suite="$SUITE"
 
-    - name: Publish integration results
-      if: always()
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        check_name: Integration test results
-        files: apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
-        comment_mode: always
-
-    - name: Upload JUnit + NC log on failure
+    # ONE RESULT FOR THE WHOLE RUN, NOT THREE. Each leg only UPLOADS its JUnit
+    # XML; the publish job below collects them and reports once. Publishing per
+    # leg would produce three checks and three PR comment updates for one test
+    # run, which buries the answer to "did the suite pass?" under the mechanics of
+    # how it was split.
+    #
+    # `if: always()` so a failing leg still contributes its results — a leg that
+    # fails is exactly the one whose report you want.
+    - name: Upload JUnit results
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: integration-junit
-        path: |
-          apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
-        if-no-files-found: warn
+        # Unique per leg: artifacts with the same name collide.
+        name: junit-${{ matrix.suite }}
+        path: apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
+        retention-days: 7
+        if-no-files-found: error
 
     - name: Nextcloud log on failure
       if: failure()
@@ -209,3 +240,57 @@ jobs:
         if [ -f data/nextcloud.log ]; then cat data/nextcloud.log; else echo "no nextcloud.log"; fi
         echo "── php built-in server log ──"
         if [ -f /tmp/nc-web.log ]; then cat /tmp/nc-web.log; else echo "no nc-web.log"; fi
+
+  # ── one report for the whole matrix ────────────────────────────────────────
+  # This is the action's own documented matrix pattern, and it needs NO XML
+  # merging: `files` is a glob and the action aggregates across every file it
+  # matches.
+  publish-integration-results:
+    name: Integration results
+    needs: integration
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+
+    steps:
+    # NO `merge-multiple`. Behat names its report after the SUITE, so every leg
+    # writes a differently-named file today — but the moment a second axis lands
+    # (the storage backend is coming), two legs share a suite name and
+    # `merge-multiple: true` would flatten them into one directory where the
+    # second download silently overwrites the first. That produced a green report
+    # over a red matrix on nextcloud-penpot. Left off, each artifact lands in
+    # `junit/<artifact-name>/`, unique by construction.
+    - name: Download every leg's results
+      uses: actions/download-artifact@v8
+      with:
+        path: junit
+        pattern: junit-*
+
+    # The guard, because that failure mode is SILENT — the report looks healthy
+    # and simply describes a different, smaller run. One leg uploads exactly one
+    # suite report, so any collision shows up as fewer files than directories.
+    - name: Every leg is present
+      run: |
+        dirs=$(find junit -mindepth 1 -maxdepth 1 -type d | wc -l)
+        files=$(find junit -name '*.xml' | wc -l)
+        echo "legs: $dirs, reports: $files"
+        find junit -name '*.xml' | sort
+        if [ "$dirs" -eq 0 ]; then echo "::error::no leg uploaded a report"; exit 1; fi
+        if [ "$dirs" -ne "$files" ]; then
+          echo "::error::$dirs legs but $files reports — results are being overwritten"
+          exit 1
+        fi
+
+    - name: Publish integration results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      with:
+        check_name: Integration test results
+        files: junit/**/*.xml
+        comment_mode: always
+        # The legs already fail the workflow on a failing scenario; this job
+        # exists to REPORT, so it must not turn a reporting hiccup into a second
+        # red X for the same failure.
+        action_fail: false
