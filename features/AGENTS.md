@@ -93,17 +93,26 @@ resolved lazily on every read — so the saved mapping and the admin list both s
 two populated fields, and it is visible at a glance that they match because the
 name was left blank. Mappings are immutable, so resolving once is enough.
 
-**Mode has no default: it is required.** Omitting it is a refusal, and the
-outline below proves it. Two divergences from the Penpot sibling are worth
-recording, both real rather than accidental:
+**Mode defaults to `link`, and it did not used to** — omitting it refused the
+whole mapping, so the shortest useful call (a Grafana folder and nothing else)
+could not be written and every caller had to name a mode it had no opinion
+about. `format`, two lines away in the same method, had always defaulted; mode
+was simply the odd one out.
 
-- **`mode` is required here; Penpot defaults it to `link`** — the conservative
-  choice, since a link downloads nothing. The n8n sibling also requires it.
-- **`use_team_folder` defaults to true here; Penpot changed its equivalent to
-  false**, because groupfolders is an OPTIONAL app and a default that cannot be
-  provisioned on a stock Nextcloud is not a default (the sibling's §C6.35).
+**Writing this table is what found it.** Declaring what every unset field becomes
+forces a value for each, and there was none to put in the `mode` row. That is the
+argument for the table, and it caught the identical gap in the n8n sibling.
 
-Both are behaviour changes and neither belongs in a specification-only change.
+`link` is the conservative choice: it downloads nothing and pushes nothing back,
+so a mapping made without an opinion about mode cannot cost anything. An
+*unknown* mode is still refused — saying nothing and saying nonsense are
+different inputs and get different answers.
+
+One divergence from the Penpot sibling remains, and it is real rather than
+accidental: **`use_team_folder` defaults to true here; Penpot changed its
+equivalent to false**, because groupfolders is an OPTIONAL app and a default that
+cannot be provisioned on a stock Nextcloud is not a default (the sibling's
+§C6.35). That is a behaviour change and has not been taken here.
 
 ### A mapping the app cannot honour is refused, and says why
 
