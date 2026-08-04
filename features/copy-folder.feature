@@ -1,45 +1,4 @@
-# Copying a FOLDER — the folder half of copy-dashboard.feature.
-#
-# ── THE RULE COPY ALWAYS FOLLOWS ─────────────────────────────────────────────────
-#
-# A copy is ALWAYS a new instance, never a second claim on an existing one. For a
-# dashboard file that means the copy's `grafana_uid` is stripped and a fresh
-# dashboard is created (copy-dashboard.feature). For a folder the same rule has to
-# hold twice over: the copied folder must not inherit the original's
-# `grafana_folderUid`, and neither must any dashboard file inside it.
-#
-# The failure this prevents is the one that has no clean repair: two Nextcloud
-# folders both stamped with one Grafana folder uid, or two files both claiming one
-# dashboard. The next pull then has two candidates for one uid and no way to choose,
-# and whichever it writes, the other silently diverges.
-#
-# ── THE `grafana` TAG IS NOT COPIED ──────────────────────────────────────────────
-#
-# A folder becomes a Grafana folder by being TAGGED (create-folder.feature) — a
-# deliberate act with a name. Nextcloud copies system tags along with a folder, so
-# a naive copy would opt the duplicate in without anyone asking, and the app would
-# create a Grafana folder nobody named. The copy must land as a plain folder; if
-# the user wants it mirrored, they tag it, which is the same one gesture as before.
-#
-# This is the folder analogue of "copy is the single safest point to strip
-# metadata": whatever the source was, the copy starts clean.
-#
-# ── THE ALTERNATIVE: REFUSE ──────────────────────────────────────────────────────
-#
-# The penpot sibling refuses a project-folder copy outright rather than defining
-# what a duplicated project means. That is a legitimate answer here too, and
-# cheaper to get right — a folder copy is a bulk create with a partial-failure mode
-# (move-folder.feature has the same problem), and "one gesture, forty new
-# dashboards" is not obviously what anyone wants. Both readings are written below;
-# whichever is chosen, delete the other rather than leaving the pair unresolved.
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# Nextcloud fires `NodeCopiedEvent` per node, and `CopyListener` acts on Files only,
-# so the FILES inside a copied folder already take the normal copy path — those
-# scenarios are @todo. Everything about the folder's own identity is @unbuilt:
-# nothing reads or strips `grafana_folderUid`, and there is no folder write API to
-# create a duplicate with.
+# Notes, decisions and history for this feature: AGENTS.md#copy-folder
 
 Feature: Copying a folder
   As a Nextcloud user

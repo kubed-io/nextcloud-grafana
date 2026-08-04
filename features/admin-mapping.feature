@@ -1,18 +1,5 @@
-# "Admin makes a mapping" — the folder-mapping list in admin settings, driven over
-# the CLI (the same operations the Settings panel performs).
-#
-# THE KEY DIFFERENCE FROM THE n8n TEMPLATE: Grafana has real folders. Where the
-# n8n app had to bind an n8n *tag* to a Nextcloud folder (n8n has no folders), a
-# Grafana mapping binds a Grafana **folder** (by uid) to a Nextcloud folder — a
-# plain folder-to-folder mirror, no tagging scheme to maintain. The dashboards
-# inside that Grafana folder become the `.grafana.json` files in the NC folder,
-# and nested Grafana folders mirror to nested NC folders (the "General"/root area
-# maps to the mapping's root). Modes are sync / link (see the saga).
-#
-# Note on the "grafana folder" column: the mapping stores a folder **uid**, which
-# in real Grafana is opaque. This config-only feature does not check the uid
-# against a live Grafana (a mapping is pure config until the sync chapter), so the
-# steps use the folder name as its own uid — the mapping CRUD is what's under test.
+# Notes, decisions and history for this feature: AGENTS.md#admin-mapping
+
 Feature: Admin configures folder mappings
   As a Nextcloud admin
   I want to map Grafana folders to Nextcloud folders with a mode
@@ -21,127 +8,146 @@ Feature: Admin configures folder mappings
   Background:
     Given the app is enabled
 
-  @admin @occ @ui
-  Scenario: Map Grafana folders to Nextcloud folders across both modes
-    When the admin adds these mappings:
-      | grafana folder | folder  | mode |
-      | observe        | observe | sync |
-      | secrets        | secrets | link |
-    Then there are 2 configured mappings
-    And the mapping for grafana folder "observe" is in "sync" mode
-    And the mapping for grafana folder "secrets" is in "link" mode
+    # A mapping is one fact, so it is one sentence plus a table of what is in it —
+    # the same table whether it is pre-state or the action. A blank cell means the
+    # admin left that field alone, so the app's own default applies.
+    # notes: AGENTS.md#the-preconditions
 
-  # The Nextcloud folder name is OPTIONAL — Grafana has real folders, so the common case
-  # is "same name on both sides". When the NC folder is omitted, it is **resolved to the
-  # Grafana folder's name AT CREATE and stored** (not defaulted lazily). Because mappings
-  # are immutable, resolving once on create is enough, and it means the saved mapping (and
-  # the admin list) shows BOTH folder fields with a value — you can see at a glance they
-  # match precisely because you left the Nextcloud name blank.
-  # @todo — new step phrases (no step defs yet); the behaviour is covered by MappingTest.
-  @admin @occ @ui @todo
-  Scenario: The Nextcloud folder is stored as the Grafana folder name when omitted at create
-    When the admin adds a mapping for grafana folder "observability" with no Nextcloud folder
-    Then the stored mapping for grafana folder "observability" has Nextcloud folder "observability"
-    And both folder fields are set in the saved mapping, with nothing left blank
+  Scenario Outline: Creating a mapping saves the form
+    Given no Grafana folders are mapped
+    And an unset field on the mapping form defaults to:
+      | nc folder  | the Grafana folder's name |
+      | mode       | link                      |
+      | format     | json                      |
+      | groups     |                           |
+      | storage    | team folder               |
+      | subfolders | off                       |
+    # The Grafana folder is the only required field — everything else has a
+    # default, and the outline below proves the one refusal.
+    #
+    # The Nextcloud folder's default is prose rather than a value: left blank it is
+    # materialised from the Grafana folder's TITLE at create and stored, so the
+    # saved mapping shows both fields populated and you can see at a glance that
+    # they match because the name was left blank.
+    When the admin maps the Grafana folder "<uid>" with:
+      | nc folder  | <nc folder>  |
+      | mode       | <mode>       |
+      | format     | <format>     |
+      | groups     | <groups>     |
+      | storage    | <storage>    |
+      | subfolders | <subfolders> |
+    Then the mapping matches the form, unset fields at their defaults
 
-  # Four fields are IMMUTABLE once a mapping exists — each would otherwise force a live
-  # migration that's easier to avoid by re-creating the mapping:
-  #   - the Grafana folder + the Nextcloud folder — re-pointing either would rename/move both
-  #     trees of already-synced files and re-stamp metadata (doubly fiddly if BOTH change);
-  #   - the **Team Folder** flag — switching the storage backend (ownerless Team Folder ⇄
-  #     admin-owned shared folder) would migrate the provisioned folder + its shares (the n8n
-  #     master reinforces this same rule);
-  #   - **subfolder-sync** — flipping it restructures the far-side folder tree (ON→OFF flattens
-  #     mirrored Grafana subfolders + re-parents dashboards; OFF→ON lazily grows them). Immutable
-  #     for now; the saga records what a safe on-the-fly flip could look like later.
-  # To change any of them, delete the mapping and add a new one. Mode / format / groups stay
-  # editable.
-  # @todo — immutability can't be driven over occ (no update command); MappingServiceTest
-  # provides the real coverage. Kept here as the executable spec for when a REST/UI step lands.
-  @admin @occ @ui @todo
-  Scenario: A mapping's folders, Team Folder, and subfolder-sync cannot be changed after it is created
-    Given a mapping from grafana folder "observe" to Nextcloud folder "observe"
-    When the admin tries to change that mapping's Nextcloud folder to "elsewhere"
-    Then the change is rejected as immutable
-    When the admin tries to change that mapping's Grafana folder to "secrets"
-    Then the change is rejected as immutable
-    When the admin tries to change that mapping's Team Folder setting
-    Then the change is rejected as immutable
-    When the admin tries to change that mapping's subfolder-sync setting
-    Then the change is rejected as immutable
-    And the admin can still change that mapping's mode, format, and groups
+    # The mode x format matrix, one row per combination.
 
-  # New-model invariant: a mapping's mode is exactly sync or link.
-  @admin @occ @ui
-  Scenario: A mapping mode must be sync or link
-    When the admin adds a mapping with an unknown mode for grafana folder "build"
+    Examples: every mode, and every serialization format
+      | uid     | nc folder | mode | format | groups | storage      | subfolders |
+      | observe | observe   | sync | json   |        | team folder  |            |
+      | secrets | secrets   | link | json   |        | team folder  |            |
+      | network | network   | sync | yaml   |        | admin folder |            |
+      | build   | build     | link | yaml   |        | admin folder |            |
+
+    Examples: and the fields that have a default
+      | uid       | nc folder | mode | format | groups | storage | subfolders |
+      | defaulted |           |      |        |        |         |            |
+      | grouped   | grouped   | sync |        | admin  |         |            |
+      | nested    | nested    | sync |        |        |         | on         |
+
+    # notes: AGENTS.md#creating-a-mapping-saves-the-form
+
+  Scenario Outline: A mapping the app cannot honour is refused, and says why
+    Given no Grafana folders are mapped
+    When the admin maps the Grafana folder "<uid>" with:
+      | nc folder | <nc folder> |
+      | mode      | <mode>      |
+      | format    | <format>    |
     Then the mapping is rejected
-    And there are 0 configured mappings
+    And the refusal explains "<reason>"
+    And there are exactly 0 configured mappings
 
-  # Difference #2 — the serialization cut is a per-mapping field. It defaults to the
-  # classic JSON dashboard model and can opt into the newer k8s-style YAML schema.
-  @admin @occ @ui
-  Scenario: A mapping records its serialization format, defaulting to "json"
-    When the admin adds these mappings:
-      | grafana folder | folder    | mode |
-      | network        | network   | sync |
-    Then the mapping for grafana folder "network" is in "json" format
-    When the admin adds a "yaml" mapping for grafana folder "observe" in folder "observe"
-    Then the mapping for grafana folder "observe" is in "yaml" format
+    Examples: every field that carries a rule of its own
+      | uid     | nc folder | mode  | format | reason             |
+      |         | observe   | sync  | json   | grafana_folder_uid |
+      | observe | observe   | bogus | json   | mode must be       |
+      | observe | observe   | sync  | toml   | format must be     |
 
-  # A folder can map to exactly one location — a duplicate uid is rejected.
-  @admin @occ @ui
+    # notes: AGENTS.md#a-mapping-the-app-cannot-honour-is-refused-and-says-why
+
   Scenario: A Grafana folder may only be mapped once
-    When the admin adds these mappings:
-      | grafana folder | folder  | mode |
-      | observe        | observe | sync |
-    And the admin adds a "json" mapping for grafana folder "observe" in folder "elsewhere"
+    Given a mapping with the following values:
+      | grafana folder | observe |
+      | nc folder      | observe |
+    When the admin maps the Grafana folder "observe" with:
+      | nc folder | elsewhere |
     Then the mapping is rejected
-    And there are 1 configured mappings
+    And the refusal explains "already uses the Grafana folder"
+    And there is exactly 1 configured mapping
+    # A Grafana folder is what a mapping IS, so mapping it twice would make two
+    # mappings mean the same thing and every dashboard in it would belong to both.
+    # notes: AGENTS.md#a-grafana-folder-may-only-be-mapped-once
 
-  # Subfolder sync (saga Ch2, revised): a mapping carries an optional "Sync subfolders"
-  # flag (default OFF), chosen AT CREATE (it is immutable afterwards — see above). ON = a
-  # Nextcloud subfolder mirrors to a Grafana subfolder the moment a dashboard lands in it
-  # (lazy, presence-driven — no hidden child mappings, no manual trigger tag). The flag
-  # persists like any other mapping field; the folder-mirroring engine that acts on it lands
-  # in a later Course, so the "on" behaviour is @todo.
-  @admin @occ @ui @unbuilt
-  Scenario: A mapping records its "Sync subfolders" flag at create, defaulting to off
-    When the admin adds these mappings:
-      | grafana folder | folder  | mode |
-      | observe        | observe | sync |
-    Then the mapping for grafana folder "observe" has subfolder sync off
-    When the admin adds a "sync" mapping for grafana folder "network" in folder "network" with subfolder sync on
-    Then the mapping for grafana folder "network" has subfolder sync on
+  @unbuilt
+  Scenario: Two mappings may not target the same Nextcloud folder
+    Given a mapping with the following values:
+      | grafana folder | observe |
+      | nc folder      | shared  |
+    When the admin maps the Grafana folder "secrets" with:
+      | nc folder | shared |
+    Then the mapping is rejected
+    And the refusal explains "already"
+    And there is exactly 1 configured mapping
+    # UNBUILT, AND THE GAP IS REAL: assertFolderUnique checks the GRAFANA uid and
+    # says nothing about the Nextcloud folder, so today this is accepted and the
+    # two mappings then prune each other's dashboards forever.
+    # notes: AGENTS.md#two-mappings-may-not-target-the-same-nextcloud-folder
 
-  # The Grafana root ("General") holds dashboards with no folder. It has no real uid, so the
-  # folder picker offers a reserved "/" entry for it. Mapping "/" pulls the no-folder
-  # dashboards; "/" → Nextcloud "/" with subfolder sync on mirrors the WHOLE instance
-  # (see reconcile.feature). @todo — needs the reserved-root handling.
-  @admin @occ @ui
   Scenario: The Grafana root can be mapped via the reserved "/" folder
-    When the admin adds these mappings:
-      | grafana folder | folder     | mode |
-      | /              | dashboards | sync |
-    Then the mapping for grafana folder "/" is in "sync" mode
+    Given no Grafana folders are mapped
+    When the admin maps the Grafana folder "/" with:
+      | nc folder | dashboards |
+      | mode      | sync       |
+    Then the mapping matches the form, unset fields at their defaults
+    # The Grafana root ("General") holds dashboards with no folder and has no real
+    # uid, so the picker offers a reserved "/" entry for it.
+    # notes: AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-  # ── the optional Grafana recycle-bin folder (opt-in id-preserving delete/move-out) ──
-  # OFF by default: a move-out / delete is a true Grafana delete (see move-dashboard.feature +
-  # delete-dashboard.feature). Turned ON, the admin names an existing Grafana folder to act as the
-  # trash: instead of deleting, the app MOVES the dashboard there (keeping its uid), so a
-  # restore / move-back-in returns the SAME dashboard — Grafana's answer to n8n's archive.
-  # The bin folder has special meaning, so it may not itself be used in a folder mapping.
-  # @todo — the delete/move engine that reads these settings lands in Course 4 · Slice 2.
-  @admin @occ @ui @recycle-bin @todo
+  @unbuilt
+  Scenario Outline: What a mapping locks, it locks for a reason
+    Given a mapping with the following values:
+      | grafana folder | observe |
+      | nc folder      | observe |
+    When the admin changes that mapping's <field> to "<value>"
+    Then the change is rejected as immutable
+
+    Examples: the four fields a change would have to migrate
+      | field          | value     |
+      | grafana folder | secrets   |
+      | nc folder      | elsewhere |
+      | storage        | admin     |
+      | subfolders     | on        |
+
+    # notes: AGENTS.md#what-a-mapping-locks-it-locks-for-a-reason
+
+  # ── the optional Grafana recycle-bin folder ────────────────────────────────
+  # Off by default: a move-out or delete is a true Grafana delete. Turned on, the
+  # admin names an existing Grafana folder to act as the bin, so a delete MOVES
+  # the dashboard there with its uid intact and a restore returns the same
+  # dashboard. It is a setting of the app, not a property of a mapping — which is
+  # why the bin folder may not itself be mapped.
+  # notes: AGENTS.md#the-recycle-bin-folder
+
+  @recycle-bin @todo
   Scenario: The recycle-bin folder is off by default and can be enabled with a folder name
     Given the app is enabled
     Then the Grafana recycle-bin folder is off
     When the admin enables the Grafana recycle-bin folder and sets it to "nextcloud-trash"
     Then the Grafana recycle-bin folder is on and set to "nextcloud-trash"
 
-  @admin @occ @ui @recycle-bin @unbuilt
+  @recycle-bin @unbuilt
   Scenario: The recycle-bin folder cannot also be a mapped folder
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    When the admin adds a "sync" mapping for grafana folder "nextcloud-trash" in folder "trash"
+    When the admin maps the Grafana folder "nextcloud-trash" with:
+      | nc folder | trash |
+      | mode      | sync  |
     Then the mapping is rejected
-    And there are 0 configured mappings
+    And there are exactly 0 configured mappings

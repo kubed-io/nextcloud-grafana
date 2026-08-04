@@ -1,39 +1,4 @@
-# Deleting a FOLDER — the folder half of delete-dashboard.feature, and the highest
-# blast radius in the app.
-#
-# ── WHY THIS IS NOT JUST "DELETE, N TIMES" ───────────────────────────────────────
-#
-# Deleting one dashboard file is a decision the user makes about one dashboard.
-# Deleting a folder is one gesture that reaches every dashboard inside it — and
-# under the DEFAULT setting (recycle bin OFF), every one of those is a **permanent
-# Grafana delete**, because Grafana has no undo. A user dragging a folder to the
-# trash is unlikely to have priced that in.
-#
-# The Nextcloud side stays honest either way: the files land in the trash with their
-# JSON intact, so nothing is *lost*. What is gone is the dashboards' uids and their
-# Grafana version history, for as many dashboards as the folder held.
-#
-#   | folder holds N sync files | bin OFF                    | bin ON                     |
-#   |---------------------------|----------------------------|----------------------------|
-#   | trash the folder          | N permanent Grafana deletes | N dashboards parked        |
-#   | restore the folder        | N NEW uids (create-on-land) | N restored, uids preserved |
-#   | empty the trash           | nothing left to do          | N permanent deletes        |
-#
-# ── THE ORDERING QUESTION NOBODY HAS ANSWERED ────────────────────────────────────
-#
-# Nextcloud fires `BeforeNodeDeletedEvent` per node, so the app sees N file deletes
-# rather than one folder delete. That mostly works — each file takes the normal path
-# — but it means there is no transaction and no summary: a folder delete that fails
-# on dashboard 7 of 12 leaves five dashboards deleted, one delete aborted, and six
-# untouched, with nothing telling the user which is which. Every individual file
-# behaved correctly and the aggregate is still a mess.
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# The per-file path is built (DeleteService, unit-tested), so the scenarios that are
-# only "does the per-file rule hold when a folder is the gesture" are @todo. The
-# aggregate behaviour — confirmation, partial-failure reporting, restoring a folder
-# as a unit — is @unbuilt: nothing in `lib/` treats a folder delete as one event.
+# Notes, decisions and history for this feature: AGENTS.md#delete-folder
 
 Feature: Deleting a folder
   As a Nextcloud user
@@ -63,11 +28,7 @@ Feature: Deleting a folder
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
     And all three files KEEP their "grafana_uid"
 
-  # ── the mapped folder itself ─────────────────────────────────────────────────────
-  # Deleting the folder a mapping points at is the widest gesture available to a
-  # non-admin. The mapping survives — it is configuration, not a file — so the next
-  # pull re-creates the folder and everything in it. Whether the dashboards should
-  # have been deleted in the meantime is the whole question.
+  # notes: AGENTS.md#trashing-the-mapped-folder-itself-deletes-its-dashboards-but-keeps-the-mapping
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Trashing the mapped folder itself deletes its dashboards but keeps the mapping

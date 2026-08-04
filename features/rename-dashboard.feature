@@ -1,42 +1,4 @@
-# Three-way name agreement in sync mode: filename stem ⇄ JSON "title" ⇄ Grafana title.
-#
-# ── THE THREE SURFACES, AND WHY THERE ARE THREE ──────────────────────────────────
-#
-#   1. the FILENAME       — what the user sees and types in the Files app
-#   2. the JSON `title`   — what is inside the file, and what a push sends
-#   3. the Grafana title  — what the dashboard is called on the far side
-#
-# Any one of them can be changed first, and the other two must follow. Two of the
-# three are in Nextcloud, which is why a rename is not simply "push the new name":
-# editing the JSON has to rename the FILE too, and renaming the file has to rewrite
-# the JSON, before either reaches Grafana.
-#
-# ── THE UID IS THE THREAD, NOT THE NAME ──────────────────────────────────────────
-#
-# The link between a file and its dashboard is `grafana_uid` in the file's metadata.
-# No rename, on any surface, can break it — which is the whole reason names are free
-# to change at all. Every scenario here is really a restatement of that.
-#
-# ── RENAMING A FOLDER IS A DIFFERENT PROBLEM ─────────────────────────────────────
-#
-# It has its own file (rename-folder.feature) and its own defect: a mapping is
-# stored as a PATH string, so renaming a mapped folder silently orphans it. Nothing
-# on this page has that problem, because nothing on this page is identified by name.
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# The Nextcloud-side legs are cooked (Course 5) and now RUN IN CI — NameSyncListener
-# enqueues, ReconcileNameJob does the file-locked write/rename, and the writeback
-# carries the title to Grafana.
-#
-# The deferral is not an optimisation: during a rename the file is LOCKED, so a
-# synchronous putContent throws. That is why every rename step drains
-# PushDashboardJob and then ReconcileNameJob before asserting — a test that checked
-# immediately after the MOVE would be racing a job that had not started.
-#
-# The Grafana-side legs ride the ordinary pull and are still @todo. The refusals are
-# @unbuilt: NameSyncListener bails on an empty stem rather than reporting anything,
-# so nothing tells the user their rename went nowhere.
+# Notes, decisions and history for this feature: AGENTS.md#rename-dashboard
 
 Feature: Renaming keeps file, JSON, and Grafana in agreement
   As a Nextcloud user
@@ -149,11 +111,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
     Then the rename is refused with a message
     And the file, its JSON title, and the dashboard still agree
 
-  # The local rename is the user's own gesture in their own file tree. A far-side
-  # failure must not reach back and undo it — report the divergence and let the next
-  # reconcile settle it. This is the deliberate asymmetry with delete, where a failed
-  # far-side call DOES abort the local gesture: a rename is recoverable and a delete
-  # is not.
+  # notes: AGENTS.md#a-failed-propagation-never-reverts-the-local-rename
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: A failed propagation never reverts the local rename
     Given a managed "sync" dashboard file

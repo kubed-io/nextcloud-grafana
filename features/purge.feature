@@ -1,19 +1,4 @@
-# Purge — an admin-only button beside "Sync from/to Grafana" and "Test connection"
-# (also `occ grafana_sync:purge`) that removes the dashboard files THIS APP created and
-# nothing else. It deletes every **restorable** managed file — `sync` and `link`,
-# whose dashboard is still live + tagged in Grafana — across all mappings, and:
-#   - never contacts Grafana (the delete runs under SyncGuard so it can't mirror out);
-#   - leaves the mappings configured;
-#   - leaves the custom mimetype registration alone (that is uninstall's job).
-#
-# It deliberately KEEPS files a "Sync from Grafana" could not bring back, so purge can
-# never cost you data: `unmapped` files (moved out of a mapping — a standalone copy /
-# template you kept, whose full JSON lives in the file), `ignored` files, and untracked
-# `.grafana.json` (a plain document the app never created).
-#
-# Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Command\Purge}).
-# Two intended flows: purge → "Sync from Grafana" (everything reappears), and
-# purge → uninstall (Nextcloud looks like the app was never there).
+# Notes, decisions and history for this feature: AGENTS.md#purge
 
 Feature: Purge the app's restorable files from Nextcloud
   As a Nextcloud admin

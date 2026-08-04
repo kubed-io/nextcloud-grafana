@@ -1,79 +1,4 @@
-# HOW A FOLDER BECOMES A GRAFANA FOLDER, AND HOW YOU CAN TELL THAT IT IS ONE.
-#
-# ── WHY FOLDERS GET THEIR OWN FEATURE FILES AT ALL ───────────────────────────────
-#
-# In the n8n sibling a "folder" is a Nextcloud convenience: n8n maps by TAG and has
-# no folder concept, so there is nothing on the far side for a folder gesture to
-# mean. Grafana has REAL folders, so every folder gesture is a question about two
-# systems, exactly as a file gesture is. Splitting `<action>-dashboard` from
-# `<action>-folder` is what makes the two readable side by side — and it is what
-# made the state of this surface legible at all (see STATUS below).
-#
-# ── THE ASYMMETRY ────────────────────────────────────────────────────────────────
-#
-#     every mirrored Grafana folder  →  a folder in Nextcloud     (automatic)
-#     SOME Nextcloud folders         →  a folder in Grafana       (opt-in only)
-#
-# A folder created inside a mapped folder is an ORDINARY FOLDER. Nothing is sent,
-# nothing is inferred, and it can hold anything the user likes — notes, exports,
-# screenshots, a subfolder of references. **A mapped folder is a real folder and
-# must stay usable for ordinary things.** A mapping that silently turned every
-# subfolder into a Grafana folder would make the mapped folder unusable for
-# anything but dashboards, which is not a trade a user agreed to.
-#
-# ── THE OPT-IN IS THE `grafana` TAG ──────────────────────────────────────────────
-#
-# Assigning the `grafana` tag to a folder says "make this a Grafana folder" — a
-# deliberate act with a name, exactly as "+ New → Grafana dashboard" is for files.
-# The tag is ALSO how the app marks the folders it mirrors, so both directions share
-# one visible marker: **if it carries the tag, it is a Grafana folder, whoever made
-# it one.** A user cannot tell — and should not have to — whether a folder started
-# life in Grafana or was opted in from Nextcloud.
-#
-# THE MAPPED FOLDER ITSELF NEEDS NO TAG. It is already bound to a Grafana folder by
-# the mapping; that IS its identity. The tag answers the question the mapping does
-# not: which of the folders *underneath* it are Grafana folders. Same shape as the
-# penpot sibling, where a mapped team folder is untagged and the projects inside it
-# carry the `penpot` tag.
-#
-# WHY A TAG AND NOT A CHECKBOX. The current schema has a per-mapping "Sync
-# subfolders" flag, and it is the wrong shape twice over: it is all-or-nothing for a
-# whole mapping, and it infers intent from a folder's mere existence. It is also
-# inert — `syncSubfolders` is stored and validated but no code path reads it, so it
-# is a promise the app does not keep. A tag is per-folder, is a first-class
-# Nextcloud gesture with an event (`TagAssignedEvent`), and survives a rename or a
-# move in a way a name convention or a path-scoped flag cannot.
-#
-# WHY A TAG AND NOT A NAME CONVENTION: the same reason the app tracks dashboards by
-# `grafana_uid` rather than by filename. Names change; markers should not.
-#
-# ── THE TAG DECORATES; THE ID DECIDES ────────────────────────────────────────────
-#
-# `grafana_folderUid` on the folder is what the app acts on. The tag is the visible
-# badge, re-stamped by every pull — which is why a missing tag is never a state the
-# app has to repair specially, and why removing the tag cannot destroy anything.
-#
-# ── STATUS: THE WHOLE FOLDER SURFACE IS UNBUILT ──────────────────────────────────
-#
-# `GrafanaClient` has exactly three folder methods — `listFolders`,
-# `resolveFolderUidByTitle`, `listDashboards` — all READS. There is no createFolder,
-# renameFolder, deleteFolder or moveFolder anywhere in `lib/`, and nothing
-# subscribes to `TagAssignedEvent`. So every scenario requiring a folder write is
-# @unbuilt, not @todo: no test could pass, because there is nothing to call.
-#
-# That distinction only became visible when folders were split out of the file
-# features. While "moving a dashboard into a subfolder" and "creating the subfolder"
-# lived in one file under one file-level @todo, an entire missing subsystem looked
-# like a handful of missing tests.
-#
-# The scenarios that ARE testable today are the ones whose correct outcome is that
-# nothing happens in Grafana — which is also the default path, and the one that
-# keeps a mapped folder usable.
-#
-# NOTE ON REQUIREMENTS: `TagAssignedEvent` needs Nextcloud 32. `appinfo/info.xml`
-# currently declares 31 (for IDeclarativeSettingsFormWithHandlers) — building this
-# means raising that floor, which is a decision for the PR that builds it, not for
-# the one that specifies it.
+# Notes, decisions and history for this feature: AGENTS.md#create-folder
 
 Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
   As a Nextcloud user
@@ -114,11 +39,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
     Then Grafana holds a folder named "Client Work"
     And the Nextcloud folder carries a "grafana_folderUid"
 
-  # THE REASON TO ALLOW OPTING IN LATE. A folder someone has been filling with
-  # dashboards becomes a Grafana folder WITH its contents, rather than forcing the
-  # decision up front. Before the tag those dashboards belonged to the parent
-  # mapping's folder — a folder inside a mapping is still inside the mapping — and
-  # one re-parent moves the lot without re-creating or re-id'ing anything.
+  # notes: AGENTS.md#a-folder-opted-in-late-brings-the-dashboards-already-inside-it
   @user @in-nextcloud @gesture @ui @occ @unbuilt
   Scenario: A folder opted in late brings the dashboards already inside it
     Given a folder "Late Opt In" inside the "alpha" folder holding two managed "sync" dashboard files

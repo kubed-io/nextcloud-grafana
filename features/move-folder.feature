@@ -1,40 +1,4 @@
-# Moving a FOLDER — the folder half of move-dashboard.feature.
-#
-# ── THE RULE THAT MAKES THIS DANGEROUS ───────────────────────────────────────────
-#
-# Mapping membership is decided by PATH (`MappingService::resolveForPath` uses
-# `str_starts_with`), so moving a folder changes the mapping of every dashboard
-# inside it — in one gesture, without touching any of those files individually.
-#
-# And "left every mapping" is the branch that DELETES in Grafana (see
-# move-dashboard.feature §3). So dragging a subfolder out of a mapped folder is,
-# under the default setting, a permanent multi-dashboard delete. The gesture looks
-# like tidying; the consequence is the same as emptying the trash on all of them.
-#
-#   | move a subfolder of "alpha" holding N sync files | outcome                    |
-#   |--------------------------------------------------|----------------------------|
-#   | …to elsewhere inside "alpha"                      | nothing (same mapping)     |
-#   | …into the "beta" mapped folder                    | N Grafana folder moves     |
-#   | …out of every mapping, bin OFF                    | N PERMANENT deletes        |
-#   | …out of every mapping, bin ON                     | N parked in the bin        |
-#   | …in from outside, into a mapping                  | N creates (new uids)       |
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# Nextcloud fires `NodeRenamedEvent` for the FOLDER, not for each file inside it, so
-# `MotionListener` sees one event about a node that is not a File and does nothing.
-# That means **none of the per-file consequences above actually fire today**: moving
-# a folder full of dashboards silently changes their mapping membership without
-# telling Grafana anything, and the two sides drift until the next pull.
-#
-# So the delete rows in that table are not "what happens", they are "what the
-# per-file rules imply should happen". Everything here is @unbuilt: there is no
-# folder-move handling, and `GrafanaClient` has no folder write operations to call.
-#
-# Whether the right answer is "apply the per-file rule to each file", "refuse the
-# move", or "re-home without deleting" is a DECISION, not an implementation detail —
-# and the middle rows below are deliberately written as alternatives so it can be
-# made once, in writing, rather than discovered.
+# Notes, decisions and history for this feature: AGENTS.md#move-folder
 
 Feature: Moving a folder
   As a Nextcloud user

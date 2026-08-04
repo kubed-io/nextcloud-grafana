@@ -1,0 +1,1371 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kelly Ferrone
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
+# Feature notes
+
+The reasoning behind `features/*.feature` — why a scenario exists, what it
+replaced, which decision it encodes, and what was deliberately left out.
+
+It lives here rather than in the feature files because Gherkin is meant to be
+read as specification: a scenario should be legible at a glance, and a comment
+should add scope or a tidbit, not carry an essay. The essays are here, one
+section per feature file, and a feature file links to its section on line 1.
+
+For how the suite is organised — the one-verb-one-noun rule, tags, suites, and
+which scenarios CI runs — see [README.md](README.md).
+
+> Written for whoever picks this up next, human or agent. If you change a
+> behaviour, change the note that explains it in the same commit; a note that
+> describes the old behaviour is worse than no note.
+
+## One section per feature file
+
+Every `features/*.feature` links here from its first line, and every scenario
+whose reasoning did not fit in a sentence carries a `# notes: AGENTS.md#anchor`
+breadcrumb.
+
+Short comments stay in the feature files on purpose. A remark that adds scope to
+a step is meant to be read next to the step; only the essays are the problem,
+because a scenario buried under twenty lines of history stops being legible as
+specification.
+
+**Keep them in step.** If you change a behaviour, change the note that explains
+it in the same commit. A note describing the old behaviour is worse than no note,
+because it will be believed.
+
+Ported from `kubed-io/nextcloud-penpot`, where this layout was worked out.
+
+## admin-mapping
+
+`features/admin-mapping.feature`
+
+"Admin makes a mapping" — the folder-mapping list in admin settings, driven over
+the CLI (the same operations the Settings panel performs).
+
+**THE KEY DIFFERENCE FROM THE n8n TEMPLATE: Grafana has real folders.** Where the
+n8n app binds a *tag* to a Nextcloud folder because n8n has no folder concept at
+all, a Grafana mapping binds a Grafana **folder** (by uid) to a Nextcloud folder —
+a plain folder-to-folder mirror with no tagging scheme to maintain. The dashboards
+inside that Grafana folder become the `.grafana.json` files in the Nextcloud
+folder.
+
+A mapping stores a folder **uid**, which in real Grafana is opaque. This feature
+is config-only — a mapping is pure config until the sync chapter — so the steps
+use the folder name as its own uid and title. The mapping CRUD and its validation
+is what is under test.
+
+### The preconditions
+
+ONE SENTENCE PER FACT, AND A MAPPING IS ONE FACT.
+
+    Given a mapping with the following values:
+      | grafana folder | observe |
+      | nc folder      | observe |
+
+The table carries the full state of one mapping, and the fields are exactly the
+ones the creation form takes. That matters more than it looks: the pre-state and
+the action are then described in **one vocabulary**, so a scenario can put a
+mapping in place and then perform the very action that would have created it,
+with the difference visible in the table rather than hidden between two
+differently-worded steps.
+
+`the admin maps the Grafana folder "X" with:` is the same table as a `When`.
+
+**A BLANK CELL MEANS "THE ADMIN LEFT IT ALONE", NOT "EMPTY".** Blank values are
+dropped from the payload entirely, so the app applies its own default.
+
+This replaced `When the admin adds these mappings:` taking a table of whole
+mappings. That form could only pass or fail as a whole, naming none of its rows
+as the thing that broke — and being a `When`, it could not state a mapping that
+already existed, so the uniqueness scenarios had to add two mappings and assert
+on the second.
+
+### Creating a mapping saves the form
+
+The mode × format matrix, one Examples row per combination.
+
+**THE NEXTCLOUD FOLDER IS OPTIONAL, and that is this app's own rule.** Grafana has
+real folders, so "same name on both sides" is the common case. Left blank it is
+materialised from the Grafana folder's TITLE **at create and stored** — not
+resolved lazily on every read — so the saved mapping and the admin list both show
+two populated fields, and it is visible at a glance that they match because the
+name was left blank. Mappings are immutable, so resolving once is enough.
+
+**Mode has no default: it is required.** Omitting it is a refusal, and the
+outline below proves it. Two divergences from the Penpot sibling are worth
+recording, both real rather than accidental:
+
+- **`mode` is required here; Penpot defaults it to `link`** — the conservative
+  choice, since a link downloads nothing. The n8n sibling also requires it.
+- **`use_team_folder` defaults to true here; Penpot changed its equivalent to
+  false**, because groupfolders is an OPTIONAL app and a default that cannot be
+  provisioned on a stock Nextcloud is not a default (the sibling's §C6.35).
+
+Both are behaviour changes and neither belongs in a specification-only change.
+
+### A mapping the app cannot honour is refused, and says why
+
+One scenario, not four, because the behaviour is identical every time: refused,
+nothing stored, and the message names the field at fault. The rules are the
+Examples.
+
+**`nc_folder is required` has no row, and that is deliberate.** It is unreachable
+from this form: a blank Nextcloud folder defaults from the Grafana folder's
+title, and the step supplies a title whenever it supplies a uid. It is reachable
+only by an API caller sending a uid with no title at all. **A refusal earns a row
+only when someone can provoke it**; a validator no input can reach is not a
+behaviour, and writing one up as if it were invents an actor to do it.
+
+`the refusal explains "<fragment>"` matches a FRAGMENT. Pinning the exact
+sentence would make every wording improvement a test failure.
+
+### A Grafana folder may only be mapped once
+
+A Grafana folder is what a mapping IS, so mapping it twice would make two
+mappings mean the same thing and every dashboard inside it would belong to both.
+Enforced by `MappingService::assertFolderUnique()` — which, despite the name,
+checks the **Grafana** uid.
+
+### Two mappings may not target the same Nextcloud folder
+
+`@unbuilt`, **and the gap is real.** `assertFolderUnique()` checks the Grafana
+uid and says nothing whatsoever about the Nextcloud folder, so today the second
+mapping is accepted. Two Grafana folders mirroring into one Nextcloud folder
+interleave their dashboard files, and each mapping-scoped sync prunes what the
+other just wrote — the folder never settles.
+
+The n8n sibling has the identical gap, written in the identical shape.
+
+### The Grafana root can be mapped via the reserved "/" folder
+
+The Grafana root ("General") holds dashboards that are in no folder. It has no
+real uid, so the folder picker offers a reserved `/` entry for it. Mapping `/`
+pulls the no-folder dashboards; `/` with subfolder sync on mirrors the whole
+instance (see `reconcile.feature`).
+
+### What a mapping locks, it locks for a reason
+
+Four fields are immutable once a mapping exists, each because changing it would
+force a live migration:
+
+- the **Grafana folder** and the **Nextcloud folder** — re-pointing either would
+  rename or move a whole tree of already-synced files and re-stamp their metadata
+  (doubly fiddly if both change at once);
+- the **Team Folder** flag — switching backend migrates the provisioned folder
+  and all its shares;
+- **subfolder-sync** — flipping it restructures the far-side tree (on→off
+  flattens mirrored subfolders and re-parents dashboards; off→on lazily grows
+  them).
+
+Mode, format and groups stay editable. To change anything else, delete the
+mapping and add a new one — which makes the migration cost visible instead of
+hiding it behind a dropdown.
+
+`@unbuilt` rather than `@todo`: there is no update command to drive this over, so
+`MappingServiceTest` is where the rule is actually held. It is written here as one
+outline whose Examples are the fields, replacing a scenario that performed four
+`When`s in a row — which read as a script rather than as four instances of one
+rule, and could only ever report the first failure.
+
+**THE STANDARD IS STRONGER THAN WHAT IS ENFORCED, and the difference is the API
+shape.** The Penpot sibling's `MappingController::update()` takes an id and
+`ncGroups` and nothing else, so no caller can *express* a change to anything
+else. This app instead accepts a whole Mapping and checks four fields — which
+leaves `mode` and `format` editable, and means the admin card PUTs every field on
+every save whether or not it may change one.
+
+Guarding is weaker than not offering. Adopting the sibling's shape is the
+intended end state, and it arrives with the groups pass-through: once groups are
+read from the folder rather than stored (the sibling's §C6.35), "editing a
+mapping" stops existing as a concept and the object is wholly immutable.
+
+### The recycle-bin folder
+
+Off by default, in which case a move-out or a delete is a true Grafana delete —
+and Grafana has no undo. Turned on, the admin names an existing Grafana folder to
+act as the bin: a delete MOVES the dashboard there with its uid intact, so a
+restore returns the same dashboard rather than a lookalike. It is Grafana's
+answer to n8n's archive.
+
+It is a setting of the APP, not a property of a mapping, which is why the bin
+folder may not itself be mapped — it holds dashboards Nextcloud does not manage,
+so no operation may ever clear it wholesale.
+
+## admin-connection
+
+`features/admin-connection.feature`
+
+The "admin makes the Grafana connection" use case — the app's "I'm logged in"
+gate, a prerequisite to every other feature. The admin points the app at Grafana
+(base URL), provides a service-account token, and tests the connection to confirm
+the URL + token are valid and Grafana is reachable.
+
+The test deliberately hits an AUTHENTICATED Grafana endpoint (GET /api/folders),
+not the unauthenticated /api/health, so a green result proves the token itself is
+valid — not merely that the host is up.
+
+(Obtaining the token is out of the app's scope — that's the Grafana admin's job;
+in the tests it's minted as setup, see tests/integration/bin/mint-grafana-token.sh.)
+
+## copy-dashboard
+
+`features/copy-dashboard.feature`
+
+Copying a dashboard file. Where a MOVE is "the same dashboard" (see move-dashboard.feature),
+a COPY is ALWAYS a brand-new instance. A copy never inherits the original's Grafana
+identity — its metadata (grafana_uid, version, mapping, mode) is stripped the moment
+it is copied. Copy is therefore the single safest point to strip metadata:
+whatever the source was (sync, link, unmapped), the copy starts clean.
+
+Nextcloud distinguishes copy from move at the event layer (NodeCopiedEvent vs
+NodeRenamedEvent), which is what lets us treat them oppositely.
+
+COPYING A FOLDER is a different question with a different blast radius — one
+gesture, N far-side creates, and a folder identity of its own to strip. It lives
+in copy-folder.feature.
+
+STATUS: the copy path is built (CopyListener + CopyService, unit-tested). These are
+@todo — the code exists, the WebDAV COPY step definitions do not — except where
+noted. The file-level @todo this used to carry could not say that.
+
+### The pull's own writes are never treated as a copy
+
+── the pull must never look like a copy ─────────────────────────────────────────
+The reconciler writes files into mapped folders, which at the event layer is
+indistinguishable from a user copying one in. If the pull's own writes took the
+copy path, every pull would mint a duplicate dashboard for every file it wrote —
+the single worst failure this listener could have.
+
+## copy-folder
+
+`features/copy-folder.feature`
+
+Copying a FOLDER — the folder half of copy-dashboard.feature.
+
+── THE RULE COPY ALWAYS FOLLOWS ─────────────────────────────────────────────────
+
+A copy is ALWAYS a new instance, never a second claim on an existing one. For a
+dashboard file that means the copy's `grafana_uid` is stripped and a fresh
+dashboard is created (copy-dashboard.feature). For a folder the same rule has to
+hold twice over: the copied folder must not inherit the original's
+`grafana_folderUid`, and neither must any dashboard file inside it.
+
+The failure this prevents is the one that has no clean repair: two Nextcloud
+folders both stamped with one Grafana folder uid, or two files both claiming one
+dashboard. The next pull then has two candidates for one uid and no way to choose,
+and whichever it writes, the other silently diverges.
+
+── THE `grafana` TAG IS NOT COPIED ──────────────────────────────────────────────
+
+A folder becomes a Grafana folder by being TAGGED (create-folder.feature) — a
+deliberate act with a name. Nextcloud copies system tags along with a folder, so
+a naive copy would opt the duplicate in without anyone asking, and the app would
+create a Grafana folder nobody named. The copy must land as a plain folder; if
+the user wants it mirrored, they tag it, which is the same one gesture as before.
+
+This is the folder analogue of "copy is the single safest point to strip
+metadata": whatever the source was, the copy starts clean.
+
+── THE ALTERNATIVE: REFUSE ──────────────────────────────────────────────────────
+
+The penpot sibling refuses a project-folder copy outright rather than defining
+what a duplicated project means. That is a legitimate answer here too, and
+cheaper to get right — a folder copy is a bulk create with a partial-failure mode
+(move-folder.feature has the same problem), and "one gesture, forty new
+dashboards" is not obviously what anyone wants. Both readings are written below;
+whichever is chosen, delete the other rather than leaving the pair unresolved.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+Nextcloud fires `NodeCopiedEvent` per node, and `CopyListener` acts on Files only,
+so the FILES inside a copied folder already take the normal copy path — those
+scenarios are @todo. Everything about the folder's own identity is @unbuilt:
+nothing reads or strips `grafana_folderUid`, and there is no folder write API to
+create a duplicate with.
+
+## create-dashboard
+
+`features/create-dashboard.feature`
+
+Creating dashboards from Nextcloud. These scenarios are the human-readable spec
+for the "author in NC, live in Grafana" flow: a .grafana.json written over WebDAV
+into a mapped folder fires NodeWrittenEvent → the create listener → the dashboard
+appears in Grafana. The Grafana side is asserted over its REST API; the NC stamp over
+DAV PROPFIND of nc:metadata-grafana_uid.
+
+CREATING A FOLDER is the other half, and it works the opposite way round: a new
+folder is inert until it is TAGGED, because a mapped folder must stay usable for
+ordinary things. See create-folder.feature — the asymmetry is deliberate and
+explained there.
+
+STATUS: create-on-land is built (CreateService + CreateInGrafanaListener,
+unit-tested and live-verified). @todo means the WebDAV step definitions are
+missing, not the code.
+
+## create-folder
+
+`features/create-folder.feature`
+
+HOW A FOLDER BECOMES A GRAFANA FOLDER, AND HOW YOU CAN TELL THAT IT IS ONE.
+
+── WHY FOLDERS GET THEIR OWN FEATURE FILES AT ALL ───────────────────────────────
+
+In the n8n sibling a "folder" is a Nextcloud convenience: n8n maps by TAG and has
+no folder concept, so there is nothing on the far side for a folder gesture to
+mean. Grafana has REAL folders, so every folder gesture is a question about two
+systems, exactly as a file gesture is. Splitting `<action>-dashboard` from
+`<action>-folder` is what makes the two readable side by side — and it is what
+made the state of this surface legible at all (see STATUS below).
+
+── THE ASYMMETRY ────────────────────────────────────────────────────────────────
+
+    every mirrored Grafana folder  →  a folder in Nextcloud     (automatic)
+    SOME Nextcloud folders         →  a folder in Grafana       (opt-in only)
+
+A folder created inside a mapped folder is an ORDINARY FOLDER. Nothing is sent,
+nothing is inferred, and it can hold anything the user likes — notes, exports,
+screenshots, a subfolder of references. **A mapped folder is a real folder and
+must stay usable for ordinary things.** A mapping that silently turned every
+subfolder into a Grafana folder would make the mapped folder unusable for
+anything but dashboards, which is not a trade a user agreed to.
+
+── THE OPT-IN IS THE `grafana` TAG ──────────────────────────────────────────────
+
+Assigning the `grafana` tag to a folder says "make this a Grafana folder" — a
+deliberate act with a name, exactly as "+ New → Grafana dashboard" is for files.
+The tag is ALSO how the app marks the folders it mirrors, so both directions share
+one visible marker: **if it carries the tag, it is a Grafana folder, whoever made
+it one.** A user cannot tell — and should not have to — whether a folder started
+life in Grafana or was opted in from Nextcloud.
+
+THE MAPPED FOLDER ITSELF NEEDS NO TAG. It is already bound to a Grafana folder by
+the mapping; that IS its identity. The tag answers the question the mapping does
+not: which of the folders *underneath* it are Grafana folders. Same shape as the
+penpot sibling, where a mapped team folder is untagged and the projects inside it
+carry the `penpot` tag.
+
+WHY A TAG AND NOT A CHECKBOX. The current schema has a per-mapping "Sync
+subfolders" flag, and it is the wrong shape twice over: it is all-or-nothing for a
+whole mapping, and it infers intent from a folder's mere existence. It is also
+inert — `syncSubfolders` is stored and validated but no code path reads it, so it
+is a promise the app does not keep. A tag is per-folder, is a first-class
+Nextcloud gesture with an event (`TagAssignedEvent`), and survives a rename or a
+move in a way a name convention or a path-scoped flag cannot.
+
+WHY A TAG AND NOT A NAME CONVENTION: the same reason the app tracks dashboards by
+`grafana_uid` rather than by filename. Names change; markers should not.
+
+── THE TAG DECORATES; THE ID DECIDES ────────────────────────────────────────────
+
+`grafana_folderUid` on the folder is what the app acts on. The tag is the visible
+badge, re-stamped by every pull — which is why a missing tag is never a state the
+app has to repair specially, and why removing the tag cannot destroy anything.
+
+── STATUS: THE WHOLE FOLDER SURFACE IS UNBUILT ──────────────────────────────────
+
+`GrafanaClient` has exactly three folder methods — `listFolders`,
+`resolveFolderUidByTitle`, `listDashboards` — all READS. There is no createFolder,
+renameFolder, deleteFolder or moveFolder anywhere in `lib/`, and nothing
+subscribes to `TagAssignedEvent`. So every scenario requiring a folder write is
+@unbuilt, not @todo: no test could pass, because there is nothing to call.
+
+That distinction only became visible when folders were split out of the file
+features. While "moving a dashboard into a subfolder" and "creating the subfolder"
+lived in one file under one file-level @todo, an entire missing subsystem looked
+like a handful of missing tests.
+
+The scenarios that ARE testable today are the ones whose correct outcome is that
+nothing happens in Grafana — which is also the default path, and the one that
+keeps a mapped folder usable.
+
+NOTE ON REQUIREMENTS: `TagAssignedEvent` needs Nextcloud 32. `appinfo/info.xml`
+currently declares 31 (for IDeclarativeSettingsFormWithHandlers) — building this
+means raising that floor, which is a decision for the PR that builds it, not for
+the one that specifies it.
+
+### A folder opted in late brings the dashboards already inside it
+
+THE REASON TO ALLOW OPTING IN LATE. A folder someone has been filling with
+dashboards becomes a Grafana folder WITH its contents, rather than forcing the
+decision up front. Before the tag those dashboards belonged to the parent
+mapping's folder — a folder inside a mapping is still inside the mapping — and
+one re-parent moves the lot without re-creating or re-id'ing anything.
+
+## delete-dashboard
+
+`features/delete-dashboard.feature`
+
+Deletion semantics — the highest-stakes surface in the app, because Grafana has NO undo.
+
+THE FINDING THAT SHAPES THIS FILE: we proved on live Grafana that the service account
+cannot reach any soft-delete/trash. A `DELETE /api/dashboards/uid/{uid}` is PERMANENT.
+So the master's (n8n) recipe — trash=archive, purge=delete, restore=unarchive — does not
+translate: Grafana has no archive to fall back to.
+
+THE RE-PLATED MODEL — Nextcloud's recycle bin IS the feature we're adding to Grafana.
+Grafana can only ever *delete*; Nextcloud has a real trash you can restore from, so
+deleting a dashboard file is native NC trash on the Nextcloud side + a Grafana action
+that depends on ONE optional setting — the **Grafana recycle-bin folder**.
+
+── THE BIN IS A SHIM WE BUILT, NOT A FEATURE GRAFANA HAS ────────────────────────
+
+This is the single most important sentence in the file. **Grafana has no trashbin at
+all.** Not a hidden one, not an admin-only one — a service account cannot reach any
+soft-delete, and `DELETE /api/dashboards/uid/{uid}` is final. The n8n sibling has
+archive/unarchive and Penpot has its own bin; Grafana has nothing, so we could not
+port either recipe.
+
+What the "Grafana recycle-bin folder" setting does is EMULATE one, by designating an
+ordinary Grafana folder as a parking space. Everything follows from the word
+*ordinary*:
+
+  - It is **visible in Grafana's own UI.** Anyone browsing folders sees it and the
+    dashboards in it. There is no "deleted items" chrome telling them what it means.
+  - **Anyone can move things out of it** — a colleague spotting a dashboard they still
+    need can simply drag it back. That is a rescue, and it must be respected.
+  - **Anyone can delete things in it,** or delete the folder itself.
+  - **It can hold dashboards Nextcloud never managed.** It is a folder; people put
+    things in folders.
+  - **It outlives this app.** Uninstalling does not empty it.
+
+A real trashbin is privileged storage the owning system controls. This is a shared
+folder with a name we agreed on. Every rule below that looks paranoid is paranoid for
+that reason, and the sharpest one is on the purge: we delete a parked dashboard only
+while it is **still in the bin**. If it has been moved out, emptying a Nextcloud trash
+is not authority to chase it down and destroy it.
+
+WITH THE SHIM OFF — the default — none of that exists and the model is simply: trash
+the file, the dashboard is gone, and the file's JSON in the Nextcloud trash is the only
+copy left. Every scenario below states which world it is in, because they share almost
+no behaviour.
+
+── RULE: TWO DELETE MODELS, AND THEY AGREE ABOUT NOTHING ────────────────────────
+
+  |                        | bin OFF (default)          | bin ON (opt-in)              |
+  |------------------------|----------------------------|------------------------------|
+  | trash a sync file      | true Grafana DELETE, now   | dashboard MOVED to the bin   |
+  | the file's uid         | STRIPPED (the id is dead)  | KEPT                         |
+  | restore                | create-on-land → NEW uid   | moved back, SAME uid         |
+  | empty the NC trash     | Nextcloud-only no-op       | THE irreversible step        |
+  | point of no return     | the trash gesture          | emptying the trash           |
+
+Read that table as two columns, never as one story. The bin setting does not tune the
+behaviour, it *replaces* it — including which gesture is the one you cannot undo. Every
+scenario below therefore states its model in a `Given`, and the two are never rows of a
+single Scenario Outline (features/README.md explains why that would hide the asymmetry).
+
+THE BIN FOLDER IS NOT A MAPPING. It may hold dashboards Nextcloud does not manage, so no
+operation here ever clears it wholesale — only the specific items being purged.
+
+── RULE: THE TWO STEPS ARRIVE THROUGH TWO DIFFERENT DOORS ───────────────────────
+
+  - trash-move (soft) → `BeforeNodeDeletedEvent`, a typed event → DeleteToGrafanaListener
+  - purge     (hard)  → the legacy `\OCP\Trashbin` `preDelete` hook → TrashPurgeHook
+
+Nextcloud dispatches NO typed event for a purge. That hook only fires if the app is
+LOADED on a WebDAV request, which needs `<types><filesystem/></types>` in info.xml —
+missing until this PR, so with the bin on, emptying the trash silently left every parked
+dashboard alive in Grafana forever. A perfectly correct hook in a method that never ran.
+
+── RULE: NEXTCLOUD DRIVES; GRAFANA DOES NOT DRIVE BACK ──────────────────────────
+
+Nextcloud's trash is the user's own undo history, and this app does not reach into it in
+either direction. A dashboard deleted in Grafana does not empty a Nextcloud trash, and
+the pull cannot see into the trash at all (`SyncService` indexes the folder listing, and
+a trashed file is not in the folder). Sometimes that blindness is right and sometimes it
+is a gap — the `@unbuilt` scenarios at the bottom are the same blindness, benign in one
+case and harmful in the other. Worth reading them as a pair.
+
+STATUS: the delete engine IS cooked (Course 4 · Slice 3) — DeleteService +
+DeleteToGrafanaListener + RestoreFromTrashListener + TrashPurgeHook. The rule table is
+unit-tested (failed-delete-never-strips, bin-ON-parks-not-deletes, bin-OFF-restore-
+recreates) and verified live on the pod. The scenarios below are tagged per-scenario:
+live where the WebDAV trash/restore/purge steps now exist, @todo where they do not
+yet, @unbuilt where there is genuinely no code, @blocked where the harness cannot
+reach it. The file-level @todo this used to carry hid that distinction entirely.
+
+THE PURGE SCENARIOS ARE THE REGRESSION TEST FOR THIS PR'S <types> FIX. A purge fires
+no typed Nextcloud event — only the legacy `\OCP\Trashbin` `preDelete` hook, which
+runs only if the app is LOADED on a WebDAV request. Before `<types><filesystem/></types>`
+they would have failed; that they can pass at all is the proof.
+
+### Emptying the trash for a bin-off file touches nothing in Grafana
+
+The other half of the rule — that the dead uid is STRIPPED — cannot be observed
+here: Nextcloud's trashbin DAV endpoint serves no `nc:metadata-*`, so every key
+reads null for a trashed file whether it was stripped or not. Asserting it here
+passed vacuously until its bin-on counterpart proved the surface was dead.
+
+It is observable one step later, and restore-dashboard.feature asserts it there:
+a stripped file restores as a NEW dashboard with a NEW uid, a kept one restores
+to the same dashboard. Identity is proven by what comes back, not by reading a
+property off a file in the bin.
+
+### Purging never deletes a dashboard someone rescued out of the bin
+
+Purging one of several parked dashboards must not sweep the rest. Same rule as
+above, stated for the case people actually hit — a trash holding several of OUR
+files, only one of which is being cleared.
+── THE RESCUE: the shim is a folder, so people take things back out of it ───────
+A colleague browsing Grafana sees a dashboard they still need sitting in
+"nextcloud-trash" and drags it back where it belongs. Weeks later the original user
+empties their Nextcloud trash. The purge must NOT chase the rescued dashboard down.
+Deleting by uid alone would destroy a live, in-use dashboard, and Grafana has no undo.
+
+### Deleting a dashboard in Grafana leaves an already-trashed file where it is
+
+This one the app gets RIGHT — but for a weak reason, which is why it is worth
+pinning. Nothing DECIDES to leave the file alone: the pull simply cannot see
+into the trash. A trash-aware reconcile must keep this behaviour deliberately
+rather than lose it, because Nextcloud's trash is the user's undo history and a
+Grafana-side delete is not permission to empty it.
+
+### A trash-bypassed delete leaves the dashboard parked forever (bin on)
+
+…and under bin ON it is a LEAK, which is the point of writing both down together.
+The soft step parks the dashboard in the bin folder expecting a later purge to
+finish the job, but no trash entry was ever created, so no purge can ever fire.
+The dashboard sits in the bin forever with no file anywhere naming it.
+
+@unbuilt, not @todo: nothing in the code notices. The fix has to be a decision
+first — either the soft step detects the bypass and does a true delete (losing
+the id preservation the admin opted into, with no undo), or bin mode declines to
+park when there will be no trash entry. Not a bug to fix quietly.
+
+### The Grafana delete is aborted if Grafana is unreachable
+
+@blocked, not @todo: the code exists (the exception propagates and aborts the NC
+delete), but this harness has no way to make Grafana unreachable for the
+duration of one request — that is the missing capability, and naming it is what
+keeps this out of the @todo work queue. The unit suite covers the rule against a
+mocked GrafanaClient (testSoftDeleteBinOffFailedDeleteNeverStrips).
+
+## delete-folder
+
+`features/delete-folder.feature`
+
+Deleting a FOLDER — the folder half of delete-dashboard.feature, and the highest
+blast radius in the app.
+
+── WHY THIS IS NOT JUST "DELETE, N TIMES" ───────────────────────────────────────
+
+Deleting one dashboard file is a decision the user makes about one dashboard.
+Deleting a folder is one gesture that reaches every dashboard inside it — and
+under the DEFAULT setting (recycle bin OFF), every one of those is a **permanent
+Grafana delete**, because Grafana has no undo. A user dragging a folder to the
+trash is unlikely to have priced that in.
+
+The Nextcloud side stays honest either way: the files land in the trash with their
+JSON intact, so nothing is *lost*. What is gone is the dashboards' uids and their
+Grafana version history, for as many dashboards as the folder held.
+
+  | folder holds N sync files | bin OFF                    | bin ON                     |
+  |---------------------------|----------------------------|----------------------------|
+  | trash the folder          | N permanent Grafana deletes | N dashboards parked        |
+  | restore the folder        | N NEW uids (create-on-land) | N restored, uids preserved |
+  | empty the trash           | nothing left to do          | N permanent deletes        |
+
+── THE ORDERING QUESTION NOBODY HAS ANSWERED ────────────────────────────────────
+
+Nextcloud fires `BeforeNodeDeletedEvent` per node, so the app sees N file deletes
+rather than one folder delete. That mostly works — each file takes the normal path
+— but it means there is no transaction and no summary: a folder delete that fails
+on dashboard 7 of 12 leaves five dashboards deleted, one delete aborted, and six
+untouched, with nothing telling the user which is which. Every individual file
+behaved correctly and the aggregate is still a mess.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+The per-file path is built (DeleteService, unit-tested), so the scenarios that are
+only "does the per-file rule hold when a folder is the gesture" are @todo. The
+aggregate behaviour — confirmation, partial-failure reporting, restoring a folder
+as a unit — is @unbuilt: nothing in `lib/` treats a folder delete as one event.
+
+### Trashing the mapped folder itself deletes its dashboards but keeps the mapping
+
+── the mapped folder itself ─────────────────────────────────────────────────────
+Deleting the folder a mapping points at is the widest gesture available to a
+non-admin. The mapping survives — it is configuration, not a file — so the next
+pull re-creates the folder and everything in it. Whether the dashboards should
+have been deleted in the meantime is the whole question.
+
+## file-type
+
+`features/file-type.feature`
+
+The custom mimetype makes a dashboard a first-class FILE TYPE: its own mimetype,
+its own icon, DAV-exposed (and read-only) metadata, and — because grafana_mode is
+indexed — it's queryable. (What happens when you OPEN one is the related but
+separate "open with" concern; see open-with.feature.)
+
+METADATA KEYS (saga Ch2 Round 2 — scrutinised, NOT a 1:1 rename of the master's
+n8n_* keys). Five renamed + two Grafana-only additions:
+  grafana_uid        — the dashboard UID (the master's n8n_id). Stable thread.
+  grafana_mode       — sync | reference(=link) | unmapped | ignored. INDEXED.
+  grafana_version    — last-seen Grafana version (bumps every save — STORED, never
+                       hashed; the master's n8n_versionId).
+  grafana_syncedHash — sha1 of the spec WE sent (loop guard; the master's
+                       n8n_syncedHash).
+  grafana_mapping    — originating mapping id. INDEXED.
+  grafana_folderUid  — NEW: source Grafana folder UID (Grafana has real nested
+                       folders; needed for the cascade/subfolder model).
+  grafana_apiVersion — NEW: serialization schema (classic JSON vs v2 YAML) so a
+                       file self-describes how to be read back.
+Isolation is free: NC Files-Metadata keys are a flat string-keyed namespace, so a
+grafana_* key can never surface in an n8n_* query and vice-versa. (The shared-module
+neutral-key question is deferred — saga Ch2 Round 2, fork B.)
+
+Live for the WebDAV-observable surface: the custom mimetype, the nc:metadata-*
+props exposed in PROPFIND, the descriptive grafana_mode value for sync + unmapped,
+and the read-only (PROPPATCH-rejected) guarantee. Left @todo: the link/ignored mode
+rows (link integration is uncertain; ignored is the reserved-tags slice), and the
+REPORT-by-indexed-mode query (the DAV search plumbing for nc:metadata-* is unproven
+against the pod). CI skips @todo.
+
+### Files are queryable by their indexed mode
+
+grafana_mode is indexed → "find every sync / unmapped / ignored file" is a fast
+query. @todo until the DAV-search plumbing for nc:metadata-* is confirmed.
+@blocked, and the missing capability is named: there is no proven DAV REPORT
+search over `nc:metadata-*` in this harness. The index itself is real — the mode
+is registered as an indexed metadata key precisely so "find every unmapped file"
+is a query rather than a folder walk — but nothing here can issue that query.
+
+## lifecycle
+
+`features/lifecycle.feature`
+
+Stage 0 (saga §5): the app installs and uninstalls cleanly on a real Nextcloud.
+A clean uninstall is also an app-store rule. No Grafana contact.
+
+## mapping-membership
+
+`features/mapping-membership.feature`
+
+Folder mappings are metadata on the folder, so membership is resolved by where a
+file lives. (How the app reacts when you MOVE a file across that boundary is in
+move-dashboard.feature — a sync file moved out becomes "unmapped"; a link can't leave.)
+
+The resolver matches the deepest mapped folder that encloses a file, so nested
+mappings work and the nearest enclosing one wins. Each scenario lands a real file
+over WebDAV and reads the resulting grafana_mapping stamp back, so these are
+server-observable assertions of the mapping resolver.
+
+@todo — the mapping engine lands with the sync chapter; executable spec only.
+
+## move-dashboard
+
+`features/move-dashboard.feature`
+
+How the app reacts to every move a Nextcloud user can make on a dashboard file.
+The stable thread is the dashboard UID **plus the full JSON we hold in the file**.
+(COPY is the opposite — always a new instance; see copy-dashboard.feature.)
+
+THE CORE NUANCE (resolved with Dr K) — MOVE and DELETE are NOT the same, and where
+a file moves decides everything. Grafana has NO soft-delete/archive (proven live: a
+DELETE is permanent), and — unlike n8n — we CANNOT keep an id "parked" for free,
+because there is nothing to un-archive. So the id-preservation story depends on where
+the file lands and on ONE optional setting:
+
+  1. MOVE WITHIN THE SAME MAPPING (rename) — nothing in Grafana but the name.
+
+  2. MOVE FROM ONE MAPPED FOLDER TO ANOTHER — a genuine Grafana **folder move**: the
+     dashboard's folderUid updates to the destination mapping's folder, the **UID is
+     always preserved** (both sides are real Grafana folders — no delete involved),
+     and the file re-stamps grafana_mapping + grafana_folderUid. Independent of the
+     recycle-bin setting below.
+
+  3. MOVE OUT OF EVERY MAPPED FOLDER (to an unmapped location) — this is where the two
+     strategies diverge, selected by the optional **Grafana recycle-bin folder**:
+       • BIN OFF (default, aggressive): the content is already safe in the Nextcloud
+         file, so we **DELETE the dashboard in Grafana** and **strip the file's Grafana
+         identity** (uid/mapping/folderUid/version/hash). The file becomes a plain,
+         untracked .grafana.json that still holds the full JSON. Moving it back into a
+         mapping is then just **create-on-land** — a brand-new dashboard, same content,
+         a **NEW uid** (the old one is gone forever). "It just works", id not preserved.
+       • BIN ON: we **MOVE the Grafana dashboard into the designated recycle-bin folder**
+         (uid **preserved**) — the analogue of n8n's archive, done with a real folder.
+         Moving the file back into a mapping **moves the dashboard back** out of the bin
+         to the destination folder, **same uid**. (See delete-dashboard.feature — trash uses the
+         exact same bin machinery.)
+
+THE ID-STRIP RULE (precise): we strip the file's grafana_uid **only when we are about
+to do a TRUE delete in Grafana while the file survives in Nextcloud** — because the
+dashboard is gone, so its uid is dead. With the recycle-bin folder ON, a "delete/move-out"
+is a **move into the bin, not a true delete**, so the dashboard still exists and the file
+**keeps its uid** (it becomes an `unmapped` file that can restore to the SAME dashboard —
+the n8n-style parked state, which Grafana can only offer via the bin).
+
+THE SAFETY RULE (never lose data): a sync file always holds the full dashboard JSON, so
+the content is safe in Nextcloud BEFORE we touch Grafana. We only ever DELETE from
+Grafana once we have confirmed the file holds what it needs to rebuild.
+
+STATUS: the move engine IS cooked (Course 4 · Slice 2b) — MotionService + MoveGuardListener,
+unit-tested for the invariants (uid kept on a re-parent, a failed delete never strips, a link
+move-out refused) and verified live on the pod (create → re-parent uid-kept → move-out delete
+→ move-back new-uid, all confirmed against Grafana's API).
+  SCOPE — same-storage moves only: Nextcloud fires NodeRenamedEvent for a move within one
+  storage (regular folder ↔ regular folder, rename, subfolder). A move into/out of a TEAM
+  FOLDER crosses a storage boundary and is a copy+delete under the hood (NodeDeletedEvent, not
+  NodeRenamedEvent), so team-folder re-homing rides the delete/create lifecycle — a fast-follow
+  — NOT this engine. The bin-ON parking rows here also stay design-only (fast-follow).
+Scenarios are tagged per-scenario, not per-file: @todo where the engine is built and only the
+occ+WebDAV move steps are missing (the unit suite + the live smoke carry the proof meanwhile),
+@unbuilt where there is genuinely no code. A @todo above `Feature:` used to hide that split.
+
+MOVE AND DELETE ARE THE SAME GRAFANA OPERATION, chosen by the same setting — moving a file out
+of every mapping and trashing it both run through the bin decision. They live in separate files
+because the gestures differ, so whenever either changes, check the rules still agree.
+Every scenario whose outcome depends on that setting carries @recycle-bin.
+
+### Moving a dashboard into a tagged subfolder re-parents it in Grafana
+
+── into a TAGGED subfolder — a real Grafana folder ───────────────────────────────
+A subfolder that carries the `grafana` tag is a Grafana folder in its own right
+(create-folder.feature owns how it gets there). Moving a dashboard into one is
+therefore a re-parent, not local organisation. @unbuilt: GrafanaClient has no folder
+write operations, so there is nothing to re-parent into yet.
+
+## move-folder
+
+`features/move-folder.feature`
+
+Moving a FOLDER — the folder half of move-dashboard.feature.
+
+── THE RULE THAT MAKES THIS DANGEROUS ───────────────────────────────────────────
+
+Mapping membership is decided by PATH (`MappingService::resolveForPath` uses
+`str_starts_with`), so moving a folder changes the mapping of every dashboard
+inside it — in one gesture, without touching any of those files individually.
+
+And "left every mapping" is the branch that DELETES in Grafana (see
+move-dashboard.feature §3). So dragging a subfolder out of a mapped folder is,
+under the default setting, a permanent multi-dashboard delete. The gesture looks
+like tidying; the consequence is the same as emptying the trash on all of them.
+
+  | move a subfolder of "alpha" holding N sync files | outcome                    |
+  |--------------------------------------------------|----------------------------|
+  | …to elsewhere inside "alpha"                      | nothing (same mapping)     |
+  | …into the "beta" mapped folder                    | N Grafana folder moves     |
+  | …out of every mapping, bin OFF                    | N PERMANENT deletes        |
+  | …out of every mapping, bin ON                     | N parked in the bin        |
+  | …in from outside, into a mapping                  | N creates (new uids)       |
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+Nextcloud fires `NodeRenamedEvent` for the FOLDER, not for each file inside it, so
+`MotionListener` sees one event about a node that is not a File and does nothing.
+That means **none of the per-file consequences above actually fire today**: moving
+a folder full of dashboards silently changes their mapping membership without
+telling Grafana anything, and the two sides drift until the next pull.
+
+So the delete rows in that table are not "what happens", they are "what the
+per-file rules imply should happen". Everything here is @unbuilt: there is no
+folder-move handling, and `GrafanaClient` has no folder write operations to call.
+
+Whether the right answer is "apply the per-file rule to each file", "refuse the
+move", or "re-home without deleting" is a DECISION, not an implementation detail —
+and the middle rows below are deliberately written as alternatives so it can be
+made once, in writing, rather than discovered.
+
+## open-with
+
+`features/open-with.feature`
+
+"Open with" — the openers offered for a managed dashboard file, and which one is
+the default click. RELATED to the file type (file-type.feature: it's *because*
+`.grafana.json` is a first-class type that we get custom openers) but a distinct
+concern, because the opener set + default depend on the file's MODE, not its type.
+
+Two openers:
+  - "Open in Grafana"          — jumps to the live dashboard in Grafana. Only meaningful for
+                             sync/link; hidden for unmapped/ignored (nothing to open).
+  - "Open with text editor" — edits the raw JSON. ALWAYS available on any dashboard
+                             file; it's the default for unmapped/ignored.
+Default click: sync/link → Open in Grafana; unmapped/ignored → text editor.
+(Whether editing+saving pushes to Grafana follows the file's mode — see
+create-dashboard.feature / rename-dashboard.feature / the bidirectional sync, not here.)
+
+STATUS: the openers ARE cooked (Course 5) — src/files.js registers "Open in Grafana" +
+"Open with text editor" (+ the "Grafana dashboard" New-menu item), loaded by
+LoadFilesScriptListener. Behat can't click the Files-app JS, so the opener DECISION logic
+is unit-tested in tests/js/files-helpers.test.js (30 cases); the integration steps here
+assert the server-observable state the front-end keys off (the grafana_mode DAV value + the
+live dashboard + raw-JSON readability). The whole feature stays @todo — CI skips it — until
+those occ+WebDAV step definitions are written; the JS unit suite carries the decision proof.
+── STATUS: @blocked THROUGHOUT, AND THE CAPABILITY IS NAMED ─────────────────────
+
+Every scenario here describes what the Files-app context menu SHOWS — which entry
+is offered, which is hidden, what the default click does. That is browser
+behaviour, and this harness has **no browser**: it drives Nextcloud over WebDAV
+and occ, neither of which renders a menu. No step could assert any of it.
+
+@blocked, not @todo: the code exists and ships (the openers are registered in the
+Files UI), and the JS unit suite covers the entry-visibility logic
+(tests/js/files-helpers.test.js). What is missing is a capability in the harness,
+not a test someone forgot — which is exactly the distinction that keeps these out
+of the @todo work queue.
+
+## purge
+
+`features/purge.feature`
+
+Purge — an admin-only button beside "Sync from/to Grafana" and "Test connection"
+(also `occ grafana_sync:purge`) that removes the dashboard files THIS APP created and
+nothing else. It deletes every **restorable** managed file — `sync` and `link`,
+whose dashboard is still live + tagged in Grafana — across all mappings, and:
+  - never contacts Grafana (the delete runs under SyncGuard so it can't mirror out);
+  - leaves the mappings configured;
+  - leaves the custom mimetype registration alone (that is uninstall's job).
+
+It deliberately KEEPS files a "Sync from Grafana" could not bring back, so purge can
+never cost you data: `unmapped` files (moved out of a mapping — a standalone copy /
+template you kept, whose full JSON lives in the file), `ignored` files, and untracked
+`.grafana.json` (a plain document the app never created).
+
+Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Command\Purge}).
+Two intended flows: purge → "Sync from Grafana" (everything reappears), and
+purge → uninstall (Nextcloud looks like the app was never there).
+
+## reconcile
+
+`features/reconcile.feature`
+
+The manual per-mapping sync controls in admin settings:
+  - "Sync from Grafana" (pull): bring the mapping's folder dashboards into its folder.
+  - "Sync to Grafana"   (push): send the mapping's sync files up to Grafana.
+Both reconcile the mapped folder against the dashboards in that mapping's Grafana
+folder, and both FULLY IGNORE "unmapped" files — those live outside any mapping, so
+a mapping-scoped sync never sees them. Pruning here is therefore mapping-scoped:
+it only ever concerns files/dashboards inside the mapping.
+
+The pull scenarios below are LIVE (Course 2): they drive `occ grafana_sync:pull`
+(the headless twin of the admin button) against the preloaded Grafana folders and
+assert the result over WebDAV. The mapping is admin-owned so CI needs no
+groupfolders app. Push (Course 3, writeback) and the whole-instance root mirror
+(the subfolder course) are still @todo — their engines land later.
+
+### Sync from Grafana with nothing changed rewrites nothing and says so
+
+── RULE: a run that changes nothing changes nothing ──────────────────────────
+Two things are NOT behaviours, and both were nearly written up as if they were.
+
+A file's "modified" time is a RESULT, not a gesture. Editing, moving, copying and
+renaming all move it, each already owned by the file that owns the gesture. A
+scenario asserting "the mtime moved after an edit" specifies Nextcloud, not this
+app, and has to invent an actor to do it.
+
+The RECONCILER is likewise the *how*, not the *what*. The scheduled pull is a
+machine that makes Grafana-origin behaviours show up in Nextcloud; "renamed in
+Grafana" is the behaviour, the reconciler is merely how it arrives — which is why
+those scenarios live with their behaviour and carry `@in-grafana`, not here.
+
+What is left is genuinely this file's, and genuinely not automatic: the admin
+presses the button when nothing has changed, and the run must leave every file
+exactly as it found it. It matters because the same run is what a schedule would
+fire — a write performed unconditionally is performed forever, and a folder where
+everything was modified seconds ago says nothing about what changed.
+
+The negative control is the pull scenario above: it asserts a file APPEARS, which
+a pull that had simply stopped writing could never do. (Inherited defect, fixed in
+the n8n master first — saga Ch2, Course 7.)
+
+## remove-mapping
+
+`features/remove-mapping.feature`
+
+Removing a folder mapping — the admin deletes a mapping from the list (or
+`occ grafana_sync:remove-mapping <id>`). This is NOT the "Purge Nextcloud files"
+button (that keeps the mapping + never touches Grafana — see purge.feature). Removing
+a MAPPING tears down the connection, and the question is: what happens to the files
+and dashboards that were connected through it?
+
+THE CONTRACT (resolved with Dr K) — trash the connected, leave the rest, lose nothing:
+  • Every file ACTIVELY CONNECTED to the mapping (a managed sync/link file whose
+    grafana_mapping is this mapping) is moved to the **Nextcloud trash** — it becomes
+    unmapped and goes to the bin. Because a trash move rides the delete contract
+    (delete-dashboard.feature), the Grafana side follows automatically:
+      - recycle-bin OFF → the connected dashboard is deleted in Grafana at trash-time
+        and the file's metadata is stripped (restore re-creates with a new uid);
+      - recycle-bin ON  → the connected dashboard is MOVED into the bin folder, uid
+        kept (restore moves it back, same uid).
+  • Files that are NOT connected are LEFT ALONE, untouched: an `unmapped`/`untracked`
+    standalone `.grafana.json` only ever existed in Nextcloud, so removing a mapping
+    it was never part of must never move or delete it — no data loss.
+  • The Nextcloud trash is the safety net: we don't surgically decide what to keep —
+    we trash exactly the connected files, and the trash is fully recoverable. Fully
+    **emptying the trash** then does the permanent clean-up (recycle-bin ON → the
+    matching dashboards are deleted from the Grafana bin; OFF → already gone).
+  • RECONNECTION: if a new mapping to the same Grafana/Nextcloud folder is created
+    later, the trashed files can simply be **restored (untrashed)** to reconnect —
+    cleanest with the recycle bin ON (the dashboards were only parked, so restore
+    re-links the SAME uids); with the bin OFF, a restore is a re-create (new uids).
+
+STATUS: the tear-down cascade IS cooked (Course 4 · Slice 3) — MappingTeardownService trashes
+the mapping's connected files (their delete rides the recycle-bin setting via the delete
+listener) and leaves standalone files alone, wired to both `occ remove-mapping` and the admin
+panel. The whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions are
+written; until then the delete-engine unit suite + the live smoke carry the proof.
+
+## rename-dashboard
+
+`features/rename-dashboard.feature`
+
+Three-way name agreement in sync mode: filename stem ⇄ JSON "title" ⇄ Grafana title.
+
+── THE THREE SURFACES, AND WHY THERE ARE THREE ──────────────────────────────────
+
+  1. the FILENAME       — what the user sees and types in the Files app
+  2. the JSON `title`   — what is inside the file, and what a push sends
+  3. the Grafana title  — what the dashboard is called on the far side
+
+Any one of them can be changed first, and the other two must follow. Two of the
+three are in Nextcloud, which is why a rename is not simply "push the new name":
+editing the JSON has to rename the FILE too, and renaming the file has to rewrite
+the JSON, before either reaches Grafana.
+
+── THE UID IS THE THREAD, NOT THE NAME ──────────────────────────────────────────
+
+The link between a file and its dashboard is `grafana_uid` in the file's metadata.
+No rename, on any surface, can break it — which is the whole reason names are free
+to change at all. Every scenario here is really a restatement of that.
+
+── RENAMING A FOLDER IS A DIFFERENT PROBLEM ─────────────────────────────────────
+
+It has its own file (rename-folder.feature) and its own defect: a mapping is
+stored as a PATH string, so renaming a mapped folder silently orphans it. Nothing
+on this page has that problem, because nothing on this page is identified by name.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+The Nextcloud-side legs are cooked (Course 5) and now RUN IN CI — NameSyncListener
+enqueues, ReconcileNameJob does the file-locked write/rename, and the writeback
+carries the title to Grafana.
+
+The deferral is not an optimisation: during a rename the file is LOCKED, so a
+synchronous putContent throws. That is why every rename step drains
+PushDashboardJob and then ReconcileNameJob before asserting — a test that checked
+immediately after the MOVE would be racing a job that had not started.
+
+The Grafana-side legs ride the ordinary pull and are still @todo. The refusals are
+@unbuilt: NameSyncListener bails on an empty stem rather than reporting anything,
+so nothing tells the user their rename went nowhere.
+
+### A failed propagation never reverts the local rename
+
+The local rename is the user's own gesture in their own file tree. A far-side
+failure must not reach back and undo it — report the divergence and let the next
+reconcile settle it. This is the deliberate asymmetry with delete, where a failed
+far-side call DOES abort the local gesture: a rename is recoverable and a delete
+is not.
+
+## rename-folder
+
+`features/rename-folder.feature`
+
+Renaming a FOLDER — the folder half of rename-dashboard.feature.
+
+Two very different folders can be renamed, and conflating them is the trap this
+file exists to prevent:
+
+  1. A MAPPED folder — the Nextcloud folder an admin bound to a Grafana folder.
+  2. A SUBFOLDER inside one — an ordinary folder, or a mirrored Grafana folder
+     if it carries the `grafana` tag (create-folder.feature).
+
+── THE FINDING: A MAPPING IS STORED AS A PATH STRING ────────────────────────────
+
+`Mapping::$ncFolder` is a path (`nc_folder`), and `MappingService::resolveForPath`
+decides membership with `str_starts_with($relative, $folder . '/')`. It is NOT a
+Nextcloud file id.
+
+So renaming a mapped folder does not "move" the mapping — it silently ORPHANS it.
+The mapping still names a path that no longer exists, every file inside the
+renamed folder resolves to no mapping, and nothing anywhere says so. The dashboards
+are untouched in Grafana, so nothing is destroyed; the connection simply stops,
+quietly, and the next pull re-creates the whole folder at the old path.
+
+That is the opposite of the promise the rest of the app makes. A dashboard file
+survives renaming, moving and restoring because it is tracked by a stable **uid**
+in its metadata rather than by its name — and the mapping it belongs to is tracked
+by a **string**. The one identifier that is not stable is the one the whole mapping
+rests on.
+
+`admin-mapping.feature` compounds it: a mapping's folders cannot be edited after
+creation, so an admin who renames the folder cannot repoint the mapping — they
+must remove it and add it back.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+@unbuilt throughout. There is no folder-rename handling of any kind: no listener
+watches folder renames, and `GrafanaClient` has no renameFolder. The first
+scenario documents what happens TODAY (the orphaning) so the gap is written down
+rather than rediscovered; the rest specify what should happen instead.
+
+## reserved-tags
+
+`features/reserved-tags.feature`
+
+Reserved tags — the optional, per-dashboard EXCLUDE switches. TWO ORIGINS, and
+conflating them is a trap (saga Ch2 Fork H). "Tag" means two entirely different
+systems here:
+
+  • a NEXTCLOUD tag — Nextcloud's own collaborative/system tag, on a *file*; and
+  • a GRAFANA tag — a string in a dashboard's own `tags` array, on a *dashboard*.
+
+The rule: **you tag with the name of the system you're talking TO.**
+
+  grafana:ignore    — origin NEXTCLOUD. A Nextcloud tag the admin hand-sets on a
+                      `.grafana.json` FILE (the app's own `grafana:*` namespace,
+                      alongside the automatic `grafana:sync`/`grafana:link` mode
+                      pills). Read on NC tag events → the file's mode becomes
+                      `ignored`: it stays put, keeps its uid, sync skips it, and the
+                      live Grafana dashboard is untouched. Never written to Grafana.
+
+  nextcloud:ignore  — origin GRAFANA. A tag the Grafana admin sets on the DASHBOARD
+                      in Grafana (`nextcloud:` = "addressed to Nextcloud"). Read at
+                      PULL time → that dashboard is never brought into Nextcloud, no
+                      file is created, even inside a mapped folder. Never written by
+                      the app.
+
+One is Nextcloud saying "don't sync this file"; the other is Grafana saying "don't
+pull this dashboard." Both are optional escape hatches — the mapping does everything
+on its own. (Symmetric with the n8n master: `n8n:ignore` on the NC file,
+`nextcloud:ignore` on the workflow — so the shared base gets one two-axis model.)
+
+NO ARCHIVE (saga Ch2 Round 2): the master archives an ignored resource. Our
+ingredient has no reachable archive, so `ignored` just means "skip it in sync" — the
+dashboard is left fully LIVE in Grafana (fork F, leaning).
+
+DESIGN, NOT WIRED: this feature is @todo — CI skips it — until the pull engine +
+reserved-tag resolver are cooked.
+── STATUS: THE SEAM IS LIVE, THE ORIGIN IS NOT ──────────────────────────────────
+
+`SyncService::pullOne` already skips any file whose mode is `ignored`, and the
+comment there is explicit: *"No origin sets `ignored` in this course yet; the seam
+is here for the reserved-tag course."* So the app can HONOUR the exclusion and has
+no way to ACQUIRE it — nothing reads a reserved tag, on either side.
+
+That split is why these are @unbuilt rather than @todo. The one behaviour that is
+genuinely built (the pull leaving an already-ignored file alone) is stated as its
+own scenario at the bottom, tagged @todo, so the work queue tells the truth.
+
+NOTE ON THE TWO TAG NAMESPACES. `grafana:sync`/`grafana:link`/`grafana:unmapped`
+are MODE pills the app writes and owns (OwnershipTags) — they are built. The
+`grafana:ignore` marker here is user-set and read-only from the app's side, and
+`nextcloud:ignore` is its Grafana-side counterpart. Content tags are a third thing
+again, and none of that is built either (tag-sync.feature).
+
+## restore-dashboard
+
+`features/restore-dashboard.feature`
+
+Restoring a dashboard file from the Nextcloud trash — the other half of
+delete-dashboard.feature, and a behaviour in its own right rather than an appendix
+to deleting.
+
+── WHY THIS IS A SEPARATE FILE ──────────────────────────────────────────────────
+
+A restore does not need to re-perform a delete to be specified. It starts from a
+state — *"a trashed sync dashboard file whose dashboard is parked in the bin"* —
+and the question it answers is what comes back. Folding that into the delete file
+meant every restore scenario carried a delete it was not testing, and the reader
+had to hold both halves in mind to find the one being asserted.
+
+Delete owns "what leaves". Restore owns "what comes back, and as what".
+
+── RESTORE IS WHERE THE TWO BIN MODELS DIVERGE MOST ─────────────────────────────
+
+Trashing looks superficially similar either way — the file goes to the trash, and
+something happens in Grafana. Restoring is where the difference becomes visible to
+the user, because it decides whether they get their dashboard BACK or merely get
+a new dashboard with the same content:
+
+  | bin OFF (default)                    | bin ON (opt-in)                       |
+  |--------------------------------------|---------------------------------------|
+  | the uid was stripped at trash time   | the uid was kept                      |
+  | create-on-land makes a NEW dashboard | the parked dashboard is MOVED back    |
+  | **new uid**, history gone            | **same uid**, history intact          |
+  | content preserved (it was in the file) | content never left Grafana          |
+
+Nothing is ever lost either way — a sync file holds the whole dashboard JSON, which
+is the invariant that makes bin-off survivable at all. What bin-on buys is
+**identity**: the uid, the version history, and every Grafana-side reference to it.
+
+── SAY IT PLAINLY: WITH THE SHIM OFF, A RESTORE MAKES A NEW DASHBOARD ───────────
+
+It is not the old dashboard coming back. Grafana deleted that one permanently at
+trash time and cannot return it. What a restore does is take the JSON out of the
+Nextcloud file and CREATE a dashboard from it — the same panels, the same queries,
+the same title, and a brand-new uid.
+
+For most people that is indistinguishable from a restore, which is why it is a
+reasonable default. What it costs is everything keyed to the old uid, and none of
+it is recoverable:
+
+  - the **URL**. `/d/<uid>/…` is the uid. Bookmarks, wiki links, runbooks, Slack
+    messages and screenshots pointing at that dashboard all 404.
+  - **version history.** Grafana's per-save revisions belonged to the deleted
+    dashboard. The restored one starts at version 1.
+  - **anything referencing it inside Grafana** — a panel link, a playlist entry, an
+    annotation query, an alert's dashboardUID.
+
+That is the trade the default makes: content is always safe, identity is not. An
+admin who cannot afford to lose the identity turns the shim on, and that is the
+whole reason the setting exists.
+
+── THE HARD PART IS THAT THE WORLD MOVED ────────────────────────────────────────
+
+A file can sit in the trash for weeks. By the time it comes back, its mapping may
+be gone, its parked dashboard may have been deleted in Grafana by hand, or someone
+may already have moved that dashboard back. A restore must succeed in all three
+cases: Nextcloud's trash is the user's own undo history, and this app does not get
+to veto it. The bottom section is those cases.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+RestoreFromTrashListener + DeleteService::restore are built and unit-tested
+(bin-ON-moves-back-keeping-id, bin-OFF-recreates, no-recreate-outside-a-sync-
+mapping, link-is-a-noop). The bin-on restore now runs in CI; the rest are @todo
+for want of their step definitions, not for want of code.
+
+### Restoring into a mapping that no longer exists leaves a plain file
+
+The mapping was torn down while the file waited in the trash, so there is no
+longer anywhere for it to belong. Restoring must still succeed as a Nextcloud
+operation — the user's undo is not this app's to veto — and simply leave the
+file unmanaged. RestoreFromTrashListener already handles the unresolvable
+mapping; what is untested is that the file comes back at all.
+
+### A bin-off restore cannot preserve the old dashboard's URL or history
+
+The consequence of "a new dashboard", written down because it is the part users
+discover the hard way and the part no amount of care on our side can prevent.
+@decision, not @unbuilt: preserving the uid across a true Grafana delete is not a
+feature we have declined to build, it is not possible — Grafana destroyed the
+object. The recycle-bin shim exists precisely so an admin can opt out of this.
+
+### Moving a dashboard out of the bin in Grafana brings its file back out of the trash
+
+══ RESTORED IN GRAFANA ════════════════════════════════════════════════════════
+
+Because the bin is a SHIM — an ordinary Grafana folder anyone can browse — a
+restore can legitimately start on the Grafana side: someone drags a dashboard out
+of "nextcloud-trash" and back where it belongs. That IS a restore, performed by a
+person who never touched Nextcloud, and the mirror should follow.
+
+THE DETECTION IS THE UID, NOT THE FILENAME. The reconcile already knows the uid of
+every dashboard it sees. What it does not currently do is look in the Nextcloud
+TRASH for a file carrying that uid — it indexes `$folder->getDirectoryListing()`,
+and a trashed file is not in the folder. So today it writes a brand-new file and
+leaves the trashed one orphaned; restore that copy later and two files claim one
+dashboard, the exact duplicate the reconcile is otherwise careful to avoid.
+
+The fix is a trash-aware reconcile: before creating a file for an unseen uid, look
+for a trashed mirror carrying it and RESTORE that instead. The penpot sibling built
+exactly this (penpot saga §6.37); neither n8n nor Grafana has it.
+
+### A dashboard reappearing in Grafana never empties the Nextcloud trash
+
+══ WHAT STILL DOES NOT RESTORE FROM THE GRAFANA SIDE ══════════════════════════
+
+A dashboard merely EXISTING again is not a restore. Nextcloud's trash is the
+user's own undo history, and a dashboard being re-created in Grafana by unrelated
+means is not permission to empty it. The scenario above is narrow on purpose: it
+is about a dashboard we ourselves parked, being taken back out of the bin we
+ourselves put it in. Anything wider is the user's call.
+
+## restore-folder
+
+`features/restore-folder.feature`
+
+Restoring a FOLDER from the Nextcloud trash — the folder half of
+restore-dashboard.feature.
+
+── ONE GESTURE, N IDENTITIES ────────────────────────────────────────────────────
+
+Restoring a folder is restoring every dashboard file inside it, and under bin-off
+every one of those gets a NEW uid. So a folder that held forty dashboards comes
+back as forty dashboards that are, from Grafana's point of view, entirely new
+objects — nothing that referenced them by uid still resolves.
+
+Under bin-on they come back as themselves. That asymmetry is the whole reason the
+recycle-bin setting exists, and it is at its most expensive here.
+
+── STATUS ───────────────────────────────────────────────────────────────────────
+
+The per-file restore path is built and unit-tested, so "does the per-file rule hold
+when a folder is the gesture" is @todo. The aggregate behaviour — reporting what
+came back, and what came back with a different identity — is @unbuilt: nothing in
+`lib/` treats a folder restore as one event.
+
+## tag-sync
+
+`features/tag-sync.feature`
+
+Bidirectional dashboard-tag sync — a dashboard's tags and its Nextcloud system
+tags are kept as ONE set, so the mirror is as searchable as Grafana.
+
+Imported from the finalized n8n sibling (nextcloud-n8n Chapter 5 §5.6 — the
+TagMerge / TagSyncService / ContentTagListener / ReconcileTagsJob engine + the
+*_syncedTags baseline) and re-cut for Grafana's ingredient. DESIGN, NOT WIRED:
+the whole feature is @todo — CI skips it — until (1) the sibling's tag PR merges
+(we port the engine as our base) and (2) the file-lifecycle mode machine (Course 4)
+lands, since tag sync scopes itself to mapped files and no-ops on unmapped/ignored.
+
+Two label systems, made equal (minus our control tags):
+
+  • Grafana tags   — free-text strings that live INSIDE the dashboard object
+                     (`dashboard.tags: ["dns","linux"]`). No tag-id API, no tag
+                     catalog: a tag exists exactly when some dashboard carries the
+                     string, and writing tags = upserting the dashboard. Folders
+                     have no tags.
+  • Nextcloud tags — collaborative SYSTEM TAGS (the coloured pills in Files,
+                     searchable via DAV REPORT).
+
+THE RULE OF EQUALITY: after a reconcile a managed dashboard's Grafana tags and its
+Nextcloud system tags hold the same strings, with ONE exclusion — the app's
+reserved namespace `grafana:*` (`grafana:sync`, `grafana:link`, `grafana:unmapped`,
+`grafana:ignore`, and any future control tag). Reserved tags are the app's control
+plane: never pushed into Grafana, never imported from Grafana as content.
+
+THREE EDIT SURFACES — the object body is the third: tags live INSIDE the dashboard,
+so a sync file's on-disk JSON already has a `tags` array. Three editable places,
+kept as one set:
+  1. Grafana `dashboard.tags`   (edit in Grafana → pull)
+  2. the file body `tags` array (edit the JSON → push)
+  3. Nextcloud system-tag pills (edit the pills → push)
+The FILE BODY is the canonical object; the PILLS are a listener-kept projection. In
+`link` mode the body is a pointer, so only surfaces 1 and 3 exist and the pills are
+a read-only projection of Grafana.
+
+NO EXTRA BUTTON FOR TAGS (n8n "Slice A" — the reactive engine): a content-pill
+add/remove on a managed `sync` file is caught by a dedicated ContentTagListener
+(TagAssignedEvent/TagUnassignedEvent for CONTENT tags, distinct from the reserved
+`grafana:ignore` the mode listener watches) and reconciled to Grafana ON ITS OWN —
+no "Sync to Grafana" click. It honours the SAME `timing` knob as the body writeback:
+  • `sync`  — reconcile inline during the request.
+  • `async` — enqueue a per-file ReconcileTagsJob the cron worker runs next tick.
+
+GRAFANA IS THE EASIER COOK — three backend knobs, all simpler than n8n:
+  1. TAGS ARE BODY-NATIVE, so there is NO tags-only side-channel. n8n reconciles a
+     pill to a DECOUPLED tag endpoint (setWorkflowTags → PUT /workflows/{id}/tags)
+     and must re-stamp its body hash so the silent body-tags write isn't re-pushed.
+     Grafana has no such endpoint: `dashboard.tags` IS the object, so a pill edit
+     updates the body's `tags` and rides the EXISTING body upsert — one push path,
+     no re-stamp dance. The loop guard is the SyncGuard + `grafana_syncedHash` we
+     already ship (a real tag change is a real body change — correct, not a hazard).
+  2. THE PROTECTED-TAGS SET IS EMPTY. n8n's sharpest hazard — the mapping tag is a
+     content tag (n8n maps a folder BY TAG, so dropping that pill would unbind +
+     prune) — DOES NOT EXIST here: we map by real Grafana folders, so no content tag
+     is ever load-bearing. The whole force-keep-the-mapping-pill / eject-via-ignore /
+     union-of-mapping-tags apparatus evaporates. Protected set = [].
+  3. PULL CHANGE-DETECTION IS A BRANCH SHORTER. Because tags live in the body, a
+     Grafana-side tag change IS a body change `grafana_syncedHash` catches — n8n's
+     separate "tags-only changed in the source" branch collapses into the ordinary
+     body-changed path. Detection is just: skip-if-unchanged vs body-changed → write
+     + reconcile pills.
+
+PROVENANCE — add-on-one-side vs remove-on-the-other: when the two sets differ on a
+string you cannot tell an ADD from a REMOVE from the current sets alone. So the app
+banks the reserved-stripped tag set as of the last successful sync in
+`grafana_syncedTags` (the tag analogue of `grafana_syncedHash`) and three-way-merges
+against it: add-on-either-side keeps the tag, remove-on-either-side drops it (those
+are disjoint against a single baseline, so the merge is deterministic). The only
+genuine conflict — same tag added on one side, removed on the other since baseline —
+falls to the reconcile's direction of truth (pull → Grafana wins, push → NC wins).
+
+PRUNING — edges swept, catalog definitions not. Assignment EDGES (tag-on-this-file)
+are pruned both ways: remove-on-either-side drops the edge. Catalog DEFINITIONS are
+NOT auto-pruned — an NC system tag may be pinned on unrelated files. Reconcile is
+prune-free by construction (compute the merged set first, write once, never mint a
+pill it's about to drop). An OPTIONAL, opt-in `occ` sweep (dry-run first, never on
+the hot path) can GC NC definitions orphaned everywhere. GRAFANA SUBTRACTION: Grafana
+has NO tag catalog — a tag is just a string that vanishes with its last dashboard —
+so there are no Grafana-side definitions to sweep; the sweep is NC-side-only here.
+
+SCOPE — a mapped-folder feature: every behaviour here applies ONLY to a file managed
+by a mapping. An `unmapped` or `ignored` file is a plain Nextcloud file — its pills
+are ordinary system tags with NO Grafana side effect — so the listener + reconcile
+must no-op on it.
+
+── STATUS: NONE OF THIS IS BUILT ────────────────────────────────────────────────
+
+There is no content tag-sync code in `lib/` at all. `OwnershipTags` writes the
+MODE pills (`grafana:sync`/`grafana:link`/`grafana:unmapped`) and nothing else —
+no content-tag mirror, no pill listener, no tag reconcile, no body tags array.
+
+So every scenario here is @unbuilt, not @todo. The file-level @todo it used to
+carry was claiming twenty-five items in the work queue that no test could ever
+pass, which is precisely what makes a work queue worth ignoring. This is the
+single largest correction in the tag makeover.
+
+The `grafana:*` MODE pills are a different thing and they ARE built — see
+reserved-tags.feature for the boundary between the two.
+
+### Editing a pill updates the file body's tags array (body is canonical)
+
+── the body↔pills projection (surface 2, n8n "Slice B") — DEFERRED ────────────
+The sibling attempted Slice B (body canonical for tags) and REVERTED it: a
+body-canonical push regressed its pill-driven mapping push. That regression is
+n8n-shaped (its body PUT drops tags; its mapping is a tag) and has no Grafana
+analogue — but the body↔pills loop safety (pill listener vs body-write listener
+must not chase each other) is real, so we defer surface 2 too until the mode
+machine is in and it's verified live. The body-reconcile engine stays dormant.
+These scenarios pin the target; the whole feature is @todo regardless.
+
+### An unchanged dashboard is skipped by the pull
+
+── pull change-detection: only write what changed (a branch shorter than n8n) ──
+THE BODY HALF IS BUILT (Course 7): a mirror whose bytes already match Grafana is
+not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
+content tag-sync code in `lib/` at all, so no scenario here can pass yet.
+
+The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
+a tag behaviour and does not wait on tags: it is LIVE in reconcile.feature, which
+owns what a run does as a run. Do not restate it here.
+
+Note what makes the skip possible at all, because it is a Grafana-specific gift:
+`DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
+rewrites on every save. Without that the spec would differ on every read and
+there would be nothing to skip. A tag change lives in the body, so it IS a body
+difference — which is the branch n8n needs and we do not.
+
+## uninstall
+
+`features/uninstall.feature`
+
+Uninstall lifecycle — what happens to the SYSTEM and to the user's DATA when the
+app is removed, and that a reinstall reconnects cleanly.
+
+  - SYSTEM: removing the app runs the <uninstall> repair step (UnregisterMimetype),
+    which REVERTS the custom-mimetype registration the install wrote into the
+    Nextcloud core tree (config/mimetype*.json, core/img/filetypes/Grafana.svg,
+    core/js/mimetypelist.js) and re-stamps the .grafana.json filecache rows back to
+    application/json. The store's clean-uninstall rule is about this shared state.
+  - DATA: the app ORPHANS the user's data — it never deletes the .grafana.json files,
+    never clears their Files-Metadata, never deletes Team Folders, never touches
+    Grafana. A sync folder is a full backup, so deleting it would be data loss. To wipe
+    the Nextcloud side deliberately, an admin uses Purge first (see purge.feature).
+
+Because the files keep their grafana_uid, a reinstall + pull RECONCILES them in
+place (matched by uid, never duplicated) — the reconnect is free, by design.
+
+The <uninstall> system leg needs a full app remove on a live pod (CI can't drive
+it), so it stays @todo; the data-orphan + reinstall-reconnect legs are provable via
+disable/re-enable + a pull, which exercises the same metadata-keyed reconcile.
+Spec-first / @todo: the SYSTEM leg needs a real app-remove on a live pod (the CI
+harness can only disable/enable, not remove+reinstall), so it stays manual. The
+DATA promise — reinstall reconciles existing files in place by uid with NO
+duplicates — is already proven LIVE by reconcile.feature ("existing files are
+updated in place — matched by dashboard uid, never duplicated"); a disable/enable
+changes nothing about that reconcile, so re-proving it here would be redundant.
+
+### Removing the app reverts the custom mimetype registration
+
+── system cleanup ───────────────────────────────────────────────────────────
+@blocked, and the missing capability is named: this harness can only DISABLE and
+ENABLE the app, never remove and reinstall it, so the uninstall repair step
+(UnregisterMimetype) is unreachable from CI. The two scenarios below stay live
+because disable/enable is exactly what they need.

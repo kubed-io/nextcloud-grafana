@@ -109,7 +109,21 @@ final class Mapping implements JsonSerializable {
 		if ($ncFolder === '' && $title !== '') {
 			$ncFolder = self::normaliseFolder($title);
 		}
-		$mode = (string)($data['mode'] ?? '');
+		// DEFAULTS TO `link`, WHICH IT DID NOT USED TO. An omitted mode was a hard
+		// refusal, so the shortest useful add-mapping — a Grafana folder and
+		// nothing else — could not be written at all, and every caller had to name
+		// a mode it had no opinion about. `link` is the conservative choice: it
+		// downloads nothing and pushes nothing back, so a mapping made without
+		// thinking about mode cannot cost anything. Individual files are promoted
+		// afterwards.
+		//
+		// Note the inconsistency this removes: `format` two lines below has always
+		// defaulted, and for the same reason. Mode was the odd one out.
+		//
+		// Matches the Penpot sibling, which has always defaulted this way. The gap
+		// here and in nextcloud-n8n was found by writing the admin-mapping spec's
+		// defaults table and having no value to put in the `mode` row.
+		$mode = (string)($data['mode'] ?? self::MODE_LINK);
 
 		// Format defaults to the classic JSON cut when absent — everything already
 		// is this, so an omitted field is never a surprise.

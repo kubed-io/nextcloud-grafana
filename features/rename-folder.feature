@@ -1,40 +1,4 @@
-# Renaming a FOLDER — the folder half of rename-dashboard.feature.
-#
-# Two very different folders can be renamed, and conflating them is the trap this
-# file exists to prevent:
-#
-#   1. A MAPPED folder — the Nextcloud folder an admin bound to a Grafana folder.
-#   2. A SUBFOLDER inside one — an ordinary folder, or a mirrored Grafana folder
-#      if it carries the `grafana` tag (create-folder.feature).
-#
-# ── THE FINDING: A MAPPING IS STORED AS A PATH STRING ────────────────────────────
-#
-# `Mapping::$ncFolder` is a path (`nc_folder`), and `MappingService::resolveForPath`
-# decides membership with `str_starts_with($relative, $folder . '/')`. It is NOT a
-# Nextcloud file id.
-#
-# So renaming a mapped folder does not "move" the mapping — it silently ORPHANS it.
-# The mapping still names a path that no longer exists, every file inside the
-# renamed folder resolves to no mapping, and nothing anywhere says so. The dashboards
-# are untouched in Grafana, so nothing is destroyed; the connection simply stops,
-# quietly, and the next pull re-creates the whole folder at the old path.
-#
-# That is the opposite of the promise the rest of the app makes. A dashboard file
-# survives renaming, moving and restoring because it is tracked by a stable **uid**
-# in its metadata rather than by its name — and the mapping it belongs to is tracked
-# by a **string**. The one identifier that is not stable is the one the whole mapping
-# rests on.
-#
-# `admin-mapping.feature` compounds it: a mapping's folders cannot be edited after
-# creation, so an admin who renames the folder cannot repoint the mapping — they
-# must remove it and add it back.
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# @unbuilt throughout. There is no folder-rename handling of any kind: no listener
-# watches folder renames, and `GrafanaClient` has no renameFolder. The first
-# scenario documents what happens TODAY (the orphaning) so the gap is written down
-# rather than rediscovered; the rest specify what should happen instead.
+# Notes, decisions and history for this feature: AGENTS.md#rename-folder
 
 Feature: Renaming a folder
   As a Nextcloud user or admin

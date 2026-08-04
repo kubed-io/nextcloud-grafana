@@ -1,17 +1,4 @@
-# Creating dashboards from Nextcloud. These scenarios are the human-readable spec
-# for the "author in NC, live in Grafana" flow: a .grafana.json written over WebDAV
-# into a mapped folder fires NodeWrittenEvent → the create listener → the dashboard
-# appears in Grafana. The Grafana side is asserted over its REST API; the NC stamp over
-# DAV PROPFIND of nc:metadata-grafana_uid.
-#
-# CREATING A FOLDER is the other half, and it works the opposite way round: a new
-# folder is inert until it is TAGGED, because a mapped folder must stay usable for
-# ordinary things. See create-folder.feature — the asymmetry is deliberate and
-# explained there.
-#
-# STATUS: create-on-land is built (CreateService + CreateInGrafanaListener,
-# unit-tested and live-verified). @todo means the WebDAV step definitions are
-# missing, not the code.
+# Notes, decisions and history for this feature: AGENTS.md#create-dashboard
 
 Feature: Create a dashboard from Nextcloud
   As a Nextcloud user

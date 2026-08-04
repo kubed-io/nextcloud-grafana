@@ -1,19 +1,4 @@
-# Copying a dashboard file. Where a MOVE is "the same dashboard" (see move-dashboard.feature),
-# a COPY is ALWAYS a brand-new instance. A copy never inherits the original's Grafana
-# identity — its metadata (grafana_uid, version, mapping, mode) is stripped the moment
-# it is copied. Copy is therefore the single safest point to strip metadata:
-# whatever the source was (sync, link, unmapped), the copy starts clean.
-#
-# Nextcloud distinguishes copy from move at the event layer (NodeCopiedEvent vs
-# NodeRenamedEvent), which is what lets us treat them oppositely.
-#
-# COPYING A FOLDER is a different question with a different blast radius — one
-# gesture, N far-side creates, and a folder identity of its own to strip. It lives
-# in copy-folder.feature.
-#
-# STATUS: the copy path is built (CopyListener + CopyService, unit-tested). These are
-# @todo — the code exists, the WebDAV COPY step definitions do not — except where
-# noted. The file-level @todo this used to carry could not say that.
+# Notes, decisions and history for this feature: AGENTS.md#copy-dashboard
 
 Feature: Copying a dashboard file always makes a new instance
   As a Nextcloud user
@@ -96,11 +81,7 @@ Feature: Copying a dashboard file always makes a new instance
     And the "links" mapping is pulled
     Then the new file is a "link" pointer
 
-  # ── the pull must never look like a copy ─────────────────────────────────────────
-  # The reconciler writes files into mapped folders, which at the event layer is
-  # indistinguishable from a user copying one in. If the pull's own writes took the
-  # copy path, every pull would mint a duplicate dashboard for every file it wrote —
-  # the single worst failure this listener could have.
+  # notes: AGENTS.md#the-pulls-own-writes-are-never-treated-as-a-copy
 
   @grafana @in-grafana @occ @todo
   Scenario: The pull's own writes are never treated as a copy
