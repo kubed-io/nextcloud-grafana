@@ -146,7 +146,6 @@ final class MappingServiceTest extends TestCase {
 	// features/admin-mapping.feature's @decision scenario, which records that there
 	// is deliberately no operation here at all.
 
-
 	public function testDeleteRemovesTheMapping(): void {
 		$svc = $this->service();
 		$saved = $svc->add($this->mapping('uid-a', 'alpha'));
