@@ -126,85 +126,26 @@ final class MappingServiceTest extends TestCase {
 		$svc->add($b);
 	}
 
-	public function testUpdateChangesMutableFieldsButKeepsIdAndFolders(): void {
-		$svc = $this->service();
-		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
+	// ── there is no update() any more, and these tests went with it ──────────────
+	//
+	// Seven tests lived here asserting that update() rejected a change to the
+	// Grafana folder, the Nextcloud folder, the Team Folder flag and
+	// subfolder-sync, one field at a time. Every one of them described a guard on
+	// a method that no longer exists.
+	//
+	// Immutability is now the API's SHAPE: updateGroups() takes an id and groups,
+	// so a change to anything else cannot be expressed and there is no rejection to
+	// assert. Testing a guard that cannot be reached would be testing nothing.
+	//
+	// The old guard list was also incomplete in a way the tests hid: it checked
+	// four fields and left `mode` and `format` editable, and both decide how every
+	// already-mirrored file was written. Seven passing tests, and the gap between
+	// them was the bug.
+	//
+	// What replaced them: the groups tests below, and
+	// features/admin-mapping.feature's @decision scenario, which records that there
+	// is deliberately no operation here at all.
 
-		// The folder names are immutable, so an update keeps them and only changes the
-		// mutable fields (mode/format/…).
-		$svc->update($saved->id, $this->mapping('uid-a', 'alpha', 'link', 'yaml'));
-
-		$got = $svc->getById($saved->id);
-		self::assertNotNull($got);
-		self::assertSame($saved->id, $got->id);
-		self::assertSame('alpha', $got->ncFolder);
-		self::assertSame('link', $got->mode);
-		self::assertSame('yaml', $got->format);
-	}
-
-	public function testUpdateRejectsChangingTheNextcloudFolder(): void {
-		$svc = $this->service();
-		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
-
-		$this->expectException(\InvalidArgumentException::class);
-		$svc->update($saved->id, $this->mapping('uid-a', 'alpha-renamed', 'sync', 'json'));
-	}
-
-	public function testUpdateRejectsChangingTheGrafanaFolder(): void {
-		$svc = $this->service();
-		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
-
-		$this->expectException(\InvalidArgumentException::class);
-		$svc->update($saved->id, $this->mapping('uid-b', 'alpha', 'sync', 'json'));
-	}
-
-	public function testUpdateRejectsChangingTheTeamFolderFlag(): void {
-		$svc = $this->service();
-		// Default use_team_folder is true; the saved mapping is a Team Folder.
-		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
-
-		$flipped = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid-a', 'grafana_folder_title' => 'uid-a',
-			'nc_folder' => 'alpha', 'mode' => 'sync', 'use_team_folder' => false,
-		]);
-		$this->expectException(\InvalidArgumentException::class);
-		$svc->update($saved->id, $flipped);
-	}
-
-	public function testUpdateRejectsChangingSubfolderSync(): void {
-		$svc = $this->service();
-		// Default sync_subfolders is false.
-		$saved = $svc->add($this->mapping('uid-a', 'alpha', 'sync', 'json'));
-
-		$flipped = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid-a', 'grafana_folder_title' => 'uid-a',
-			'nc_folder' => 'alpha', 'mode' => 'sync', 'sync_subfolders' => true,
-		]);
-		$this->expectException(\InvalidArgumentException::class);
-		$svc->update($saved->id, $flipped);
-	}
-
-	public function testUpdateForcesTheIdFromThePathNotTheBody(): void {
-		$svc = $this->service();
-		$saved = $svc->add($this->mapping('uid-a', 'alpha'));
-		// A body carrying a different id must not create a second row or move the id.
-		// (Same folders — those are immutable.)
-		$body = Mapping::fromArray([
-			'id' => 'attacker-supplied',
-			'grafana_folder_uid' => 'uid-a',
-			'nc_folder' => 'alpha',
-			'mode' => 'sync',
-		]);
-		$svc->update($saved->id, $body);
-		self::assertCount(1, $svc->list());
-		self::assertSame($saved->id, $svc->list()[0]->id);
-	}
-
-	public function testUpdateUnknownIdThrows(): void {
-		$svc = $this->service();
-		$this->expectException(\OutOfBoundsException::class);
-		$svc->update('missing', $this->mapping('uid-a', 'alpha'));
-	}
 
 	public function testDeleteRemovesTheMapping(): void {
 		$svc = $this->service();

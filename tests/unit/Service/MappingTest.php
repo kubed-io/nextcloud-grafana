@@ -77,7 +77,6 @@ final class MappingTest extends TestCase {
 		self::assertTrue(Mapping::fromArray($enabled->toArray())->syncSubfolders);
 	}
 
-
 	public function testGeneratesAnIdWhenNoneGiven(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
