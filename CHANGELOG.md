@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Dev: added the `@nextcloud/files` / `event-bus` / `initial-state` / `l10n` / `router` frontend deps (matching n8n) for the upcoming openers PR.
+- CI: the integration suite is split into three Behat suites (`admin`, `dashboard`, `core`) run as parallel matrix legs, with one aggregated result comment instead of one per leg.
+- CI: a new check keeps every feature file in exactly one suite, and the step-definition check now also catches a step no definition resolves.
 - Folder mappings hardened: the Nextcloud folder name is optional (defaults to the Grafana folder's name), and Grafana folder / Nextcloud folder / Team Folder / subfolder-sync are immutable after create — re-create to change them; mode, format, and groups stay editable.
 - Folder mappings now persist **Groups** and **Team Folder** (previously rendered but dropped on save).
 - The admin connection is a single **Instance** card (Grafana has one API and one credential).

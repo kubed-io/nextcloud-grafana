@@ -61,11 +61,19 @@ jobs:
           exit $status
         fi
 
-    # Two Behat mistakes that each cost a full integration cycle — duplicate step
-    # text (fails the WHOLE suite with "already defined") and stray parentheses in a
-    # pattern (an optional group, reported as an ambiguous match). Both are pure text
-    # checks, so catching them here takes a second instead of minutes plus a live
-    # Nextcloud and Grafana. See the script for the full autopsy.
+    # The suites are a partition, and both ways of breaking it are SILENT: a file
+    # in no suite never runs and every leg still reports green; a file in two runs
+    # twice against two stacks. A text check settles it in a second.
+    - name: Behat suites partition features/
+      run: bash tests/integration/bin/check-suites.sh
+
+    # Three Behat mistakes that each cost a full integration cycle — duplicate step
+    # text (fails the WHOLE suite with "already defined"), stray parentheses in a
+    # pattern (an optional group, reported as an ambiguous match), and a step no
+    # definition resolves (silently proves nothing today, a hard failure the moment
+    # the run turns on --strict). All three are pure text checks, so catching them
+    # here takes a second instead of minutes plus a live Nextcloud and Grafana. See
+    # the script for the full autopsy.
     - name: Behat step definitions
       run: bash tests/integration/bin/check-step-definitions.sh
 

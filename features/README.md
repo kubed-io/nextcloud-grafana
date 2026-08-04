@@ -66,6 +66,35 @@ Everything that is not a verb on a file or a folder keeps its own file:
 | `lifecycle.feature` | Install and enable |
 | `uninstall.feature` | Removal, and what survives it |
 
+## The files are also a partition — three Behat suites
+
+Every file above belongs to **exactly one** of three Behat suites, declared in
+`tests/integration/behat.dist.yml`, and the integration matrix runs one suite per
+leg:
+
+| suite | what it holds |
+|---|---|
+| `admin` | the settings surface — the connection, the mapping list, removing a mapping |
+| `dashboard` | the six verbs as they apply to a dashboard (a `.grafana.json` file) |
+| `core` | everything else: the same six verbs on a **folder**, plus identity, file type, tags, the sync buttons, purge and the app lifecycle |
+
+**The axis is the filename, not a tag.** A tag partition leaks: `@occ`, `@ui` and
+`@in-grafana` are carried by some scenarios and not others, so an untagged
+scenario would match no leg and quietly stop running — with every leg still
+green. A path partition cannot leak, because `ls features/*.feature` minus the
+union must be empty. `tests/integration/bin/check-suites.sh` checks exactly that,
+in the quality job, in about a second.
+
+`folder` is the obvious fourth suite, and is how the penpot sibling splits
+(`admin`/`design`/`project`/`core`). It is not one yet because **all 56 of its
+scenarios are specification** — the folder surface is entirely `@unbuilt`, as the
+section above records — so the leg would boot a Nextcloud and a Grafana to run
+nothing. The six folder files are kept together and first in `core` so promoting
+them is a cut and a paste, and `check-suites.sh` will verify the result.
+
+Running plain `behat` still runs all three in sequence, so a local run is
+unaffected by the split.
+
 ## Every action file covers BOTH directions
 
 A mirror has two sides, and a spec that only writes down one of them is only half a
