@@ -7,14 +7,15 @@ Feature: Admin configures folder mappings
 
   Background:
     Given the app is enabled
-
-    # A mapping is one fact, so it is one sentence plus a table of what is in it —
-    # the same table whether it is pre-state or the action. A blank cell means the
-    # admin left that field alone, so the app's own default applies.
-    # notes: AGENTS.md#the-preconditions
-
-  Scenario Outline: Creating a mapping saves the form
-    Given no Grafana folders are mapped
+    # WHAT AN UNSET FIELD BECOMES IS A FACT ABOUT THE FORM, not about one
+    # scenario, so it is declared once here. Stated per-scenario it was silently
+    # optional: a scenario that asserted "unset fields at their defaults" without
+    # declaring any compared against whatever the step happened to assume, and
+    # disagreed with the app.
+    #
+    # The Grafana folder is the only required field. The Nextcloud folder's default
+    # is prose rather than a value because that is genuinely what it is: left blank
+    # it is materialised from the Grafana folder's TITLE at create and stored.
     And an unset field on the mapping form defaults to:
       | nc folder  | the Grafana folder's name |
       | mode       | link                      |
@@ -22,13 +23,15 @@ Feature: Admin configures folder mappings
       | groups     |                           |
       | storage    | team folder               |
       | subfolders | off                       |
-    # The Grafana folder is the only required field — everything else has a
-    # default, and the outline below proves the one refusal.
-    #
-    # The Nextcloud folder's default is prose rather than a value: left blank it is
-    # materialised from the Grafana folder's TITLE at create and stored, so the
-    # saved mapping shows both fields populated and you can see at a glance that
-    # they match because the name was left blank.
+
+    # A mapping is one fact, so it is one sentence plus a table of what is in it —
+    # the same table whether it is pre-state or the action. A blank cell means the
+    # admin left that field alone, so the app's own default applies.
+    # notes: AGENTS.md#the-preconditions
+
+  @admin @occ @ui
+  Scenario Outline: Creating a mapping saves the form
+    Given no Grafana folders are mapped
     When the admin maps the Grafana folder "<uid>" with:
       | nc folder  | <nc folder>  |
       | mode       | <mode>       |
@@ -55,6 +58,7 @@ Feature: Admin configures folder mappings
 
     # notes: AGENTS.md#creating-a-mapping-saves-the-form
 
+  @admin @occ @ui
   Scenario Outline: A mapping the app cannot honour is refused, and says why
     Given no Grafana folders are mapped
     When the admin maps the Grafana folder "<uid>" with:
@@ -73,6 +77,7 @@ Feature: Admin configures folder mappings
 
     # notes: AGENTS.md#a-mapping-the-app-cannot-honour-is-refused-and-says-why
 
+  @admin @occ @ui
   Scenario: A Grafana folder may only be mapped once
     Given a mapping with the following values:
       | grafana folder | observe |
@@ -86,7 +91,7 @@ Feature: Admin configures folder mappings
     # mappings mean the same thing and every dashboard in it would belong to both.
     # notes: AGENTS.md#a-grafana-folder-may-only-be-mapped-once
 
-  @unbuilt
+  @admin @occ @ui @unbuilt
   Scenario: Two mappings may not target the same Nextcloud folder
     Given a mapping with the following values:
       | grafana folder | observe |
@@ -101,6 +106,7 @@ Feature: Admin configures folder mappings
     # two mappings then prune each other's dashboards forever.
     # notes: AGENTS.md#two-mappings-may-not-target-the-same-nextcloud-folder
 
+  @admin @occ @ui
   Scenario: The Grafana root can be mapped via the reserved "/" folder
     Given no Grafana folders are mapped
     When the admin maps the Grafana folder "/" with:
@@ -111,7 +117,7 @@ Feature: Admin configures folder mappings
     # uid, so the picker offers a reserved "/" entry for it.
     # notes: AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-  @unbuilt
+  @admin @occ @ui @unbuilt
   Scenario Outline: What a mapping locks, it locks for a reason
     Given a mapping with the following values:
       | grafana folder | observe |
