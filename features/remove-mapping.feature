@@ -1,35 +1,4 @@
-# Removing a folder mapping — the admin deletes a mapping from the list (or
-# `occ grafana_sync:remove-mapping <id>`). This is NOT the "Purge Nextcloud files"
-# button (that keeps the mapping + never touches Grafana — see purge.feature). Removing
-# a MAPPING tears down the connection, and the question is: what happens to the files
-# and dashboards that were connected through it?
-#
-# THE CONTRACT (resolved with Dr K) — trash the connected, leave the rest, lose nothing:
-#   • Every file ACTIVELY CONNECTED to the mapping (a managed sync/link file whose
-#     grafana_mapping is this mapping) is moved to the **Nextcloud trash** — it becomes
-#     unmapped and goes to the bin. Because a trash move rides the delete contract
-#     (delete-dashboard.feature), the Grafana side follows automatically:
-#       - recycle-bin OFF → the connected dashboard is deleted in Grafana at trash-time
-#         and the file's metadata is stripped (restore re-creates with a new uid);
-#       - recycle-bin ON  → the connected dashboard is MOVED into the bin folder, uid
-#         kept (restore moves it back, same uid).
-#   • Files that are NOT connected are LEFT ALONE, untouched: an `unmapped`/`untracked`
-#     standalone `.grafana.json` only ever existed in Nextcloud, so removing a mapping
-#     it was never part of must never move or delete it — no data loss.
-#   • The Nextcloud trash is the safety net: we don't surgically decide what to keep —
-#     we trash exactly the connected files, and the trash is fully recoverable. Fully
-#     **emptying the trash** then does the permanent clean-up (recycle-bin ON → the
-#     matching dashboards are deleted from the Grafana bin; OFF → already gone).
-#   • RECONNECTION: if a new mapping to the same Grafana/Nextcloud folder is created
-#     later, the trashed files can simply be **restored (untrashed)** to reconnect —
-#     cleanest with the recycle bin ON (the dashboards were only parked, so restore
-#     re-links the SAME uids); with the bin OFF, a restore is a re-create (new uids).
-#
-# STATUS: the tear-down cascade IS cooked (Course 4 · Slice 3) — MappingTeardownService trashes
-# the mapping's connected files (their delete rides the recycle-bin setting via the delete
-# listener) and leaves standalone files alone, wired to both `occ remove-mapping` and the admin
-# panel. The whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions are
-# written; until then the delete-engine unit suite + the live smoke carry the proof.
+# Notes, decisions and history for this feature: AGENTS.md#remove-mapping
 
 Feature: Removing a folder mapping tears down the connection safely
   As a Nextcloud admin

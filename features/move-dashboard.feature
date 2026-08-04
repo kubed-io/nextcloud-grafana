@@ -1,63 +1,4 @@
-# How the app reacts to every move a Nextcloud user can make on a dashboard file.
-# The stable thread is the dashboard UID **plus the full JSON we hold in the file**.
-# (COPY is the opposite — always a new instance; see copy-dashboard.feature.)
-#
-# THE CORE NUANCE (resolved with Dr K) — MOVE and DELETE are NOT the same, and where
-# a file moves decides everything. Grafana has NO soft-delete/archive (proven live: a
-# DELETE is permanent), and — unlike n8n — we CANNOT keep an id "parked" for free,
-# because there is nothing to un-archive. So the id-preservation story depends on where
-# the file lands and on ONE optional setting:
-#
-#   1. MOVE WITHIN THE SAME MAPPING (rename) — nothing in Grafana but the name.
-#
-#   2. MOVE FROM ONE MAPPED FOLDER TO ANOTHER — a genuine Grafana **folder move**: the
-#      dashboard's folderUid updates to the destination mapping's folder, the **UID is
-#      always preserved** (both sides are real Grafana folders — no delete involved),
-#      and the file re-stamps grafana_mapping + grafana_folderUid. Independent of the
-#      recycle-bin setting below.
-#
-#   3. MOVE OUT OF EVERY MAPPED FOLDER (to an unmapped location) — this is where the two
-#      strategies diverge, selected by the optional **Grafana recycle-bin folder**:
-#        • BIN OFF (default, aggressive): the content is already safe in the Nextcloud
-#          file, so we **DELETE the dashboard in Grafana** and **strip the file's Grafana
-#          identity** (uid/mapping/folderUid/version/hash). The file becomes a plain,
-#          untracked .grafana.json that still holds the full JSON. Moving it back into a
-#          mapping is then just **create-on-land** — a brand-new dashboard, same content,
-#          a **NEW uid** (the old one is gone forever). "It just works", id not preserved.
-#        • BIN ON: we **MOVE the Grafana dashboard into the designated recycle-bin folder**
-#          (uid **preserved**) — the analogue of n8n's archive, done with a real folder.
-#          Moving the file back into a mapping **moves the dashboard back** out of the bin
-#          to the destination folder, **same uid**. (See delete-dashboard.feature — trash uses the
-#          exact same bin machinery.)
-#
-# THE ID-STRIP RULE (precise): we strip the file's grafana_uid **only when we are about
-# to do a TRUE delete in Grafana while the file survives in Nextcloud** — because the
-# dashboard is gone, so its uid is dead. With the recycle-bin folder ON, a "delete/move-out"
-# is a **move into the bin, not a true delete**, so the dashboard still exists and the file
-# **keeps its uid** (it becomes an `unmapped` file that can restore to the SAME dashboard —
-# the n8n-style parked state, which Grafana can only offer via the bin).
-#
-# THE SAFETY RULE (never lose data): a sync file always holds the full dashboard JSON, so
-# the content is safe in Nextcloud BEFORE we touch Grafana. We only ever DELETE from
-# Grafana once we have confirmed the file holds what it needs to rebuild.
-#
-# STATUS: the move engine IS cooked (Course 4 · Slice 2b) — MotionService + MoveGuardListener,
-# unit-tested for the invariants (uid kept on a re-parent, a failed delete never strips, a link
-# move-out refused) and verified live on the pod (create → re-parent uid-kept → move-out delete
-# → move-back new-uid, all confirmed against Grafana's API).
-#   SCOPE — same-storage moves only: Nextcloud fires NodeRenamedEvent for a move within one
-#   storage (regular folder ↔ regular folder, rename, subfolder). A move into/out of a TEAM
-#   FOLDER crosses a storage boundary and is a copy+delete under the hood (NodeDeletedEvent, not
-#   NodeRenamedEvent), so team-folder re-homing rides the delete/create lifecycle — a fast-follow
-#   — NOT this engine. The bin-ON parking rows here also stay design-only (fast-follow).
-# Scenarios are tagged per-scenario, not per-file: @todo where the engine is built and only the
-# occ+WebDAV move steps are missing (the unit suite + the live smoke carry the proof meanwhile),
-# @unbuilt where there is genuinely no code. A @todo above `Feature:` used to hide that split.
-#
-# MOVE AND DELETE ARE THE SAME GRAFANA OPERATION, chosen by the same setting — moving a file out
-# of every mapping and trashing it both run through the bin decision. They live in separate files
-# because the gestures differ, so whenever either changes, check the rules still agree.
-# Every scenario whose outcome depends on that setting carries @recycle-bin.
+# Notes, decisions and history for this feature: AGENTS.md#move-dashboard
 
 Feature: Moving a dashboard file mirrors the move in Grafana
   As a Nextcloud user
@@ -250,11 +191,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Then the file is still in that subfolder
     And its name reflects the new title
 
-  # ── into a TAGGED subfolder — a real Grafana folder ───────────────────────────────
-  # A subfolder that carries the `grafana` tag is a Grafana folder in its own right
-  # (create-folder.feature owns how it gets there). Moving a dashboard into one is
-  # therefore a re-parent, not local organisation. @unbuilt: GrafanaClient has no folder
-  # write operations, so there is nothing to re-parent into yet.
+  # notes: AGENTS.md#moving-a-dashboard-into-a-tagged-subfolder-re-parents-it-in-grafana
 
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Moving a dashboard into a tagged subfolder re-parents it in Grafana

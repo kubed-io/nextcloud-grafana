@@ -153,6 +153,31 @@ final class MappingTest extends TestCase {
 		Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'mode' => 'sync']);
 	}
 
+	/**
+	 * AN OMITTED MODE IS THE DEFAULT, NOT A REFUSAL.
+	 *
+	 * It used to be a refusal, which made the shortest useful call — a Grafana
+	 * folder and nothing else — impossible to write, and forced every caller to
+	 * name a mode it had no opinion about. `format` in this same method had always
+	 * defaulted; mode was the odd one out.
+	 *
+	 * `link` is the conservative choice: it downloads nothing and pushes nothing
+	 * back, so a mapping made without an opinion about mode cannot cost anything.
+	 *
+	 * This test exists because NOTHING ELSE LOCKS THE CONTRACT — unlike the n8n
+	 * sibling, this repo never had a "missing mode is rejected" test to invert, so
+	 * the change would otherwise have been free to regress silently.
+	 */
+	public function testAMissingModeDefaultsToLink(): void {
+		$m = Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'nc_folder' => 'observe']);
+		$this->assertSame(Mapping::MODE_LINK, $m->mode);
+	}
+
+	/**
+	 * An UNKNOWN mode is still refused. Saying nothing and saying nonsense are
+	 * different inputs: one has no opinion, the other has one the app cannot
+	 * honour, and collapsing them would let a typo become a silent `link`.
+	 */
 	public function testRejectsAnUnknownMode(): void {
 		$this->expectException(\InvalidArgumentException::class);
 		Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'nc_folder' => 'observe', 'mode' => 'backup']);

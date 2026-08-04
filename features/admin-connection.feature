@@ -1,14 +1,4 @@
-# The "admin makes the Grafana connection" use case — the app's "I'm logged in"
-# gate, a prerequisite to every other feature. The admin points the app at Grafana
-# (base URL), provides a service-account token, and tests the connection to confirm
-# the URL + token are valid and Grafana is reachable.
-#
-# The test deliberately hits an AUTHENTICATED Grafana endpoint (GET /api/folders),
-# not the unauthenticated /api/health, so a green result proves the token itself is
-# valid — not merely that the host is up.
-#
-# (Obtaining the token is out of the app's scope — that's the Grafana admin's job;
-# in the tests it's minted as setup, see tests/integration/bin/mint-grafana-token.sh.)
+# Notes, decisions and history for this feature: AGENTS.md#admin-connection
 
 Feature: Admin configures the Grafana connection
   As a Nextcloud admin

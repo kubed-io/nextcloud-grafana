@@ -1,102 +1,4 @@
-# Bidirectional dashboard-tag sync — a dashboard's tags and its Nextcloud system
-# tags are kept as ONE set, so the mirror is as searchable as Grafana.
-#
-# Imported from the finalized n8n sibling (nextcloud-n8n Chapter 5 §5.6 — the
-# TagMerge / TagSyncService / ContentTagListener / ReconcileTagsJob engine + the
-# *_syncedTags baseline) and re-cut for Grafana's ingredient. DESIGN, NOT WIRED:
-# the whole feature is @todo — CI skips it — until (1) the sibling's tag PR merges
-# (we port the engine as our base) and (2) the file-lifecycle mode machine (Course 4)
-# lands, since tag sync scopes itself to mapped files and no-ops on unmapped/ignored.
-#
-# Two label systems, made equal (minus our control tags):
-#
-#   • Grafana tags   — free-text strings that live INSIDE the dashboard object
-#                      (`dashboard.tags: ["dns","linux"]`). No tag-id API, no tag
-#                      catalog: a tag exists exactly when some dashboard carries the
-#                      string, and writing tags = upserting the dashboard. Folders
-#                      have no tags.
-#   • Nextcloud tags — collaborative SYSTEM TAGS (the coloured pills in Files,
-#                      searchable via DAV REPORT).
-#
-# THE RULE OF EQUALITY: after a reconcile a managed dashboard's Grafana tags and its
-# Nextcloud system tags hold the same strings, with ONE exclusion — the app's
-# reserved namespace `grafana:*` (`grafana:sync`, `grafana:link`, `grafana:unmapped`,
-# `grafana:ignore`, and any future control tag). Reserved tags are the app's control
-# plane: never pushed into Grafana, never imported from Grafana as content.
-#
-# THREE EDIT SURFACES — the object body is the third: tags live INSIDE the dashboard,
-# so a sync file's on-disk JSON already has a `tags` array. Three editable places,
-# kept as one set:
-#   1. Grafana `dashboard.tags`   (edit in Grafana → pull)
-#   2. the file body `tags` array (edit the JSON → push)
-#   3. Nextcloud system-tag pills (edit the pills → push)
-# The FILE BODY is the canonical object; the PILLS are a listener-kept projection. In
-# `link` mode the body is a pointer, so only surfaces 1 and 3 exist and the pills are
-# a read-only projection of Grafana.
-#
-# NO EXTRA BUTTON FOR TAGS (n8n "Slice A" — the reactive engine): a content-pill
-# add/remove on a managed `sync` file is caught by a dedicated ContentTagListener
-# (TagAssignedEvent/TagUnassignedEvent for CONTENT tags, distinct from the reserved
-# `grafana:ignore` the mode listener watches) and reconciled to Grafana ON ITS OWN —
-# no "Sync to Grafana" click. It honours the SAME `timing` knob as the body writeback:
-#   • `sync`  — reconcile inline during the request.
-#   • `async` — enqueue a per-file ReconcileTagsJob the cron worker runs next tick.
-#
-# GRAFANA IS THE EASIER COOK — three backend knobs, all simpler than n8n:
-#   1. TAGS ARE BODY-NATIVE, so there is NO tags-only side-channel. n8n reconciles a
-#      pill to a DECOUPLED tag endpoint (setWorkflowTags → PUT /workflows/{id}/tags)
-#      and must re-stamp its body hash so the silent body-tags write isn't re-pushed.
-#      Grafana has no such endpoint: `dashboard.tags` IS the object, so a pill edit
-#      updates the body's `tags` and rides the EXISTING body upsert — one push path,
-#      no re-stamp dance. The loop guard is the SyncGuard + `grafana_syncedHash` we
-#      already ship (a real tag change is a real body change — correct, not a hazard).
-#   2. THE PROTECTED-TAGS SET IS EMPTY. n8n's sharpest hazard — the mapping tag is a
-#      content tag (n8n maps a folder BY TAG, so dropping that pill would unbind +
-#      prune) — DOES NOT EXIST here: we map by real Grafana folders, so no content tag
-#      is ever load-bearing. The whole force-keep-the-mapping-pill / eject-via-ignore /
-#      union-of-mapping-tags apparatus evaporates. Protected set = [].
-#   3. PULL CHANGE-DETECTION IS A BRANCH SHORTER. Because tags live in the body, a
-#      Grafana-side tag change IS a body change `grafana_syncedHash` catches — n8n's
-#      separate "tags-only changed in the source" branch collapses into the ordinary
-#      body-changed path. Detection is just: skip-if-unchanged vs body-changed → write
-#      + reconcile pills.
-#
-# PROVENANCE — add-on-one-side vs remove-on-the-other: when the two sets differ on a
-# string you cannot tell an ADD from a REMOVE from the current sets alone. So the app
-# banks the reserved-stripped tag set as of the last successful sync in
-# `grafana_syncedTags` (the tag analogue of `grafana_syncedHash`) and three-way-merges
-# against it: add-on-either-side keeps the tag, remove-on-either-side drops it (those
-# are disjoint against a single baseline, so the merge is deterministic). The only
-# genuine conflict — same tag added on one side, removed on the other since baseline —
-# falls to the reconcile's direction of truth (pull → Grafana wins, push → NC wins).
-#
-# PRUNING — edges swept, catalog definitions not. Assignment EDGES (tag-on-this-file)
-# are pruned both ways: remove-on-either-side drops the edge. Catalog DEFINITIONS are
-# NOT auto-pruned — an NC system tag may be pinned on unrelated files. Reconcile is
-# prune-free by construction (compute the merged set first, write once, never mint a
-# pill it's about to drop). An OPTIONAL, opt-in `occ` sweep (dry-run first, never on
-# the hot path) can GC NC definitions orphaned everywhere. GRAFANA SUBTRACTION: Grafana
-# has NO tag catalog — a tag is just a string that vanishes with its last dashboard —
-# so there are no Grafana-side definitions to sweep; the sweep is NC-side-only here.
-#
-# SCOPE — a mapped-folder feature: every behaviour here applies ONLY to a file managed
-# by a mapping. An `unmapped` or `ignored` file is a plain Nextcloud file — its pills
-# are ordinary system tags with NO Grafana side effect — so the listener + reconcile
-# must no-op on it.
-#
-# ── STATUS: NONE OF THIS IS BUILT ────────────────────────────────────────────────
-#
-# There is no content tag-sync code in `lib/` at all. `OwnershipTags` writes the
-# MODE pills (`grafana:sync`/`grafana:link`/`grafana:unmapped`) and nothing else —
-# no content-tag mirror, no pill listener, no tag reconcile, no body tags array.
-#
-# So every scenario here is @unbuilt, not @todo. The file-level @todo it used to
-# carry was claiming twenty-five items in the work queue that no test could ever
-# pass, which is precisely what makes a work queue worth ignoring. This is the
-# single largest correction in the tag makeover.
-#
-# The `grafana:*` MODE pills are a different thing and they ARE built — see
-# reserved-tags.feature for the boundary between the two.
+# Notes, decisions and history for this feature: AGENTS.md#tag-sync
 
 Feature: A dashboard's tags and its Nextcloud system tags stay one set
   As a Grafana admin browsing dashboards in Nextcloud
@@ -178,14 +80,7 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the dashboard in Grafana is tagged "linux" without a manual push
     And the file has no content tag "old"
 
-  # ── the body↔pills projection (surface 2, n8n "Slice B") — DEFERRED ────────────
-  # The sibling attempted Slice B (body canonical for tags) and REVERTED it: a
-  # body-canonical push regressed its pill-driven mapping push. That regression is
-  # n8n-shaped (its body PUT drops tags; its mapping is a tag) and has no Grafana
-  # analogue — but the body↔pills loop safety (pill listener vs body-write listener
-  # must not chase each other) is real, so we defer surface 2 too until the mode
-  # machine is in and it's verified live. The body-reconcile engine stays dormant.
-  # These scenarios pin the target; the whole feature is @todo regardless.
+  # notes: AGENTS.md#editing-a-pill-updates-the-file-bodys-tags-array-body-is-canonical
 
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Editing a pill updates the file body's tags array (body is canonical)
@@ -273,20 +168,7 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the resulting tag set on both sides is "2024", "linux", and "prod"
     And the tag "2024" is a string, not coerced to a number
 
-  # ── pull change-detection: only write what changed (a branch shorter than n8n) ──
-  # THE BODY HALF IS BUILT (Course 7): a mirror whose bytes already match Grafana is
-  # not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
-  # content tag-sync code in `lib/` at all, so no scenario here can pass yet.
-  #
-  # The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
-  # a tag behaviour and does not wait on tags: it is LIVE in reconcile.feature, which
-  # owns what a run does as a run. Do not restate it here.
-  #
-  # Note what makes the skip possible at all, because it is a Grafana-specific gift:
-  # `DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
-  # rewrites on every save. Without that the spec would differ on every read and
-  # there would be nothing to skip. A tag change lives in the body, so it IS a body
-  # difference — which is the branch n8n needs and we do not.
+  # notes: AGENTS.md#an-unchanged-dashboard-is-skipped-by-the-pull
 
   @admin @occ @unbuilt
   Scenario: An unchanged dashboard is skipped by the pull

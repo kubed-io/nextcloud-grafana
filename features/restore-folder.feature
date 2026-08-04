@@ -1,22 +1,4 @@
-# Restoring a FOLDER from the Nextcloud trash — the folder half of
-# restore-dashboard.feature.
-#
-# ── ONE GESTURE, N IDENTITIES ────────────────────────────────────────────────────
-#
-# Restoring a folder is restoring every dashboard file inside it, and under bin-off
-# every one of those gets a NEW uid. So a folder that held forty dashboards comes
-# back as forty dashboards that are, from Grafana's point of view, entirely new
-# objects — nothing that referenced them by uid still resolves.
-#
-# Under bin-on they come back as themselves. That asymmetry is the whole reason the
-# recycle-bin setting exists, and it is at its most expensive here.
-#
-# ── STATUS ───────────────────────────────────────────────────────────────────────
-#
-# The per-file restore path is built and unit-tested, so "does the per-file rule hold
-# when a folder is the gesture" is @todo. The aggregate behaviour — reporting what
-# came back, and what came back with a different identity — is @unbuilt: nothing in
-# `lib/` treats a folder restore as one event.
+# Notes, decisions and history for this feature: AGENTS.md#restore-folder
 
 Feature: Restoring a folder from the trash
   As a Nextcloud user

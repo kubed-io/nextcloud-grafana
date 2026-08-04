@@ -1,13 +1,5 @@
-# Folder mappings are metadata on the folder, so membership is resolved by where a
-# file lives. (How the app reacts when you MOVE a file across that boundary is in
-# move-dashboard.feature — a sync file moved out becomes "unmapped"; a link can't leave.)
-#
-# The resolver matches the deepest mapped folder that encloses a file, so nested
-# mappings work and the nearest enclosing one wins. Each scenario lands a real file
-# over WebDAV and reads the resulting grafana_mapping stamp back, so these are
-# server-observable assertions of the mapping resolver.
-#
-# @todo — the mapping engine lands with the sync chapter; executable spec only.
+# Notes, decisions and history for this feature: AGENTS.md#mapping-membership
+
 Feature: Mapping membership is resolved by folder
   As a Nextcloud admin
   I want mappings to be per-folder metadata

@@ -1,16 +1,4 @@
-# The manual per-mapping sync controls in admin settings:
-#   - "Sync from Grafana" (pull): bring the mapping's folder dashboards into its folder.
-#   - "Sync to Grafana"   (push): send the mapping's sync files up to Grafana.
-# Both reconcile the mapped folder against the dashboards in that mapping's Grafana
-# folder, and both FULLY IGNORE "unmapped" files — those live outside any mapping, so
-# a mapping-scoped sync never sees them. Pruning here is therefore mapping-scoped:
-# it only ever concerns files/dashboards inside the mapping.
-#
-# The pull scenarios below are LIVE (Course 2): they drive `occ grafana_sync:pull`
-# (the headless twin of the admin button) against the preloaded Grafana folders and
-# assert the result over WebDAV. The mapping is admin-owned so CI needs no
-# groupfolders app. Push (Course 3, writeback) and the whole-instance root mirror
-# (the subfolder course) are still @todo — their engines land later.
+# Notes, decisions and history for this feature: AGENTS.md#reconcile
 
 Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   As a Nextcloud admin
@@ -49,28 +37,7 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
     Then no file named "Ephemeral.grafana.json" remains in "delta-dash"
     And a file named "Delta Demo.grafana.json" appears in "delta-dash"
 
-  # ── RULE: a run that changes nothing changes nothing ──────────────────────────
-  # Two things are NOT behaviours, and both were nearly written up as if they were.
-  #
-  # A file's "modified" time is a RESULT, not a gesture. Editing, moving, copying and
-  # renaming all move it, each already owned by the file that owns the gesture. A
-  # scenario asserting "the mtime moved after an edit" specifies Nextcloud, not this
-  # app, and has to invent an actor to do it.
-  #
-  # The RECONCILER is likewise the *how*, not the *what*. The scheduled pull is a
-  # machine that makes Grafana-origin behaviours show up in Nextcloud; "renamed in
-  # Grafana" is the behaviour, the reconciler is merely how it arrives — which is why
-  # those scenarios live with their behaviour and carry `@in-grafana`, not here.
-  #
-  # What is left is genuinely this file's, and genuinely not automatic: the admin
-  # presses the button when nothing has changed, and the run must leave every file
-  # exactly as it found it. It matters because the same run is what a schedule would
-  # fire — a write performed unconditionally is performed forever, and a folder where
-  # everything was modified seconds ago says nothing about what changed.
-  #
-  # The negative control is the pull scenario above: it asserts a file APPEARS, which
-  # a pull that had simply stopped writing could never do. (Inherited defect, fixed in
-  # the n8n master first — saga Ch2, Course 7.)
+  # notes: AGENTS.md#sync-from-grafana-with-nothing-changed-rewrites-nothing-and-says-so
   @admin @occ @ui
   Scenario: Sync from Grafana with nothing changed rewrites nothing and says so
     Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-quiet"
