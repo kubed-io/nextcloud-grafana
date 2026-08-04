@@ -119,18 +119,23 @@
 		});
 	}
 
+	// A saved card renders its immutable fields as text carrying data-value; the
+	// add-card still renders real controls. Read either.
+	function fieldValue(card, selector) {
+		var el = card.querySelector(selector);
+		if (!el) { return ''; }
+		return (el.dataset && typeof el.dataset.value === 'string' ? el.dataset.value : (el.value || '')).trim();
+	}
+
 	function readCard(card) {
-		var mode = card.querySelector('.js-mode').value === 'link' ? 'link' : 'sync';
-		var format = card.querySelector('.js-format').value === 'yaml' ? 'yaml' : 'json';
+		var mode = fieldValue(card, '.js-mode') === 'link' ? 'link' : 'sync';
+		var format = fieldValue(card, '.js-format') === 'yaml' ? 'yaml' : 'json';
 		var folderEl = card.querySelector('.js-grafana-folder');
-		var uid;
-		var title = '';
-		if (folderEl.tagName === 'SELECT') {
-			uid = folderEl.value.trim();
+		var uid = fieldValue(card, '.js-grafana-folder');
+		var title = folderEl && folderEl.dataset ? (folderEl.dataset.title || '') : '';
+		if (folderEl && folderEl.tagName === 'SELECT') {
 			var opt = folderEl.options[folderEl.selectedIndex];
 			title = opt ? (opt.dataset.title || '') : '';
-		} else {
-			uid = folderEl.value.trim();
 		}
 		var groups = [];
 		Array.prototype.forEach.call(
@@ -143,7 +148,7 @@
 			id: card.dataset.id || '',
 			grafana_folder_uid: uid,
 			grafana_folder_title: title,
-			nc_folder: card.querySelector('.js-nc-folder').value.trim(),
+			nc_folder: fieldValue(card, '.js-nc-folder'),
 			mode: mode,
 			format: format,
 			nc_groups: groups,
@@ -161,8 +166,13 @@
 		// The Nextcloud folder is optional: leave it blank and the backend stores it as the
 		// Grafana folder's own name at create (both fields then show in the list).
 		var isNew = !data.id;
+		// AN EXISTING CARD SENDS ONLY ITS GROUPS. Everything else about a mapping is
+		// immutable and the endpoint takes nothing else — sending the rest would be a
+		// payload the server is right to ignore, which is exactly how a UI comes to
+		// offer an edit that silently does nothing.
+		var payload = isNew ? data : { nc_groups: data.nc_groups };
 		var url = OC.generateUrl(MAP_BASE + (isNew ? '' : '/' + encodeURIComponent(data.id)));
-		api(isNew ? 'POST' : 'PUT', url, data)
+		api(isNew ? 'POST' : 'PUT', url, payload)
 			.then(function (res) {
 				if (res.mapping && res.mapping.id) {
 					card.dataset.id = res.mapping.id;
@@ -171,7 +181,7 @@
 				// entry shows the name the backend filled in.
 				if (res.mapping && res.mapping.nc_folder) {
 					var ncEl = card.querySelector('.js-nc-folder');
-					if (ncEl && !ncEl.value.trim()) {
+					if (ncEl && 'value' in ncEl && !ncEl.value.trim()) {
 						ncEl.value = res.mapping.nc_folder;
 					}
 				}

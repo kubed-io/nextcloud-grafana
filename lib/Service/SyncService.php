@@ -269,13 +269,12 @@ final class SyncService {
 		// A Team Folder with no groups is invisible to everyone — skip rather than
 		// create dead storage. The admin-owned backend is always visible to the actor,
 		// so an empty group list there is fine (admin-only), and we do NOT skip it.
-		if ($mapping->useTeamFolder && $mapping->ncGroups === []) {
-			$this->logger->warning('skipping Team Folder mapping with no groups; it would be invisible', [
-				'app' => Application::APP_ID,
-				'ncFolder' => $mapping->ncFolder,
-			]);
-			return $empty;
-		}
+		// NO "SKIP A TEAM FOLDER WITH NO GROUPS" GUARD ANY MORE. It read
+		// $mapping->ncGroups, which no longer exists — the groups are the folder's
+		// (see Mapping's class docblock). It was also the wrong call: an unshared
+		// folder is the admin's business, visible to them in the mapping card and in
+		// Files, and refusing to sync into it turned a sharing question into a
+		// mysteriously empty folder.
 		if (!$this->storage->isAvailable($mapping)) {
 			$this->logger->warning('skipping mapping: storage backend unavailable (Team Folder selected but groupfolders disabled?)', [
 				'app' => Application::APP_ID,

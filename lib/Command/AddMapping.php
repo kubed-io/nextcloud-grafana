@@ -57,7 +57,9 @@ final class AddMapping extends Command {
 		// that the admin panel then can't update or delete.
 		unset($data['id']);
 		try {
-			$saved = $this->service->add(Mapping::fromArray($data));
+			// nc_groups travels ALONGSIDE the mapping, not inside it: they are applied
+			// to the provisioned folder and read back from it, never stored.
+			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? []);
 		} catch (\InvalidArgumentException $e) {
 			$output->writeln('<error>' . $e->getMessage() . '</error>');
 			return 1;

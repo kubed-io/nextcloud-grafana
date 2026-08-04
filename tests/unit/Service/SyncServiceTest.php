@@ -93,14 +93,13 @@ final class SyncServiceTest extends TestCase {
 		);
 	}
 
-	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false, array $groups = ['admin']): Mapping {
+	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false): Mapping {
 		return Mapping::fromArray([
 			'id' => $id,
 			'grafana_folder_uid' => 'gf-alpha',
 			'grafana_folder_title' => 'alpha',
 			'nc_folder' => 'alpha',
 			'mode' => $mode,
-			'nc_groups' => $groups,
 			'use_team_folder' => $useTeamFolder,
 		]);
 	}
@@ -125,13 +124,15 @@ final class SyncServiceTest extends TestCase {
 
 	// ── guards ───────────────────────────────────────────────────────────────
 
-	public function testPullOneSkipsTeamFolderMappingWithNoGroups(): void {
-		// A Team Folder shared with nobody is invisible — skipped with all-zero counts
-		// before any provisioning (ensureFolder is never reached; storage stays a stub).
-		$res = $this->service->pullOne($this->mapping(useTeamFolder: true, groups: []));
-
-		self::assertSame(['processed' => 0, 'succeeded' => 0, 'failed' => 0, 'pruned' => 0, 'unchanged' => 0], $res);
-	}
+	// THE "SKIP A TEAM FOLDER WITH NO GROUPS" TEST IS GONE, with the guard it
+	// covered. It read $mapping->ncGroups, which no longer exists — the groups are
+	// the folder's now, so the sync has no list to inspect and nothing to decide.
+	//
+	// It was also the wrong behaviour to protect: an unshared folder is the admin's
+	// business, plainly visible in the mapping card and in Files, and refusing to
+	// sync into it turned a sharing question into a mysteriously empty folder. The
+	// storage-unavailable skip below is the one that still earns its place, because
+	// there the app genuinely cannot proceed.
 
 	public function testPullOneSkipsWhenStorageUnavailable(): void {
 		$this->storage->method('isAvailable')->willReturn(false);

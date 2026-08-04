@@ -47,8 +47,13 @@ final class MappingController extends Controller {
 
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function index(): JSONResponse {
+		// describe(), not toArray(): each mapping carries the groups its FOLDER is
+		// currently shared with, read as this responds.
 		return new JSONResponse([
-			'mappings' => array_map(fn (Mapping $m) => $m->toArray(), $this->service->list()),
+			'mappings' => array_map(
+				fn (Mapping $m): array => $this->service->describe($m),
+				$this->service->list(),
+			),
 		]);
 	}
 
@@ -60,29 +65,54 @@ final class MappingController extends Controller {
 			$params = $this->request->getParams();
 			unset($params['id']);
 			$mapping = Mapping::fromArray($params);
-			$saved = $this->service->add($mapping);
-			return new JSONResponse(['mapping' => $saved->toArray()], Http::STATUS_CREATED);
+			// nc_groups travels ALONGSIDE the mapping: applied to the provisioned
+			// folder and read back from it, never stored.
+			$saved = $this->service->add($mapping, $params['nc_groups'] ?? []);
+			return new JSONResponse(
+				['mapping' => $this->service->describe($saved)],
+				Http::STATUS_CREATED,
+			);
 		} catch (\InvalidArgumentException $e) {
 			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+		} catch (\RuntimeException $e) {
+			// The request was fine and the mapping is fine — the FOLDER could not be
+			// provisioned (a Team Folder on an instance without groupfolders). A 400
+			// would send the admin back to change an input that was never wrong.
+			return new JSONResponse(
+				['message' => 'Could not provision the mapped folder: ' . $e->getMessage()],
+				Http::STATUS_INTERNAL_SERVER_ERROR,
+			);
 		}
 	}
 
+	/**
+	 * Re-share a mapping's folder with the given groups — THE ONLY EDIT THERE IS.
+	 *
+	 * Everything else about a mapping is fixed once created. That is not enforced
+	 * here by a list of guards; it is enforced by {@see MappingService::updateGroups()}
+	 * taking GROUPS, so no caller can express a change to anything else. There is
+	 * no path to check. Its docblock gives the reason each field is locked.
+	 *
+	 * It writes to the FOLDER and stores nothing, so the response carries the
+	 * groups the folder reports afterwards — which is not always what was
+	 * submitted, since a group that does not exist cannot be shared with.
+	 */
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function update(string $id): JSONResponse {
 		try {
-			// The path id is authoritative — assign it explicitly. (Array union
-			// `getParams() + ['id' => $id]` would keep a body-supplied id, since union
-			// favours the left operand's keys — the opposite of what we want.)
-			$params = $this->request->getParams();
-			$params['id'] = $id;
-			$mapping = Mapping::fromArray($params);
-			$saved = $this->service->update($id, $mapping);
-			return new JSONResponse(['mapping' => $saved->toArray()]);
-		} catch (\InvalidArgumentException $e) {
-			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+			$this->service->updateGroups($id, $this->request->getParam('nc_groups', []));
 		} catch (\OutOfBoundsException) {
 			return new JSONResponse(['message' => 'Mapping not found'], Http::STATUS_NOT_FOUND);
+		} catch (\RuntimeException $e) {
+			return new JSONResponse(
+				['message' => 'Could not re-share the mapped folder: ' . $e->getMessage()],
+				Http::STATUS_INTERNAL_SERVER_ERROR,
+			);
 		}
+
+		$mapping = $this->service->getById($id);
+
+		return new JSONResponse(['mapping' => $mapping === null ? null : $this->service->describe($mapping)]);
 	}
 
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]

@@ -27,7 +27,6 @@ final class MappingTest extends TestCase {
 			'nc_folder' => 'dashboards/observe',
 			'mode' => 'sync',
 			'format' => 'yaml',
-			'nc_groups' => ['admin', 'ops'],
 			'use_team_folder' => false,
 			'sync_subfolders' => true,
 		]);
@@ -38,19 +37,32 @@ final class MappingTest extends TestCase {
 		self::assertSame('dashboards/observe', $m->ncFolder);
 		self::assertSame('sync', $m->mode);
 		self::assertSame('yaml', $m->format);
-		self::assertSame(['admin', 'ops'], $m->ncGroups);
 		self::assertFalse($m->useTeamFolder);
 		self::assertTrue($m->syncSubfolders);
 	}
 
-	public function testGroupsDefaultToEmptyAndTeamFolderToTrue(): void {
+	public function testTeamFolderDefaultsToTrue(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
 			'nc_folder' => 'observe',
 			'mode' => 'sync',
 		]);
-		self::assertSame([], $m->ncGroups);
 		self::assertTrue($m->useTeamFolder);
+	}
+
+	/**
+	 * A stored row from before groups moved to the folder still parses, and the key
+	 * is simply not a field any more. Reading old data must not throw, and must not
+	 * resurrect the value.
+	 */
+	public function testAStoredRowWithGroupsStillParsesAndIgnoresThem(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+			'nc_groups' => ['devs'],
+		]);
+		self::assertArrayNotHasKey('nc_groups', $m->toArray());
 	}
 
 	public function testSyncSubfoldersDefaultsOff(): void {
@@ -63,16 +75,6 @@ final class MappingTest extends TestCase {
 		// …and round-trips through toArray/fromArray when enabled.
 		$enabled = Mapping::fromArray(['grafana_folder_uid' => 'uid2', 'nc_folder' => 'x', 'mode' => 'sync', 'sync_subfolders' => true]);
 		self::assertTrue(Mapping::fromArray($enabled->toArray())->syncSubfolders);
-	}
-
-	public function testGroupsAreTrimmedDedupedAndReindexed(): void {
-		$m = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid1',
-			'nc_folder' => 'observe',
-			'mode' => 'sync',
-			'nc_groups' => [' admin ', 'admin', '', 'ops'],
-		]);
-		self::assertSame(['admin', 'ops'], $m->ncGroups);
 	}
 
 	public function testGeneratesAnIdWhenNoneGiven(): void {
@@ -218,7 +220,6 @@ final class MappingTest extends TestCase {
 			'nc_folder' => 'observe',
 			'mode' => 'link',
 			'format' => 'json',
-			'nc_groups' => ['admin'],
 			'use_team_folder' => false,
 		]);
 		$round = Mapping::fromArray($original->toArray());

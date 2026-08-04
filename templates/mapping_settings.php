@@ -96,49 +96,55 @@ $info = static function (string $tip) use ($icon): string {
 					<div class="grafana-sync-field gf-folder">
 						<label><?php p($l->t('Grafana folder'));
 			print_unescaped($info($desc['folder'])); ?></label>
-						<select class="js-grafana-folder" data-uid="<?php p($uid); ?>" data-title="<?php p($title); ?>">
-							<option value="<?php p($uid); ?>" data-title="<?php p($title); ?>" selected><?php p($label); ?></option>
-						</select>
+						<?php /* Immutable: the Grafana folder IS the mapping, so a different
+								 folder is a different mapping. Rendered as text rather than a
+								 one-option select — a control implies it might save. */ ?>
+						<span class="grafana-sync-fixed js-grafana-folder" data-uid="<?php p($uid); ?>" data-title="<?php p($title); ?>" data-value="<?php p($uid); ?>"><?php p($label); ?>
+							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
+						</span>
 					</div>
 					<div class="grafana-sync-field gf-nc">
 						<label><?php p($l->t('Nextcloud folder'));
 			print_unescaped($info($desc['nc'])); ?></label>
-						<input type="text" class="js-nc-folder" value="<?php p($m['nc_folder']); ?>" placeholder="<?php p($l->t('dashboards')); ?>" />
+						<?php /* Immutable: re-pointing it would move the whole mirrored tree
+								 and re-stamp every file's metadata. */ ?>
+						<span class="grafana-sync-fixed js-nc-folder" data-value="<?php p($m['nc_folder']); ?>"><?php p($m['nc_folder']); ?>
+							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
+						</span>
 					</div>
 					<div class="grafana-sync-field gf-subfolders">
+						<?php /* Immutable: flipping it restructures the far side. */ ?>
 						<label class="grafana-sync-checkbox"><input type="checkbox" class="js-sync-subfolders" <?php if ($syncSubfolders) {
 							print_unescaped('checked');
-						} ?> /> <?php p($l->t('Sync subfolders'));
+						} ?> disabled /> <?php p($l->t('Sync subfolders'));
 			print_unescaped($info($desc['subfolders'])); ?></label>
 					</div>
 					<div class="grafana-sync-field gf-mode">
 						<label><?php p($l->t('Mode'));
 			print_unescaped($info($desc['mode'])); ?></label>
-						<select class="js-mode">
-							<option value="sync" <?php if ($modeSel === 'sync') {
-								print_unescaped('selected');
-							} ?>><?php p($l->t('Sync')); ?></option>
-							<option value="link" <?php if ($modeSel === 'link') {
-								print_unescaped('selected');
-							} ?>><?php p($l->t('Link')); ?></option>
-						</select>
+						<?php /* Immutable: it decided how every existing file under the
+								 mapping was written, so changing it invalidates what is on
+								 disk. Re-create the mapping instead. */ ?>
+						<span class="grafana-sync-fixed js-mode" data-value="<?php p($modeSel); ?>"><?php p($modeSel === 'sync' ? $l->t('Sync') : $l->t('Link')); ?>
+							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
+						</span>
 					</div>
 					<div class="grafana-sync-field gf-format">
 						<label><?php p($l->t('Format'));
 			print_unescaped($info($desc['format'])); ?></label>
-						<select class="js-format">
-							<option value="json" <?php if ($formatSel === 'json') {
-								print_unescaped('selected');
-							} ?>><?php p($l->t('JSON')); ?></option>
-							<option value="yaml" <?php if ($formatSel === 'yaml') {
-								print_unescaped('selected');
-							} ?>><?php p($l->t('YAML')); ?></option>
-						</select>
+						<?php /* Immutable, for the same reason as mode: it chose the
+								 serializer and the file extension of everything already
+								 mirrored. */ ?>
+						<span class="grafana-sync-fixed js-format" data-value="<?php p($formatSel); ?>"><?php p($formatSel === 'yaml' ? $l->t('YAML') : $l->t('JSON')); ?>
+							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
+						</span>
 					</div>
 					<div class="grafana-sync-field gf-tf">
+						<?php /* Immutable: switching backend migrates the folder and every
+								 share on it. */ ?>
 						<label class="grafana-sync-checkbox"><input type="checkbox" class="js-use-team-folder" <?php if ($useTf) {
 							print_unescaped('checked');
-						} ?> /> <?php p($l->t('Team Folder'));
+						} ?> disabled /> <?php p($l->t('Team Folder'));
 			print_unescaped($info($desc['tf'])); ?></label>
 					</div>
 					<div class="grafana-sync-field gf-groups">

@@ -27,7 +27,8 @@ use OCP\Util;
  * The card layout mirrors the n8n master (Grafana folder + NC folder | mode +
  * format + team-folder | groups | actions). The **groups** list and the
  * **team-folder-available** flag feed the col-3 picker + the Team Folder checkbox.
- * Both now **persist with the mapping** (the model carries `nc_groups` +
+ * Team Folder persists with the mapping; GROUPS DO NOT — they are read from the
+ * mapped folder as this renders (see Mapping's class docblock). (The model carries
  * `use_team_folder`, mirroring n8n); the sync engine that *provisions* the folder
  * from those values lands in a later chapter.
  *
@@ -60,7 +61,13 @@ final class MappingSettings implements IDelegatedSettings {
 			Application::APP_ID,
 			'mapping_settings',
 			[
-				'mappings' => array_map(fn ($m) => $m->toArray(), $this->service->list()),
+				// describe(), not toArray(): each card's Groups picker is checked against
+				// what the FOLDER is shared with, read as this page renders. So a share
+				// added in the Files app or with occ shows up here.
+				'mappings' => array_map(
+					fn ($m) => $this->service->describe($m),
+					$this->service->list(),
+				),
 				'groups' => $groups,
 				// Drives whether the Team Folder checkbox defaults on (groupfolders
 				// present) — UI parity with n8n; not acted on yet.

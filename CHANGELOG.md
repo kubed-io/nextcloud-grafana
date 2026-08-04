@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Re-share a mapped folder from anywhere and this app reflects it.** The groups a mapped folder is shared with are now read from the folder itself rather than stored alongside the mapping, so a change made in Files, with `occ`, or by another app sharing the same folder shows up here — and a sync never puts back a group you removed. Setting the groups to nothing now actually clears them, which it silently did not before.
+- **BREAKING:** a mapping is now immutable except for its groups. The Grafana folder, the Nextcloud folder, the storage backend, subfolder-sync, the mode and the format are all fixed once created — mode and format were previously editable, which silently invalidated how every already-mirrored file had been written. Remove the mapping and add it again to change one.
+- **`occ grafana_sync:set-groups`** changes the groups a mapped folder is shared with, the one field a mapping lets you edit — previously reachable only from the admin panel.
+- **A mapped folder now appears the moment you save the mapping**, instead of only when the first sync runs. A mapping whose folder cannot be provisioned is no longer saved at all, rather than being stored and failing on every sync afterwards.
+- A `link` mapping's folder is no longer read-only for its groups. That bit stopped nothing being written to Grafana — the listeners do that — and only stopped you organising your own files.
+
 ### Fixed
 
 - **A sync no longer marks every dashboard file as modified.** Each sync rewrote every mirrored file whether or not anything had changed in Grafana, so the whole folder read "Modified a few seconds ago" after every run and a file you had actually touched was impossible to spot — a pull now writes only the files whose dashboard really changed, and reports the rest as "unchanged".

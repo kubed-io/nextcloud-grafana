@@ -69,11 +69,13 @@ jobs:
     # multiplies against: as the specification goes live (the folder engine alone
     # is 56 scenarios) the legs are already there to absorb it.
     #
-    # NOT ADDED YET: a storage-backend axis (Team Folder vs admin-owned). Every
-    # behaviour is valid on both, and the groupfolders path has never run in CI
-    # here — but `add-mapping` only persists, it does not provision, so a mapping
-    # has no folder until a sync makes one. The axis lands with the change that
-    # makes creating a mapping provision its folder.
+    # A STORAGE-BACKEND AXIS (Team Folder vs admin-owned) IS NOW UNBLOCKED but
+    # deliberately not here. It was impossible while `add-mapping` merely
+    # persisted — a mapping had no folder until a sync made one. Creating a
+    # mapping now provisions its folder, and groupfolders is installed below, so
+    # the axis is a matrix line away. It doubles the legs, so it gets its own run
+    # rather than riding on a behaviour change, where a failure would be
+    # ambiguous.
     #
     # fail-fast: false is load-bearing. With it on, one flaky leg cancels the
     # others and you lose the signal from the legs that were fine.
@@ -144,6 +146,25 @@ jobs:
         # WebDAV scenarios reach NC over HTTP at localhost:8080 (see below), so
         # that host:port must be trusted too.
         ./occ config:system:set trusted_domains 2 --value=localhost:8080
+
+    # TEAM FOLDERS ARE THE DEFAULT BACKEND, so the suite has to have them.
+    #
+    # groupfolders is an optional app and this workflow never installed it, which
+    # was survivable only because `add-mapping` used to persist without
+    # provisioning anything — the folder was created lazily at sync time, so a
+    # Team Folder mapping could be *stored* on an instance that could never make
+    # one. Now that creating a mapping provisions its folder, a default mapping
+    # fails outright without it.
+    #
+    # Installing it beats making every scenario ask for an admin-owned folder:
+    # `use_team_folder` defaults to true, and a suite that cannot exercise the
+    # default is testing a fiction. It is also the prerequisite for running the
+    # matrix across both backends.
+    - name: Install Team Folders (groupfolders)
+      run: |
+        ./occ app:install groupfolders
+        ./occ app:enable groupfolders
+        ./occ app:list | grep -i groupfolders
 
     # ── Serve: occ-only scenarios need no HTTP, but the WebDAV channel does.
     # PHP's built-in server is enough for DAV; no nginx/fpm needed. Backgrounded.
