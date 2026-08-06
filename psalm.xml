@@ -14,6 +14,23 @@
 	errorBaseline="tests/psalm-baseline.xml">
 	<projectFiles>
 		<directory name="lib" />
+		<!--
+			THE STEP DEFINITIONS ARE ANALYSED TOO, and they were not before.
+
+			They are ordinary PHP that only ever runs inside a live integration
+			environment, so a mistake in them costs a full CI cycle — a Nextcloud
+			and a Grafana boot — to discover. That is not hypothetical: a call to
+			`theFileWasCreatedWhenItsDashboardWasCreated()` (the real method is
+			`…WasCreatedWhenItsDashboardWas`; the name was written from the STEP
+			TEXT rather than from the method) got all the way to a red integration
+			leg, and nothing on the way could have caught it.
+
+			`bin/check-step-definitions.sh` answers a different question — does the
+			step TEXT resolve to a definition — and answered it correctly. Whether
+			the PHP inside those definitions is coherent is Psalm's job, and until
+			now nobody was asking.
+		-->
+		<directory name="tests/integration/bootstrap" />
 		<ignoreFiles>
 			<directory name="vendor" />
 		</ignoreFiles>
@@ -39,6 +56,18 @@
 		<file name="tests/external-stubs.php" />
 	</stubs>
 	<issueHandlers>
+		<!--
+			PHP 8.2 added constants in traits, and composer.json declares ^8.1 —
+			which is right for SHIPPED code, because Nextcloud 31 runs on 8.1.
+			These three are in the integration step definitions, which ship to
+			nobody and only ever run in CI on 8.4. Suppressed there and nowhere
+			else, so the same construct in lib/ would still be an error.
+		-->
+		<ConstantDeclarationInTrait>
+			<errorLevel type="suppress">
+				<directory name="tests/integration" />
+			</errorLevel>
+		</ConstantDeclarationInTrait>
 		<!--
 			These reference classes that exist at runtime in a real Nextcloud but are
 			NOT shipped in nextcloud/ocp, so Psalm can't see them: the private OC

@@ -38,6 +38,20 @@ trait SyncSteps {
 	 * @Given an admin-owned mapping from Grafana folder :uid to Nextcloud folder :folder
 	 */
 	public function anAdminOwnedMappingFromGrafanaFolderToNextcloudFolder(string $uid, string $folder): void {
+		// CLEAR FIRST, so this is a pre-STATE rather than an accumulation.
+		//
+		// A mapping is unique on the Grafana uid, so without this the second row of
+		// an Examples table that maps the same folder is refused as a duplicate and
+		// the scenario fails on its Given. Every scenario in this file wants exactly
+		// one mapping anyway, and a pre-state step that quietly depends on what the
+		// previous scenario left behind is the thing outlines exist to avoid.
+		foreach ($this->listMappingsForSync() as $existing) {
+			$id = (string)($existing['id'] ?? '');
+			if ($id !== '') {
+				$this->occ('grafana_sync:remove-mapping ' . escapeshellarg($id));
+			}
+		}
+
 		$json = json_encode([
 			'grafana_folder_uid' => $uid,
 			'grafana_folder_title' => $uid,
@@ -52,6 +66,93 @@ trait SyncSteps {
 		if (!in_array($folder, $this->createdFolders, true)) {
 			$this->createdFolders[] = $folder;
 		}
+	}
+
+	/**
+	 * A REGEX WITH THE VOCABULARY SPELLED OUT, not `:actor syncs :scope`. Behat's
+	 * `:name` placeholder matches a quoted string or a single non-space token — so
+	 * `the admin` never matches it, and all three rows come back UNDEFINED. The
+	 * alternation also makes a typo in an Examples cell a hard failure rather than
+	 * a silently different actor.
+	 *
+	 * @When /^(the admin|the schedule) syncs (one mapping|every mapping)$/
+	 *
+	 * THE TRIGGER IS DATA, NOT A BEHAVIOUR. Three ways to start the same sync —
+	 * the card's button, the section's button, and the clock — so the outline
+	 * treats them as columns and this step turns a column into an action.
+	 *
+	 * "one mapping" and "every mapping" differ only in whether an id is passed;
+	 * the schedule is the interesting one, because the only honest way to test it
+	 * is to make the real TimedJob run.
+	 */
+	public function actorSyncsScope(string $actor, string $scope): void {
+		if ($actor === 'the schedule') {
+			$this->theScheduleFires();
+
+			return;
+		}
+
+		$args = 'pull';
+		if ($scope === 'one mapping') {
+			$id = (string)($this->listMappingsForSync()[0]['id'] ?? '');
+			Assert::assertNotSame('', $id, 'no mapping to sync');
+			$args .= ' --mapping=' . escapeshellarg($id);
+		}
+
+		$res = $this->occ('grafana_sync:sync ' . $args);
+		Assert::assertSame(0, $res['exit'], "sync failed:\n{$res['output']}");
+		$this->lastPullReport = self::decodeSyncReport((string)$res['output']);
+	}
+
+	/**
+	 * Make the scheduled pull actually run, rather than asserting it would.
+	 *
+	 * TWO SAFETY FLOORS STAND BETWEEN A TEST AND A TIMED JOB, and neither can be
+	 * waited out in CI: the job's own interval (60s minimum, by design — see
+	 * ScheduleInterval) and the worker's last-run gate. So this enables the
+	 * schedule, finds the registered job by class, and executes it by id with
+	 * `--force-execute`, which bypasses both.
+	 *
+	 * That is the real job, reading the real setting, calling the real sync. The
+	 * alternative — asserting that a row exists in oc_jobs — would prove the job
+	 * is registered and nothing about whether it works, which is precisely the gap
+	 * this app had: the setting existed for months and nothing read it.
+	 */
+	private function theScheduleFires(): void {
+		$res = $this->occ('config:app:set grafana_sync schedule_enabled --value=1 --type=boolean');
+		Assert::assertSame(0, $res['exit'], "could not enable the schedule:\n{$res['output']}");
+
+		$res = $this->occ('background-job:list --class=' . escapeshellarg('OCA\\GrafanaSync\\BackgroundJob\\ScheduledPullJob') . ' --output=json');
+		$jobs = json_decode($res['output'], true);
+		Assert::assertIsArray($jobs, "background-job:list did not return JSON:\n{$res['output']}");
+		Assert::assertNotSame([], $jobs, 'the scheduled pull job is not registered — Application::boot did not add it');
+
+		$id = (string)($jobs[0]['id'] ?? '');
+		Assert::assertNotSame('', $id, 'the scheduled pull job has no id');
+
+		$res = $this->occ('background-job:execute ' . escapeshellarg($id) . ' --force-execute');
+		Assert::assertSame(0, $res['exit'], "running the scheduled pull failed:\n{$res['output']}");
+	}
+
+	/**
+	 * @Then the file :path carries its Grafana dates
+	 *
+	 * BOTH CLOCKS IN ONE SENTENCE, because they are one end state: a mirror wears
+	 * the dashboard's times rather than the sync's. Spelled out as two `Then`s it
+	 * read like two behaviours; every future thing that produces a mirror wants to
+	 * assert exactly this, and now it can in one line.
+	 */
+	public function theFileCarriesItsGrafanaDates(string $path): void {
+		$this->theFileIsDatedWhenItsDashboardChanged($path);
+		$this->theFileWasCreatedWhenItsDashboardWas($path);
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function listMappingsForSync(): array {
+		$res = $this->occ('grafana_sync:list-mappings');
+		$decoded = json_decode(trim($res['output']), true);
+
+		return is_array($decoded) ? $decoded : [];
 	}
 
 	/**

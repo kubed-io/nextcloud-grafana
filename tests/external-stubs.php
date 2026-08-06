@@ -98,3 +98,54 @@ namespace OCA\Files_Trashbin\Events {
 		}
 	}
 }
+
+// ── Behat, for the step definitions ──────────────────────────────────────────
+//
+// Behat is a dependency of tests/integration/composer.json, a separate Composer
+// project whose vendor tree the quality job does not install — so from the root
+// project's point of view these symbols simply do not exist, and Psalm reports
+// UndefinedClass the moment it looks at the step definitions.
+//
+// Stubbed rather than suppressed, for the same reason as the events above:
+// suppressing UndefinedClass across FeatureContext would blind Psalm to a real
+// missing class in the file, which is precisely what analysing the step
+// definitions was turned on to catch.
+//
+// Declaration-only. Behat's behaviour is not being modelled — only the shape
+// needed for the classes to resolve.
+
+namespace Behat\Behat\Context {
+	if (!interface_exists(Context::class, false)) {
+		interface Context {
+		}
+	}
+}
+
+namespace Behat\Gherkin\Node {
+	if (!class_exists(TableNode::class, false)) {
+		class TableNode {
+			/** @return list<array<string, string>> */
+			public function getHash(): array {
+				throw new \RuntimeException('stub');
+			}
+
+			/** @return array<string, string> */
+			public function getRowsHash(): array {
+				throw new \RuntimeException('stub');
+			}
+
+			/** @return list<list<string>> */
+			public function getRows(): array {
+				throw new \RuntimeException('stub');
+			}
+		}
+	}
+
+	if (!class_exists(PyStringNode::class, false)) {
+		class PyStringNode {
+			public function getRaw(): string {
+				throw new \RuntimeException('stub');
+			}
+		}
+	}
+}

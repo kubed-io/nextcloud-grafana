@@ -8,22 +8,57 @@ Feature: Manual per-mapping sync (Sync from / Sync to Grafana)
   Background:
     Given the app is connected to Grafana
 
+  # ── ONE BEHAVIOUR, THREE WAYS TO START IT ──────────────────────────────────
+  #
+  #   actor        | scope
+  #   -------------+---------------------
+  #   the admin    | one mapping        the card's "Sync now"
+  #   the admin    | every mapping      the section's "Sync from Grafana"
+  #   the schedule | every mapping      time as the actor
+  #
+  # Same pre-state, same post-state. The actor and the scope are the only things
+  # that differ, so they are COLUMNS rather than three near-identical scenarios.
+  # Whether a run is synchronous or queued is a mechanism, and is asserted nowhere.
+  # notes: AGENTS.md#a-sync-fills-the-mapped-folder-however-it-was-started
+
   @admin @in-grafana @occ @ui
-  Scenario: Sync from Grafana fills the mapped folder, matched by dashboard uid
-    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-dash"
+  Scenario Outline: A sync fills the mapped folder, however it was started
+    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "<folder>"
+    When <actor> syncs <scope>
+    Then a file named "Alpha Demo.grafana.json" appears in "<folder>"
+    And the file "<folder>/Alpha Demo.grafana.json" is a "sync" dashboard for uid "nc-alpha-demo"
+    And "<folder>" holds exactly 1 dashboard file
+    And the file "<folder>/Alpha Demo.grafana.json" carries its Grafana dates
+
+    Examples: every way a sync starts
+      | actor        | scope         | folder       |
+      | the admin    | one mapping   | one-mapping  |
+      | the admin    | every mapping | all-mappings |
+      | the schedule | every mapping | on-schedule  |
+
+    # A FOLDER PER ROW, on purpose. All three map the same Grafana folder, and a
+    # mapping is unique on the Grafana uid, so each row clears the store first
+    # anyway — distinct Nextcloud folders keep one row's leftovers from being read
+    # as the next row's result.
+    #
+    # THE DATES ARE AN END STATE, not a feature of their own: a mirror carries the
+    # dashboard's clocks rather than the sync's, and that is true however the sync
+    # started. So it is one reusable sentence rather than two `Then`s spelled out
+    # here, and any later behaviour that produces a mirror can assert it the same
+    # way.
+    # notes: AGENTS.md#carries-its-grafana-dates
+
+  @admin @in-grafana @occ @ui
+  Scenario: A second sync updates in place, never duplicating
+    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-again"
+    And the admin pulls from Grafana
     When the admin pulls from Grafana
-    Then a file named "Alpha Demo.grafana.json" appears in "alpha-dash"
-    And the file "alpha-dash/Alpha Demo.grafana.json" is a "sync" dashboard for uid "nc-alpha-demo"
-    And "alpha-dash" holds exactly 1 dashboard file
-    # The mirror's two clocks are END STATES of this behaviour, not features of their
-    # own — a modification time is the shared result of edit/move/copy/rename, each
-    # already owned elsewhere. Here the mirror comes into existence AND takes its
-    # content from Grafana, so both clocks are answerable in one place.
-    And the file "alpha-dash/Alpha Demo.grafana.json" is dated when its dashboard changed in Grafana
-    And the file "alpha-dash/Alpha Demo.grafana.json" was created when its dashboard was created in Grafana
-    # A second pull updates in place by uid — no duplicate, no "(2)" collision file.
-    When the admin pulls from Grafana
-    Then "alpha-dash" holds exactly 1 dashboard file
+    Then "alpha-again" holds exactly 1 dashboard file
+    # Matched by uid, so no duplicate and no "(2)" collision file. Kept as its own
+    # scenario rather than a second `When` inside the outline: it is a different
+    # question (identity across runs, not "did the sync work"), and running it
+    # three times over would prove the same thing three times.
+    # notes: AGENTS.md#a-second-sync-updates-in-place-never-duplicating
 
   @admin @in-grafana @occ @ui
   Scenario: Sync from Grafana prunes a file whose dashboard left the folder
