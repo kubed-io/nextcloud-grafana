@@ -144,7 +144,7 @@ trait SyncSteps {
 	 */
 	public function theFileCarriesItsGrafanaDates(string $path): void {
 		$this->theFileIsDatedWhenItsDashboardChanged($path);
-		$this->theFileWasCreatedWhenItsDashboardWasCreated($path);
+		$this->theFileWasCreatedWhenItsDashboardWas($path);
 	}
 
 	/** @return list<array<string,mixed>> */

@@ -82,7 +82,10 @@ final class ScheduleInterval {
 		// for a large enough digit string, and the int cast that followed would
 		// then be out of range. Multiplying as float keeps the value comparable,
 		// so the clamp happens BEFORE anything is narrowed back to int.
-		$seconds = (float)$m[1] * $multiplier;
+		// BOTH OPERANDS FLOAT. Psalm's strict binary operands mode refuses to mix an
+		// int with a float, and casting only the left side leaves the multiplier an
+		// int. Casting here rather than suppressing keeps the arithmetic honest.
+		$seconds = (float)$m[1] * (float)$multiplier;
 
 		if ($seconds >= self::MAXIMUM) {
 			return self::MAXIMUM;
