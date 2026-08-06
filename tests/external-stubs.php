@@ -113,6 +113,7 @@ namespace OCA\Files_Trashbin\Events {
 //
 // Declaration-only. Behat's behaviour is not being modelled — only the shape
 // needed for the classes to resolve.
+
 namespace Behat\Behat\Context {
 	if (!interface_exists(Context::class, false)) {
 		interface Context {
