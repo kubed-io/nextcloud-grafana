@@ -57,6 +57,18 @@
 	</stubs>
 	<issueHandlers>
 		<!--
+			PHP 8.2 added constants in traits, and composer.json declares ^8.1 —
+			which is right for SHIPPED code, because Nextcloud 31 runs on 8.1.
+			These three are in the integration step definitions, which ship to
+			nobody and only ever run in CI on 8.4. Suppressed there and nowhere
+			else, so the same construct in lib/ would still be an error.
+		-->
+		<ConstantDeclarationInTrait>
+			<errorLevel type="suppress">
+				<directory name="tests/integration" />
+			</errorLevel>
+		</ConstantDeclarationInTrait>
+		<!--
 			These reference classes that exist at runtime in a real Nextcloud but are
 			NOT shipped in nextcloud/ocp, so Psalm can't see them: the private OC
 			internals the pull's mimetype repair-steps + Team Folder actor-FS setup
