@@ -56,5 +56,14 @@ final class ScheduleIntervalTest extends TestCase {
 		yield 'a negative is not a number here' => ['-5m', 3600];
 		yield 'a unit we do not know' => ['3w', 3600];
 		yield 'a decimal' => ['1.5h', 3600];
+
+		// THE CAP, and it is a correctness case rather than a taste one: without it
+		// the multiplication overflows to float and the `: int` return raises a
+		// TypeError, so a parseable-but-absurd value would CRASH the job's
+		// constructor instead of degrading. Caught in review.
+		yield 'absurdly large is capped, not crashed' => ['999999999999d', ScheduleInterval::MAXIMUM];
+		yield 'beyond int range is capped, not crashed' => ['99999999999999999999', ScheduleInterval::MAXIMUM];
+		yield 'exactly the cap' => ['30d', ScheduleInterval::MAXIMUM];
+		yield 'just under the cap' => ['29d', 2505600];
 	}
 }

@@ -70,7 +70,12 @@ final class ScheduledPullJob extends TimedJob {
 
 		try {
 			$result = $this->sync->runInline(SyncService::DIR_PULL, null);
-			$this->logger->info('grafana_sync scheduled pull finished', [
+			// DEBUG, not info: at the 60s floor this runs 1440 times a day, and every
+			// other background job in this app logs only exceptional paths. A
+			// successful sync that changed nothing is the least interesting line the
+			// log can carry, and burying the ones that matter is how a log stops
+			// being read.
+			$this->logger->debug('grafana_sync scheduled pull finished', [
 				'app' => Application::APP_ID,
 				'result' => $result,
 			]);
@@ -105,7 +110,6 @@ final class ScheduledPullJob extends TimedJob {
 			return in_array($raw, ['1', 'true', 'yes', 'on'], true);
 		}
 	}
-
 
 	private function safeString(string $key, string $default): string {
 		try {

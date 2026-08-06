@@ -40,6 +40,21 @@ final class ScheduleInterval {
 	public const DEFAULT = 3600;
 
 	/**
+	 * The longest interval worth honouring — 30 days.
+	 *
+	 * A cap exists for correctness, not taste. Without one, `(int)$digits *
+	 * $multiplier` OVERFLOWS TO FLOAT for a large enough number (`999999999999d`
+	 * is a thing someone can type into a free-text field), `max()` then returns a
+	 * float, and the `: int` return type raises a TypeError under strict_types.
+	 * A parseable-but-absurd value would CRASH the job's constructor instead of
+	 * degrading — which is the exact opposite of what the fallback is for.
+	 *
+	 * Caught in review. The arithmetic below is done in float precisely so the
+	 * comparison can happen before any int cast.
+	 */
+	public const MAXIMUM = 30 * 86400;
+
+	/**
 	 * A number with an optional unit (`s`/`m`/`h`/`d`), or a plain number meaning
 	 * seconds. Case and internal spaces are tolerated, because the field is free
 	 * text and `2H` and `30 m` are things people type.
@@ -47,6 +62,9 @@ final class ScheduleInterval {
 	 * ANYTHING UNPARSEABLE IS HOURLY, NEVER ZERO. A zero interval is a tight loop
 	 * against the Grafana API, so the failure mode of a typo has to be "runs less
 	 * often than you meant", not "hammers the server".
+	 *
+	 * Every path returns a number between {@see MINIMUM} and {@see MAXIMUM}. There
+	 * is no input — however long, however silly — that throws.
 	 */
 	public static function seconds(string $raw): int {
 		$raw = strtolower(trim($raw));
@@ -60,6 +78,16 @@ final class ScheduleInterval {
 
 		$multiplier = ['' => 1, 's' => 1, 'm' => 60, 'h' => 3600, 'd' => 86400][$m[2]];
 
-		return max(self::MINIMUM, (int)$m[1] * $multiplier);
+		// FLOAT MATH ON PURPOSE. An int multiplication overflows silently to float
+		// for a large enough digit string, and the int cast that followed would
+		// then be out of range. Multiplying as float keeps the value comparable,
+		// so the clamp happens BEFORE anything is narrowed back to int.
+		$seconds = (float)$m[1] * $multiplier;
+
+		if ($seconds >= self::MAXIMUM) {
+			return self::MAXIMUM;
+		}
+
+		return max(self::MINIMUM, (int)$seconds);
 	}
 }
