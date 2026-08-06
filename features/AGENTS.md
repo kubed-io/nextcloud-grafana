@@ -871,44 +871,78 @@ purge → uninstall (Nextcloud looks like the app was never there).
 
 `features/reconcile.feature`
 
-The manual per-mapping sync controls in admin settings:
-  - "Sync from Grafana" (pull): bring the mapping's folder dashboards into its folder.
-  - "Sync to Grafana"   (push): send the mapping's sync files up to Grafana.
-Both reconcile the mapped folder against the dashboards in that mapping's Grafana
-folder, and both FULLY IGNORE "unmapped" files — those live outside any mapping, so
-a mapping-scoped sync never sees them. Pruning here is therefore mapping-scoped:
-it only ever concerns files/dashboards inside the mapping.
+What a sync run does *as a run* — completeness, idempotency, and what it reports.
 
-The pull scenarios below are LIVE (Course 2): they drive `occ grafana_sync:pull`
-(the headless twin of the admin button) against the preloaded Grafana folders and
-assert the result over WebDAV. The mapping is admin-owned so CI needs no
-groupfolders app. Push (Course 3, writeback) and the whole-instance root mirror
-(the subfolder course) are still @todo — their engines land later.
+### A sync fills the mapped folder, however it was started
+
+ONE BEHAVIOUR, THREE WAYS TO START IT:
+
+| actor | scope | |
+|---|---|---|
+| the admin | one mapping | the card's "Sync now" |
+| the admin | every mapping | the section's "Sync from Grafana" |
+| the schedule | every mapping | time as the actor |
+
+Same pre-state, same post-state; the actor and the scope are the only things that
+differ, so they are **columns** rather than three near-identical scenarios. Whether
+a run is synchronous or queued is a mechanism and is asserted nowhere — a
+scenario that pinned it would break the moment the dispatch changed, without any
+user-visible behaviour having changed at all.
+
+**The schedule row is why this app now has a scheduled pull at all.** Writing the
+table forced the question "what are the ways a sync starts?", and the honest
+answer was that `schedule_enabled` and `schedule_interval` had been in the Sync
+Settings card since it was written with **no reader anywhere in the app**. An
+admin could switch the schedule on, save it, watch it persist across reloads —
+and nothing would ever happen. The n8n sibling had the job all along; writing one
+spec across both made the gap impossible to keep quiet about.
+
+The step drives the REAL job: it enables the setting, finds the registered
+`ScheduledPullJob` by class, and runs it with `background-job:execute
+--force-execute`. Two safety floors stand between a test and a timed job — the
+job's own 60s minimum interval and the worker's last-run gate — and neither can
+be waited out in CI, so forcing it is the only honest option. Asserting that a
+row exists in `oc_jobs` would prove the job is *registered* and nothing about
+whether it *works*, which is exactly the gap that let the settings sit unread.
+
+A distinct Nextcloud folder per row, deliberately: all three map the same Grafana
+folder and a mapping is unique on the Grafana uid, so each row clears the store
+anyway — distinct folders stop one row's leftovers reading as the next row's
+result.
+
+### carries its Grafana dates
+
+AN END STATE, NOT A FEATURE OF ITS OWN. A mirror wears the dashboard's clocks
+rather than the sync's, and that is true however the sync started. Written as two
+`Then`s it read like two behaviours; as one reusable sentence it is a single fact
+that any later behaviour producing a mirror can assert the same way.
+
+### A second sync updates in place, never duplicating
+
+Its own scenario rather than a second `When` inside the outline. It asks a
+different question — identity across runs, not "did the sync work" — and folding
+it in would have proven the same thing three times, once per actor, for no extra
+information.
+
+### A dashboard that left the folder is pruned
+
+KEPT HERE, unlike in the Penpot sibling, where pruning moved out to "deleted in
+Penpot". The difference is real rather than an inconsistency: this app has no
+delete-dashboard reconcile path, so a dashboard vanishing from a Grafana folder
+is only ever noticed BY a sync. The behaviour genuinely lives here until there is
+somewhere better for it to go.
 
 ### Sync from Grafana with nothing changed rewrites nothing and says so
 
-── RULE: a run that changes nothing changes nothing ──────────────────────────
-Two things are NOT behaviours, and both were nearly written up as if they were.
+KEPT, and deliberately not moved or deleted. The Penpot sibling dropped its
+equivalent on the grounds that a second run is out of scope — but here it is a
+regression guard for a defect that was actually fixed (a pull rewriting every
+mirror on every run, so the whole folder read "Modified a few seconds ago" and a
+file you had really touched was impossible to spot).
 
-A file's "modified" time is a RESULT, not a gesture. Editing, moving, copying and
-renaming all move it, each already owned by the file that owns the gesture. A
-scenario asserting "the mtime moved after an edit" specifies Nextcloud, not this
-app, and has to invent an actor to do it.
+Its negative control is the outline above, which asserts a file APPEARS — so this
+cannot be satisfied by a pull that has simply stopped writing.
 
-The RECONCILER is likewise the *how*, not the *what*. The scheduled pull is a
-machine that makes Grafana-origin behaviours show up in Nextcloud; "renamed in
-Grafana" is the behaviour, the reconciler is merely how it arrives — which is why
-those scenarios live with their behaviour and carry `@in-grafana`, not here.
-
-What is left is genuinely this file's, and genuinely not automatic: the admin
-presses the button when nothing has changed, and the run must leave every file
-exactly as it found it. It matters because the same run is what a schedule would
-fire — a write performed unconditionally is performed forever, and a folder where
-everything was modified seconds ago says nothing about what changed.
-
-The negative control is the pull scenario above: it asserts a file APPEARS, which
-a pull that had simply stopped writing could never do. (Inherited defect, fixed in
-the n8n master first — saga Ch2, Course 7.)
 
 ## remove-mapping
 

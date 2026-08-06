@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\AppInfo;
 use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Files_Trashbin\Events\NodeRestoredEvent;
+use OCA\GrafanaSync\BackgroundJob\ScheduledPullJob;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
@@ -27,6 +28,7 @@ use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
+use OCP\BackgroundJob\IJobList;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -154,6 +156,17 @@ final class Application extends App implements IBootstrap {
 		// the signature instead of buried in a get() call.
 		$context->injectFn(static function (DashboardMetadata $metadata): void {
 			$metadata->register();
+		});
+
+		// Register the scheduled Grafana→NC pull. IJobList::add is idempotent, so
+		// calling it every boot just ensures the TimedJob exists; the job self-gates
+		// on `schedule_enabled` and reads its interval from app config, both of which
+		// the Sync Settings card has been writing since before anything read them.
+		// injectFn for the same reason the metadata registration above uses it: the
+		// dependency is visible in the signature rather than buried in a container
+		// lookup, and it avoids the deprecated getAppContainer() surface.
+		$context->injectFn(static function (IJobList $jobs): void {
+			$jobs->add(ScheduledPullJob::class);
 		});
 
 		// Empty-trash (hard delete) for the delete lifecycle: permanently deleting a file from the
