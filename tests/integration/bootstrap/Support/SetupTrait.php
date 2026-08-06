@@ -91,9 +91,9 @@ trait SetupTrait {
 	 * Create a mapping and its Nextcloud folder, and remember both as "the current
 	 * mapping" so later steps can say "the file" without repeating the path.
 	 *
-	 * Admin-owned (use_team_folder=false) for the reason SyncSteps documents: the CI
-	 * Nextcloud has no groupfolders app, so a Team Folder mapping is skipped as
-	 * "storage unavailable".
+	 * Admin-owned (use_team_folder=false) for the reason SyncSteps documents — it
+	 * is the app's default and the cheaper mount, not, as this note used to claim,
+	 * because the CI Nextcloud lacks groupfolders. It has not lacked it for a while.
 	 */
 	private function setupMapping(string $name, string $mode): string {
 		$uid = $this->grafanaFolderUid($name);

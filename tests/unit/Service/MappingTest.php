@@ -41,13 +41,35 @@ final class MappingTest extends TestCase {
 		self::assertTrue($m->syncSubfolders);
 	}
 
-	public function testTeamFolderDefaultsToTrue(): void {
+	/**
+	 * THE DEFAULT MUST BE THE BACKEND THAT ALWAYS EXISTS.
+	 *
+	 * A Team Folder needs groupfolders, an optional app absent from a stock
+	 * Nextcloud, so defaulting to it made the default mapping the one that could
+	 * not be provisioned. This asserts the OMITTED flag, not a passed `false` —
+	 * the defect lived entirely in what happens when nobody says anything.
+	 *
+	 * This test used to assert the opposite, under the name
+	 * `testTeamFolderDefaultsToTrue`. A test can pin a defect just as firmly as it
+	 * pins a requirement; what it cannot do is tell you which one it is holding.
+	 */
+	public function testStorageDefaultsToAdminOwned(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
 			'nc_folder' => 'observe',
 			'mode' => 'sync',
 		]);
-		self::assertTrue($m->useTeamFolder);
+		self::assertFalse($m->useTeamFolder, 'an unset storage flag must mean an admin-owned folder');
+	}
+
+	public function testStorageIsOptedInto(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+			'use_team_folder' => true,
+		]);
+		self::assertTrue($m->useTeamFolder, 'a Team Folder must still be selectable');
 	}
 
 	/**

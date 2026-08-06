@@ -142,10 +142,23 @@ final class Mapping implements JsonSerializable {
 			$format = self::FORMAT_JSON;
 		}
 
-		// Storage backend. Default true: groupfolders is the preferred path (matches
-		// the n8n master), and an omitted flag means "use a Team Folder".
-		$useTeamFolder = !array_key_exists('use_team_folder', $data)
-			|| filter_var($data['use_team_folder'], FILTER_VALIDATE_BOOLEAN);
+		// Storage backend. DEFAULT FALSE — an omitted flag means an admin-owned
+		// folder, because that is the only backend guaranteed to exist.
+		//
+		// A Team Folder needs the groupfolders app, which is OPTIONAL and absent on
+		// a stock Nextcloud. Defaulting to it meant the default mapping was the one
+		// that could not be provisioned: an admin who filled in the required fields
+		// and touched nothing else got a refusal on a plain install. A default must
+		// be the safe choice, not the preferred one.
+		//
+		// This was inherited from the n8n master, which had the same inversion and
+		// is fixed in the same pass. Penpot has always defaulted to false.
+		//
+		// NOTE FOR OLD DATA: `toArray()` always writes the key, so every mapping
+		// this app has ever saved carries it explicitly and is unaffected. Only a
+		// row persisted before the flag existed at all would read differently.
+		$useTeamFolder = array_key_exists('use_team_folder', $data)
+			&& filter_var($data['use_team_folder'], FILTER_VALIDATE_BOOLEAN);
 
 		// Subfolder sync. Default FALSE (flat, n8n-like) — an omitted flag means off.
 		$syncSubfolders = array_key_exists('sync_subfolders', $data)
