@@ -18,11 +18,15 @@ use PHPUnit\Framework\Assert;
  * the metadata contract, and repeated pulls neither duplicate nor churn. Composed
  * into {@see \OCA\GrafanaSync\Tests\Integration\FeatureContext}.
  *
- * The mapping is created **admin-owned** (use_team_folder=false): the CI Nextcloud
- * checkout has no groupfolders app, so a Team Folder mapping would be skipped as
- * "storage unavailable". Admin-owned writes into the actor's home, which the DAV
- * client (authed as that admin) reads back directly — the same reconcile logic,
- * minus the groupfolders dependency.
+ * The mapping is created **admin-owned** (use_team_folder=false), which is also
+ * the app's default: it writes into the actor's home, which the DAV client
+ * (authed as that admin) reads back directly — the same reconcile logic, minus
+ * the groupfolders dependency.
+ *
+ * This note used to say the CI Nextcloud "has no groupfolders app". It has had
+ * one since integration.yml started installing it on every leg, so the reason is
+ * now cost and defaultness rather than availability. A scenario that wants a Team
+ * Folder can have one.
  */
 trait SyncSteps {
 	/** The decoded JSON the last `grafana_sync:sync pull` printed — what the run reports. */

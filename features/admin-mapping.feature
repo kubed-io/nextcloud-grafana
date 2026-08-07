@@ -21,7 +21,7 @@ Feature: Admin configures folder mappings
       | mode       | link                      |
       | format     | json                      |
       | groups     |                           |
-      | storage    | team folder               |
+      | storage    | admin folder              |
       | subfolders | off                       |
 
     # A mapping is one fact, so it is one sentence plus a table of what is in it —

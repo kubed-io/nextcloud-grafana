@@ -108,11 +108,24 @@ so a mapping made without an opinion about mode cannot cost anything. An
 *unknown* mode is still refused — saying nothing and saying nonsense are
 different inputs and get different answers.
 
-One divergence from the Penpot sibling remains, and it is real rather than
-accidental: **`use_team_folder` defaults to true here; Penpot changed its
-equivalent to false**, because groupfolders is an OPTIONAL app and a default that
-cannot be provisioned on a stock Nextcloud is not a default (the sibling's
-§C6.35). That is a behaviour change and has not been taken here.
+**`use_team_folder` defaults to false**, matching Penpot and n8n. A Team Folder
+needs groupfolders, an OPTIONAL app absent from a stock Nextcloud, so defaulting
+to it made the default mapping the one that could not be provisioned: an admin
+who filled in the required fields and touched nothing else got a refusal. A
+default must be the safe choice, not the preferred one. A Team Folder is opted
+into, by naming `| storage | team folder |`.
+
+**This note previously argued the opposite, and that is the lesson.** It recorded
+the divergence from Penpot as "real rather than accidental", conceded in the same
+breath that the sibling had changed it because such a default "cannot be
+provisioned on a stock Nextcloud", and declined to follow. Writing the reason
+down is not the same as having one — a documented defect reads as a decision, and
+is much harder to see afterwards than an undocumented one. The inversion came
+from the n8n master and was fixed in both apps in one pass.
+
+`MappingTest::testStorageDefaultsToAdminOwned` pins it, and asserts the OMITTED
+flag rather than an explicit `false` — the whole defect lived in what happens
+when nobody says anything.
 
 ### A mapping the app cannot honour is refused, and says why
 
