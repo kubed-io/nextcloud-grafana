@@ -20,6 +20,16 @@ the gesture a person performs and the thing they perform it on.
 The failure this prevents is silent: two files describing one behaviour drift
 apart, and nobody reads two files to answer one question.
 
+**A mechanism is not a verb, so it never gets a file.** There was a
+`reconcile.feature` here, named after the thing that carries a Grafana-side
+change into Nextcloud. Nobody reconciles; the app does, on a timer, and that is
+an implementation detail. What people do is map a folder and sync it the first
+time (`sync-now.feature`), edit a dashboard file (`edit-dashboard.feature`), or
+delete a dashboard in Grafana (`delete-dashboard.feature`) — and each of those
+states its own end state without naming the reconciler at all. The same rule
+retired `file-type.feature`: a mimetype is not something anyone does, it is what
+enabling the app left behind.
+
 **Why the noun is part of it, when the sibling apps organise by verb alone.**
 n8n keeps `rename.feature` for everything renameable, and that is right *there*,
 because n8n maps by TAG and has no folder concept — a folder is pure Nextcloud
@@ -62,7 +72,7 @@ Everything that is not a verb on a file or a folder keeps its own file:
 | `admin-mapping.feature` | Creating and configuring a mapping |
 | `remove-mapping.feature` | Tearing a mapping down, and what happens to what it owned |
 | `purge.feature` | The admin's deliberate wipe of the Nextcloud side |
-| `reconcile.feature` | What a sync run does *as a run*: completeness, idempotency, what it reports |
+| `sync-now.feature` | The first sync: what a mapped folder holds once it has run |
 | `lifecycle.feature` | Install and enable |
 | `uninstall.feature` | Removal, and what survives it |
 
@@ -75,8 +85,8 @@ leg:
 | suite | what it holds |
 |---|---|
 | `admin` | the settings surface — the connection, the mapping list, removing a mapping |
-| `dashboard` | the six verbs as they apply to a dashboard (a `.grafana.json` file) |
-| `core` | everything else: the same six verbs on a **folder**, plus identity, file type, tags, the sync buttons, purge and the app lifecycle |
+| `dashboard` | the verbs as they apply to a dashboard (a `.grafana.json` file), editing included |
+| `core` | everything else: the same verbs on a **folder**, plus the first sync, identity, looking at a mirror, tags, purge and the app lifecycle |
 
 **The axis is the filename, not a tag.** A tag partition leaks: `@occ`, `@ui` and
 `@in-grafana` are carried by some scenarios and not others, so an untagged
@@ -107,7 +117,7 @@ spec. Each `<action>-<noun>` file is split by banner into the two:
 ```
 
 The Nextcloud side is a gesture in the Files app; the Grafana side is a change on
-the far side that a reconcile brings back. They are not symmetric — Nextcloud
+the far side that a sync brings back. They are not symmetric — Nextcloud
 drives, and Grafana only ever answers a pull — and reading them next to each other
 is how that asymmetry stays visible instead of being rediscovered.
 

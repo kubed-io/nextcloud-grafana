@@ -45,11 +45,10 @@ default:
   #   admin      the settings surface — the connection, the mapping list, and
   #              removing a mapping. Grouped because admin work is a different
   #              SESSION from user work, not merely a different tag.
-  #   dashboard  the six verbs, as they apply to a dashboard (a .grafana.json
-  #              file): create, copy, move, rename, delete, restore.
-  #   core       everything else: the same six verbs on a FOLDER, plus identity,
-  #              file type, tags, the manual sync buttons, purge and the app
-  #              lifecycle.
+  #   dashboard  the verbs, as they apply to a dashboard (a .grafana.json file):
+  #              create, copy, move, rename, delete, restore, edit.
+  #   core       everything else: the same verbs on a FOLDER, plus the first sync,
+  #              identity, looking at a mirror, tags, purge and the app lifecycle.
   #
   # WHY `folder` IS NOT ITS OWN SUITE YET, though it is the obvious fourth and is
   # exactly how nextcloud-penpot splits (admin/design/project/core): all 56 of its
@@ -77,6 +76,7 @@ default:
       - '%paths.base%/../../features/move-dashboard.feature'
       - '%paths.base%/../../features/rename-dashboard.feature'
       - '%paths.base%/../../features/restore-dashboard.feature'
+      - '%paths.base%/../../features/edit-dashboard.feature'
       contexts: *contexts
 
     core:
@@ -90,7 +90,7 @@ default:
       - '%paths.base%/../../features/move-folder.feature'
       - '%paths.base%/../../features/rename-folder.feature'
       - '%paths.base%/../../features/restore-folder.feature'
-      - '%paths.base%/../../features/reconcile.feature'
+      - '%paths.base%/../../features/sync-now.feature'
       - '%paths.base%/../../features/mapping-membership.feature'
       - '%paths.base%/../../features/view-dashboard.feature'
       - '%paths.base%/../../features/open-with.feature'

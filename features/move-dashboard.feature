@@ -158,7 +158,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
 
   # Both folders are mapped, so the dashboard should end up in the other mapping's
   # Nextcloud folder. Today the pull prunes it from the source folder
-  # (reconcile.feature covers that leg) and writes it fresh into the destination —
+  # (sync-now.feature covers that leg) and writes it fresh into the destination —
   # correct end state, reached as a delete-and-recreate rather than as a move.
   @grafana @in-grafana @occ @ui @todo
   Scenario: A dashboard moved to another mapped folder in Grafana relocates its mirror

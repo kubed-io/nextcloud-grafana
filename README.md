@@ -183,7 +183,7 @@ request-scoped guard plus a content hash keep the app from pushing its own pull 
 (the classic sync-loop problem). A push Grafana rejects raises a notification with Grafana's
 own message and leaves the file to retry on the next save.
 
-📋 spec: [`features/reconcile.feature`](features/reconcile.feature) · 🛠 [`lib/Listener/NodeWrittenListener.php`](lib/Listener/NodeWrittenListener.php), [`lib/Service/PushService.php`](lib/Service/PushService.php)
+📋 spec: [`features/edit-dashboard.feature`](features/edit-dashboard.feature) · 🛠 [`lib/Listener/NodeWrittenListener.php`](lib/Listener/NodeWrittenListener.php), [`lib/Service/PushService.php`](lib/Service/PushService.php)
 
 ### A link file can't be edited into a corner
 
@@ -278,7 +278,7 @@ Beyond the on-save writeback, both directions are available on demand — from t
   the folder.
 - **Sync to Grafana** (push) sends the mapping's sync files up.
 
-📋 spec: [`features/reconcile.feature`](features/reconcile.feature) · 🛠 [`lib/Service/SyncService.php`](lib/Service/SyncService.php)
+📋 spec: [`features/sync-now.feature`](features/sync-now.feature) · 🛠 [`lib/Service/SyncService.php`](lib/Service/SyncService.php)
 
 ---
 

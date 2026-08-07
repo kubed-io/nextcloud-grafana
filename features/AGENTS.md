@@ -165,7 +165,7 @@ The n8n sibling has the identical gap, written in the identical shape.
 The Grafana root ("General") holds dashboards that are in no folder. It has no
 real uid, so the folder picker offers a reserved `/` entry for it. Mapping `/`
 pulls the no-folder dashboards; `/` with subfolder sync on mirrors the whole
-instance (see `reconcile.feature`).
+instance (see `sync-now.feature`).
 
 ### There is no way to change a mapping except its groups
 
@@ -565,6 +565,26 @@ A colleague browsing Grafana sees a dashboard they still need sitting in
 empties their Nextcloud trash. The purge must NOT chase the rescued dashboard down.
 Deleting by uid alone would destroy a live, in-use dashboard, and Grafana has no undo.
 
+### A dashboard deleted in Grafana loses its mirror in Nextcloud
+
+MOVED HERE FROM `reconcile.feature`, where it was phrased "Sync from Grafana
+prunes a file whose dashboard left the folder" — named after the mechanism that
+carries the news, with the actual event (someone deleted a dashboard in Grafana)
+buried in a `When`. A delete that starts in Grafana is a delete, and deletes live
+here.
+
+The old notes argued it should stay in the sync file, because "this app has no
+delete-dashboard reconcile path, so a dashboard vanishing from a Grafana folder
+is only ever noticed BY a sync". That is true and it is not the point: being the
+only mechanism that notices a change does not make the mechanism the subject.
+This file already had an "everything above starts in Nextcloud; these start in
+Grafana" section for exactly this shape of scenario.
+
+THE SECOND `Then` IS THE POINT AS MUCH AS THE FIRST. A prune that took the whole
+folder with it would satisfy "no file named Ephemeral remains" on its own, and
+that is precisely the failure worth guarding against: only the dashboard that
+went is the file that goes.
+
 ### Deleting a dashboard in Grafana leaves an already-trashed file where it is
 
 This one the app gets RIGHT — but for a weak reason, which is why it is worth
@@ -963,35 +983,60 @@ Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Comma
 Two intended flows: purge → "Sync from Grafana" (everything reappears), and
 purge → uninstall (Nextcloud looks like the app was never there).
 
-## reconcile
+## sync-now
 
-`features/reconcile.feature`
+`features/sync-now.feature`
 
-What a sync run does *as a run* — completeness, idempotency, and what it reports.
+THE FIRST SYNC, AND ONLY THAT.
 
-### A sync fills the mapped folder, however it was started
+### sync-now scope
 
-ONE BEHAVIOUR, THREE WAYS TO START IT:
+**There is no `reconcile.feature`, and there must never be one.** Reconciling is
+a MECHANISM — the thing that carries a Grafana-side change into Nextcloud — and a
+mechanism does not get a feature file. What a person does gets a feature file.
 
-| actor | scope | |
+This file replaced one called "Manual per-mapping sync (Sync from / Sync to
+Grafana)", which was named after two buttons. Its six scenarios turned out to be
+four different behaviours wearing one coat, and most of them belonged somewhere
+else:
+
+| it said | it meant | where it went |
 |---|---|---|
-| the admin | one mapping | the card's "Sync now" |
-| the admin | every mapping | the section's "Sync from Grafana" |
-| the schedule | every mapping | time as the actor |
+| the button pulls the folder's dashboards in | the FIRST sync | here |
+| a second sync updates in place | a sync over a folder that already holds mirrors | here, renamed |
+| …and prunes a file whose dashboard left the folder | a dashboard deleted **in Grafana** | `delete-dashboard.feature` |
+| a run that changed nothing rewrote nothing | an mtime, and the reconciler | deleted — see below |
+| the button pushes a local edit up | **editing** a dashboard file | `edit-dashboard.feature` |
+| a root mapping mirrors the whole instance | the first sync of a root mapping | here |
 
-Same pre-state, same post-state; the actor and the scope are the only things that
-differ, so they are **columns** rather than three near-identical scenarios. Whether
-a run is synchronous or queued is a mechanism and is asserted nowhere — a
-scenario that pinned it would break the moment the dispatch changed, without any
-user-visible behaviour having changed at all.
+**Why the first sync is genuinely its own thing.** Nothing is tracked yet, so
+whatever sits in Grafana is simply a Given. Every LATER run only has work because
+something changed upstream — and each of those is a scenario about the change:
+renamed in Grafana is `rename-dashboard.feature`, deleted in Grafana is
+`delete-dashboard.feature`, moved to another folder in Grafana is
+`move-dashboard.feature`. The sync is how the news arrives, not what happened.
 
-**The schedule row is why this app now has a scheduled pull at all.** Writing the
+**This reverses two decisions recorded in this file.** The old notes argued the
+prune should stay ("this app has no delete-dashboard reconcile path, so a
+dashboard vanishing is only ever noticed BY a sync") and that the unchanged-run
+scenario should stay ("a regression guard for a defect that was actually fixed").
+Both arguments are about the reconciler, which is what gave them away: being the
+only mechanism that notices a change does not make the mechanism the subject.
+`delete-dashboard.feature` already had an "in Grafana" section waiting for the
+first one.
+
+**The trigger is data.** Three ways to start one sync — the card's button, the
+section's button, the schedule — same pre-state, same post-state. Columns, not
+scenarios. Whether a run is synchronous or queued is a mechanism and is asserted
+nowhere; a scenario that pinned it would break the moment the dispatch changed,
+without any user-visible behaviour having changed at all.
+
+**The schedule row is why this app has a scheduled pull at all.** Writing the
 table forced the question "what are the ways a sync starts?", and the honest
 answer was that `schedule_enabled` and `schedule_interval` had been in the Sync
 Settings card since it was written with **no reader anywhere in the app**. An
 admin could switch the schedule on, save it, watch it persist across reloads —
-and nothing would ever happen. The n8n sibling had the job all along; writing one
-spec across both made the gap impossible to keep quiet about.
+and nothing would ever happen.
 
 The step drives the REAL job: it enables the setting, finds the registered
 `ScheduledPullJob` by class, and runs it with `background-job:execute
@@ -1006,6 +1051,16 @@ folder and a mapping is unique on the Grafana uid, so each row clears the store
 anyway — distinct folders stop one row's leftovers reading as the next row's
 result.
 
+**"A run that changed nothing rewrote nothing and says so" was deleted, not
+moved.** It asserted an mtime — a result — about the reconciler — a mechanism —
+and neither gets a scenario. Same call the n8n sibling made. The defect it once
+guarded is real and worth remembering: a pull that rewrote every mirror on every
+run left the whole folder reading "Modified a few seconds ago", so a file you had
+really touched was impossible to spot. That is recorded in the CHANGELOG, and the
+step definitions are kept with their docblocks, so re-adding it is one line if it
+ever earns a home. The behaviours that DO rewrite a mirror assert their own end
+states, which is where the guarantee belongs.
+
 ### carries its Grafana dates
 
 AN END STATE, NOT A FEATURE OF ITS OWN. A mirror wears the dashboard's clocks
@@ -1013,31 +1068,37 @@ rather than the sync's, and that is true however the sync started. Written as tw
 `Then`s it read like two behaviours; as one reusable sentence it is a single fact
 that any later behaviour producing a mirror can assert the same way.
 
-### A second sync updates in place, never duplicating
+### A folder that already holds a mirror is filled in place, not doubled
 
-Its own scenario rather than a second `When` inside the outline. It asks a
-different question — identity across runs, not "did the sync work" — and folding
-it in would have proven the same thing three times, once per actor, for no extra
-information.
+This was "A second sync updates in place, never duplicating" — named after
+running the reconciler twice, which is the mechanism again. What makes it worth a
+scenario is the *situation*, not the repetition: a first sync over a tree that
+already has files in it. A restored backup, a re-mapped folder, a re-enabled app.
 
-### A dashboard that left the folder is pruned
+The uid is what identifies a dashboard, not the filename, so the sync fills the
+existing file rather than leaving an `Alpha Demo (2).grafana.json` beside it. Kept
+out of the outline above because it asks a different question, and folding it in
+would prove the same thing three times, once per actor, for no extra information.
 
-KEPT HERE, unlike in the Penpot sibling, where pruning moved out to "deleted in
-Penpot". The difference is real rather than an inconsistency: this app has no
-delete-dashboard reconcile path, so a dashboard vanishing from a Grafana folder
-is only ever noticed BY a sync. The behaviour genuinely lives here until there is
-somewhere better for it to go.
+## edit-dashboard
 
-### Sync from Grafana with nothing changed rewrites nothing and says so
+`features/edit-dashboard.feature`
 
-KEPT, and deliberately not moved or deleted. The Penpot sibling dropped its
-equivalent on the grounds that a second run is out of scope — but here it is a
-regression guard for a defect that was actually fixed (a pull rewriting every
-mirror on every run, so the whole folder read "Modified a few seconds ago" and a
-file you had really touched was impossible to spot).
+EDITING IS THE BEHAVIOUR; THE PUSH IS HOW IT TRAVELS.
 
-Its negative control is the outline above, which asserts a file APPEARS — so this
-cannot be satisfied by a pull that has simply stopped writing.
+### A local edit reaches its dashboard in Grafana
+
+This was "Sync to Grafana pushes a local edit up to its dashboard", a scenario in
+a file named after two buttons. Nobody edits a dashboard in order to press a
+button — they edit it so Grafana gets the change, and the app offers three ways
+for that to happen (on save, on the button, on the schedule). Those are
+mechanisms; this is what they are for.
+
+The uid is the thread, so the edit lands on the dashboard the file already names
+— same dashboard, same folder, never a duplicate.
+
+The bravo folder rather than alpha, so an edit here never mutates the fixture
+`sync-now.feature` asserts an untouched mirror against.
 
 
 ## remove-mapping
@@ -1491,8 +1552,9 @@ not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
 content tag-sync code in `lib/` at all, so no scenario here can pass yet.
 
 The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
-a tag behaviour and does not wait on tags: it is LIVE in reconcile.feature, which
-owns what a run does as a run. Do not restate it here.
+a tag behaviour and does not wait on tags. It no longer has a scenario anywhere:
+it asserted an mtime about the reconciler, and neither is a behaviour (see
+`sync-now.feature`'s notes). Do not restate it here either.
 
 Note what makes the skip possible at all, because it is a Grafana-specific gift:
 `DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
@@ -1526,9 +1588,10 @@ disable/re-enable + a pull, which exercises the same metadata-keyed reconcile.
 Spec-first / @todo: the SYSTEM leg needs a real app-remove on a live pod (the CI
 harness can only disable/enable, not remove+reinstall), so it stays manual. The
 DATA promise — reinstall reconciles existing files in place by uid with NO
-duplicates — is already proven LIVE by reconcile.feature ("existing files are
-updated in place — matched by dashboard uid, never duplicated"); a disable/enable
-changes nothing about that reconcile, so re-proving it here would be redundant.
+duplicates — is already proven LIVE by sync-now.feature ("a folder that already
+holds a mirror is filled in place, not doubled"); a disable/enable changes
+nothing about how a sync matches on uid, so re-proving it here would be
+redundant.
 
 ### Removing the app reverts the custom mimetype registration
 

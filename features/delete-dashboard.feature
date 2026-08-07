@@ -176,6 +176,27 @@ Feature: Deleting a dashboard file
   # Everything above starts in Nextcloud. These start in Grafana, and they are where
   # the pull's blindness to the Nextcloud trash actually bites.
 
+  @admin @in-grafana @occ @ui
+  Scenario: A dashboard deleted in Grafana loses its mirror in Nextcloud
+    Given an admin-owned mapping from Grafana folder "nc-delta" to Nextcloud folder "delta-dash"
+    And a throwaway Grafana dashboard "Ephemeral" with uid "nc-ephemeral" in folder "nc-delta"
+    And the admin pulls from Grafana
+    And a file named "Ephemeral.grafana.json" appears in "delta-dash"
+    When the Grafana dashboard with uid "nc-ephemeral" is deleted
+    And the admin pulls from Grafana
+    Then no file named "Ephemeral.grafana.json" remains in "delta-dash"
+    And a file named "Delta Demo.grafana.json" appears in "delta-dash"
+    # A DELETE THAT STARTS IN GRAFANA, which is why it lives here rather than in a
+    # file about syncing. It used to be phrased "Sync from Grafana prunes a file
+    # whose dashboard left the folder" — named after the mechanism that carries the
+    # news, with the actual event (someone deleted a dashboard) buried in a `When`.
+    #
+    # THE SECOND `Then` IS THE POINT AS MUCH AS THE FIRST. A prune that took the
+    # whole folder with it would satisfy the first line alone, and that is exactly
+    # the failure worth guarding: only the dashboard that went is the file that
+    # goes.
+    # notes: AGENTS.md#a-dashboard-deleted-in-grafana-loses-its-mirror-in-nextcloud
+
   # notes: AGENTS.md#deleting-a-dashboard-in-grafana-leaves-an-already-trashed-file-where-it-is
   @grafana @in-grafana @ui @occ @todo
   Scenario: Deleting a dashboard in Grafana leaves an already-trashed file where it is
