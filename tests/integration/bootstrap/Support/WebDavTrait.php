@@ -151,7 +151,7 @@ trait WebDavTrait {
 	/**
 	 * PROPFIND a single nc:metadata-<key> on a file. Returns the property value,
 	 * or null if the property is absent (404 inside the multistatus). This is the
-	 * exact DAV surface the README documents for the file-type feature.
+	 * exact DAV surface view-dashboard.feature specifies.
 	 */
 	private function davReadMetadata(string $path, string $key): ?string {
 		$ns = 'http://nextcloud.org/ns';
@@ -181,6 +181,28 @@ trait WebDavTrait {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The mimetype a Files client is told, read off the same PROPFIND the Files app
+	 * uses.
+	 *
+	 * NOT `application/json`, which is what a `.grafana.json` file would otherwise
+	 * be sniffed as — the whole reason the app registers a mimetype and ships a
+	 * repair step for it. Asserted over DAV because that is where the Files app
+	 * reads it from; the mapping file on disk being right proves nothing about
+	 * what a client is told.
+	 */
+	private function davContentType(string $path): string {
+		$res = $this->davClient()->request('PROPFIND', $this->davEncode($path), [
+			'headers' => ['Depth' => '0', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?>'
+				. '<d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>',
+		]);
+		Assert::assertSame(207, $res->getStatusCode(), "PROPFIND content type $path failed: " . (string)$res->getBody());
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		return trim((string)(($doc->xpath('//d:getcontenttype') ?: [])[0] ?? ''));
 	}
 
 	/**

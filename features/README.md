@@ -56,7 +56,7 @@ Everything that is not a verb on a file or a folder keeps its own file:
 | `tag-sync.feature` | A dashboard's content tags, across all surfaces |
 | `reserved-tags.feature` | The control plane — the `ignore` markers and the mode pills |
 | `mapping-membership.feature` | Which files a mapping owns, and what "unmapped" means |
-| `file-type.feature` | A mirror as a first-class file type: mimetype, icon, DAV props |
+| `view-dashboard.feature` | Looking at a mirror: what it looks like, and what it publishes over DAV |
 | `open-with.feature` | What clicking a mirror does |
 | `admin-connection.feature` | Reaching Grafana at all: URL, token, and how failure reads |
 | `admin-mapping.feature` | Creating and configuring a mapping |

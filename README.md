@@ -249,7 +249,7 @@ Because `grafana_mode` is **indexed**, "find every sync dashboard" / "every unma
 is a fast DAV `REPORT`, not a folder walk. A `grafana:sync` / `grafana:link` coloured pill
 (a system tag) mirrors each managed file's mode automatically.
 
-📋 spec: [`features/file-type.feature`](features/file-type.feature) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
+📋 spec: [`features/view-dashboard.feature`](features/view-dashboard.feature) (the mimetype registration itself is asserted on install, in [`features/lifecycle.feature`](features/lifecycle.feature)) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
 
 ### Opening a dashboard: Open in Grafana vs text editor
 

@@ -642,47 +642,114 @@ non-admin. The mapping survives — it is configuration, not a file — so the n
 pull re-creates the folder and everything in it. Whether the dashboards should
 have been deleted in the meantime is the whole question.
 
-## file-type
+## view-dashboard
 
-`features/file-type.feature`
+`features/view-dashboard.feature`
 
-The custom mimetype makes a dashboard a first-class FILE TYPE: its own mimetype,
-its own icon, DAV-exposed (and read-only) metadata, and — because grafana_mode is
-indexed — it's queryable. (What happens when you OPEN one is the related but
-separate "open with" concern; see open-with.feature.)
+LOOKING AT A DASHBOARD FILE — the only part of "it is a real file type" that
+anyone actually performs.
 
-METADATA KEYS (saga Ch2 Round 2 — scrutinised, NOT a 1:1 rename of the master's
-n8n_* keys). Five renamed + two Grafana-only additions:
-  grafana_uid        — the dashboard UID (the master's n8n_id). Stable thread.
-  grafana_mode       — sync | reference(=link) | unmapped | ignored. INDEXED.
-  grafana_version    — last-seen Grafana version (bumps every save — STORED, never
-                       hashed; the master's n8n_versionId).
-  grafana_syncedHash — sha1 of the spec WE sent (loop guard; the master's
-                       n8n_syncedHash).
-  grafana_mapping    — originating mapping id. INDEXED.
-  grafana_folderUid  — NEW: source Grafana folder UID (Grafana has real nested
-                       folders; needed for the cascade/subfolder model).
-  grafana_apiVersion — NEW: serialization schema (classic JSON vs v2 YAML) so a
-                       file self-describes how to be read back.
-Isolation is free: NC Files-Metadata keys are a flat string-keyed namespace, so a
-grafana_* key can never surface in an n8n_* query and vice-versa. (The shared-module
-neutral-key question is deferred — saga Ch2 Round 2, fork B.)
+### view-dashboard
 
-Live for the WebDAV-observable surface: the custom mimetype, the nc:metadata-*
-props exposed in PROPFIND, the descriptive grafana_mode value for sync + unmapped,
-and the read-only (PROPPATCH-rejected) guarantee. Left @todo: the link/ignored mode
-rows (link integration is uncertain; ignored is the reserved-tags slice), and the
-REPORT-by-indexed-mode query (the DAV search plumbing for nc:metadata-* is unproven
-against the pod). CI skips @todo.
+**This replaced `file-type.feature`, which described a CONSTRUCT.** "Grafana
+dashboard is a first-class file type" was about a mimetype, a property set and an
+index — none of which anyone does. Each turned out to be the end state of
+something else:
 
-### Files are queryable by their indexed mode
+| it described | whose end state it is | where it went |
+|---|---|---|
+| the mimetype is registered | **enabling the app** | `lifecycle.feature` |
+| a file carries this metadata | **creating** or **syncing** a dashboard | asserted by those, shown here |
+| the mode property's wire value | what the metadata says | the DAV view outline |
+| the metadata cannot be edited | a refusal anyone can provoke | stayed, as a scenario |
 
-grafana_mode is indexed → "find every sync / unmapped / ignored file" is a fast
-query. @todo until the DAV-search plumbing for nc:metadata-* is confirmed.
-@blocked, and the missing capability is named: there is no proven DAV REPORT
-search over `nc:metadata-*` in this harness. The index itself is real — the mode
-is registered as an indexed metadata key precisely so "find every unmapped file"
-is a query rather than a folder walk — but nothing here can issue that query.
+Nobody registers a mimetype; they install an app. Nobody sets metadata; they make
+a dashboard and the app stamps it. Once each end state sits with the behaviour
+that produces it, what remains is looking — and that is a real thing to do.
+
+Ported from `kubed-io/nextcloud-n8n`, where the split landed first.
+
+### A mapped folder shows its dashboards as dashboards
+
+**ONE SCENARIO, DELIBERATELY.** Behat cannot read rendered pixels, so the icon is
+proven the only way it can be: the file carries the app's own mimetype rather
+than `application/json`, and Nextcloud maps that mimetype to the app's glyph.
+Elaborating past that would be testing Nextcloud's icon renderer, which is not
+this app's to prove.
+
+This is the app's only genuinely UI-only surface, which is why it is one small
+scenario rather than a file.
+
+### Viewing the DAV properties on a file shows Grafana specific details
+
+**This is the one scenario that spells the properties out**, and everywhere else
+the same fact is one sentence — `the file carries its Grafana metadata`. The two
+are not in tension, they are the difference between a subject and an end state.
+Sync, create and rename all *produce* a mirror; which keys that mirror carries is
+the app's business, and listing them there would make every one of those
+scenarios look like a metadata test. Here the properties genuinely are what is
+under test, so the table is the specification.
+
+THE KEYS ARE THE FIVE `stampSynced` WRITES when a file lands: `grafana_uid`,
+`grafana_mapping`, `grafana_mode`, `grafana_version`, `grafana_syncedHash`. The
+metadata store registers two more — `grafana_folderUid` (the source Grafana
+folder, for the nested-folder cascade) and `grafana_apiVersion` (classic JSON vs
+v2 YAML, so a file self-describes how to be read back) — but **nothing writes
+either one yet**; they are banked for the subfolder and YAML courses. The old
+`file-type.feature` listed both in its PROPFIND table, which asserted values the
+app has never set.
+
+Isolation is free, and worth knowing while reading the table: NC Files-Metadata
+keys are a flat string-keyed namespace, so a `grafana_*` key can never surface in
+an `n8n_*` query and vice-versa. (The shared-module neutral-key question is
+deferred — saga Ch2 Round 2, fork B.)
+
+The value column takes three forms and no more, because a table that can say
+anything stops being readable: `set` (present and non-empty), `the dashboard's
+uid` / `the mapping's id` (resolved against what the arrange recorded), or an
+exact literal. The two id forms exist because presence is too weak for them — a
+uid that is merely non-empty could be any dashboard's, and the whole point of
+publishing it is that it names *this* one. A Grafana version int and a body hash
+are the sync engine's own bookkeeping; pinning literals there would assert its
+internals instead of the fact under test.
+
+`link` stores as `reference`. The literal string `link` is `is_callable()`, which
+crashes core's PROPFIND — the only place in this app where a wire value differs
+from the name of the thing it carries, so it is an Examples column rather than a
+footnote, and the row shows both what the admin chose and what a client reads.
+
+**The table says nothing about storage or format.** Naming a field is a claim
+that it matters, and what a mirror publishes over DAV is identical on an
+admin-owned folder and a Team Folder. So the mapping takes the app's own
+defaults, which is the one shape that exists on every install. `storage` and
+`format` are named where provisioning IS the behaviour, in
+`admin-mapping.feature`, and a scenario that wants a Team Folder or the YAML cut
+asks for one there.
+
+**The outline lost two rows** (`unmapped`, `ignored`) when it was reshaped around
+a mapping. That is deliberate and not a coverage regression: a mapping only ever
+produces `sync` or `link`. The other two are what a file *becomes* — moved out of
+its folder, or hand-tagged `grafana:ignore` — so they cannot be reached from a
+mapping form at all, and their modes are asserted where those behaviours live, in
+`move-dashboard.feature` and `reserved-tags.feature`.
+
+### What the app manages, only the app changes
+
+A REFUSAL SOMEONE CAN PROVOKE, so it earns a scenario: any DAV client can attempt
+a PROPPATCH. The identity of a mirror is the app's to write — a client that could
+edit `grafana_uid` could silently re-point a file at a different dashboard.
+
+The load-bearing assertion is that the VALUE did not change, not that a
+particular status came back.
+
+### Finding dashboards by their mode
+
+`@blocked`, and the missing capability is named: there is no proven DAV REPORT
+search over `nc:metadata-*` in this harness to drive it against. The index itself
+is real — `grafana_mode` is registered as an indexed metadata key precisely so
+"find every unmapped file" is a query rather than a folder walk — but nothing
+here can issue that query. Confirm the search surface exists and this becomes an
+ordinary `@todo`.
 
 ## lifecycle
 
@@ -690,6 +757,22 @@ is a query rather than a folder walk — but nothing here can issue that query.
 
 Stage 0 (saga §5): the app installs and uninstalls cleanly on a real Nextcloud.
 A clean uninstall is also an app-store rule. No Grafana contact.
+
+### Enabling the app
+
+**THE MIMETYPE IS WHAT ENABLING LEFT BEHIND.** It used to head a file called
+"Grafana dashboard is a first-class file type", which described the registration
+as though someone had gone and done it. Nobody registers a mimetype; they install
+an app, and the registration is the consequence — so it is asserted here, on the
+install.
+
+Proven by uploading a plain file rather than by reading the app's own metadata: a
+file this app has never touched, with nothing but the extension going for it,
+comes back typed as the app's own mimetype. That is what registration means and
+the only part of it a client can observe.
+
+Its visible consequence (a mapped folder that looks like dashboards) belongs to
+`view-dashboard.feature`; its removal belongs to `uninstall.feature`.
 
 ## mapping-membership
 

@@ -92,7 +92,7 @@ default:
       - '%paths.base%/../../features/restore-folder.feature'
       - '%paths.base%/../../features/reconcile.feature'
       - '%paths.base%/../../features/mapping-membership.feature'
-      - '%paths.base%/../../features/file-type.feature'
+      - '%paths.base%/../../features/view-dashboard.feature'
       - '%paths.base%/../../features/open-with.feature'
       - '%paths.base%/../../features/tag-sync.feature'
       - '%paths.base%/../../features/reserved-tags.feature'
