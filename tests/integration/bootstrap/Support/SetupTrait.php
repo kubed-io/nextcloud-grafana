@@ -38,7 +38,7 @@ trait SetupTrait {
 	 * THE LIFECYCLE SUITES DELIBERATELY DO NOT USE THE PRELOADED FOLDERS.
 	 *
 	 * `bin/preload-grafana.sh` builds nc-alpha…nc-delta as a CONTROL CASE, and
-	 * `reconcile.feature` asserts against them exactly — *"alpha-dash holds exactly 1
+	 * `sync-now.feature` asserts against them exactly — *"alpha-dash holds exactly 1
 	 * dashboard file"*. If the lifecycle scenarios created their dashboards in
 	 * nc-alpha, every one they left behind would show up in that count.
 	 *

@@ -165,7 +165,7 @@ The n8n sibling has the identical gap, written in the identical shape.
 The Grafana root ("General") holds dashboards that are in no folder. It has no
 real uid, so the folder picker offers a reserved `/` entry for it. Mapping `/`
 pulls the no-folder dashboards; `/` with subfolder sync on mirrors the whole
-instance (see `reconcile.feature`).
+instance (see `sync-now.feature`).
 
 ### There is no way to change a mapping except its groups
 
@@ -565,6 +565,26 @@ A colleague browsing Grafana sees a dashboard they still need sitting in
 empties their Nextcloud trash. The purge must NOT chase the rescued dashboard down.
 Deleting by uid alone would destroy a live, in-use dashboard, and Grafana has no undo.
 
+### A dashboard deleted in Grafana loses its mirror in Nextcloud
+
+MOVED HERE FROM `reconcile.feature`, where it was phrased "Sync from Grafana
+prunes a file whose dashboard left the folder" — named after the mechanism that
+carries the news, with the actual event (someone deleted a dashboard in Grafana)
+buried in a `When`. A delete that starts in Grafana is a delete, and deletes live
+here.
+
+The old notes argued it should stay in the sync file, because "this app has no
+delete-dashboard reconcile path, so a dashboard vanishing from a Grafana folder
+is only ever noticed BY a sync". That is true and it is not the point: being the
+only mechanism that notices a change does not make the mechanism the subject.
+This file already had an "everything above starts in Nextcloud; these start in
+Grafana" section for exactly this shape of scenario.
+
+THE SECOND `Then` IS THE POINT AS MUCH AS THE FIRST. A prune that took the whole
+folder with it would satisfy "no file named Ephemeral remains" on its own, and
+that is precisely the failure worth guarding against: only the dashboard that
+went is the file that goes.
+
 ### Deleting a dashboard in Grafana leaves an already-trashed file where it is
 
 This one the app gets RIGHT — but for a weak reason, which is why it is worth
@@ -642,47 +662,114 @@ non-admin. The mapping survives — it is configuration, not a file — so the n
 pull re-creates the folder and everything in it. Whether the dashboards should
 have been deleted in the meantime is the whole question.
 
-## file-type
+## view-dashboard
 
-`features/file-type.feature`
+`features/view-dashboard.feature`
 
-The custom mimetype makes a dashboard a first-class FILE TYPE: its own mimetype,
-its own icon, DAV-exposed (and read-only) metadata, and — because grafana_mode is
-indexed — it's queryable. (What happens when you OPEN one is the related but
-separate "open with" concern; see open-with.feature.)
+LOOKING AT A DASHBOARD FILE — the only part of "it is a real file type" that
+anyone actually performs.
 
-METADATA KEYS (saga Ch2 Round 2 — scrutinised, NOT a 1:1 rename of the master's
-n8n_* keys). Five renamed + two Grafana-only additions:
-  grafana_uid        — the dashboard UID (the master's n8n_id). Stable thread.
-  grafana_mode       — sync | reference(=link) | unmapped | ignored. INDEXED.
-  grafana_version    — last-seen Grafana version (bumps every save — STORED, never
-                       hashed; the master's n8n_versionId).
-  grafana_syncedHash — sha1 of the spec WE sent (loop guard; the master's
-                       n8n_syncedHash).
-  grafana_mapping    — originating mapping id. INDEXED.
-  grafana_folderUid  — NEW: source Grafana folder UID (Grafana has real nested
-                       folders; needed for the cascade/subfolder model).
-  grafana_apiVersion — NEW: serialization schema (classic JSON vs v2 YAML) so a
-                       file self-describes how to be read back.
-Isolation is free: NC Files-Metadata keys are a flat string-keyed namespace, so a
-grafana_* key can never surface in an n8n_* query and vice-versa. (The shared-module
-neutral-key question is deferred — saga Ch2 Round 2, fork B.)
+### view-dashboard
 
-Live for the WebDAV-observable surface: the custom mimetype, the nc:metadata-*
-props exposed in PROPFIND, the descriptive grafana_mode value for sync + unmapped,
-and the read-only (PROPPATCH-rejected) guarantee. Left @todo: the link/ignored mode
-rows (link integration is uncertain; ignored is the reserved-tags slice), and the
-REPORT-by-indexed-mode query (the DAV search plumbing for nc:metadata-* is unproven
-against the pod). CI skips @todo.
+**This replaced `file-type.feature`, which described a CONSTRUCT.** "Grafana
+dashboard is a first-class file type" was about a mimetype, a property set and an
+index — none of which anyone does. Each turned out to be the end state of
+something else:
 
-### Files are queryable by their indexed mode
+| it described | whose end state it is | where it went |
+|---|---|---|
+| the mimetype is registered | **enabling the app** | `lifecycle.feature` |
+| a file carries this metadata | **creating** or **syncing** a dashboard | asserted by those, shown here |
+| the mode property's wire value | what the metadata says | the DAV view outline |
+| the metadata cannot be edited | a refusal anyone can provoke | stayed, as a scenario |
 
-grafana_mode is indexed → "find every sync / unmapped / ignored file" is a fast
-query. @todo until the DAV-search plumbing for nc:metadata-* is confirmed.
-@blocked, and the missing capability is named: there is no proven DAV REPORT
-search over `nc:metadata-*` in this harness. The index itself is real — the mode
-is registered as an indexed metadata key precisely so "find every unmapped file"
-is a query rather than a folder walk — but nothing here can issue that query.
+Nobody registers a mimetype; they install an app. Nobody sets metadata; they make
+a dashboard and the app stamps it. Once each end state sits with the behaviour
+that produces it, what remains is looking — and that is a real thing to do.
+
+Ported from `kubed-io/nextcloud-n8n`, where the split landed first.
+
+### A mapped folder shows its dashboards as dashboards
+
+**ONE SCENARIO, DELIBERATELY.** Behat cannot read rendered pixels, so the icon is
+proven the only way it can be: the file carries the app's own mimetype rather
+than `application/json`, and Nextcloud maps that mimetype to the app's glyph.
+Elaborating past that would be testing Nextcloud's icon renderer, which is not
+this app's to prove.
+
+This is the app's only genuinely UI-only surface, which is why it is one small
+scenario rather than a file.
+
+### Viewing the DAV properties on a file shows Grafana specific details
+
+**This is the one scenario that spells the properties out**, and everywhere else
+the same fact is one sentence — `the file carries its Grafana metadata`. The two
+are not in tension, they are the difference between a subject and an end state.
+Sync, create and rename all *produce* a mirror; which keys that mirror carries is
+the app's business, and listing them there would make every one of those
+scenarios look like a metadata test. Here the properties genuinely are what is
+under test, so the table is the specification.
+
+THE KEYS ARE THE FIVE `stampSynced` WRITES when a file lands: `grafana_uid`,
+`grafana_mapping`, `grafana_mode`, `grafana_version`, `grafana_syncedHash`. The
+metadata store registers two more — `grafana_folderUid` (the source Grafana
+folder, for the nested-folder cascade) and `grafana_apiVersion` (classic JSON vs
+v2 YAML, so a file self-describes how to be read back) — but **nothing writes
+either one yet**; they are banked for the subfolder and YAML courses. The old
+`file-type.feature` listed both in its PROPFIND table, which asserted values the
+app has never set.
+
+Isolation is free, and worth knowing while reading the table: NC Files-Metadata
+keys are a flat string-keyed namespace, so a `grafana_*` key can never surface in
+an `n8n_*` query and vice-versa. (The shared-module neutral-key question is
+deferred — saga Ch2 Round 2, fork B.)
+
+The value column takes three forms and no more, because a table that can say
+anything stops being readable: `set` (present and non-empty), `the dashboard's
+uid` / `the mapping's id` (resolved against what the arrange recorded), or an
+exact literal. The two id forms exist because presence is too weak for them — a
+uid that is merely non-empty could be any dashboard's, and the whole point of
+publishing it is that it names *this* one. A Grafana version int and a body hash
+are the sync engine's own bookkeeping; pinning literals there would assert its
+internals instead of the fact under test.
+
+`link` stores as `reference`. The literal string `link` is `is_callable()`, which
+crashes core's PROPFIND — the only place in this app where a wire value differs
+from the name of the thing it carries, so it is an Examples column rather than a
+footnote, and the row shows both what the admin chose and what a client reads.
+
+**The table says nothing about storage or format.** Naming a field is a claim
+that it matters, and what a mirror publishes over DAV is identical on an
+admin-owned folder and a Team Folder. So the mapping takes the app's own
+defaults, which is the one shape that exists on every install. `storage` and
+`format` are named where provisioning IS the behaviour, in
+`admin-mapping.feature`, and a scenario that wants a Team Folder or the YAML cut
+asks for one there.
+
+**The outline lost two rows** (`unmapped`, `ignored`) when it was reshaped around
+a mapping. That is deliberate and not a coverage regression: a mapping only ever
+produces `sync` or `link`. The other two are what a file *becomes* — moved out of
+its folder, or hand-tagged `grafana:ignore` — so they cannot be reached from a
+mapping form at all, and their modes are asserted where those behaviours live, in
+`move-dashboard.feature` and `reserved-tags.feature`.
+
+### What the app manages, only the app changes
+
+A REFUSAL SOMEONE CAN PROVOKE, so it earns a scenario: any DAV client can attempt
+a PROPPATCH. The identity of a mirror is the app's to write — a client that could
+edit `grafana_uid` could silently re-point a file at a different dashboard.
+
+The load-bearing assertion is that the VALUE did not change, not that a
+particular status came back.
+
+### Finding dashboards by their mode
+
+`@blocked`, and the missing capability is named: there is no proven DAV REPORT
+search over `nc:metadata-*` in this harness to drive it against. The index itself
+is real — `grafana_mode` is registered as an indexed metadata key precisely so
+"find every unmapped file" is a query rather than a folder walk — but nothing
+here can issue that query. Confirm the search surface exists and this becomes an
+ordinary `@todo`.
 
 ## lifecycle
 
@@ -690,6 +777,22 @@ is a query rather than a folder walk — but nothing here can issue that query.
 
 Stage 0 (saga §5): the app installs and uninstalls cleanly on a real Nextcloud.
 A clean uninstall is also an app-store rule. No Grafana contact.
+
+### Enabling the app
+
+**THE MIMETYPE IS WHAT ENABLING LEFT BEHIND.** It used to head a file called
+"Grafana dashboard is a first-class file type", which described the registration
+as though someone had gone and done it. Nobody registers a mimetype; they install
+an app, and the registration is the consequence — so it is asserted here, on the
+install.
+
+Proven by uploading a plain file rather than by reading the app's own metadata: a
+file this app has never touched, with nothing but the extension going for it,
+comes back typed as the app's own mimetype. That is what registration means and
+the only part of it a client can observe.
+
+Its visible consequence (a mapped folder that looks like dashboards) belongs to
+`view-dashboard.feature`; its removal belongs to `uninstall.feature`.
 
 ## mapping-membership
 
@@ -880,35 +983,60 @@ Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Comma
 Two intended flows: purge → "Sync from Grafana" (everything reappears), and
 purge → uninstall (Nextcloud looks like the app was never there).
 
-## reconcile
+## sync-now
 
-`features/reconcile.feature`
+`features/sync-now.feature`
 
-What a sync run does *as a run* — completeness, idempotency, and what it reports.
+THE FIRST SYNC, AND ONLY THAT.
 
-### A sync fills the mapped folder, however it was started
+### sync-now scope
 
-ONE BEHAVIOUR, THREE WAYS TO START IT:
+**There is no `reconcile.feature`, and there must never be one.** Reconciling is
+a MECHANISM — the thing that carries a Grafana-side change into Nextcloud — and a
+mechanism does not get a feature file. What a person does gets a feature file.
 
-| actor | scope | |
+This file replaced one called "Manual per-mapping sync (Sync from / Sync to
+Grafana)", which was named after two buttons. Its six scenarios turned out to be
+four different behaviours wearing one coat, and most of them belonged somewhere
+else:
+
+| it said | it meant | where it went |
 |---|---|---|
-| the admin | one mapping | the card's "Sync now" |
-| the admin | every mapping | the section's "Sync from Grafana" |
-| the schedule | every mapping | time as the actor |
+| the button pulls the folder's dashboards in | the FIRST sync | here |
+| a second sync updates in place | a sync over a folder that already holds mirrors | here, renamed |
+| …and prunes a file whose dashboard left the folder | a dashboard deleted **in Grafana** | `delete-dashboard.feature` |
+| a run that changed nothing rewrote nothing | an mtime, and the reconciler | deleted — see below |
+| the button pushes a local edit up | **editing** a dashboard file | `edit-dashboard.feature` |
+| a root mapping mirrors the whole instance | the first sync of a root mapping | here |
 
-Same pre-state, same post-state; the actor and the scope are the only things that
-differ, so they are **columns** rather than three near-identical scenarios. Whether
-a run is synchronous or queued is a mechanism and is asserted nowhere — a
-scenario that pinned it would break the moment the dispatch changed, without any
-user-visible behaviour having changed at all.
+**Why the first sync is genuinely its own thing.** Nothing is tracked yet, so
+whatever sits in Grafana is simply a Given. Every LATER run only has work because
+something changed upstream — and each of those is a scenario about the change:
+renamed in Grafana is `rename-dashboard.feature`, deleted in Grafana is
+`delete-dashboard.feature`, moved to another folder in Grafana is
+`move-dashboard.feature`. The sync is how the news arrives, not what happened.
 
-**The schedule row is why this app now has a scheduled pull at all.** Writing the
+**This reverses two decisions recorded in this file.** The old notes argued the
+prune should stay ("this app has no delete-dashboard reconcile path, so a
+dashboard vanishing is only ever noticed BY a sync") and that the unchanged-run
+scenario should stay ("a regression guard for a defect that was actually fixed").
+Both arguments are about the reconciler, which is what gave them away: being the
+only mechanism that notices a change does not make the mechanism the subject.
+`delete-dashboard.feature` already had an "in Grafana" section waiting for the
+first one.
+
+**The trigger is data.** Three ways to start one sync — the card's button, the
+section's button, the schedule — same pre-state, same post-state. Columns, not
+scenarios. Whether a run is synchronous or queued is a mechanism and is asserted
+nowhere; a scenario that pinned it would break the moment the dispatch changed,
+without any user-visible behaviour having changed at all.
+
+**The schedule row is why this app has a scheduled pull at all.** Writing the
 table forced the question "what are the ways a sync starts?", and the honest
 answer was that `schedule_enabled` and `schedule_interval` had been in the Sync
 Settings card since it was written with **no reader anywhere in the app**. An
 admin could switch the schedule on, save it, watch it persist across reloads —
-and nothing would ever happen. The n8n sibling had the job all along; writing one
-spec across both made the gap impossible to keep quiet about.
+and nothing would ever happen.
 
 The step drives the REAL job: it enables the setting, finds the registered
 `ScheduledPullJob` by class, and runs it with `background-job:execute
@@ -923,6 +1051,16 @@ folder and a mapping is unique on the Grafana uid, so each row clears the store
 anyway — distinct folders stop one row's leftovers reading as the next row's
 result.
 
+**"A run that changed nothing rewrote nothing and says so" was deleted, not
+moved.** It asserted an mtime — a result — about the reconciler — a mechanism —
+and neither gets a scenario. Same call the n8n sibling made. The defect it once
+guarded is real and worth remembering: a pull that rewrote every mirror on every
+run left the whole folder reading "Modified a few seconds ago", so a file you had
+really touched was impossible to spot. That is recorded in the CHANGELOG, and the
+step definitions are kept with their docblocks, so re-adding it is one line if it
+ever earns a home. The behaviours that DO rewrite a mirror assert their own end
+states, which is where the guarantee belongs.
+
 ### carries its Grafana dates
 
 AN END STATE, NOT A FEATURE OF ITS OWN. A mirror wears the dashboard's clocks
@@ -930,31 +1068,37 @@ rather than the sync's, and that is true however the sync started. Written as tw
 `Then`s it read like two behaviours; as one reusable sentence it is a single fact
 that any later behaviour producing a mirror can assert the same way.
 
-### A second sync updates in place, never duplicating
+### A folder that already holds a mirror is filled in place, not doubled
 
-Its own scenario rather than a second `When` inside the outline. It asks a
-different question — identity across runs, not "did the sync work" — and folding
-it in would have proven the same thing three times, once per actor, for no extra
-information.
+This was "A second sync updates in place, never duplicating" — named after
+running the reconciler twice, which is the mechanism again. What makes it worth a
+scenario is the *situation*, not the repetition: a first sync over a tree that
+already has files in it. A restored backup, a re-mapped folder, a re-enabled app.
 
-### A dashboard that left the folder is pruned
+The uid is what identifies a dashboard, not the filename, so the sync fills the
+existing file rather than leaving an `Alpha Demo (2).grafana.json` beside it. Kept
+out of the outline above because it asks a different question, and folding it in
+would prove the same thing three times, once per actor, for no extra information.
 
-KEPT HERE, unlike in the Penpot sibling, where pruning moved out to "deleted in
-Penpot". The difference is real rather than an inconsistency: this app has no
-delete-dashboard reconcile path, so a dashboard vanishing from a Grafana folder
-is only ever noticed BY a sync. The behaviour genuinely lives here until there is
-somewhere better for it to go.
+## edit-dashboard
 
-### Sync from Grafana with nothing changed rewrites nothing and says so
+`features/edit-dashboard.feature`
 
-KEPT, and deliberately not moved or deleted. The Penpot sibling dropped its
-equivalent on the grounds that a second run is out of scope — but here it is a
-regression guard for a defect that was actually fixed (a pull rewriting every
-mirror on every run, so the whole folder read "Modified a few seconds ago" and a
-file you had really touched was impossible to spot).
+EDITING IS THE BEHAVIOUR; THE PUSH IS HOW IT TRAVELS.
 
-Its negative control is the outline above, which asserts a file APPEARS — so this
-cannot be satisfied by a pull that has simply stopped writing.
+### A local edit reaches its dashboard in Grafana
+
+This was "Sync to Grafana pushes a local edit up to its dashboard", a scenario in
+a file named after two buttons. Nobody edits a dashboard in order to press a
+button — they edit it so Grafana gets the change, and the app offers three ways
+for that to happen (on save, on the button, on the schedule). Those are
+mechanisms; this is what they are for.
+
+The uid is the thread, so the edit lands on the dashboard the file already names
+— same dashboard, same folder, never a duplicate.
+
+The bravo folder rather than alpha, so an edit here never mutates the fixture
+`sync-now.feature` asserts an untouched mirror against.
 
 
 ## remove-mapping
@@ -1408,8 +1552,9 @@ not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
 content tag-sync code in `lib/` at all, so no scenario here can pass yet.
 
 The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
-a tag behaviour and does not wait on tags: it is LIVE in reconcile.feature, which
-owns what a run does as a run. Do not restate it here.
+a tag behaviour and does not wait on tags. It no longer has a scenario anywhere:
+it asserted an mtime about the reconciler, and neither is a behaviour (see
+`sync-now.feature`'s notes). Do not restate it here either.
 
 Note what makes the skip possible at all, because it is a Grafana-specific gift:
 `DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
@@ -1443,9 +1588,10 @@ disable/re-enable + a pull, which exercises the same metadata-keyed reconcile.
 Spec-first / @todo: the SYSTEM leg needs a real app-remove on a live pod (the CI
 harness can only disable/enable, not remove+reinstall), so it stays manual. The
 DATA promise — reinstall reconciles existing files in place by uid with NO
-duplicates — is already proven LIVE by reconcile.feature ("existing files are
-updated in place — matched by dashboard uid, never duplicated"); a disable/enable
-changes nothing about that reconcile, so re-proving it here would be redundant.
+duplicates — is already proven LIVE by sync-now.feature ("a folder that already
+holds a mirror is filled in place, not doubled"); a disable/enable changes
+nothing about how a sync matches on uid, so re-proving it here would be
+redundant.
 
 ### Removing the app reverts the custom mimetype registration
 

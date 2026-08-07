@@ -219,6 +219,20 @@ trait SyncSteps {
 	 * Pin every mirror's etag in $folder, so a later Then can say whether the run
 	 * under test wrote anything.
 	 *
+	 * ── KEPT WITHOUT A CALLER, ON PURPOSE ────────────────────────────────────
+	 *
+	 * These three steps drove "Sync from Grafana with nothing changed rewrites
+	 * nothing and says so", which was DELETED rather than moved when
+	 * reconcile.feature was retired: it asserted an mtime — a result — about the
+	 * reconciler — a mechanism — and neither is a behaviour anyone performs.
+	 * (features/AGENTS.md#sync-now-scope has the reasoning; the n8n sibling made
+	 * the same call.)
+	 *
+	 * The defect it guarded was real: a pull that rewrote every mirror on every
+	 * run left the whole folder reading "Modified a few seconds ago", so a file
+	 * you had actually touched was impossible to spot. So the machinery stays,
+	 * and re-adding the scenario is one line if it ever earns a home.
+	 *
 	 * @Given the mirrors in :folder are noted
 	 */
 	public function theMirrorsAreNoted(string $folder): void {

@@ -32,7 +32,7 @@ use Psr\Log\NullLogger;
 
 /**
  * Unit tests for the {@see SyncService} pull (saga Ch2 Course 2). The end-to-end
- * wiring is covered by reconcile.feature + the live smoke test; these pin the
+ * wiring is covered by sync-now.feature + the live smoke test; these pin the
  * reconcile *decisions* the orchestration makes, so a regression can't land silently:
  *
  *  - a Team Folder mapping with no groups (invisible) + an unavailable backend are
