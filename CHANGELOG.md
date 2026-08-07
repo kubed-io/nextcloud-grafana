@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A new mapping defaults to an admin-owned folder, not a Team Folder.** Leaving the storage backend unset used to mean "Team Folder", which needs the optional `groupfolders` app — so on a stock Nextcloud the default mapping was the one that could not be provisioned, and filling in only the required fields got you a refusal. A Team Folder is now opted into. Existing mappings are unaffected: every mapping this app has saved records its backend explicitly.
 - **Re-share a mapped folder from anywhere and this app reflects it.** The groups a mapped folder is shared with are now read from the folder itself rather than stored alongside the mapping, so a change made in Files, with `occ`, or by another app sharing the same folder shows up here — and a sync never puts back a group you removed. Setting the groups to nothing now actually clears them, which it silently did not before.
 - **BREAKING:** a mapping is now immutable except for its groups. The Grafana folder, the Nextcloud folder, the storage backend, subfolder-sync, the mode and the format are all fixed once created — mode and format were previously editable, which silently invalidated how every already-mirrored file had been written. Remove the mapping and add it again to change one.
 - **`occ grafana_sync:set-groups`** changes the groups a mapped folder is shared with, the one field a mapping lets you edit — previously reachable only from the admin panel.
