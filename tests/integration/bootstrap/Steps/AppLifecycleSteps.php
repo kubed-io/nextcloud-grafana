@@ -82,15 +82,21 @@ trait AppLifecycleSteps {
 	 * config/mimetypemapping.json, with an alias to `grafana` for the icon.)
 	 */
 	public function filesAreRegisteredAsTheirOwnFileType(string $extension): void {
-		$path = 'registered-type-probe.' . ltrim($extension, '.');
+		$ext = ltrim(trim($extension), '.');
+		$path = 'registered-type-probe.' . $ext;
 		$this->davPut($path, '{"title":"probe","panels":[],"schemaVersion":39}');
 		$this->createdFolders[] = $path;
 
+		// THE EXACT MIMETYPE, not a substring of it. `application/grafana+json` is
+		// the thing registered; anything else containing "grafana" would satisfy a
+		// looser check while still leaving the Files app without its icon. The
+		// parameters are dropped first because a server may append `; charset=…`,
+		// which is not part of what was registered.
 		$type = $this->davContentType($path);
-		Assert::assertStringContainsString(
-			'grafana',
-			$type,
-			"a plain .$extension file came back as '$type' — the mimetype is not registered, "
+		Assert::assertSame(
+			'application/grafana+json',
+			trim(explode(';', $type, 2)[0]),
+			"a plain .$ext file came back as '$type' — the mimetype is not registered, "
 			. 'so these files would show a generic JSON icon',
 		);
 	}

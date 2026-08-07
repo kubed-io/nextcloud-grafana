@@ -199,10 +199,25 @@ trait WebDavTrait {
 			'body' => '<?xml version="1.0"?>'
 				. '<d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>',
 		]);
-		Assert::assertSame(207, $res->getStatusCode(), "PROPFIND content type $path failed: " . (string)$res->getBody());
+		$this->assertStatus($res, [207], "PROPFIND content type $path");
+
 		$doc = new \SimpleXMLElement((string)$res->getBody());
 		$doc->registerXPathNamespace('d', 'DAV:');
-		return trim((string)(($doc->xpath('//d:getcontenttype') ?: [])[0] ?? ''));
+		// Only the 200-OK propstat block, as davReadMetadata() does — a collection
+		// has no getcontenttype and answers in a 404 block, and reading across both
+		// would report an empty string as though the property had been served.
+		foreach ($doc->xpath('//d:propstat') ?: [] as $propstat) {
+			$propstat->registerXPathNamespace('d', 'DAV:');
+			if (!str_contains((string)($propstat->xpath('d:status')[0] ?? ''), '200')) {
+				continue;
+			}
+			$node = $propstat->xpath('d:prop/d:getcontenttype');
+			if ($node) {
+				return trim((string)$node[0]);
+			}
+		}
+
+		throw new \RuntimeException("PROPFIND $path returned no getcontenttype:\n" . (string)$res->getBody());
 	}
 
 	/**
