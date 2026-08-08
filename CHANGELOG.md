@@ -19,29 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Spec: the feature files are grouped by what they act on — `dashboards/`, `folders/`, `mapping/` and `connection/` — one verb per file, matching the sibling integrations.
-- Spec: the text editor is correctly specified as **hidden** for a link file; the spec had asserted it opens, contradicting both the code and the README.
-
-- Spec: `reconcile.feature` is gone, and must never come back. The reconciler is a mechanism, not something anyone does — its scenarios were four behaviours wearing one coat, and each moved to the thing a person actually performs: the first sync (`sync-now.feature`), editing a dashboard file (`edit-dashboard.feature`), and deleting a dashboard in Grafana (`delete-dashboard.feature`).
-- Spec: `file-type.feature` is gone. A mimetype is not something anyone does — it is what enabling the app left behind, so it is asserted on install; the rest of the file became `view-dashboard.feature`, about looking at a mirror. The DAV property table now lists only the five keys a mirror actually arrives with (`grafana_folderUid` and `grafana_apiVersion` are registered but written by nothing yet).
-- **A new mapping defaults to an admin-owned folder, not a Team Folder.** Leaving the storage backend unset used to mean "Team Folder", which needs the optional `groupfolders` app — so on a stock Nextcloud the default mapping was the one that could not be provisioned, and filling in only the required fields got you a refusal. A Team Folder is now opted into. Existing mappings are unaffected: every mapping this app has saved records its backend explicitly.
-- **Re-share a mapped folder from anywhere and this app reflects it.** The groups a mapped folder is shared with are now read from the folder itself rather than stored alongside the mapping, so a change made in Files, with `occ`, or by another app sharing the same folder shows up here — and a sync never puts back a group you removed. Setting the groups to nothing now actually clears them, which it silently did not before.
-- **BREAKING:** a mapping is now immutable except for its groups. The Grafana folder, the Nextcloud folder, the storage backend, subfolder-sync, the mode and the format are all fixed once created — mode and format were previously editable, which silently invalidated how every already-mirrored file had been written. Remove the mapping and add it again to change one.
-- **`occ grafana_sync:set-groups`** changes the groups a mapped folder is shared with, the one field a mapping lets you edit — previously reachable only from the admin panel.
-- **A mapped folder now appears the moment you save the mapping**, instead of only when the first sync runs. A mapping whose folder cannot be provisioned is no longer saved at all, rather than being stored and failing on every sync afterwards.
-- A `link` mapping's folder is no longer read-only for its groups. That bit stopped nothing being written to Grafana — the listeners do that — and only stopped you organising your own files.
-
-### Fixed
-
-- **A sync no longer marks every dashboard file as modified.** Each sync rewrote every mirrored file whether or not anything had changed in Grafana, so the whole folder read "Modified a few seconds ago" after every run and a file you had actually touched was impossible to spot — a pull now writes only the files whose dashboard really changed, and reports the rest as "unchanged".
-- **BREAKING:** requires Nextcloud 31+ (was 30). The Sync Settings form now handles its own storage, which needs an interface added in 31; Nextcloud 30 is end-of-life.
-- **The Sync Settings checkboxes could never be saved** — "scheduled sync" and "preserve dashboards in a recycle-bin folder" sprang back on reload. The recycle-bin one is the serious half: the toggle silently reverting meant every trashed dashboard was permanently deleted in Grafana instead of parked, and Grafana has no undo.
-- **Emptying the Nextcloud trash never deleted parked dashboards.** With the recycle bin on, Grafana kept every "deleted" dashboard forever; the app was not being loaded on WebDAV requests, so the purge hook never ran.
-- **Test connection** is no longer reachable without a CSRF token, so another site can no longer make your server probe the configured Grafana URL.
-- **Pulled dashboards no longer have their empty JSON objects turned into empty arrays** (`timepicker`, a panel's `options`, `fieldConfig.defaults`), which corrupted the mirrored file and was then pushed back to Grafana.
-
 ### Added
 
 - **The scheduled sync now actually runs.** "Grafana → Nextcloud: scheduled sync" and its interval have been in Sync Settings all along and nothing read either of them, so turning the schedule on did nothing at all, forever. There is now a background job behind it.
@@ -67,6 +44,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The admin cards no longer tag every immutable field with "(fixed)". The value renders as plain text rather than a control, which already says it cannot be edited.
+- Spec: the feature files are grouped by what they act on — `dashboards/`, `folders/`, `mapping/` and `connection/` — one verb per file, matching the sibling integrations.
+- Spec: the text editor is correctly specified as **hidden** for a link file; the spec had asserted it opens, contradicting both the code and the README.
+
+- Spec: `reconcile.feature` is gone, and must never come back. The reconciler is a mechanism, not something anyone does — its scenarios were four behaviours wearing one coat, and each moved to the thing a person actually performs: the first sync (`sync-now.feature`), editing a dashboard file (`edit-dashboard.feature`), and deleting a dashboard in Grafana (`delete-dashboard.feature`).
+- Spec: `file-type.feature` is gone. A mimetype is not something anyone does — it is what enabling the app left behind, so it is asserted on install; the rest of the file became `view-dashboard.feature`, about looking at a mirror. The DAV property table now lists only the five keys a mirror actually arrives with (`grafana_folderUid` and `grafana_apiVersion` are registered but written by nothing yet).
+- **A new mapping defaults to an admin-owned folder, not a Team Folder.** Leaving the storage backend unset used to mean "Team Folder", which needs the optional `groupfolders` app — so on a stock Nextcloud the default mapping was the one that could not be provisioned, and filling in only the required fields got you a refusal. A Team Folder is now opted into. Existing mappings are unaffected: every mapping this app has saved records its backend explicitly.
+- **Re-share a mapped folder from anywhere and this app reflects it.** The groups a mapped folder is shared with are now read from the folder itself rather than stored alongside the mapping, so a change made in Files, with `occ`, or by another app sharing the same folder shows up here — and a sync never puts back a group you removed. Setting the groups to nothing now actually clears them, which it silently did not before.
+- **BREAKING:** a mapping is now immutable except for its groups. The Grafana folder, the Nextcloud folder, the storage backend, subfolder-sync, the mode and the format are all fixed once created — mode and format were previously editable, which silently invalidated how every already-mirrored file had been written. Remove the mapping and add it again to change one.
+- **`occ grafana_sync:set-groups`** changes the groups a mapped folder is shared with, the one field a mapping lets you edit — previously reachable only from the admin panel.
+- **A mapped folder now appears the moment you save the mapping**, instead of only when the first sync runs. A mapping whose folder cannot be provisioned is no longer saved at all, rather than being stored and failing on every sync afterwards.
+- A `link` mapping's folder is no longer read-only for its groups. That bit stopped nothing being written to Grafana — the listeners do that — and only stopped you organising your own files.
+
 - Dev: added the `@nextcloud/files` / `event-bus` / `initial-state` / `l10n` / `router` frontend deps (matching n8n) for the upcoming openers PR.
 - CI: the integration suite is split into three Behat suites (`admin`, `dashboard`, `core`) run as parallel matrix legs, with one aggregated result comment instead of one per leg.
 - CI: a new check keeps every feature file in exactly one suite, and the step-definition check now also catches a step no definition resolves.
@@ -80,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Connection card shows whether a token is **currently stored** (the field always looks empty since it's encrypted).
 
 ### Fixed
+
+- **A link file can no longer be opened in the text editor.** On the first folder of a session the mode had not always reached the browser yet, so the editor could be offered on a pointer whose edits the server discards and the next sync overwrites; picking it now opens the dashboard in Grafana instead.
+- **A sync no longer marks every dashboard file as modified.** Each sync rewrote every mirrored file whether or not anything had changed in Grafana, so the whole folder read "Modified a few seconds ago" after every run and a file you had actually touched was impossible to spot — a pull now writes only the files whose dashboard really changed, and reports the rest as "unchanged".
+- **BREAKING:** requires Nextcloud 31+ (was 30). The Sync Settings form now handles its own storage, which needs an interface added in 31; Nextcloud 30 is end-of-life.
+- **The Sync Settings checkboxes could never be saved** — "scheduled sync" and "preserve dashboards in a recycle-bin folder" sprang back on reload. The recycle-bin one is the serious half: the toggle silently reverting meant every trashed dashboard was permanently deleted in Grafana instead of parked, and Grafana has no undo.
+- **Emptying the Nextcloud trash never deleted parked dashboards.** With the recycle bin on, Grafana kept every "deleted" dashboard forever; the app was not being loaded on WebDAV requests, so the purge hook never ran.
+- **Test connection** is no longer reachable without a CSRF token, so another site can no longer make your server probe the configured Grafana URL.
+- **Pulled dashboards no longer have their empty JSON objects turned into empty arrays** (`timepicker`, a panel's `options`, `fieldConfig.defaults`), which corrupted the mirrored file and was then pushed back to Grafana.
 
 - The **Grafana glyph in the Files context menu and the + New menu** now themes to the menu colour instead of rendering as a solid yellow tile.
 - Creating a dashboard from a non-object JSON body now errors clearly instead of making an empty dashboard.

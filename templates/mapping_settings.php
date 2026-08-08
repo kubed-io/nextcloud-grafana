@@ -99,18 +99,14 @@ $info = static function (string $tip) use ($icon): string {
 						<?php /* Immutable: the Grafana folder IS the mapping, so a different
 								 folder is a different mapping. Rendered as text rather than a
 								 one-option select — a control implies it might save. */ ?>
-						<span class="grafana-sync-fixed js-grafana-folder" data-uid="<?php p($uid); ?>" data-title="<?php p($title); ?>" data-value="<?php p($uid); ?>"><?php p($label); ?>
-							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
-						</span>
+						<span class="grafana-sync-fixed js-grafana-folder" data-uid="<?php p($uid); ?>" data-title="<?php p($title); ?>" data-value="<?php p($uid); ?>"><?php p($label); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-nc">
 						<label><?php p($l->t('Nextcloud folder'));
 			print_unescaped($info($desc['nc'])); ?></label>
 						<?php /* Immutable: re-pointing it would move the whole mirrored tree
 								 and re-stamp every file's metadata. */ ?>
-						<span class="grafana-sync-fixed js-nc-folder" data-value="<?php p($m['nc_folder']); ?>"><?php p($m['nc_folder']); ?>
-							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
-						</span>
+						<span class="grafana-sync-fixed js-nc-folder" data-value="<?php p($m['nc_folder']); ?>"><?php p($m['nc_folder']); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-subfolders">
 						<?php /* Immutable: flipping it restructures the far side. */ ?>
@@ -125,9 +121,7 @@ $info = static function (string $tip) use ($icon): string {
 						<?php /* Immutable: it decided how every existing file under the
 								 mapping was written, so changing it invalidates what is on
 								 disk. Re-create the mapping instead. */ ?>
-						<span class="grafana-sync-fixed js-mode" data-value="<?php p($modeSel); ?>"><?php p($modeSel === 'sync' ? $l->t('Sync') : $l->t('Link')); ?>
-							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
-						</span>
+						<span class="grafana-sync-fixed js-mode" data-value="<?php p($modeSel); ?>"><?php p($modeSel === 'sync' ? $l->t('Sync') : $l->t('Link')); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-format">
 						<label><?php p($l->t('Format'));
@@ -135,9 +129,7 @@ $info = static function (string $tip) use ($icon): string {
 						<?php /* Immutable, for the same reason as mode: it chose the
 								 serializer and the file extension of everything already
 								 mirrored. */ ?>
-						<span class="grafana-sync-fixed js-format" data-value="<?php p($formatSel); ?>"><?php p($formatSel === 'yaml' ? $l->t('YAML') : $l->t('JSON')); ?>
-							<span class="grafana-sync-hint"><?php p($l->t('(fixed)')); ?></span>
-						</span>
+						<span class="grafana-sync-fixed js-format" data-value="<?php p($formatSel); ?>"><?php p($formatSel === 'yaml' ? $l->t('YAML') : $l->t('JSON')); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-tf">
 						<?php /* Immutable: switching backend migrates the folder and every

@@ -258,8 +258,3 @@
 	font-family: monospace;
 }
 
-.grafana-sync-hint {
-	font-family: var(--font-face, sans-serif);
-	color: var(--color-text-maxcontrast);
-	font-size: 0.9em;
-}
