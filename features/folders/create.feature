@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#create-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#folderscreate
 
 Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
   As a Nextcloud user
@@ -39,7 +39,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
     Then Grafana holds a folder named "Client Work"
     And the Nextcloud folder carries a "grafana_folderUid"
 
-  # notes: AGENTS.md#a-folder-opted-in-late-brings-the-dashboards-already-inside-it
+  # notes: ../AGENTS.md#a-folder-opted-in-late-brings-the-dashboards-already-inside-it
   @user @in-nextcloud @gesture @ui @occ @unbuilt
   Scenario: A folder opted in late brings the dashboards already inside it
     Given a folder "Late Opt In" inside the "alpha" folder holding two managed "sync" dashboard files
@@ -67,10 +67,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
     And the tag is not left applied
     And no folder is created in Grafana
 
-  # Tags are instance-wide, so this is not an error to report — no mapping could be
-  # resolved for that folder even in principle. Stripping a user's own tag off a
-  # folder this app has no business touching would be a worse surprise than an
-  # inert label.
+  # notes: ../AGENTS.md#tagging-a-folder-outside-every-mapping-does-nothing-at-all
   @user @in-nextcloud @gesture @ui @occ @unbuilt
   Scenario: Tagging a folder outside every mapping does nothing at all
     Given a folder "Holiday Photos" outside every mapped folder
@@ -78,9 +75,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
     Then Grafana is not contacted
     And the tag is left where the user put it
 
-  # The mapped folder's identity is the mapping. Tagging it is redundant, and acting
-  # on the tag would create a second Grafana folder alongside the one it is already
-  # bound to.
+  # notes: ../AGENTS.md#tagging-the-mapped-folder-itself-creates-nothing
   @user @in-nextcloud @gesture @ui @occ @unbuilt
   Scenario: Tagging the mapped folder itself creates nothing
     When I assign the "grafana" tag to the mapped folder
@@ -89,9 +84,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
 
   # ── opting out does not destroy anything ─────────────────────────────────────────
 
-  # Untagging is unmapping, not deleting — the same rule as moving a dashboard out of
-  # a mapping. Destroying a Grafana folder and everything in it because someone
-  # removed a label would be the worst kind of surprise, and Grafana has no undo.
+  # notes: ../AGENTS.md#removing-the-grafana-tag-does-not-delete-the-grafana-folder
   @user @in-nextcloud @gesture @ui @occ @unbuilt
   Scenario: Removing the "grafana" tag does not delete the Grafana folder
     Given a mirrored Grafana folder "Keep Me" under the "alpha" folder
@@ -128,9 +121,7 @@ Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
     And it still carries no "grafana_folderUid"
 
   # ── the reserved folder ──────────────────────────────────────────────────────────
-  # The recycle-bin folder holds parked dashboards and dashboards Nextcloud does not
-  # manage (see delete-dashboard.feature). Letting a tagged folder resolve to it
-  # would put the app's own scratch space under user control.
+  # notes: ../AGENTS.md#a-folder-cannot-be-opted-in-under-the-recycle-bin-folders-name
   @user @in-nextcloud @gesture @ui @occ @recycle-bin @unbuilt
   Scenario: A folder cannot be opted in under the recycle-bin folder's name
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"

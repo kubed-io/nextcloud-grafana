@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#rename-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#foldersrename
 
 Feature: Renaming a folder
   As a Nextcloud user or admin
@@ -11,9 +11,7 @@ Feature: Renaming a folder
 
   # ── the mapped folder itself ─────────────────────────────────────────────────────
 
-  # WHAT HAPPENS TODAY, recorded so it is a known defect rather than a surprise.
-  # Nothing is lost — no dashboard is deleted — but the mapping stops matching and
-  # the user is told nothing.
+  # notes: ../AGENTS.md#renaming-a-mapped-folder-silently-orphans-its-mapping
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Renaming a mapped folder silently orphans its mapping
     Given a managed "sync" dashboard file in the "alpha" folder
@@ -22,9 +20,7 @@ Feature: Renaming a folder
     And the file inside it resolves to no mapping
     And nothing warns the user that the connection is broken
 
-  # What it should do instead. Following the rename keeps the promise the file-level
-  # metadata already makes, and needs the mapping to be keyed by something stable —
-  # the folder's Nextcloud file id — rather than by its path.
+  # notes: ../AGENTS.md#renaming-a-mapped-folder-keeps-the-mapping-pointing-at-it
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Renaming a mapped folder keeps the mapping pointing at it
     Given a managed "sync" dashboard file in the "alpha" folder
@@ -58,9 +54,7 @@ Feature: Renaming a folder
     Then Grafana is not contacted
     And the dashboard stays bound to the "alpha" mapping
 
-  # A failed far-side rename must not roll back the local one. The user's gesture in
-  # their own file tree is theirs; the app reports the divergence and lets the next
-  # reconcile settle it. Same rule as rename-dashboard.feature.
+  # notes: ../AGENTS.md#a-failed-subfolder-rename-leaves-the-local-rename-standing
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: A failed subfolder rename leaves the local rename standing
     Given a mirrored Grafana folder under the "alpha" folder, holding a dashboard
@@ -71,10 +65,7 @@ Feature: Renaming a folder
 
   # ── renamed on the Grafana side ──────────────────────────────────────────────────
 
-  # A mapping names a Grafana folder by **uid**, not by title, so a title change in
-  # Grafana does not break it. Whether the Nextcloud folder should follow is the open
-  # question — it is the user's own file tree, and the mapping was created against a
-  # folder the admin named.
+  # notes: ../AGENTS.md#renaming-the-mapped-folder-in-grafana-does-not-break-the-mapping
   @grafana @in-grafana @occ @ui @unbuilt
   Scenario: Renaming the mapped folder in Grafana does not break the mapping
     Given a managed "sync" dashboard file in the "alpha" folder

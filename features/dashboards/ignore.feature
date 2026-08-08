@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#reserved-tags
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardsignore
 
 Feature: Reserved tags exclude individual dashboards — from either side
   As an admin
@@ -48,9 +48,7 @@ Feature: Reserved tags exclude individual dashboards — from either side
     Then the dashboard in Grafana still carries only its original tags
     And the app has not added any "grafana:sync", "grafana:link", "grafana:ignore", or "nextcloud:ignore" tag to it
 
-  # The one leg that IS built: the pull leaves an already-ignored file strictly
-  # alone rather than writing a second, collision-suffixed copy beside it. Nothing
-  # sets the mode yet, so the arrangement has to stamp it directly.
+  # notes: ../AGENTS.md#a-file-already-marked-ignored-is-left-alone-by-the-pull
   @grafana @in-grafana @occ @todo
   Scenario: A file already marked ignored is left alone by the pull
     Given a managed dashboard file in a mapped folder whose mode is "ignored"

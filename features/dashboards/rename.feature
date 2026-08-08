@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#rename-dashboard
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardsrename
 
 Feature: Renaming keeps file, JSON, and Grafana in agreement
   As a Nextcloud user
@@ -39,9 +39,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
     When I rename the file
     Then the file is still in that subfolder
 
-  # A link is a read-only pointer with no dashboard JSON to rewrite and nothing to
-  # push. Renaming the pointer file is a local act; the dashboard keeps its name and
-  # the next pull re-derives the filename from Grafana.
+  # notes: ../AGENTS.md#renaming-a-link-never-renames-the-dashboard
   @user @in-nextcloud @gesture @ui
   Scenario: Renaming a link never renames the dashboard
     Given a folder mapped as "link" to the Grafana folder "links"
@@ -57,9 +55,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
     And the rename succeeds
 
   # ══ RENAMED IN GRAFANA ═════════════════════════════════════════════════════════
-  # The mirror image: the title changes on the far side and the pull carries it back.
-  # Mode-agnostic — a link's filename follows a title change exactly as a sync file's
-  # does, because in both cases the name is derived from Grafana, not pushed to it.
+  # notes: ../AGENTS.md#renaming-a-dashboard-in-grafana-renames-the-mirrored-file
 
   @grafana @in-grafana @occ @ui @todo
   Scenario: Renaming a dashboard in Grafana renames the mirrored file
@@ -88,9 +84,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
     Then both files still exist
     And each still carries its own uid
 
-  # A dashboard with no usable title must not produce ".grafana.json" with an empty
-  # stem. FilenameCodec falls back to the uid — an ugly name is recoverable, a file
-  # the app cannot round-trip is not.
+  # notes: ../AGENTS.md#the-app-never-invents-a-substitute-name
   @grafana @in-grafana @occ @ui @todo
   Scenario: The app never invents a substitute name
     Given a dashboard in the "alpha" Grafana folder whose title is empty
@@ -100,10 +94,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
 
   # ══ REFUSALS AND FAILURES ══════════════════════════════════════════════════════
 
-  # NameSyncListener bails on an empty stem, so the JSON and Grafana keep the old
-  # name while the file carries the new one — a silent three-way disagreement, which
-  # is the one outcome this whole feature exists to prevent. @unbuilt: bailing is not
-  # refusing, and nothing tells the user.
+  # notes: ../AGENTS.md#a-rename-to-an-empty-or-whitespace-only-name-is-refused
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: A rename to an empty or whitespace-only name is refused
     Given a managed "sync" dashboard file
@@ -111,7 +102,7 @@ Feature: Renaming keeps file, JSON, and Grafana in agreement
     Then the rename is refused with a message
     And the file, its JSON title, and the dashboard still agree
 
-  # notes: AGENTS.md#a-failed-propagation-never-reverts-the-local-rename
+  # notes: ../AGENTS.md#a-failed-propagation-never-reverts-the-local-rename
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: A failed propagation never reverts the local rename
     Given a managed "sync" dashboard file

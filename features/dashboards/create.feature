@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#create-dashboard
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardscreate
 
 Feature: Create a dashboard from Nextcloud
   As a Nextcloud user
@@ -28,9 +28,7 @@ Feature: Create a dashboard from Nextcloud
 
   # ── what lands, and what it carries ──────────────────────────────────────────────
 
-  # A file arriving with a uid already in its JSON is a re-adoption, not a create —
-  # a dashboard exported from Grafana and dropped back in, or a file restored from a
-  # backup. Minting a second dashboard for it would fork the two copies apart.
+  # notes: ../AGENTS.md#a-file-that-already-carries-a-uid-re-adopts-its-dashboard-instead-of-creating-one
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A file that already carries a uid re-adopts its dashboard instead of creating one
     Given a folder mapped as "sync" to the Grafana folder "demo"
@@ -39,9 +37,7 @@ Feature: Create a dashboard from Nextcloud
     Then no second dashboard is created in Grafana
     And the file is stamped with "uid-A"
 
-  # …and one carrying a uid that names nothing is a create, not a failure. The uid is
-  # stale — from a deleted dashboard or another instance — and the file's content is
-  # the thing worth keeping.
+  # notes: ../AGENTS.md#a-file-carrying-a-uid-that-no-longer-exists-is-created-fresh
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A file carrying a uid that no longer exists is created fresh
     Given a folder mapped as "sync" to the Grafana folder "demo"
@@ -78,10 +74,7 @@ Feature: Create a dashboard from Nextcloud
 
   # ── failure ──────────────────────────────────────────────────────────────────────
 
-  # The file exists in Nextcloud before Grafana is called, so a failed create cannot
-  # be rolled back into "nothing happened". Leaving it unstamped is what lets a later
-  # save or pull retry it, rather than leaving a file that claims a dashboard it does
-  # not have.
+  # notes: ../AGENTS.md#a-failed-creation-leaves-an-unstamped-file-not-a-half-managed-one
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A failed creation leaves an unstamped file, not a half-managed one
     Given a folder mapped as "sync" to the Grafana folder "demo"

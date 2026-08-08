@@ -43,7 +43,7 @@ import re, sys, pathlib
 
 root = pathlib.Path(sys.argv[1])
 bootstrap = root / 'tests' / 'integration' / 'bootstrap'
-features = sorted((root / 'features').glob('*.feature'))
+features = sorted((root / 'features').rglob('*.feature'))
 
 # Scenarios carrying any of these are specification, not implementation.
 UNRUN = {'@todo', '@unbuilt', '@blocked', '@decision'}
@@ -211,7 +211,7 @@ for feature in features:
                 if '<' in concrete:
                     continue  # a placeholder with no Examples column to fill it
                 if not any(c.match(concrete) for c in compiled):
-                    undefined.append(f'{feature.name}: {concrete}')
+                    undefined.append(f'{feature.relative_to(root / "features")}: {concrete}')
 
 if undefined:
     fail = True

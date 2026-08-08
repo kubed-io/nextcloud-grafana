@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#copy-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#folderscopy
 
 Feature: Copying a folder
   As a Nextcloud user
@@ -84,9 +84,7 @@ Feature: Copying a folder
     And the copied files that failed carry no "grafana_uid"
 
   # ── the pull must never look like a copy ─────────────────────────────────────────
-  # The reconciler writes files into mapped folders, which is indistinguishable from
-  # a user copy at the event layer. If the pull's own writes triggered the copy path,
-  # every pull would mint duplicate dashboards.
+  # notes: ../AGENTS.md#the-pulls-own-folder-writes-are-never-treated-as-a-copy
   @grafana @in-grafana @occ @unbuilt
   Scenario: The pull's own folder writes are never treated as a copy
     Given a Grafana folder "Bubbles" holding two dashboards under the "alpha" folder

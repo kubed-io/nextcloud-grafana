@@ -113,7 +113,7 @@ the Grafana UI. A file created **outside** any mapped folder stays a plain, untr
 document. (A file that already carries a uid re-adopts that dashboard rather than making a
 duplicate.)
 
-📋 spec: [`features/create-dashboard.feature`](features/create-dashboard.feature) · 🛠 [`lib/Listener/CreateInGrafanaListener.php`](lib/Listener/CreateInGrafanaListener.php), [`lib/Service/CreateService.php`](lib/Service/CreateService.php)
+📋 spec: [`features/dashboards/create.feature`](features/dashboards/create.feature) · 🛠 [`lib/Listener/CreateInGrafanaListener.php`](lib/Listener/CreateInGrafanaListener.php), [`lib/Service/CreateService.php`](lib/Service/CreateService.php)
 
 ### Mapping membership follows the folder
 
@@ -121,7 +121,7 @@ Folder mappings are **metadata on the folder**, so a file's mapping is resolved 
 lives. Because mappings are per-folder, you can map a folder **inside** an already-mapped
 folder — the nearest enclosing mapping wins.
 
-📋 spec: [`features/mapping-membership.feature`](features/mapping-membership.feature) · 🛠 [`lib/Service/MappingService.php`](lib/Service/MappingService.php)
+📋 spec: [`features/mapping/create.feature`](features/mapping/create.feature) · 🛠 [`lib/Service/MappingService.php`](lib/Service/MappingService.php)
 
 ### Moving a dashboard (real folders, so a move is a real move)
 
@@ -147,7 +147,7 @@ folder tree.
 If Grafana can't confirm the delete, the file **keeps its identity** and stays reconcilable
 rather than being silently orphaned.
 
-📋 spec: [`features/move-dashboard.feature`](features/move-dashboard.feature) · 🛠 [`lib/Listener/MoveGuardListener.php`](lib/Listener/MoveGuardListener.php), [`lib/Listener/MotionListener.php`](lib/Listener/MotionListener.php), [`lib/Service/MotionService.php`](lib/Service/MotionService.php)
+📋 spec: [`features/dashboards/move.feature`](features/dashboards/move.feature) · 🛠 [`lib/Listener/MoveGuardListener.php`](lib/Listener/MoveGuardListener.php), [`lib/Listener/MotionListener.php`](lib/Listener/MotionListener.php), [`lib/Service/MotionService.php`](lib/Service/MotionService.php)
 
 ### Copying a dashboard (always a brand-new instance)
 
@@ -161,7 +161,7 @@ carries the original's Grafana identity — its metadata is stripped the moment 
 So duplicating a dashboard is as simple as copying its file, and a copy never silently
 hijacks the original's dashboard.
 
-📋 spec: [`features/copy-dashboard.feature`](features/copy-dashboard.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
+📋 spec: [`features/dashboards/copy.feature`](features/dashboards/copy.feature) · 🛠 [`lib/Listener/CopyListener.php`](lib/Listener/CopyListener.php), [`lib/Service/CopyService.php`](lib/Service/CopyService.php)
 
 ### Renaming (three-way)
 
@@ -171,7 +171,7 @@ and save → the file is renamed and Grafana updates. The stable link is the das
 no rename ever breaks the connection. (The reconcile runs in a background job because the file is
 locked mid-rename.)
 
-📋 spec: [`features/rename-dashboard.feature`](features/rename-dashboard.feature) · 🛠 [`lib/Listener/NameSyncListener.php`](lib/Listener/NameSyncListener.php), [`lib/BackgroundJob/ReconcileNameJob.php`](lib/BackgroundJob/ReconcileNameJob.php)
+📋 spec: [`features/dashboards/rename.feature`](features/dashboards/rename.feature) · 🛠 [`lib/Listener/NameSyncListener.php`](lib/Listener/NameSyncListener.php), [`lib/BackgroundJob/ReconcileNameJob.php`](lib/BackgroundJob/ReconcileNameJob.php)
 
 ### Writeback: edit a file, update the dashboard
 
@@ -183,7 +183,7 @@ request-scoped guard plus a content hash keep the app from pushing its own pull 
 (the classic sync-loop problem). A push Grafana rejects raises a notification with Grafana's
 own message and leaves the file to retry on the next save.
 
-📋 spec: [`features/edit-dashboard.feature`](features/edit-dashboard.feature) · 🛠 [`lib/Listener/NodeWrittenListener.php`](lib/Listener/NodeWrittenListener.php), [`lib/Service/PushService.php`](lib/Service/PushService.php)
+📋 spec: [`features/dashboards/edit.feature`](features/dashboards/edit.feature) · 🛠 [`lib/Listener/NodeWrittenListener.php`](lib/Listener/NodeWrittenListener.php), [`lib/Service/PushService.php`](lib/Service/PushService.php)
 
 ### A link file can't be edited into a corner
 
@@ -216,7 +216,7 @@ An untracked `.grafana.json` is never touched. And whichever step issues the rea
 if Grafana can't confirm it the trash is **aborted** so the file stays recoverable — deleting can
 never silently desync the two systems or lose a dashboard's content.
 
-📋 spec: [`features/delete-dashboard.feature`](features/delete-dashboard.feature) · 🛠 [`lib/Service/DeleteService.php`](lib/Service/DeleteService.php), [`lib/Listener/DeleteToGrafanaListener.php`](lib/Listener/DeleteToGrafanaListener.php), [`lib/Listener/RestoreFromTrashListener.php`](lib/Listener/RestoreFromTrashListener.php)
+📋 spec: [`features/dashboards/delete.feature`](features/dashboards/delete.feature) · 🛠 [`lib/Service/DeleteService.php`](lib/Service/DeleteService.php), [`lib/Listener/DeleteToGrafanaListener.php`](lib/Listener/DeleteToGrafanaListener.php), [`lib/Listener/RestoreFromTrashListener.php`](lib/Listener/RestoreFromTrashListener.php)
 
 ### Removing a folder mapping tears it down safely
 
@@ -226,7 +226,7 @@ reconnect) — while **standalone files that were never part of the mapping are 
 alone**. Restore the trash, or re-map the folder, and they reconnect. This is the tear-down, not
 the Purge button (which keeps the mapping and never touches Grafana).
 
-📋 spec: [`features/remove-mapping.feature`](features/remove-mapping.feature) · 🛠 [`lib/Service/MappingTeardownService.php`](lib/Service/MappingTeardownService.php)
+📋 spec: [`features/mapping/delete.feature`](features/mapping/delete.feature) · 🛠 [`lib/Service/MappingTeardownService.php`](lib/Service/MappingTeardownService.php)
 
 ### A first-class file type: custom mimetype, icon, queryable metadata
 
@@ -249,7 +249,7 @@ Because `grafana_mode` is **indexed**, "find every sync dashboard" / "every unma
 is a fast DAV `REPORT`, not a folder walk. A `grafana:sync` / `grafana:link` coloured pill
 (a system tag) mirrors each managed file's mode automatically.
 
-📋 spec: [`features/view-dashboard.feature`](features/view-dashboard.feature) (the mimetype registration itself is asserted on install, in [`features/lifecycle.feature`](features/lifecycle.feature)) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
+📋 spec: [`features/dashboards/view.feature`](features/dashboards/view.feature) (the mimetype registration itself is asserted on install, in [`features/lifecycle.feature`](features/lifecycle.feature)) · 🛠 [`lib/Service/DashboardMetadata.php`](lib/Service/DashboardMetadata.php), [`lib/Service/OwnershipTags.php`](lib/Service/OwnershipTags.php)
 
 ### Opening a dashboard: Open in Grafana vs text editor
 
@@ -265,7 +265,7 @@ Driven by the file's **mode**. Two row actions in the Files app:
 There's also a **Grafana dashboard** entry in the **+ New** menu — drop the new `.grafana.json`
 into a mapped sync folder and create-on-land makes it real in Grafana.
 
-📋 spec: [`features/open-with.feature`](features/open-with.feature) · 🛠 [`src/files.js`](src/files.js), [`lib/Listener/LoadFilesScriptListener.php`](lib/Listener/LoadFilesScriptListener.php)
+📋 spec: [`features/dashboards/open-with.feature`](features/dashboards/open-with.feature) · 🛠 [`src/files.js`](src/files.js), [`lib/Listener/LoadFilesScriptListener.php`](lib/Listener/LoadFilesScriptListener.php)
 
 ### Manual sync (Sync from / Sync to Grafana)
 
@@ -278,7 +278,7 @@ Beyond the on-save writeback, both directions are available on demand — from t
   the folder.
 - **Sync to Grafana** (push) sends the mapping's sync files up.
 
-📋 spec: [`features/sync-now.feature`](features/sync-now.feature) · 🛠 [`lib/Service/SyncService.php`](lib/Service/SyncService.php)
+📋 spec: [`features/connection/sync-now.feature`](features/connection/sync-now.feature) · 🛠 [`lib/Service/SyncService.php`](lib/Service/SyncService.php)
 
 ---
 

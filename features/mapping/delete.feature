@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#remove-mapping
+# Notes, decisions and history for this feature: ../AGENTS.md#mappingdelete
 
 Feature: Removing a folder mapping tears down the connection safely
   As a Nextcloud admin
@@ -60,9 +60,7 @@ Feature: Removing a folder mapping tears down the connection safely
     And dashboard "uid-B" is moved back out of the bin into the "alpha" Grafana folder
     And it keeps the same uid "uid-B"
 
-  # With the bin OFF the reconnection still works, but the dashboards are re-created
-  # (their originals were permanently deleted at trash-time), so the restored files come
-  # back under NEW uids — same content, new identity. Pinned for live-verify.
+  # notes: ../AGENTS.md#re-mapping-and-restoring-reconnects-by-re-creating-the-dashboards-bin-off
   @admin @in-nextcloud @occ @ui @recycle-bin @todo
   Scenario: Re-mapping and restoring reconnects by re-creating the dashboards (bin off)
     Given the Grafana recycle-bin folder is off

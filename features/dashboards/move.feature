@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#move-dashboard
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardsmove
 
 Feature: Moving a dashboard file mirrors the move in Grafana
   As a Nextcloud user
@@ -20,10 +20,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Then the file stays in "sync" mode under the "alpha" mapping
     And nothing changes in Grafana except the name
 
-  # An UNTAGGED subfolder is ordinary local NC organisation, invisible to Grafana — the
-  # dashboard stays bound to the PARENT mapped folder and keeps all its metadata. A file
-  # only leaves the mapping when it leaves every mapped folder. A subfolder becomes a
-  # Grafana folder by carrying the `grafana` tag; see create-folder.feature.
+  # notes: ../AGENTS.md#moving-into-an-untagged-subfolder-is-local-only-stays-bound-to-the-parent
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Moving into an untagged subfolder is local-only (stays bound to the parent)
     Given an untagged subfolder of the "alpha" folder
@@ -105,9 +102,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And the file stays in the "links" folder
 
   # ── a link re-homed between two mappings: the pointer follows, nothing moves ─────
-  # Unit-tested (testALinkMoveIntoADifferentMappingOnlyRehomesThePointer) and never
-  # written down. A link owns no dashboard, so a mapped→mapped move re-stamps which
-  # mapping the pointer belongs to and stops there — Grafana is not called at all.
+  # notes: ../AGENTS.md#moving-a-link-from-one-mapped-folder-to-another-only-re-homes-the-pointer
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Moving a link from one mapped folder to another only re-homes the pointer
@@ -118,9 +113,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And Grafana is not contacted
 
   # ── the safety rules: never delete on a guess ────────────────────────────────────
-  # Both of these are unit-tested invariants that no scenario stated. They are the
-  # rules that make "move out = delete" survivable, and Grafana has no undo, so they
-  # are worth reading as specification rather than as implementation detail.
+  # notes: ../AGENTS.md#a-failed-grafana-delete-on-move-out-never-strips-the-files-identity
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: A failed Grafana delete on move-out never strips the file's identity
@@ -131,10 +124,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Then the file still carries its "grafana_uid"
     And the file is still reconcilable with its dashboard
 
-  # A destination the app cannot classify — outside the user's file tree, or a path
-  # it cannot resolve to "mapped" or "unmapped" — must NOT be read as "left every
-  # mapping". Treating unknown as unmapped would turn an unreadable path into a
-  # permanent Grafana delete. Unknown means do nothing.
+  # notes: ../AGENTS.md#a-move-to-a-destination-the-app-cannot-classify-never-deletes-anything
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A move to a destination the app cannot classify never deletes anything
     Given a managed "sync" dashboard file in the "alpha" folder
@@ -152,14 +142,9 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     And the file is still untracked
 
   # ══ MOVED IN GRAFANA ═════════════════════════════════════════════════════════════
-  # Everything above starts in Nextcloud. A dashboard can also change folder in
-  # Grafana, and the pull is what makes that observable — which is what @in-grafana
-  # means. These are the mirror image of the Nextcloud-side moves above.
+  # The mirror image of the Nextcloud-side moves above.
 
-  # Both folders are mapped, so the dashboard should end up in the other mapping's
-  # Nextcloud folder. Today the pull prunes it from the source folder
-  # (sync-now.feature covers that leg) and writes it fresh into the destination —
-  # correct end state, reached as a delete-and-recreate rather than as a move.
+  # notes: ../AGENTS.md#a-dashboard-moved-to-another-mapped-folder-in-grafana-relocates-its-mirror
   @grafana @in-grafana @occ @ui @todo
   Scenario: A dashboard moved to another mapped folder in Grafana relocates its mirror
     Given a managed "sync" dashboard file in the "alpha" folder
@@ -179,10 +164,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Then no file for that dashboard remains in the "alpha" folder
     And the dashboard still exists in Grafana
 
-  # The rule that makes subfolders usable: a pull must never yank a file back to the
-  # mapping root because that is where it would have created it. Where the user filed
-  # it is theirs to decide. SyncService renames in place within the file's own folder;
-  # this is that promise, stated as behaviour.
+  # notes: ../AGENTS.md#a-pull-never-relocates-a-file-the-user-filed-into-a-subfolder
   @grafana @in-grafana @occ @ui @todo
   Scenario: A pull never relocates a file the user filed into a subfolder
     Given a managed "sync" dashboard file the user moved into a subfolder of "alpha"
@@ -191,7 +173,7 @@ Feature: Moving a dashboard file mirrors the move in Grafana
     Then the file is still in that subfolder
     And its name reflects the new title
 
-  # notes: AGENTS.md#moving-a-dashboard-into-a-tagged-subfolder-re-parents-it-in-grafana
+  # notes: ../AGENTS.md#moving-a-dashboard-into-a-tagged-subfolder-re-parents-it-in-grafana
 
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Moving a dashboard into a tagged subfolder re-parents it in Grafana

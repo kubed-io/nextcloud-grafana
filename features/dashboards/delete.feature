@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#delete-dashboard
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardsdelete
 
 Feature: Deleting a dashboard file
   As a Nextcloud user
@@ -10,9 +10,7 @@ Feature: Deleting a dashboard file
     And a folder mapped as "sync" to the Grafana folder "alpha"
 
   # ══ BIN OFF (default): the trash gesture IS the delete ═════════════════════════
-  # The content is safe in the file (now in the NC trash), so the dashboard goes
-  # immediately and the file's uid is stripped — the id is dead and must not be
-  # reused. Restore therefore cannot "put it back"; it re-creates.
+  # notes: ../AGENTS.md#trashing-a-sync-file-deletes-it-in-grafana-and-strips-all-its-metadata-bin-off
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trashing a sync file deletes it in Grafana and strips ALL its metadata (bin off)
@@ -21,7 +19,7 @@ Feature: Deleting a dashboard file
     When I move it to the trash
     Then the dashboard is deleted in Grafana
     And the file is recoverable from the Nextcloud trash with its JSON intact
-    # notes: AGENTS.md#emptying-the-trash-for-a-bin-off-file-touches-nothing-in-grafana
+    # notes: ../AGENTS.md#emptying-the-trash-for-a-bin-off-file-touches-nothing-in-grafana
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Emptying the trash for a bin-off file touches nothing in Grafana
@@ -30,10 +28,7 @@ Feature: Deleting a dashboard file
     When I purge it from the trash
     Then no Grafana call is made by the purge
 
-  # The safety rule that makes bin-off survivable: the dashboard is deleted FIRST and
-  # the uid is stripped only on success. Strip-then-delete would, on a failed call,
-  # leave a live dashboard nothing in Nextcloud can still name — unreachable and
-  # invisible to every future reconcile. Unit-tested (failed-delete-never-strips).
+  # notes: ../AGENTS.md#a-failed-grafana-delete-never-strips-the-files-identity-bin-off
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: A failed Grafana delete never strips the file's identity (bin off)
     Given the Grafana recycle-bin folder is off
@@ -44,9 +39,7 @@ Feature: Deleting a dashboard file
     And the file is still reconcilable with its dashboard
 
   # ══ BIN ON (opt-in): the trash gesture is a MOVE, and purge is the delete ══════
-  # The dashboard is parked in the designated folder with its uid intact, so a
-  # restore is a move back rather than a re-creation — id and version history
-  # survive the whole round trip.
+  # notes: ../AGENTS.md#trashing-a-sync-file-parks-its-dashboard-in-the-bin-keeping-the-id-bin-on
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trashing a sync file parks its dashboard in the bin, keeping the id (bin on)
@@ -55,9 +48,7 @@ Feature: Deleting a dashboard file
     When I move it to the trash
     Then the dashboard is moved into the "nextcloud-trash" Grafana folder and not deleted
     And the file is recoverable from the Nextcloud trash
-    # That the file KEEPS its uid is asserted in restore-dashboard.feature, where it
-    # is observable: the parked dashboard comes back with the same id. See the bin-off
-    # scenario above for why it cannot be read off the trashed file directly.
+    # notes: ../AGENTS.md#trashing-a-sync-file-parks-its-dashboard-in-the-bin-keeping-the-id-bin-on
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Emptying the trash permanently deletes only the cleared file's dashboard from the bin (bin on)
@@ -68,7 +59,7 @@ Feature: Deleting a dashboard file
     Then that file's dashboard is permanently deleted from Grafana
     And the unmanaged dashboard in "nextcloud-trash" is left untouched
 
-  # notes: AGENTS.md#purging-never-deletes-a-dashboard-someone-rescued-out-of-the-bin
+  # notes: ../AGENTS.md#purging-never-deletes-a-dashboard-someone-rescued-out-of-the-bin
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Purging never deletes a dashboard someone rescued out of the bin
@@ -80,9 +71,7 @@ Feature: Deleting a dashboard file
     And it is still in its mapped folder
     And the file is gone from the Nextcloud trash
 
-  # …and the same rule from the other direction: if the dashboard is simply GONE — a
-  # Grafana admin deleted it out of the bin by hand — the purge is a local matter. No
-  # error, nothing to chase; the Nextcloud file just goes.
+  # notes: ../AGENTS.md#purging-a-parked-dashboard-that-has-already-been-deleted-in-grafana-just-clears-the-file
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Purging a parked dashboard that has already been deleted in Grafana just clears the file
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
@@ -112,10 +101,7 @@ Feature: Deleting a dashboard file
     And the second file's dashboard is still parked in "nextcloud-trash"
     And the second file is still restorable
 
-  # Bin mode is a promise the admin opted into, so an unusable bin must FAIL LOUD
-  # rather than fall back. Silently doing a true delete because the folder was
-  # renamed in Grafana would destroy exactly the id preservation they asked for —
-  # and Grafana has no undo. RecycleBin::activeFolderUid throws; the delete aborts.
+  # notes: ../AGENTS.md#bin-mode-with-an-unusable-bin-folder-aborts-the-delete-rather-than-deleting
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Bin mode with an unusable bin folder aborts the delete rather than deleting
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
@@ -125,9 +111,7 @@ Feature: Deleting a dashboard file
     Then the delete is aborted and the file stays in Nextcloud
     And the dashboard still exists in its mapped Grafana folder
 
-  # The shim folder is shared space. Nothing in this app may ever treat "empty the
-  # Nextcloud trash" as "empty the bin folder" — it holds dashboards we never managed,
-  # and dashboards belonging to other users' trashes.
+  # notes: ../AGENTS.md#a-purge-never-clears-the-bin-folder-wholesale
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: A purge never clears the bin folder wholesale
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
@@ -186,18 +170,9 @@ Feature: Deleting a dashboard file
     And the admin pulls from Grafana
     Then no file named "Ephemeral.grafana.json" remains in "delta-dash"
     And a file named "Delta Demo.grafana.json" appears in "delta-dash"
-    # A DELETE THAT STARTS IN GRAFANA, which is why it lives here rather than in a
-    # file about syncing. It used to be phrased "Sync from Grafana prunes a file
-    # whose dashboard left the folder" — named after the mechanism that carries the
-    # news, with the actual event (someone deleted a dashboard) buried in a `When`.
-    #
-    # THE SECOND `Then` IS THE POINT AS MUCH AS THE FIRST. A prune that took the
-    # whole folder with it would satisfy the first line alone, and that is exactly
-    # the failure worth guarding: only the dashboard that went is the file that
-    # goes.
-    # notes: AGENTS.md#a-dashboard-deleted-in-grafana-loses-its-mirror-in-nextcloud
+    # notes: ../AGENTS.md#a-dashboard-deleted-in-grafana-loses-its-mirror-in-nextcloud
 
-  # notes: AGENTS.md#deleting-a-dashboard-in-grafana-leaves-an-already-trashed-file-where-it-is
+  # notes: ../AGENTS.md#deleting-a-dashboard-in-grafana-leaves-an-already-trashed-file-where-it-is
   @grafana @in-grafana @ui @occ @todo
   Scenario: Deleting a dashboard in Grafana leaves an already-trashed file where it is
     Given a trashed sync dashboard file
@@ -208,9 +183,7 @@ Feature: Deleting a dashboard file
 
   # ══ THE GESTURE THAT SKIPS THE TRASH ═══════════════════════════════════════════
 
-  # With the trashbin app disabled (or an `X-NC-Skip-Trashbin` header) only the soft
-  # step ever fires — there is no trash for a purge to empty. Under bin OFF that is
-  # harmless: the soft step already IS the true delete, so the outcome is correct.
+  # notes: ../AGENTS.md#a-trash-bypassed-delete-still-deletes-the-dashboard-bin-off
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: A trash-bypassed delete still deletes the dashboard (bin off)
     Given the Nextcloud trashbin is disabled
@@ -219,7 +192,7 @@ Feature: Deleting a dashboard file
     When I delete it
     Then the dashboard is deleted in Grafana
 
-  # notes: AGENTS.md#a-trash-bypassed-delete-leaves-the-dashboard-parked-forever-bin-on
+  # notes: ../AGENTS.md#a-trash-bypassed-delete-leaves-the-dashboard-parked-forever-bin-on
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: A trash-bypassed delete leaves the dashboard parked forever (bin on)
     Given the Nextcloud trashbin is disabled
@@ -230,7 +203,7 @@ Feature: Deleting a dashboard file
 
   # ══ FAILURE HANDLING ═══════════════════════════════════════════════════════════
 
-  # notes: AGENTS.md#the-grafana-delete-is-aborted-if-grafana-is-unreachable
+  # notes: ../AGENTS.md#the-grafana-delete-is-aborted-if-grafana-is-unreachable
   @user @in-nextcloud @gesture @ui @blocked
   Scenario: The Grafana delete is aborted if Grafana is unreachable
     Given a managed "sync" dashboard file

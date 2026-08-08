@@ -59,46 +59,38 @@ default:
   suites:
     admin:
       paths:
-      - '%paths.base%/../../features/admin-connection.feature'
-      - '%paths.base%/../../features/admin-mapping.feature'
-      - '%paths.base%/../../features/remove-mapping.feature'
-      # Context class lives with the test code (tests/integration/bootstrap/),
-      # loaded via the integration composer autoload — features/ stays pure
-      # Gherkin.
+      - '%paths.base%/../../features/connection/connection.feature'
+      - '%paths.base%/../../features/connection/sync-now.feature'
+      - '%paths.base%/../../features/mapping/create.feature'
+      - '%paths.base%/../../features/mapping/delete.feature'
       contexts: &contexts
       - OCA\GrafanaSync\Tests\Integration\FeatureContext
 
     dashboard:
       paths:
-      - '%paths.base%/../../features/create-dashboard.feature'
-      - '%paths.base%/../../features/copy-dashboard.feature'
-      - '%paths.base%/../../features/delete-dashboard.feature'
-      - '%paths.base%/../../features/move-dashboard.feature'
-      - '%paths.base%/../../features/rename-dashboard.feature'
-      - '%paths.base%/../../features/restore-dashboard.feature'
-      - '%paths.base%/../../features/edit-dashboard.feature'
+      - '%paths.base%/../../features/dashboards/create.feature'
+      - '%paths.base%/../../features/dashboards/copy.feature'
+      - '%paths.base%/../../features/dashboards/delete.feature'
+      - '%paths.base%/../../features/dashboards/edit.feature'
+      - '%paths.base%/../../features/dashboards/move.feature'
+      - '%paths.base%/../../features/dashboards/rename.feature'
+      - '%paths.base%/../../features/dashboards/restore.feature'
       contexts: *contexts
 
     core:
       paths:
-      # The folder verbs live here until they have an engine to exercise — see
-      # the note above. Kept together and first, so promoting them to a `folder`
-      # suite is a cut and a paste.
-      - '%paths.base%/../../features/create-folder.feature'
-      - '%paths.base%/../../features/copy-folder.feature'
-      - '%paths.base%/../../features/delete-folder.feature'
-      - '%paths.base%/../../features/move-folder.feature'
-      - '%paths.base%/../../features/rename-folder.feature'
-      - '%paths.base%/../../features/restore-folder.feature'
-      - '%paths.base%/../../features/sync-now.feature'
-      - '%paths.base%/../../features/mapping-membership.feature'
-      - '%paths.base%/../../features/view-dashboard.feature'
-      - '%paths.base%/../../features/open-with.feature'
-      - '%paths.base%/../../features/tag-sync.feature'
-      - '%paths.base%/../../features/reserved-tags.feature'
-      - '%paths.base%/../../features/purge.feature'
+      - '%paths.base%/../../features/folders/create.feature'
+      - '%paths.base%/../../features/folders/copy.feature'
+      - '%paths.base%/../../features/folders/delete.feature'
+      - '%paths.base%/../../features/folders/move.feature'
+      - '%paths.base%/../../features/folders/rename.feature'
+      - '%paths.base%/../../features/folders/restore.feature'
+      - '%paths.base%/../../features/dashboards/view.feature'
+      - '%paths.base%/../../features/dashboards/open-with.feature'
+      - '%paths.base%/../../features/dashboards/tags.feature'
+      - '%paths.base%/../../features/dashboards/ignore.feature'
+      - '%paths.base%/../../features/dashboards/purge.feature'
       - '%paths.base%/../../features/lifecycle.feature'
-      - '%paths.base%/../../features/uninstall.feature'
       contexts: *contexts
 
   formatters:
