@@ -86,7 +86,7 @@ async function propfindProps(node) {
 /** Node → Grafana deep link: node attributes first (free), else a one-shot PROPFIND. */
 async function resolveUrl(node) {
   return buildUrl(grafanaUrl, getGrafanaUid(node))
-    || buildUrl(grafanaUrl, (await propfindProps(node))['metadata-grafana_uid'] || '')
+    || buildUrl(grafanaUrl, getGrafanaUid({ attributes: await propfindProps(node) }))
 }
 
 /**
