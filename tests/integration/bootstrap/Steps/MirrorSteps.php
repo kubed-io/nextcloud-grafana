@@ -121,13 +121,10 @@ trait MirrorSteps {
 				$want = $this->seededDashboards[$title]
 					?? throw new \RuntimeException("no dashboard called '{$title}' was declared by this scenario");
 				return $actual === $want ? null : "expected the uid of '{$title}' ({$want}), found '{$actual}'";
-
 			case 'set':
 				return ($actual ?? '') !== '' ? null : 'expected a value, found nothing';
-
 			case 'absent':
 				return ($actual ?? '') === '' ? null : "expected it not to be stored, found '{$actual}'";
-
 			default:
 				$literal = trim($expected, '"');
 				return $actual === $literal ? null : "expected '{$literal}', found '{$actual}'";

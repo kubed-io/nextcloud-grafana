@@ -22,6 +22,22 @@ Feature: Changing who a mapped folder is shared with
     When the admin changes that mapping's groups to "<groups>"
     Then the mapping's groups are "<groups>"
 
+    Examples: on a Team Folder
+      | folder                  | storage      | groups             |
+      | Groups On A Team Folder | team folder  | design,admin,sales |
+      | Groups On A Team Folder | team folder  | design             |
+      | Groups On A Team Folder | team folder  | sales              |
+      | Groups On A Team Folder | team folder  |                    |
+
+    Examples: and on an admin-owned folder
+      | folder                   | storage      | groups             |
+      | Groups On A Plain Folder | admin folder | design,admin,sales |
+      | Groups On A Plain Folder | admin folder | design             |
+      | Groups On A Plain Folder | admin folder | sales              |
+      | Groups On A Plain Folder | admin folder |                    |
+
+    # notes: ../AGENTS.md#the-groups-a-mapped-folder-is-shared-with-can-be-changed
+
   @admin @occ @ui @team-folder
   Scenario: Groups are read from the folder, not from the mapping
     Given the Nextcloud groups "design,sales" exist

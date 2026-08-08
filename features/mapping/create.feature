@@ -105,23 +105,6 @@ Feature: Admin configures folder mappings
     # uid, so the picker offers a reserved "/" entry for it.
     # notes: ../AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-    # notes: ../AGENTS.md#the-groups-a-mapped-folder-is-shared-with-can-be-changed
-
-    Examples: on a Team Folder
-      | folder                  | storage      | groups             |
-      | Groups On A Team Folder | team folder  | design,admin,sales |
-      | Groups On A Team Folder | team folder  | design             |
-      | Groups On A Team Folder | team folder  | sales              |
-      | Groups On A Team Folder | team folder  |                    |
-
-    Examples: and on an admin-owned folder
-      | folder                   | storage      | groups             |
-      | Groups On A Plain Folder | admin folder | design,admin,sales |
-      | Groups On A Plain Folder | admin folder | design             |
-      | Groups On A Plain Folder | admin folder | sales              |
-      | Groups On A Plain Folder | admin folder |                    |
-
-    # notes: ../AGENTS.md#the-groups-a-mapped-folder-is-shared-with-can-be-changed
 
   # ── the optional Grafana recycle-bin folder ────────────────────────────────
   # notes: ../AGENTS.md#the-recycle-bin-folder
