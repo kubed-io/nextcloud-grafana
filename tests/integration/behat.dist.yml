@@ -62,6 +62,8 @@ default:
       - '%paths.base%/../../features/connection/connection.feature'
       - '%paths.base%/../../features/connection/sync-now.feature'
       - '%paths.base%/../../features/mapping/create.feature'
+      - '%paths.base%/../../features/mapping/manage-groups.feature'
+      - '%paths.base%/../../features/mapping/sync-now.feature'
       - '%paths.base%/../../features/mapping/delete.feature'
       contexts: &contexts
       - OCA\GrafanaSync\Tests\Integration\FeatureContext

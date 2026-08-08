@@ -252,6 +252,67 @@ the dashboard there with its uid intact and a restore returns the same
 dashboard. It is a setting of the app, not a property of a mapping — which is
 why the bin folder may not itself be mapped.
 
+
+## mapping/manage-groups
+
+`features/mapping/manage-groups.feature`
+
+THE ONE FIELD A MAPPING LETS YOU EDIT. Everything else — the Grafana folder, the
+Nextcloud folder, the storage backend, subfolder sync, the mode, the format — is
+fixed at creation, and not by a guard that rejects a change but by the API shape:
+`updateGroups()` takes an id and groups, the PUT takes `nc_groups` and nothing
+else, and there is no update command. A caller cannot express any other change.
+
+Split out of `admin-mapping.feature` so the editable field is not buried among
+the immutable ones — the same split `nextcloud-penpot` made.
+
+Both storage backends get their own Examples block because the provisioning
+differs and the behaviour must not.
+
+## mapping/sync-now
+
+`features/mapping/sync-now.feature`
+
+THE CARD'S OWN BUTTON — one mapping, on demand.
+
+### NO SYNC-NOW SCENARIO CARRIES AN ORIGIN TAG
+
+A sync is a NEXTCLOUD action — an admin presses a button, or the schedule fires.
+There is no "sync to Nextcloud" in Grafana and there never will be, so
+`@in-grafana` is simply wrong here however much Grafana the scenario mentions.
+`features/README.md` already says it: *origin is decided by the `When`, not by
+whichever systems the scenario happens to mention.*
+
+And `@in-nextcloud` does not fit either, because its meaning is "someone acted in
+Nextcloud, and the payoff is what reached Grafana" — a sync's payoff is what
+reached NEXTCLOUD. The tag rule allows exactly one or neither; a sync is the
+"neither" case, which is also how `kubed-io/nextcloud-penpot` leaves its own.
+
+All four scenarios carried `@in-grafana` because the dashboards being in Grafana
+felt like the Grafana-ness of it. That is the `Given`.
+
+### Syncing one mapping fills its folder
+
+SPLIT OUT OF THE INSTANCE-WIDE OUTLINE, which carried it as a third Examples row
+beside "every mapping" and "the schedule". The row was honest — same pre-state,
+same post-state — but the SCOPE is the difference, and a mapping-scoped action
+belongs with the mapping.
+
+THE FIXTURE IS NOW IN THE SCENARIO. It used to say a file named "Alpha Demo"
+appears, and where "Alpha Demo" came from was invisible — `preload-grafana.sh`
+writes it, which a reader of the spec has no reason to know. `the Grafana folder
+… already contains:` declares the pre-state and seeds it find-or-overwrite, so
+the scenario is true whether or not the preload ran.
+
+AND THE COUNT IS GONE. `holds exactly 1 dashboard file` is the weakest possible
+statement about a tree: it passes whatever the file is called and wherever it
+sits. `the mapped folder … holds:` is the tree, and the metadata table is what
+the file arrived carrying — the shape `kubed-io/nextcloud-penpot` settled on.
+
+The root mapping came with the split for the same reason the card did: `/` with
+subfolder sync on is still ONE mapping, and syncing it is the card's button doing
+the largest job it can do.
+
 ## connection/connection
 
 `features/connection/connection.feature`

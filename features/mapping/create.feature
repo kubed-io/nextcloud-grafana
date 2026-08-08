@@ -105,17 +105,6 @@ Feature: Admin configures folder mappings
     # uid, so the picker offers a reserved "/" entry for it.
     # notes: ../AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-  @admin @occ @ui
-  Scenario Outline: The groups a mapped folder is shared with can be changed
-    Given the Nextcloud groups "design,sales" exist
-    And a mapping with the following values:
-      | grafana folder | observe   |
-      | nc folder      | <folder>  |
-      | groups         | design,admin |
-      | storage        | <storage> |
-    When the admin changes that mapping's groups to "<groups>"
-    Then the mapping's groups are "<groups>"
-
     # notes: ../AGENTS.md#the-groups-a-mapped-folder-is-shared-with-can-be-changed
 
     Examples: on a Team Folder
@@ -133,18 +122,6 @@ Feature: Admin configures folder mappings
       | Groups On A Plain Folder | admin folder |                    |
 
     # notes: ../AGENTS.md#the-groups-a-mapped-folder-is-shared-with-can-be-changed
-
-  @admin @occ @ui @team-folder
-  Scenario: Groups are read from the folder, not from the mapping
-    Given the Nextcloud groups "design,sales" exist
-    And a mapping with the following values:
-      | grafana folder | observe          |
-      | nc folder      | Shared Elsewhere |
-      | groups         | design           |
-      | storage        | team folder      |
-    When the Team Folder "Shared Elsewhere" is shared with the group "sales" outside this app
-    Then the mapping's groups are "design,sales"
-    # notes: ../AGENTS.md#groups-are-read-from-the-folder-not-from-the-mapping
 
   # ── the optional Grafana recycle-bin folder ────────────────────────────────
   # notes: ../AGENTS.md#the-recycle-bin-folder

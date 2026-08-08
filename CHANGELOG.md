@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Spec: the feature files are grouped by what they act on — `dashboards/`, `folders/`, `mapping/` and `connection/` — one verb per file, matching the sibling integrations.
+- Spec: the text editor is correctly specified as **hidden** for a link file; the spec had asserted it opens, contradicting both the code and the README.
+
 - Spec: `reconcile.feature` is gone, and must never come back. The reconciler is a mechanism, not something anyone does — its scenarios were four behaviours wearing one coat, and each moved to the thing a person actually performs: the first sync (`sync-now.feature`), editing a dashboard file (`edit-dashboard.feature`), and deleting a dashboard in Grafana (`delete-dashboard.feature`).
 - Spec: `file-type.feature` is gone. A mimetype is not something anyone does — it is what enabling the app left behind, so it is asserted on install; the rest of the file became `view-dashboard.feature`, about looking at a mirror. The DAV property table now lists only the five keys a mirror actually arrives with (`grafana_folderUid` and `grafana_apiVersion` are registered but written by nothing yet).
 - **A new mapping defaults to an admin-owned folder, not a Team Folder.** Leaving the storage backend unset used to mean "Team Folder", which needs the optional `groupfolders` app — so on a stock Nextcloud the default mapping was the one that could not be provisioned, and filling in only the required fields got you a refusal. A Team Folder is now opted into. Existing mappings are unaffected: every mapping this app has saved records its backend explicitly.
