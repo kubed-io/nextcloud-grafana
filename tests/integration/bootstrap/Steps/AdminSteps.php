@@ -74,7 +74,14 @@ trait AdminSteps {
 		Assert::assertSame(0, $res['exit'], "providing the token failed:\n{$res['output']}");
 	}
 
-	/** @When the admin provides an invalid service-account token */
+	/**
+	 * ONE FUNCTION, TWO PHRASINGS. The `When` is the admin doing it; the `Given`
+	 * is the same fact as pre-state, which is what the token-failure outline needs
+	 * so its two rows differ only in a table cell.
+	 *
+	 * @When the admin provides an invalid service-account token
+	 * @Given an invalid service-account token is set
+	 */
 	public function theAdminProvidesAnInvalidToken(): void {
 		$res = $this->occStdin($this->occ . ' grafana_sync:set-token', 'not-a-real-token');
 		Assert::assertSame(0, $res['exit'], "storing the (invalid) token failed:\n{$res['output']}");

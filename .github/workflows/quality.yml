@@ -77,6 +77,13 @@ jobs:
     - name: Behat step definitions
       run: bash tests/integration/bin/check-step-definitions.sh
 
+    # The feature files carry no essays; each scenario ends with a one-line
+    # pointer into features/AGENTS.md. That split rots two silent ways — an
+    # anchor stops resolving when a scenario is renamed, and prose creeps back
+    # into the Gherkin until the spec stops being readable. Both are text checks.
+    - name: Notes breadcrumbs resolve, and the comment budget holds
+      run: bash tests/integration/bin/check-notes-anchors.sh
+
     - name: Coding standard (php-cs-fixer)
       run: composer run cs:check
 

@@ -2,7 +2,7 @@
 
 Feature: App install lifecycle
   As a Nextcloud admin
-  I want the grafana_sync app to enable and disable cleanly
+  I want the grafana_sync app to enable, disable and uninstall cleanly
   So that installing or removing it never leaves the instance broken
 
   @admin @occ @ui
@@ -11,13 +11,7 @@ Feature: App install lifecycle
     Then the app should be enabled
     And the app is installed correctly
     And ".grafana.json" files are registered as their own file type
-    # THE MIMETYPE IS AN END STATE OF ENABLING, not a feature of its own. It used
-    # to head a file called "Grafana dashboard is a first-class file type", which
-    # described the registration as though someone had gone and done it — but
-    # nobody registers a mimetype; they install an app, and the registration is
-    # what the install left behind. Its visible consequence (a mapped folder that
-    # looks like dashboards) is view-dashboard.feature's, and its removal is
-    # uninstall.feature's.
+    # The mimetype is an end state of enabling, not a feature of its own.
     # notes: AGENTS.md#enabling-the-app
 
   @admin @occ @ui
@@ -25,3 +19,13 @@ Feature: App install lifecycle
     Given the app is enabled
     When the admin disables the app
     Then the app is not enabled
+
+  # @blocked — no app removal. occ enables and disables; removing an app and
+  # reinstalling it is a store operation this suite cannot perform.
+  # notes: AGENTS.md#removing-the-app
+  @admin @occ @blocked
+  Scenario: Removing the app
+    Given the app is enabled
+    When the admin removes the app
+    Then ".grafana.json" files are not registered as their own file type
+    And the managed dashboard files are left where they are, with their metadata

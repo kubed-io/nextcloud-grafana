@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#delete-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#foldersdelete
 
 Feature: Deleting a folder
   As a Nextcloud user
@@ -28,7 +28,7 @@ Feature: Deleting a folder
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
     And all three files KEEP their "grafana_uid"
 
-  # notes: AGENTS.md#trashing-the-mapped-folder-itself-deletes-its-dashboards-but-keeps-the-mapping
+  # notes: ../AGENTS.md#trashing-the-mapped-folder-itself-deletes-its-dashboards-but-keeps-the-mapping
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Trashing the mapped folder itself deletes its dashboards but keeps the mapping
@@ -38,9 +38,7 @@ Feature: Deleting a folder
     Then all three dashboards are deleted in Grafana
     And the mapping still exists in the admin settings
 
-  # The consequence, stated separately because it is the part that surprises people:
-  # the mapping outlives the folder, so a pull rebuilds an empty folder rather than
-  # restoring what was there.
+  # notes: ../AGENTS.md#a-pull-after-the-mapped-folder-was-trashed-re-creates-it-empty
   @admin @in-grafana @occ @ui @todo
   Scenario: A pull after the mapped folder was trashed re-creates it empty
     Given the "alpha" folder has been moved to the trash with its dashboards deleted

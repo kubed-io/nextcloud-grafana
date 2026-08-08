@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#copy-dashboard
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardscopy
 
 Feature: Copying a dashboard file always makes a new instance
   As a Nextcloud user
@@ -44,9 +44,7 @@ Feature: Copying a dashboard file always makes a new instance
     And the original unmapped file's dashboard is not restored or duplicated
 
   # ── a link copies like anything else: the copy is not a link ─────────────────────
-  # A link is a pointer body, so a copy of one holds a pointer and no dashboard JSON.
-  # It must not inherit the pointer's identity, and it cannot become a sync file by
-  # accident — there are no bytes to create a dashboard from.
+  # notes: ../AGENTS.md#copying-a-link-never-creates-a-second-dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario: Copying a link never creates a second dashboard
@@ -57,9 +55,7 @@ Feature: Copying a dashboard file always makes a new instance
     And the copy carries no inherited "grafana_uid"
 
   # ══ COPIED IN GRAFANA ══════════════════════════════════════════════════════════
-  # The mirror image: someone duplicates a dashboard in Grafana. The pull sees a new
-  # uid in the mapped folder and mirrors it like any other new dashboard — the copy
-  # has no special status on the way in, which is the point.
+  # notes: ../AGENTS.md#a-dashboard-duplicated-in-grafana-arrives-as-a-new-file
 
   @grafana @in-grafana @occ @ui @todo
   Scenario: A dashboard duplicated in Grafana arrives as a new file
@@ -70,9 +66,7 @@ Feature: Copying a dashboard file always makes a new instance
     And the two files carry different uids
     And the original file is unchanged
 
-  # A duplicate made in Grafana belongs to the mapping it landed in, so it takes THAT
-  # mapping's mode — not whatever mode the dashboard it was copied from happened to
-  # have. Mode is a property of the mapping, never of the dashboard.
+  # notes: ../AGENTS.md#a-duplicate-made-in-grafana-takes-the-mappings-mode-not-the-originals
   @grafana @in-grafana @occ @ui @todo
   Scenario: A duplicate made in Grafana takes the mapping's mode, not the original's
     Given a folder mapped as "link" to the Grafana folder "links"
@@ -81,21 +75,11 @@ Feature: Copying a dashboard file always makes a new instance
     And the "links" mapping is pulled
     Then the new file is a "link" pointer
 
-  # notes: AGENTS.md#the-pulls-own-writes-are-never-treated-as-a-copy
-
-  @grafana @in-grafana @occ @todo
-  Scenario: The pull's own writes are never treated as a copy
-    Given a Grafana dashboard in the "alpha" folder
-    When the "alpha" mapping is pulled twice
-    Then Grafana holds exactly one dashboard for it
-    And exactly one file carries its uid
+  # notes: ../AGENTS.md#the-pulls-own-writes-are-never-treated-as-a-copy
 
   # ── failure ──────────────────────────────────────────────────────────────────────
 
-  # The copy already exists in Nextcloud by the time we call Grafana, so a failure
-  # cannot un-copy it. It must be left as a plain untracked file rather than one
-  # carrying a uid that names nothing — and the user has to be told, or they are
-  # holding a file that looks managed and is not.
+  # notes: ../AGENTS.md#a-copy-whose-dashboard-cannot-be-created-stays-a-plain-file-and-says-so
   @user @in-nextcloud @gesture @ui @todo
   Scenario: A copy whose dashboard cannot be created stays a plain file and says so
     Given a managed "sync" dashboard file in the "alpha" folder

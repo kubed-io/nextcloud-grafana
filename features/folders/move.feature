@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#move-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#foldersmove
 
 Feature: Moving a folder
   As a Nextcloud user

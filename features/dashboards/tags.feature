@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#tag-sync
+# Notes, decisions and history for this feature: ../AGENTS.md#dashboardstags
 
 Feature: A dashboard's tags and its Nextcloud system tags stay one set
   As a Grafana admin browsing dashboards in Nextcloud
@@ -80,7 +80,7 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the dashboard in Grafana is tagged "linux" without a manual push
     And the file has no content tag "old"
 
-  # notes: AGENTS.md#editing-a-pill-updates-the-file-bodys-tags-array-body-is-canonical
+  # notes: ../AGENTS.md#editing-a-pill-updates-the-file-bodys-tags-array-body-is-canonical
 
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Editing a pill updates the file body's tags array (body is canonical)
@@ -168,21 +168,7 @@ Feature: A dashboard's tags and its Nextcloud system tags stay one set
     Then the resulting tag set on both sides is "2024", "linux", and "prod"
     And the tag "2024" is a string, not coerced to a number
 
-  # notes: AGENTS.md#an-unchanged-dashboard-is-skipped-by-the-pull
-
-  @admin @occ @unbuilt
-  Scenario: An unchanged dashboard is skipped by the pull
-    Given a managed "sync" dashboard file in "flows" whose body and tags match Grafana
-    When the "flows" mapping is pulled
-    Then the file is not rewritten
-    And its Nextcloud system tags are unchanged
-
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: A change in Grafana pulls the new body and reconciles the pills
-    Given a managed "sync" dashboard file in "flows" whose dashboard changed in Grafana
-    When the "flows" mapping is pulled
-    Then the file body is updated from Grafana
-    And the file's Nextcloud system tags match the dashboard's Grafana tags
+  # notes: ../AGENTS.md#an-unchanged-dashboard-is-skipped-by-the-pull
 
   # ── scope: an unmapped/ignored file is a plain Nextcloud file ──────────────────
 

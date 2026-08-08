@@ -1,4 +1,4 @@
-# Notes, decisions and history for this feature: AGENTS.md#restore-folder
+# Notes, decisions and history for this feature: ../AGENTS.md#foldersrestore
 
 Feature: Restoring a folder from the trash
   As a Nextcloud user
@@ -27,9 +27,7 @@ Feature: Restoring a folder from the trash
     Then three dashboards exist in Grafana holding the files' content
     And each has a new uid
 
-  # The aggregate gap, same shape as the one in delete-folder.feature: each file is
-  # restored correctly and nobody is told what the gesture cost. Under bin-off that
-  # cost is every uid in the folder.
+  # notes: ../AGENTS.md#a-folder-restore-reports-which-dashboards-came-back-with-new-identities
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: A folder restore reports which dashboards came back with new identities
     Given the Grafana recycle-bin folder is off
