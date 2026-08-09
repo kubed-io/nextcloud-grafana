@@ -56,8 +56,4 @@ final class ManagedFile {
 	public function isUnmapped(): bool {
 		return $this->mode === DashboardMetadata::MODE_UNMAPPED;
 	}
-
-	public function isIgnored(): bool {
-		return $this->mode === DashboardMetadata::MODE_IGNORED;
-	}
 }

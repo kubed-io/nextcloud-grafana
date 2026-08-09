@@ -94,13 +94,3 @@ Feature: Changing a dashboard's tags
     Examples: neither state is owned by a mapping, so neither reaches Grafana
       | mode     |
       | unmapped |
-      | ignored  |
-
-  # notes: ../AGENTS.md#a-reserved-grafana-tag-never-becomes-a-nextcloud-content-tag
-  @grafana @in-grafana @occ @unbuilt
-  Scenario: A reserved "grafana:" tag added in Grafana never becomes a content tag
-    Given a managed "sync" dashboard file in "Flows" whose tags are "linux"
-    When the dashboard's tags are changed to "linux, grafana:sync" in Grafana
-    Then the dashboard's tags are "linux" in Nextcloud
-    And the file has no content tag "grafana:sync"
-    And the file's mode pill is unaffected

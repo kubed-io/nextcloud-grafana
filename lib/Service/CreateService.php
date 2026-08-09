@@ -44,7 +44,6 @@ final class CreateService {
 	public function __construct(
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
-		private OwnershipTags $ownershipTags,
 		private SyncGuard $guard,
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
@@ -111,7 +110,6 @@ final class CreateService {
 	private function stampFile(File $node, Mapping $mapping, string $uid, string $version, string $content): void {
 		$this->guard->run(function () use ($node, $mapping, $uid, $version, $content): void {
 			$this->metadata->stampSynced($node->getId(), $uid, $mapping->mode, $version, $content, $mapping->id);
-			$this->ownershipTags->apply($node->getId(), $mapping->mode);
 			try {
 				$this->mimeLoader->updateFilecache('grafana.json', $this->mimeLoader->getId('application/grafana+json'));
 			} catch (\Throwable $e) {

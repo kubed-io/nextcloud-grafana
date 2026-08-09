@@ -90,7 +90,6 @@ default:
       - '%paths.base%/../../features/dashboards/view.feature'
       - '%paths.base%/../../features/dashboards/open-with.feature'
       - '%paths.base%/../../features/dashboards/tags.feature'
-      - '%paths.base%/../../features/dashboards/ignore.feature'
       - '%paths.base%/../../features/dashboards/purge.feature'
       - '%paths.base%/../../features/lifecycle.feature'
       contexts: *contexts

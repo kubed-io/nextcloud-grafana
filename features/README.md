@@ -64,7 +64,6 @@ Everything that is not a verb on a file or a folder keeps its own file:
 | File | Owns |
 |---|---|
 | `tag-sync.feature` | A dashboard's content tags, across all surfaces |
-| `reserved-tags.feature` | The control plane — the `ignore` markers and the mode pills |
 | `mapping-membership.feature` | Which files a mapping owns, and what "unmapped" means |
 | `view-dashboard.feature` | Looking at a mirror: what it looks like, and what it publishes over DAV |
 | `open-with.feature` | What clicking a mirror does |

@@ -24,7 +24,6 @@ Feature: Opening a dashboard file
       | sync     | offered           |
       | link     | offered           |
       | unmapped | hidden            |
-      | ignored  | hidden            |
 
   @user @ui @blocked
   Scenario Outline: The text editor is offered exactly when the file holds the JSON
@@ -36,7 +35,6 @@ Feature: Opening a dashboard file
       | mode     | offered or hidden |
       | sync     | offered           |
       | unmapped | offered           |
-      | ignored  | offered           |
       | link     | hidden            |
 
   @user @ui @blocked
@@ -50,4 +48,3 @@ Feature: Opening a dashboard file
       | sync     | Grafana     |
       | link     | Grafana     |
       | unmapped | text editor |
-      | ignored  | text editor |

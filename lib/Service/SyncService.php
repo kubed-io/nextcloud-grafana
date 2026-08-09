@@ -41,9 +41,9 @@ use Psr\Log\LoggerInterface;
  * {@see writeDashboard}.
  *
  * Scope note: this course is the **flat** pull — every dashboard in the mapped Grafana
- * folder lands directly in the one Nextcloud folder. The subfolder mirror + whole-instance
- * cascade (and the `grafana:ignore` reserved-tag override) ride this same loop in later
- * courses; the seams (`effectiveMode`, the ignored-index split) are left in place for them.
+ * folder lands directly in the one Nextcloud folder. The subfolder mirror rides this same
+ * loop in a later course. The seams that were held open for a per-dashboard exclude are
+ * gone with the feature: a mirrored dashboard takes its mapping's mode, full stop.
  */
 final class SyncService {
 	/** Sync directions — the parity vocabulary shared with the n8n master. */
@@ -54,7 +54,6 @@ final class SyncService {
 		private MappingService $mappings,
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
-		private OwnershipTags $tags,
 		private StorageService $storage,
 		private SyncGuard $guard,
 		private PushService $push,
@@ -295,29 +294,16 @@ final class SyncService {
 			$failed = 0;
 			$unchanged = 0;
 
-			$ignoredUids = [];
-			$existingByUid = $this->indexByUid($targetFolder, $mapping, $ignoredUids);
+			$existingByUid = $this->indexByUid($targetFolder, $mapping);
 			$nameCounts = [];
 			$seenUids = [];
 
 			foreach ($this->grafana->listDashboards($this->grafanaScope($mapping)) as $row) {
 				$processed++;
 				$uid = $row['uid'];
-				// A file locally marked `ignored` is left strictly alone — its dashboard
-				// still lives in the mapped folder, but the user opted it out, so skip
-				// re-pulling it (would otherwise write a NEW collision-suffixed file). No
-				// origin sets `ignored` in this course yet; the seam is here for the
-				// reserved-tag course.
-				if (isset($ignoredUids[$uid])) {
-					continue;
-				}
-				// The dashboard takes the mapping's mode. The per-dashboard override
-				// (grafana:ignore → skip) lands with the reserved-tag course; until then
-				// the effective mode is simply the mapping's.
-				$effectiveMode = $mapping->mode;
 				$seenUids[$uid] = true;
 				try {
-					if ($this->writeDashboard($targetFolder, $mapping, $row, $effectiveMode, $existingByUid, $nameCounts)) {
+					if ($this->writeDashboard($targetFolder, $mapping, $row, $existingByUid, $nameCounts)) {
 						$unchanged++;
 					}
 					$succeeded++;
@@ -419,23 +405,21 @@ final class SyncService {
 	 *
 	 * @return array<string,Node>
 	 */
-	private function indexByUid(Folder $root, Mapping $mapping, array &$ignoredUids): array {
+	private function indexByUid(Folder $root, Mapping $mapping): array {
 		$index = [];
-		$this->collectManaged($root, $mapping, $index, $ignoredUids);
+		$this->collectManaged($root, $mapping, $index);
 		return $index;
 	}
 
 	/**
-	 * Ignored files are kept OUT of $index (so prune leaves them) but their uids are
-	 * collected into $ignoredUids, so the pull can skip re-pulling them.
+	 * Index every managed mirror this mapping owns, by dashboard uid.
 	 *
 	 * @param array<string,Node> $index
-	 * @param array<string,true> $ignoredUids
 	 */
-	private function collectManaged(Folder $folder, Mapping $mapping, array &$index, array &$ignoredUids): void {
+	private function collectManaged(Folder $folder, Mapping $mapping, array &$index): void {
 		foreach ($folder->getDirectoryListing() as $node) {
 			if ($node instanceof Folder) {
-				$this->collectManaged($node, $mapping, $index, $ignoredUids);
+				$this->collectManaged($node, $mapping, $index);
 				continue;
 			}
 			if (!FilenameCodec::isDashboardFile($node)) {
@@ -446,12 +430,6 @@ final class SyncService {
 				continue;
 			}
 			$uid = $managed->uid;
-			// An `ignored` file stays put — excluded from sync on purpose. Never index it
-			// (so prune can't delete it), but surface its uid so the pull skips it.
-			if ($managed->isIgnored()) {
-				$ignoredUids[$uid] = true;
-				continue;
-			}
 			$owner = $managed->mappingId;
 			if ($owner !== '' && $owner !== $mapping->id) {
 				continue; // owned by a different mapping sharing/nesting this subtree
@@ -486,7 +464,6 @@ final class SyncService {
 	 * same either side.)
 	 *
 	 * @param array{uid:string, title:string, folderUid:string, url:string, tags:list<string>} $row
-	 * @param string $effectiveMode Mapping::MODE_SYNC|MODE_LINK for this dashboard
 	 * @param array<string,Node> $existingByUid
 	 * @param array<string,int> $nameCounts
 	 */
@@ -494,7 +471,6 @@ final class SyncService {
 		Folder $folder,
 		Mapping $mapping,
 		array $row,
-		string $effectiveMode,
 		array $existingByUid,
 		array &$nameCounts,
 	): bool {
@@ -513,7 +489,7 @@ final class SyncService {
 		// visible. A single shared read has to pick one error policy for both, and
 		// picking the lenient one turns a Grafana outage into a run that reports success
 		// over stale mirrors.
-		if ($effectiveMode === Mapping::MODE_LINK) {
+		if ($mapping->mode === Mapping::MODE_LINK) {
 			// Lightweight pointer built from the search row. Version is inert for a link
 			// (a pointer never pushes), so it stays empty.
 			$read = $this->readClocksForLink($uid);
@@ -570,8 +546,7 @@ final class SyncService {
 			if ($differs) {
 				$existing->putContent($body);
 			}
-			$this->metadata->stampSynced($fileId, $uid, $effectiveMode, $version, $body, $mapping->id);
-			$this->tags->apply($fileId, $effectiveMode);
+			$this->metadata->stampSynced($fileId, $uid, $mapping->mode, $version, $body, $mapping->id);
 			$this->times->apply($existing, $read?->updated, $read?->created, $differs);
 			return !$differs;
 		}
@@ -591,8 +566,7 @@ final class SyncService {
 		$nameCounts[$basename] = $collision + 1;
 
 		$file = $folder->newFile($candidate, $body);
-		$this->metadata->stampSynced($file->getId(), $uid, $effectiveMode, $version, $body, $mapping->id);
-		$this->tags->apply($file->getId(), $effectiveMode);
+		$this->metadata->stampSynced($file->getId(), $uid, $mapping->mode, $version, $body, $mapping->id);
 		$this->times->apply($file, $read?->updated, $read?->created, true);
 		return false; // a brand-new mirror is always a write
 	}

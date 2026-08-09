@@ -145,15 +145,6 @@ Feature: Deleting a dashboard file
     When I delete it
     Then Grafana is not contacted
 
-  # An ignored file is one the control plane excluded (see reserved-tags.feature).
-  # It is not ours to delete on either side, in either bin model.
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Trashing an ignored file touches nothing in Grafana
-    Given a managed "ignored" dashboard file
-    When I move it to the trash
-    Then Grafana is not contacted
-    And the dashboard still exists in Grafana
-
   # ══ RESTORE EDGE CASES: the world moved while the file sat in the trash ════════
 
   # ══ CHANGES MADE ON THE GRAFANA SIDE ═══════════════════════════════════════════

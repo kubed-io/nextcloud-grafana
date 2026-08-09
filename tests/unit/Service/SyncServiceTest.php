@@ -18,7 +18,6 @@ use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MirrorTimes;
-use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\StorageService;
 use OCA\GrafanaSync\Service\SyncGuard;
@@ -52,7 +51,6 @@ final class SyncServiceTest extends TestCase {
 	private MappingService $mappings;
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
-	private OwnershipTags $tags;
 	private StorageService $storage;
 	private PushService $push;
 	private MirrorTimes $times;
@@ -62,7 +60,6 @@ final class SyncServiceTest extends TestCase {
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->tags = $this->createMock(OwnershipTags::class);
 		$this->storage = $this->createStub(StorageService::class);
 
 		// SyncGuard just brackets work in enter/leave; inert stub is enough.
@@ -83,7 +80,6 @@ final class SyncServiceTest extends TestCase {
 			$this->mappings,
 			$this->grafana,
 			$this->metadata,
-			$this->tags,
 			$this->storage,
 			$guard,
 			$this->push,
@@ -164,7 +160,6 @@ final class SyncServiceTest extends TestCase {
 		$this->metadata->expects(self::once())
 			->method('stampSynced')
 			->with(100, 'd1', Mapping::MODE_SYNC, '5', self::isType('string'), 'map-alpha');
-		$this->tags->expects(self::once())->method('apply')->with(100, Mapping::MODE_SYNC);
 
 		$res = $this->service->pullOne($this->mapping());
 
@@ -502,7 +497,6 @@ final class SyncServiceTest extends TestCase {
 		$this->grafana->method('readDashboardSpec')
 			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board'], 1700, 900));
 
-		$this->tags->expects(self::once())->method('apply')->with(200, Mapping::MODE_LINK);
 		// The point of paying for that GET: a link's clocks are real too.
 		$this->times->expects(self::once())->method('apply')->with(self::anything(), 1700, 900, true);
 

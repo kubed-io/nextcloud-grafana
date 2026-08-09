@@ -51,7 +51,6 @@ final class MotionService {
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
 		private GrafanaClient $grafana,
-		private OwnershipTags $ownershipTags,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -151,7 +150,6 @@ final class MotionService {
 	private function stripIdentity(File $node): void {
 		$this->guard->run(function () use ($node): void {
 			$this->metadata->clear($node->getId());
-			$this->ownershipTags->clear($node->getId());
 		});
 	}
 
