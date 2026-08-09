@@ -15,7 +15,6 @@ use OCA\GrafanaSync\Service\DeleteService;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
-use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
@@ -35,7 +34,6 @@ final class DeleteServiceTest extends TestCase {
 
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
-	private OwnershipTags $tags;
 	private CreateService $create;
 	private RecycleBin $recycleBin;
 	private DeleteService $service;
@@ -43,13 +41,11 @@ final class DeleteServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->tags = $this->createMock(OwnershipTags::class);
 		$this->create = $this->createMock(CreateService::class);
 		$this->recycleBin = $this->createMock(RecycleBin::class);
 		$this->service = new DeleteService(
 			$this->grafana,
 			$this->metadata,
-			$this->tags,
 			$this->create,
 			$this->recycleBin,
 			new SyncGuard(),
@@ -80,7 +76,6 @@ final class DeleteServiceTest extends TestCase {
 		$this->grafana->expects(self::once())->method('deleteDashboard')->with('dash-1');
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->metadata->expects(self::once())->method('clear')->with(5);
-		$this->tags->expects(self::once())->method('clear')->with(5);
 
 		$this->service->softDelete($this->file(5), $this->managed('dash-1'), null);
 	}
@@ -94,7 +89,6 @@ final class DeleteServiceTest extends TestCase {
 			->with(self::callback(fn (array $b): bool => $b['dashboard']->uid === 'dash-1' && ($b['folderUid'] ?? null) === self::BIN_UID))
 			->willReturn(['version' => 4]);
 		$this->metadata->expects(self::never())->method('clear');
-		$this->tags->expects(self::never())->method('clear');
 
 		$this->service->softDelete($this->file(5), $this->managed('dash-1'), self::BIN_UID);
 	}
@@ -104,7 +98,6 @@ final class DeleteServiceTest extends TestCase {
 		// exception propagates and we do NOT strip — the file keeps its identity, reconcilable.
 		$this->grafana->method('deleteDashboard')->willThrowException(new \RuntimeException('grafana down'));
 		$this->metadata->expects(self::never())->method('clear');
-		$this->tags->expects(self::never())->method('clear');
 
 		$this->expectException(\RuntimeException::class);
 		$this->service->softDelete($this->file(5), $this->managed('dash-1'), null);

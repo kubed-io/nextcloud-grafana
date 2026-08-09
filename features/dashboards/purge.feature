@@ -32,10 +32,3 @@ Feature: Purge the app's restorable files from Nextcloud
     And the admin purges the Nextcloud files
     When the admin clicks "Sync from Grafana" for the "alpha" mapping
     Then the dashboard appears again as a file in the "alpha" folder
-
-  # notes: ../AGENTS.md#purge-keeps-an-ignored-file
-  @admin @in-nextcloud @occ @ui @unbuilt
-  Scenario: Purge keeps an ignored file
-    Given a managed "ignored" dashboard file in the "alpha" folder
-    When the admin purges the Nextcloud files
-    Then that ignored file is left in place

@@ -15,7 +15,6 @@ use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MotionService;
-use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -38,19 +37,16 @@ final class MotionServiceTest extends TestCase {
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
 	private GrafanaClient $grafana;
-	private OwnershipTags $tags;
 	private MotionService $service;
 
 	protected function setUp(): void {
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->grafana = $this->createMock(GrafanaClient::class);
-		$this->tags = $this->createMock(OwnershipTags::class);
 		$this->service = new MotionService(
 			$this->mappings,
 			$this->metadata,
 			$this->grafana,
-			$this->tags,
 			new SyncGuard(),
 			new NullLogger(),
 		);
@@ -165,7 +161,6 @@ final class MotionServiceTest extends TestCase {
 		$this->grafana->expects(self::once())->method('deleteDashboard')->with('dash-gone');
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->metadata->expects(self::once())->method('clear')->with(42);
-		$this->tags->expects(self::once())->method('clear')->with(42);
 
 		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
 	}
@@ -182,7 +177,6 @@ final class MotionServiceTest extends TestCase {
 		// file keeps its uid and stays reconcilable (never orphaned, never data-lost).
 		$this->grafana->method('deleteDashboard')->willThrowException(new \RuntimeException('grafana unreachable'));
 		$this->metadata->expects(self::never())->method('clear');
-		$this->tags->expects(self::never())->method('clear');
 
 		$this->expectException(\RuntimeException::class);
 		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
@@ -204,7 +198,6 @@ final class MotionServiceTest extends TestCase {
 		$this->grafana->expects(self::never())->method('deleteDashboard');
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->metadata->expects(self::never())->method('clear');
-		$this->tags->expects(self::never())->method('clear');
 
 		$this->service->onMove($this->file($groupfolderPath), self::SRC_PATH);
 	}
@@ -221,7 +214,6 @@ final class MotionServiceTest extends TestCase {
 
 		$this->grafana->expects(self::never())->method('deleteDashboard');
 		$this->metadata->expects(self::once())->method('clear')->with(42);
-		$this->tags->expects(self::once())->method('clear')->with(42);
 
 		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
 	}

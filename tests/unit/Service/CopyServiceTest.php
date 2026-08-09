@@ -14,7 +14,6 @@ use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
-use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -32,15 +31,13 @@ final class CopyServiceTest extends TestCase {
 	private CreateService $create;
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
-	private OwnershipTags $tags;
 	private CopyService $service;
 
 	protected function setUp(): void {
 		$this->create = $this->createMock(CreateService::class);
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->tags = $this->createMock(OwnershipTags::class);
-		$this->service = new CopyService($this->create, $this->mappings, $this->metadata, $this->tags, new SyncGuard(), new NullLogger());
+		$this->service = new CopyService($this->create, $this->mappings, $this->metadata, new SyncGuard(), new NullLogger());
 	}
 
 	private function mapping(string $mode = Mapping::MODE_SYNC): Mapping {
@@ -57,7 +54,6 @@ final class CopyServiceTest extends TestCase {
 	public function testACopyOutsideAnyMappingStripsIdentityAndDoesNotCreate(): void {
 		$this->mappings->method('resolveForPath')->willReturn(null);
 		$this->metadata->expects(self::once())->method('clear')->with(1);
-		$this->tags->expects(self::once())->method('clear')->with(1);
 		$this->create->expects(self::never())->method('createForFile');
 
 		$this->service->onCopy($this->file(1));
@@ -68,7 +64,6 @@ final class CopyServiceTest extends TestCase {
 		// halves of stripIdentity must still run (metadata + ownership pill cleared).
 		$this->mappings->method('resolveForPath')->willReturn($this->mapping(Mapping::MODE_LINK));
 		$this->metadata->expects(self::once())->method('clear')->with(1);
-		$this->tags->expects(self::once())->method('clear')->with(1);
 		$this->create->expects(self::never())->method('createForFile');
 
 		$this->service->onCopy($this->file(1));
@@ -78,7 +73,6 @@ final class CopyServiceTest extends TestCase {
 		$mapping = $this->mapping(Mapping::MODE_SYNC);
 		$this->mappings->method('resolveForPath')->willReturn($mapping);
 		$this->metadata->expects(self::once())->method('clear')->with(1);
-		$this->tags->expects(self::once())->method('clear')->with(1);
 		// Identity is wiped first, so the created dashboard gets a brand-new uid.
 		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping);
 

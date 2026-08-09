@@ -70,7 +70,6 @@ final class DashboardMetadata {
 
 	/** File-mode values not covered by {@see Mapping} (which only configures sync/link). */
 	public const MODE_UNMAPPED = 'unmapped';
-	public const MODE_IGNORED = 'ignored';
 
 	/**
 	 * The on-the-wire (stored) value for {@see Mapping::MODE_LINK}. `link` itself is

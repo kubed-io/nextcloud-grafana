@@ -49,7 +49,6 @@ final class DeleteService {
 	public function __construct(
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
-		private OwnershipTags $ownershipTags,
 		private CreateService $createService,
 		private RecycleBin $recycleBin,
 		private SyncGuard $guard,
@@ -208,7 +207,6 @@ final class DeleteService {
 	private function stripIdentity(File $node): void {
 		$this->guard->run(function () use ($node): void {
 			$this->metadata->clear($node->getId());
-			$this->ownershipTags->clear($node->getId());
 		});
 	}
 

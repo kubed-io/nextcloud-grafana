@@ -1247,12 +1247,6 @@ Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Comma
 Two intended flows: purge → "Sync from Grafana" (everything reappears), and
 purge → uninstall (Nextcloud looks like the app was never there).
 
-### Purge keeps an ignored file
-
-The in-folder mode-check (ignored stays put) and the untracked-file case are
-covered by the SyncServiceTest unit test; their integration arrange (tagging
-grafana:ignore / a never-tracked file) is left @todo to keep this suite lean.
-
 ## connection/sync-now
 
 `features/connection/sync-now.feature`
@@ -1606,65 +1600,33 @@ Grafana does not break it. Whether the Nextcloud folder should follow is the ope
 question — it is the user's own file tree, and the mapping was created against a
 folder the admin named.
 
-## dashboards/ignore
+## dashboards/ignore — RETIRED (specified, never built, now removed)
 
-`features/dashboards/ignore.feature`
+Two exclude tags were specified here — `nextcloud:ignore` set on a dashboard in
+Grafana, and `grafana:ignore` set on a file in Nextcloud — either of which would
+leave one dashboard out of its mapping. Every scenario was `@unbuilt` or `@todo`.
+No code was ever written for them, and now none will be.
 
-Reserved tags — the optional, per-dashboard EXCLUDE switches. TWO ORIGINS, and
-conflating them is a trap (saga Ch2 Fork H). "Tag" means two entirely different
-systems here:
+WHY, and the n8n sibling is the evidence rather than the argument. It BUILT this
+feature and then removed it whole: `ignored` invented a third state that belonged
+to neither system properly — present in Nextcloud, excluded in the mirror, skipped
+by every sync — and the value leaked into six places that had to know about a mode
+whose only purpose was to opt out. A file in a mapped folder IS the mirrored
+object; that is the premise the app is built on, and `ignored` contradicted it.
 
-  • a NEXTCLOUD tag — Nextcloud's own collaborative/system tag, on a *file*; and
-  • a GRAFANA tag — a string in a dashboard's own `tags` array, on a *dashboard*.
+Here it cost nothing to remove because it was never built, which is the happy
+version of the same lesson: the seams held open for it in `SyncService` (the
+`$ignoredUids` index split, the `$effectiveMode` parameter that could only ever
+be the mapping's mode) are closed, and the pull is a little shorter for it.
 
-The rule: **you tag with the name of the system you're talking TO.**
+WHAT TO DO INSTEAD. Move the file out of the mapped folder — it stops being
+mirrored and stays an ordinary Nextcloud document. That is `dashboards/move.feature`,
+and it is the gesture people actually reach for.
 
-  grafana:ignore    — origin NEXTCLOUD. A Nextcloud tag the admin hand-sets on a
-                      `.grafana.json` FILE (the app's own `grafana:*` namespace,
-                      alongside the automatic `grafana:sync`/`grafana:link` mode
-                      pills). Read on NC tag events → the file's mode becomes
-                      `ignored`: it stays put, keeps its uid, sync skips it, and the
-                      live Grafana dashboard is untouched. Never written to Grafana.
-
-  nextcloud:ignore  — origin GRAFANA. A tag the Grafana admin sets on the DASHBOARD
-                      in Grafana (`nextcloud:` = "addressed to Nextcloud"). Read at
-                      PULL time → that dashboard is never brought into Nextcloud, no
-                      file is created, even inside a mapped folder. Never written by
-                      the app.
-
-One is Nextcloud saying "don't sync this file"; the other is Grafana saying "don't
-pull this dashboard." Both are optional escape hatches — the mapping does everything
-on its own. (Symmetric with the n8n master: `n8n:ignore` on the NC file,
-`nextcloud:ignore` on the workflow — so the shared base gets one two-axis model.)
-
-NO ARCHIVE (saga Ch2 Round 2): the master archives an ignored resource. Our
-ingredient has no reachable archive, so `ignored` just means "skip it in sync" — the
-dashboard is left fully LIVE in Grafana (fork F, leaning).
-
-DESIGN, NOT WIRED: this feature is @todo — CI skips it — until the pull engine +
-reserved-tag resolver are cooked.
-── STATUS: THE SEAM IS LIVE, THE ORIGIN IS NOT ──────────────────────────────────
-
-`SyncService::pullOne` already skips any file whose mode is `ignored`, and the
-comment there is explicit: *"No origin sets `ignored` in this course yet; the seam
-is here for the reserved-tag course."* So the app can HONOUR the exclusion and has
-no way to ACQUIRE it — nothing reads a reserved tag, on either side.
-
-That split is why these are @unbuilt rather than @todo. The one behaviour that is
-genuinely built (the pull leaving an already-ignored file alone) is stated as its
-own scenario at the bottom, tagged @todo, so the work queue tells the truth.
-
-NOTE ON THE TWO TAG NAMESPACES. `grafana:sync`/`grafana:link`/`grafana:unmapped`
-are MODE pills the app writes and owns (OwnershipTags) — they are built. The
-`grafana:ignore` marker here is user-set and read-only from the app's side, and
-`nextcloud:ignore` is its Grafana-side counterpart. Content tags are a third thing
-again, and none of that is built either (tag-sync.feature).
-
-### A file already marked ignored is left alone by the pull
-
-The one leg that IS built: the pull leaves an already-ignored file strictly
-alone rather than writing a second, collision-suffixed copy beside it. Nothing
-sets the mode yet, so the arrangement has to stamp it directly.
+NOT TO BE CONFUSED WITH the `grafana` FOLDER tag (`folders/create.feature`), which
+is very much alive and is the opposite kind of thing: it marks a subfolder as one
+that should exist in Grafana, and a user assigning it by hand is how a folder opts
+IN. See `the grafana: namespace` note below for why one survived and four did not.
 
 ## dashboards/restore
 
@@ -1827,6 +1789,54 @@ came back, and what came back with a different identity — is @unbuilt: nothing
 The aggregate gap, same shape as the one in delete-folder.feature: each file is
 restored correctly and nobody is told what the gesture cost. Under bin-off that
 cost is every uid in the folder.
+
+## the grafana: namespace — RETIRED ENTIRELY
+
+The app wrote three pills on every managed file, one per mode: `grafana:sync`,
+`grafana:link`, `grafana:unmapped`. They are gone, along with `grafana:ignore`
+and `nextcloud:ignore`, which were specified and never built.
+
+WHY. The MAPPING decides a file's mode and the file's own `grafana_mode` metadata
+records it — which is what every code path actually reads. The pill was a second
+copy of that truth: kept in lockstep by the app, editable by nobody, load-bearing
+for nothing. `OwnershipTags` existed only to keep the copy honest.
+
+AND IT WOULD HAVE BEEN THE EXPENSIVE COPY. Tag sync is not built here yet
+(`dashboards/tags.feature` is entirely `@unbuilt`), so unlike the n8n sibling
+there was no reserved-namespace filter to dismantle — but there would have been,
+and the sibling shows exactly what it costs: an exclusion woven through
+`contentTags()`, the merge inputs, the baseline stamp, the body writeback and a
+listener gate, all of it there only because the app put its own tags on the same
+files as the user's. Removing the pills BEFORE building tag sync means that
+filter never gets written.
+
+THE UPGRADE IS A DELETION. Once dashboard tags sync, a leftover `grafana:sync`
+pill is an ordinary tag on a mirrored file and would be PUSHED TO GRAFANA —
+seeding every dashboard with a tag nobody chose. `Migration\RemoveModePills`
+deletes the five retired DEFINITIONS once, which removes them from every file at
+once and leaves the namespace empty before anything can read it as content.
+
+Deleting a tag definition is something this app otherwise refuses to do: a catalog
+is shared, and a definition may be pinned on files it knows nothing about. These
+are the exception because the app minted them and no human chose them.
+
+## THE `grafana` FOLDER TAG IS NOT ONE OF THESE, AND IT STAYS
+
+It is worth being explicit, because they are all system tags and the distinction
+is the whole point:
+
+  · a MODE PILL echoes metadata the app already owns. Nobody can edit it, nothing
+    reads it, and removing it loses nothing.
+  · the `grafana` FOLDER TAG is the only record that a folder is MEANT to be a
+    Grafana folder, and assigning it by hand is how a user opts a folder in. It
+    starts things; the `grafana_folderUid` that follows is what lookups read.
+
+The penpot sibling settled this shape first (`penpot` on a project folder, marker
+AND opt-in, non-authoritative once the id lands) and it is the right one for us:
+penpot has teams → projects, and Grafana is recursive, so every folder BELOW a
+mapped root is the analogue of a project. The mapped root itself needs no tag —
+it is the mapping. n8n has no analogue at all, because n8n has no folders: it
+fakes structure with tags, which is why its mapping IS a tag.
 
 ## dashboards/tags
 
@@ -2012,22 +2022,6 @@ behaviour and the second is a fact about our queue. What is worth stating is
 that the file's own two surfaces still track each other with no remote system
 involved, which is a real behaviour and the reason a tag applied out here
 survives until the file is moved back into a mapping.
-
-### A reserved grafana: tag never becomes a Nextcloud content tag
-
-THE RULE OF EQUALITY has exactly one exclusion: the app's reserved namespace
-`grafana:*` (`grafana:sync`, `grafana:link`, `grafana:unmapped`,
-`grafana:ignore`, and any future control tag). Reserved tags are the app's
-control plane — never pushed into Grafana, never imported from Grafana as
-content.
-
-Stated as a tag CHANGE (someone puts `grafana:sync` on the dashboard in
-Grafana) rather than as an end state of a sync, because that is the moment the
-exclusion has to hold. The MODE PILL is a different object wearing a similar
-name, and the last line says so: importing the string must not disturb the pill
-the app maintains. What the reserved tags then DO is `dashboards/ignore.feature`'s
-subject, and the opposite direction — the app never writing one INTO Grafana —
-is already a scenario there.
 
 ### tags.feature — WHAT WAS RETIRED, AND WHY
 

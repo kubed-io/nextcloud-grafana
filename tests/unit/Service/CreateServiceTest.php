@@ -13,7 +13,6 @@ use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
-use OCA\GrafanaSync\Service\OwnershipTags;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use OCP\Files\IMimeTypeLoader;
@@ -36,17 +35,15 @@ use Psr\Log\NullLogger;
 final class CreateServiceTest extends TestCase {
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
-	private OwnershipTags $tags;
 	private CreateService $service;
 
 	protected function setUp(): void {
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->tags = $this->createMock(OwnershipTags::class);
 		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
 		$mimeLoader->method('getId')->willReturn(1);
 		// A real SyncGuard: run() executes the callback (brackets it in enter/leave).
-		$this->service = new CreateService($this->grafana, $this->metadata, $this->tags, new SyncGuard(), $mimeLoader, new NullLogger());
+		$this->service = new CreateService($this->grafana, $this->metadata, new SyncGuard(), $mimeLoader, new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-demo', string $id = 'map-demo'): Mapping {
@@ -74,7 +71,6 @@ final class CreateServiceTest extends TestCase {
 		// Loop-guard hash = sha1 of the ORIGINAL bytes; mode + version stamped.
 		$this->metadata->expects(self::once())->method('stampSynced')
 			->with(1, 'new-uid', Mapping::MODE_SYNC, '1', $content, 'map-demo');
-		$this->tags->expects(self::once())->method('apply')->with(1, Mapping::MODE_SYNC);
 
 		$uid = $this->service->createForFile($this->file(1, $content), $this->mapping());
 
