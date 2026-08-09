@@ -1765,6 +1765,50 @@ then left alone.
 > turn the crate over. It's been on there the whole time; you've been reading the wrong
 > side of the box."*
 
+### Course 9 prepped — **Reading the Label Before You Cook It** *(no PR: a finding)*
+
+Before rewriting the tag spec we asked a question that had been assumed for
+months: *does a mirrored dashboard file actually carry its tags?* The answer
+decides whether tag sync has two surfaces or three, and the whole shape of the
+feature hangs off it.
+
+We nearly answered it from the MCP tool, which returns a tidy `$.tags` for any
+dashboard. Dr K's objection was that the tool **transforms objects** — it hands
+you a normalised view, not the bytes. An answer from a normaliser is an answer
+about the normaliser.
+
+So we read the real thing: the live mirrors in Nextcloud, through Nextcloud's
+own file API, off the S3 primary storage where this instance actually keeps
+them. Two files, two mappings, both formats represented:
+
+    nxt-fun/Welcome to nxt-fun.grafana.json    143 bytes    tags: ["smoke"]
+    observe/Node Exporter Full.grafana.json    682 KB       tags: ["linux"]
+
+`tags` is a TOP-LEVEL KEY in the mirrored body, sitting beside `title`, `uid`
+and `panels`. Which is exactly what the code says if you read it rather than
+remember it: `DashboardBody::VOLATILE` is `['id', 'version']` — those two are
+stripped and **nothing else** — so a sync file is the dashboard spec entire,
+tags included. The `link` pointer carries them too, by name, on purpose.
+
+WHY THIS MATTERS BEFORE WE BUILD. It confirms the third surface is real, so the
+spec keeps its file-edit direction. And it confirms the thing that makes us the
+EASIER kitchen than the master's: our tags are **body-native**, so a tag change
+IS a body change and rides the upsert we already ship. n8n cannot do that — its
+API marks `tags` read-only on the workflow object and forces a separate
+`PUT /workflows/{id}/tags`, with a hash re-stamp to stop the write chasing its
+own tail. We inherit the recipe and skip the hardest step in it.
+
+What Grafana does NOT have is a tag CATALOG — no ids, no `/api/tags`; a tag
+exists exactly while some dashboard carries the string. So there is nothing to
+sweep on our side of the pass, and the sibling's id-resolution work has no
+analogue here at all.
+
+> **Dr K, turning the crate over again:** *"You had two answers and you liked the
+> quick one. The tool tells you what it thinks you meant; the plate tells you what
+> the guest gets. Read the plate. And notice what you found — the master had to
+> send the labels out on a separate ticket because his supplier wouldn't print
+> them on the box. Yours are printed on the box. Don't build his workaround."*
+
 ---
 
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dashboard tags are specified end to end: change them in Nextcloud, in the file, or in Grafana and the other two follow. Not built yet.
+
 - **The scheduled sync now actually runs.** "Grafana → Nextcloud: scheduled sync" and its interval have been in Sync Settings all along and nothing read either of them, so turning the schedule on did nothing at all, forever. There is now a background job behind it.
 - **A dashboard file's dates are now the dashboard's own dates.** "Modified" shows when the dashboard last changed in Grafana and "Created" when it was created there, instead of both showing when a sync happened to run — so sorting a mapped folder by date sorts by the dashboards, and one nobody has touched in a year finally looks like it.
 - **Three-way rename**: for a sync file the filename stem, the JSON `title`, and the Grafana dashboard title stay in agreement — rename the file or edit the title, and the other two follow. Stable on the uid, so no rename breaks the link.

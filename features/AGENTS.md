@@ -1838,7 +1838,7 @@ tags are kept as ONE set, so the mirror is as searchable as Grafana.
 Imported from the finalized n8n sibling (nextcloud-n8n Chapter 5 §5.6 — the
 TagMerge / TagSyncService / ContentTagListener / ReconcileTagsJob engine + the
 *_syncedTags baseline) and re-cut for Grafana's ingredient. DESIGN, NOT WIRED:
-the whole feature is @todo — CI skips it — until (1) the sibling's tag PR merges
+the whole feature is @unbuilt — CI skips it — until (1) the sibling's tag PR merges
 (we port the engine as our base) and (2) the file-lifecycle mode machine (Course 4)
 lands, since tag sync scopes itself to mapped files and no-ops on unmapped/ignored.
 
@@ -1849,6 +1849,11 @@ Two label systems, made equal (minus our control tags):
                      catalog: a tag exists exactly when some dashboard carries the
                      string, and writing tags = upserting the dashboard. Folders
                      have no tags.
+                     VERIFIED ON THE LIVE MIRRORS, not assumed (saga Course 9):
+                     `tags` is a top-level key in the mirrored file, beside
+                     `title`/`uid`/`panels`, in both a 143-byte dashboard and a
+                     682 KB one. `DashboardBody::VOLATILE` strips `id` and
+                     `version` and nothing else, so the file IS the spec entire.
   • Nextcloud tags — collaborative SYSTEM TAGS (the coloured pills in Files,
                      searchable via DAV REPORT).
 
@@ -1932,34 +1937,179 @@ single largest correction in the tag makeover.
 The `grafana:*` MODE pills are a different thing and they ARE built — see
 reserved-tags.feature for the boundary between the two.
 
-### Editing a pill updates the file body's tags array (body is canonical)
+### Applying a set of tags is one gesture
 
-── the body↔pills projection (surface 2, n8n "Slice B") — DEFERRED ────────────
-The sibling attempted Slice B (body canonical for tags) and REVERTED it: a
-body-canonical push regressed its pill-driven mapping push. That regression is
-n8n-shaped (its body PUT drops tags; its mapping is a tag) and has no Grafana
-analogue — but the body↔pills loop safety (pill listener vs body-write listener
-must not chase each other) is real, so we defer surface 2 too until the mode
-machine is in and it's verified live. The body-reconcile engine stays dormant.
-These scenarios pin the target; the whole feature is @todo regardless.
+── RULE: A TAG CHANGE IS A NEW SET, NOT A POKE ─────────────────────────────
 
-### An unchanged dashboard is skipped by the pull
+This file used to spell out a scenario per direction per operation: a pill
+added, a pill removed, a body tag added, a body tag removed, a Grafana tag
+added, a Grafana tag removed. They were six sentences for one rule. Nobody adds
+a tag; a person edits a list and saves it, and whether that list gained or lost
+an entry is a property of the VALUES, not of the behaviour. So the gesture is
+"the tags are now THIS", the add/subtract cases are rows of an `Examples`
+table, and the combinations that were never reachable before — replace the
+whole set, empty it, tag a dashboard that had none — cost a row instead of a
+scenario.
 
-── pull change-detection: only write what changed (a branch shorter than n8n) ──
-THE BODY HALF IS BUILT (Course 7): a mirror whose bytes already match Grafana is
-not rewritten. What keeps these two `@unbuilt` is the TAG half — there is no
-content tag-sync code in `lib/` at all, so no scenario here can pass yet.
+THE PURELY-NUMERIC TAG IS NOW A ROW, not a scenario. `2024` had one of its own
+because the sibling was bitten by it (a numeric string silently cast to an int
+array key by a merge that keys on tag names). That is a value, and values
+belong in the Examples table; if the coercion came back the row's set assertion
+fails, which is the whole point. The old scenario also carried "and the tag is
+a string, not coerced to a number", which asserts a PHP type rather than
+anything a person can see.
 
-The body-only claim — "a run over an unchanged folder rewrites nothing" — is not
-a tag behaviour and does not wait on tags. It no longer has a scenario anywhere:
-it asserted an mtime about the reconciler, and neither is a behaviour (see
-`sync-now.feature`'s notes). Do not restate it here either.
+THE SURFACES ARE THREE SCENARIOS, NOT THREE ROWS, and that is a rule from
+`.github/instructions/gherkin.instructions.md` rather than a preference: origin
+is exclusive, so a scenario is `@in-nextcloud` or `@in-grafana` and never both,
+and `Examples` rows must be one rule over different inputs. A pill edit and a
+Grafana edit are different rules with different payoffs. The surface is the
+scenario; the set is the input.
 
-Note what makes the skip possible at all, because it is a Grafana-specific gift:
-`DashboardBody::VOLATILE` strips `id` and `version`, the two fields Grafana
-rewrites on every save. Without that the spec would differ on every read and
-there would be nothing to skip. A tag change lives in the body, so it IS a body
-difference — which is the branch n8n needs and we do not.
+THREE SURFACES, THREE SENTENCES. The payoff is not one step asserting "in
+Grafana and in Nextcloud" — that reads as one sentence containing an "and" and
+is really three checks wearing one name. A settled tag change means the tags
+are on the Nextcloud pills, in the file, and in Grafana, so every scenario says
+that in three lines and a failure names the surface that drifted.
+
+WHY NO `When the mapping is pulled` SURVIVES IN THIS FILE. Nobody changes a tag
+in order to run a reconcile. Grafana emits no outbound event, so a pull is
+simply HOW the news of a Grafana-side change arrives — mechanism, not
+behaviour, and a spec written on it has to be rewritten every time the plumbing
+moves. It belongs inside the gesture. The same reasoning retires every
+`is pushed` / `is reconciled` step and the `catalog sweep` scenario, whose only
+action was "the sweep ran".
+
+AND NO TIMING. Whether the writeback runs during the request or on the worker's
+next tick is a knob in our plumbing, not something a person does; both settings
+end in the same place, which is the only thing the spec has an opinion about.
+The `sync`/`async` scenarios and the queued-job assertions are gone with it.
+
+### Changing the tags on a link does not change them in Grafana
+
+A link is a READ-ONLY projection of Grafana's tags: the pills are there so you
+can search, but Grafana is the only writer. A tag added on a link never pushes,
+and because a link has no push channel that stray tag would linger forever — so
+the next sync wipes it, mirroring Grafana exactly. Both halves are one rule and
+one scenario; split, the first half is a scenario whose only claim is that
+nothing happened.
+
+Searchability is asserted here rather than in a scenario of its own. It is the
+POINT of mirroring tags at all, and a link is the strongest place to say it:
+the file holds no dashboard, so its tags are the only thing making it findable.
+
+### Changing the tags on a file the mapping does not own
+
+SCOPE — TAG SYNC IS A MAPPED-FILE FEATURE. An `unmapped` or an `ignored` file is
+a plain Nextcloud file: its pills are ordinary system tags with no Grafana side
+effect, so the listener and the reconcile must no-op on it. The two states are
+one rule over two inputs, which is what an `Examples` column is for — they used
+to be two scenarios differing only in how the file stopped being owned.
+
+WRITTEN AS A POSITIVE, deliberately. The old pair asserted "no tag push is
+triggered" and "no tag-reconcile job is queued" — the first is the absence of a
+behaviour and the second is a fact about our queue. What is worth stating is
+that the file's own two surfaces still track each other with no remote system
+involved, which is a real behaviour and the reason a tag applied out here
+survives until the file is moved back into a mapping.
+
+### A reserved grafana: tag never becomes a Nextcloud content tag
+
+THE RULE OF EQUALITY has exactly one exclusion: the app's reserved namespace
+`grafana:*` (`grafana:sync`, `grafana:link`, `grafana:unmapped`,
+`grafana:ignore`, and any future control tag). Reserved tags are the app's
+control plane — never pushed into Grafana, never imported from Grafana as
+content.
+
+Stated as a tag CHANGE (someone puts `grafana:sync` on the dashboard in
+Grafana) rather than as an end state of a sync, because that is the moment the
+exclusion has to hold. The MODE PILL is a different object wearing a similar
+name, and the last line says so: importing the string must not disturb the pill
+the app maintains. What the reserved tags then DO is `dashboards/ignore.feature`'s
+subject, and the opposite direction — the app never writing one INTO Grafana —
+is already a scenario there.
+
+### tags.feature — WHAT WAS RETIRED, AND WHY
+
+Twenty-three scenarios became six. Nothing was deleted for being wrong about
+the app; every entry below was a duplicate, a mechanism, another file's
+business, or a test of something nobody has written.
+
+MECHANISM AS THE ACTION — the largest group, and the rule they broke is the
+oldest one in `gherkin.instructions.md`: describe behaviour, not
+implementation. `When the "flows" mapping is pulled` / `is pushed` /
+`is reconciled` / `When an admin runs the optional catalog sweep`. Where a real
+gesture sat underneath, the sync was folded into it; where the sync WAS the
+scenario, it went.
+
+  · Push writes Nextcloud content tags into Grafana (sync only)
+  · A link file never pushes its tags to Grafana
+  · Editing the file body's tags array updates the pills and pushes to Grafana
+  · Removing a tag from the file body's tags array removes the pill and the tag
+  · A tag added in Nextcloud since the last sync is added in Grafana
+  · A tag removed in Grafana since the last sync is removed in Nextcloud
+  · Independent changes on both sides both survive a reconcile
+  · An add on one side and an unrelated remove on the other both apply
+  · A genuine conflict falls to the reconcile's direction of truth
+  · Reconcile never mints a definition it is about to drop
+
+TIMING AND QUEUES — our plumbing, described out loud.
+
+  · Adding a pill pushes the tag to Grafana immediately when timing is "sync"
+  · Adding a pill queues the tag push when timing is "async"
+  · Removing a pill removes the tag from Grafana on its own
+
+END STATE OF SOMETHING ELSE. A mirror wearing its dashboard's tags is what a
+SYNC leaves behind, not a tag change, so it is asserted where the sync lives:
+`connection/sync-now.feature` gains a scenario whose Grafana folder table
+carries a `tags` column and whose Then reads the mirror.
+
+  · Pull mirrors Grafana tags onto the Nextcloud file as system tags
+  · Pull mirrors tags even for a link mapping (searchability, not push)
+  · The reserved namespace is never imported as a content tag  (kept, restated
+    as a change made in Grafana)
+
+TESTING SOMETHING NOBODY WROTE. Grafana has NO tag catalog — a tag is a string
+that exists exactly while some dashboard carries it — so there is nothing to
+sweep on that side, and on the Nextcloud side no code deletes a system-tag
+definition, by design (a definition may be pinned on files this app knows
+nothing about). A scenario asserting a definition survived was asserting the
+absence of a feature, and mostly testing Nextcloud.
+
+  · A dropped tag is pruned from the mirror edge, not from the shared catalog
+  · The optional catalog sweep keeps any tag still used, and is NC-side only
+
+The sweep design — an explicit, opt-in `occ` command, dry-run first, never on
+the reconcile hot path, Nextcloud-side only — stays recorded above. It gets
+scenarios when it gets code.
+
+WHY THE SKIP IS POSSIBLE AT ALL, kept from the change-detection section that
+went with its scenarios: `DashboardBody::VOLATILE` strips `id` and `version`,
+the two fields Grafana rewrites on every save. Without that a mirror would
+differ from Grafana on every read and there would be nothing to skip. A tag
+change lives in the body, so it IS a body difference — which is the extra branch
+the n8n sibling needs and we do not.
+
+THE MERGE. The `grafana_syncedTags` baseline and its three-way merge are real
+design and stay documented above; what they do not get is scenarios, because
+every scenario that pinned them was an outline row with an extra `Given` that
+PERFORMED A GESTURE. The merge runs on every row of every outline already. Its
+one genuinely distinct case — the same tag added on one side and removed on the
+other, resolved by the reconcile's direction of truth — has no user gesture that
+distinguishes a pull from a push, so it is a note here rather than a scenario,
+and it belongs to whatever unit tests the merge when it is built.
+
+### A sync leaves the mirror wearing the dashboard's tags
+
+Lives in `connection/sync-now.feature`, not here, and the distinction is the
+whole point of the makeover: NOBODY CHANGED A TAG. This is what a first sync
+leaves behind, so it is asserted where the sync is, in the same shape as the
+other end states that file already pins (the mirror's name, its uid, its mode,
+its dates).
+
+The seeded Grafana folder carries an ordinary tag on purpose. With only an
+untagged dashboard the assertion would pass on a mirror that imported no tags
+whatsoever, which is exactly the regression it exists to catch.
 
 ## uninstall
 
