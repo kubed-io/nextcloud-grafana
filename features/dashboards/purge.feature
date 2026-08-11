@@ -1,34 +1,101 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#dashboardspurge
 
-Feature: Purge the app's restorable files from Nextcloud
-  As a Nextcloud admin
-  I want a button that removes the dashboard files this app created
-  So that I can reset the Nextcloud side without ever touching Grafana or losing standalone files
+Feature: Emptying the trash
+  As a Nextcloud user
+  I want emptying the trash to finish the delete on both sides
+  So that a purged file leaves nothing behind, and takes nothing else with it
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a folder "Scratch" that is not mapped
 
-  @admin @in-nextcloud @occ @ui @todo
-  Scenario: Purge deletes the synced file but leaves its dashboard in Grafana and the mapping intact
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the admin purges the Nextcloud files
-    Then no managed dashboard files remain in the "alpha" folder
-    And the dashboard still exists in Grafana
-    And the "alpha" mapping is still configured
+  # notes: ../AGENTS.md#the-mappings-in-the-background
 
-  @admin @in-nextcloud @occ @ui @todo
-  Scenario: Purge keeps an unmapped file — a standalone copy is never lost
-    Given an unmapped dashboard file that still carries its "grafana_uid"
-    And I remember the unmapped file
-    And a managed "sync" dashboard file in the "alpha" folder
-    When the admin purges the Nextcloud files
-    Then no managed dashboard files remain in the "alpha" folder
-    And the remembered file is left in place
+    # ── RULE: the purge finishes whatever the trash gesture started ────────────
+    # notes: ../AGENTS.md#the-recycle-bin-folder
 
-  @admin @in-grafana @occ @ui @todo
-  Scenario: Sync from Grafana brings the file back after a purge
-    Given a managed "sync" dashboard file in the "alpha" folder
-    And the admin purges the Nextcloud files
-    When the admin clicks "Sync from Grafana" for the "alpha" mapping
-    Then the dashboard appears again as a file in the "alpha" folder
+  # notes: ../AGENTS.md#emptying-the-trash-for-a-bin-off-file-touches-nothing-in-grafana
+  @user @in-nextcloud @gesture @ui @recycle-bin
+  Scenario: Empty the trash with the recycle bin off
+    Given the Grafana recycle-bin folder is off
+    And a dashboard file in "Demo"
+    And the file is in the Nextcloud trash
+    When I purge it from the trash
+    Then the file is gone from the Nextcloud trash
+    And the dashboard is still absent from Grafana
+
+    # The dashboard went when the file was trashed, so there is nothing left to do.
+
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: Empty the trash with the recycle bin on
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a dashboard file in "Demo"
+    And the file is in the Nextcloud trash
+    And its dashboard is parked in "nextcloud-trash"
+    When I purge it from the trash
+    Then that file's dashboard is permanently deleted from Grafana
+    And the file is gone from the Nextcloud trash
+
+    # ── RULE: a purge reaches exactly one dashboard — the purged file's ───────
+
+  # notes: ../AGENTS.md#a-purge-never-clears-the-bin-folder-wholesale
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: Empty the trash for one file while others are parked
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a dashboard file in "Demo"
+    And the file is in the Nextcloud trash
+    And its dashboard is parked in "nextcloud-trash"
+    And "nextcloud-trash" also holds dashboards Nextcloud never managed
+    When I purge it from the trash
+    Then that file's dashboard is permanently deleted from Grafana
+    And the dashboards Nextcloud never managed are still in "nextcloud-trash"
+
+    # ── RULE: the purge deletes what is in the bin, and only that ─────────────
+    # notes: ../AGENTS.md#the-purge-deletes-what-is-in-the-bin-and-only-that
+
+  @user @in-nextcloud @gesture @ui @recycle-bin
+  Scenario Outline: Empty the trash when the dashboard is not in the bin
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a dashboard file in "Demo"
+    And the file is in the Nextcloud trash
+    And its dashboard is <where>
+    When I purge it from the trash
+    Then the file is gone from the Nextcloud trash
+    And the dashboard is as it was before the purge
+
+    Examples: two ways to get here, and the purge cannot tell them apart
+      | where                                |
+      | back in the "demo" Grafana folder    |
+      | gone from Grafana entirely           |
+
+    # ── RULE: emptying the bin in Grafana finishes the delete from that side ──
+    # notes: ../AGENTS.md#emptying-the-bin-in-grafana-finishes-the-delete
+
+  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  Scenario: Empty the bin folder in Grafana
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a dashboard file in "Demo"
+    And the file is in the Nextcloud trash
+    And its dashboard is parked in "nextcloud-trash"
+    When someone empties the "nextcloud-trash" folder in Grafana
+    Then the file is gone from the Nextcloud trash
+
+    # The purge came from the other side, and it is the same purge: the dashboard is
+    # gone for good, so the trashed mirror has nothing left to be restored to.
+
+  # notes: ../AGENTS.md#a-purge-that-cannot-reach-grafana-clears-the-file-without-deleting-anything
+  @user @in-nextcloud @gesture @ui @recycle-bin @blocked
+  Scenario: Empty the trash while Grafana is unreachable
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
+    And Grafana is unreachable
+    When I purge it from the trash
+    Then no dashboard is deleted in Grafana
+    And the file is gone from the Nextcloud trash
+
+    # Cannot prove it is still parked, so do not delete — the reasoning is in the
+    # notes above.

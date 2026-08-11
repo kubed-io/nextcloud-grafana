@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Internal: a Background could only ever declare one folder mapping — a second one silently replaced the first (no behaviour change; test harness only).
 - The Sync Settings checkboxes could never be saved. The recycle-bin one is the serious half: it silently reverting meant every trashed dashboard was permanently deleted in Grafana, which has no undo.
 - Emptying the Nextcloud trash never deleted parked dashboards, so Grafana kept them forever.
 - A sync no longer marks every dashboard file as modified.

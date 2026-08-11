@@ -1,188 +1,162 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#dashboardsmove
 
-Feature: Moving a dashboard file mirrors the move in Grafana
+Feature: Moving a dashboard file
   As a Nextcloud user
-  I want moves to mirror correctly in Grafana without ever losing a dashboard's content
-  So that relocating a file behaves predictably and safely
+  I want a move to mean the same thing in Grafana
+  So that relocating a file never duplicates a dashboard or silently desyncs one
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
-    And a folder mapped as "sync" to the Grafana folder "beta"
-    And a folder mapped as "link" to the Grafana folder "links"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a mapping with the following values:
+      | grafana folder | reports |
+      | nc folder      | Reports |
+      | mode           | sync    |
+    And a mapping with the following values:
+      | grafana folder | links    |
+      | nc folder      | Pointers |
+      | mode           | link     |
+    And a folder "Scratch" that is not mapped
+    And a Grafana folder "Archive" that is not mapped
 
-  # ── 1. within the same mapping: only the name ────────────────────────────────────
+  # notes: ../AGENTS.md#the-mappings-in-the-background
+
+    # ── RULE: a subfolder holding a dashboard is a Grafana folder too ─────────
+
+  # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Move a dashboard into a subfolder of its mapping
+    Given a dashboard file in "Demo"
+    And a folder "Demo/Team/Drafts" holding no dashboards
+    When I move the file into "Demo/Team/Drafts"
+    Then Grafana holds "Team" under "demo", and "Drafts" under "Team"
+    And the dashboard is in the "Drafts" Grafana folder
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | the mapping's mode  |
+
+    # @unbuilt — THIS IS THE SPEC, AND THE APP DOES THE OPPOSITE TODAY: a subfolder
+    # is local-only and the dashboard stays put in the mapping's Grafana folder.
+
+    # ── RULE: leaving a mapping, and what the recycle bin makes of it ──────────
+    # notes: ../AGENTS.md#the-recycle-bin-folder
+
+  @user @in-nextcloud @gesture @ui @recycle-bin
+  Scenario: Move a dashboard out of its mapping with the recycle bin off
+    Given the Grafana recycle-bin folder is off
+    And a dashboard file in "Demo"
+    When I move the file into "Scratch"
+    Then the dashboard no longer exists in Grafana
+    And the file holds no Grafana metadata at all
+    And the full dashboard JSON is still in the Nextcloud file
+
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  Scenario: Move a dashboard out of its mapping with the recycle bin on
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And a dashboard file in "Demo"
+    When I move the file into "Scratch"
+    Then the dashboard is in the "nextcloud-trash" Grafana folder
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | absent              |
+      | grafana_mode    | "unmapped"          |
+    And the full dashboard JSON is still in the Nextcloud file
+
+    # It keeps the uid because nothing was truly deleted — the dashboard is parked,
+    # and moving the file back into a mapping is what brings it out again.
+
+    # ── RULE: a link is read-only, so it does not travel ───────────────────────
+
+  # notes: ../AGENTS.md#a-link-cannot-be-deleted-from-nextcloud
+  @user @in-nextcloud @gesture @ui
+  Scenario: Move a link out of its mapping
+    Given a dashboard file in "Pointers"
+    When I try to move the file into "Scratch"
+    Then the move is refused with a message
+    And the file stays in "Pointers"
+
+  # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario Outline: Move a dashboard between sync and link folders
+    Given a dashboard file in "<source>"
+    When I try to move the file into "<destination>"
+    Then the move is refused with a message
+    And the file stays in "<source>"
+
+    Examples: a mode is a property of the folder, and a move may not change one
+      | source   | destination |
+      | Demo     | Pointers    |
+      | Pointers | Demo        |
+
+    # ── RULE: arriving in a mapping — the same dashboard, or a new one ─────────
 
   @user @in-nextcloud @gesture @ui
-  Scenario: Moving/renaming within the same mapping keeps it managed
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I rename the file within the "alpha" folder
-    Then the file stays in "sync" mode under the "alpha" mapping
-    And nothing changes in Grafana except the name
-
-  # notes: ../AGENTS.md#moving-into-an-untagged-subfolder-is-local-only-stays-bound-to-the-parent
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Moving into an untagged subfolder is local-only (stays bound to the parent)
-    Given an untagged subfolder of the "alpha" folder
-    And a managed "sync" dashboard file in the "alpha" folder
-    When I move the file into a Nextcloud subfolder of the "alpha" folder
-    Then the file stays fully managed in "sync" mode under the "alpha" mapping
-    And it keeps its "grafana_uid", "grafana_mapping", and "grafana_folderUid" pointing at the "alpha" folder
-    And nothing changes in Grafana — the subfolder is local Nextcloud organization only
-
-  # ── 2. mapped → mapped: a real Grafana folder move, UID preserved ─────────────────
+  Scenario: Move an unmapped file into a mapping
+    Given a dashboard file in "Scratch"
+    When I move the file into "Demo"
+    Then a matching dashboard is created in Grafana
+    And the dashboard is named after the file, in the "demo" Grafana folder
+    And the file holds:
+      | grafana_uid     | set                |
+      | grafana_mapping | the mapping's id   |
+      | grafana_mode    | the mapping's mode |
 
   @user @in-nextcloud @gesture @ui @todo
-  Scenario: Moving a sync file from one mapped folder to another moves the dashboard's Grafana folder
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I move the file into the "beta" folder
-    Then the dashboard's Grafana folder becomes the "beta" folder
-    And the dashboard keeps the same "grafana_uid"
-    And the file re-stamps "grafana_mapping" to "beta" and "grafana_folderUid" to the "beta" folder
+  Scenario: Move a dashboard from one mapping to another
+    Given a dashboard file in "Demo"
+    When I move the file into "Reports"
+    Then the dashboard is in the "reports" Grafana folder
     And the dashboard is not deleted or recreated
-
-  # ── 3. mapped → unmapped: DELETE in Grafana, strip identity (BIN OFF, default) ────
-
-  @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario: Moving a sync file out of every mapping deletes it in Grafana and strips the file's identity
-    Given the Grafana recycle-bin folder is off
-    And a managed "sync" dashboard file in the "alpha" folder
-    When I move the file to a folder that is not mapped
-    Then the dashboard is deleted in Grafana
-    And the file's Grafana identity is stripped of "grafana_uid" and "grafana_mapping"
-    And the full dashboard JSON is still in the Nextcloud file
-    And the file is now a plain, untracked ".grafana.json"
-
-  @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario: Moving that stripped file back into a mapping creates a brand-new dashboard
-    Given the Grafana recycle-bin folder is off
-    And a plain ".grafana.json" file whose Grafana identity was stripped, outside any mapping
-    When I move the file into the "beta" folder
-    Then a brand-new dashboard is created in Grafana from the file's JSON body
-    And it is created in the "beta" folder with a NEW "grafana_uid"
-    And the file's mode becomes "sync" under the "beta" mapping
-
-  # ── 3'. mapped → unmapped WITH the recycle-bin folder on: MOVE to bin, UID kept ───
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | the mapping's mode  |
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: With the recycle-bin folder on, moving a sync file out parks the dashboard in the bin (UID kept)
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a managed "sync" dashboard file in the "alpha" folder
-    When I move the file to a folder that is not mapped
-    Then the dashboard is moved into the "nextcloud-trash" Grafana folder and not deleted
-    And the file KEEPS its "grafana_uid", because it was not a true delete
-    And the file's mode becomes "unmapped"
-    And the full dashboard JSON is still in the Nextcloud file
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: With the recycle-bin folder on, moving a parked file back into a mapping restores it (same UID)
+  Scenario: Move a file back into a mapping while its dashboard sits in the bin
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And an unmapped dashboard file whose Grafana dashboard is parked in the "nextcloud-trash" folder
-    When I move the file into the "beta" folder
-    Then the dashboard is moved out of "nextcloud-trash" into the "beta" folder
+    When I move the file into "Reports"
+    Then the dashboard is in the "reports" Grafana folder
     And the dashboard keeps the same "grafana_uid"
-    And the file's mode becomes "sync" under the "beta" mapping
+    And the file holds:
+      | grafana_mapping | the mapping's id   |
+      | grafana_mode    | the mapping's mode |
 
-  # ── move a brand-new (untracked) file into a mapping → create-on-land ─────────────
+    # ── RULE: a move that cannot finish leaves the file as it was ──────────────
 
-  @user @in-nextcloud @gesture @ui
-  Scenario: Moving a brand-new dashboard file into a mapping creates it
-    Given a ".grafana.json" file that was never tracked in Grafana
-    When I move the file into the "alpha" folder
-    Then a matching dashboard is created in Grafana in the "alpha" folder
-    And the file's mode becomes "sync" under the "alpha" mapping
-
-  # ── link move-out is refused (a link is a read-only pointer) ─────────────────────
-
-  @user @in-nextcloud @gesture @ui
-  Scenario: Moving a link out of its mapping is blocked
-    Given a managed "link" dashboard file in the "links" folder
-    When I try to move the file to a folder that is not mapped
-    Then the move is refused with a message
-    And the file stays in the "links" folder
-
-  # ── a link re-homed between two mappings: the pointer follows, nothing moves ─────
-  # notes: ../AGENTS.md#moving-a-link-from-one-mapped-folder-to-another-only-re-homes-the-pointer
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Moving a link from one mapped folder to another only re-homes the pointer
-    Given a managed "link" dashboard file in the "links" folder
-    When I move the file into the "beta" folder
-    Then the file's mapping becomes "beta"
-    And the dashboard's Grafana folder is unchanged
-    And Grafana is not contacted
-
-  # ── the safety rules: never delete on a guess ────────────────────────────────────
   # notes: ../AGENTS.md#a-failed-grafana-delete-on-move-out-never-strips-the-files-identity
+  @user @in-nextcloud @gesture @ui @blocked
+  Scenario: Move a dashboard out of its mapping while Grafana is unreachable
+    Given a dashboard file in "Demo"
+    And Grafana is unreachable
+    When I try to move the file into "Scratch"
+    Then the move is aborted and the file stays in "Demo"
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: A failed Grafana delete on move-out never strips the file's identity
-    Given the Grafana recycle-bin folder is off
-    And a managed "sync" dashboard file in the "alpha" folder
-    And the Grafana delete will fail
-    When I move the file to a folder that is not mapped
-    Then the file still carries its "grafana_uid"
-    And the file is still reconcilable with its dashboard
-
-  # notes: ../AGENTS.md#a-move-to-a-destination-the-app-cannot-classify-never-deletes-anything
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A move to a destination the app cannot classify never deletes anything
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the file is moved to a path outside the user's file tree
-    Then the dashboard is not deleted in Grafana
-    And the file keeps its "grafana_uid"
-
-  # ── moves that are none of our business ──────────────────────────────────────────
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Moving an untracked file between two unmapped folders changes nothing
-    Given an untracked ".grafana.json" file outside any mapping
-    When I move the file to another folder that is not mapped
-    Then Grafana is not contacted
-    And the file is still untracked
-
-  # ══ MOVED IN GRAFANA ═════════════════════════════════════════════════════════════
-  # The mirror image of the Nextcloud-side moves above.
+    # ── RULE: a dashboard moved in Grafana takes its file with it ──────────────
 
   # notes: ../AGENTS.md#a-dashboard-moved-to-another-mapped-folder-in-grafana-relocates-its-mirror
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A dashboard moved to another mapped folder in Grafana relocates its mirror
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the dashboard is moved to the "beta" folder in Grafana
-    And both mappings are pulled
-    Then the file is in the Nextcloud folder mapped to "beta"
-    And no file for that dashboard remains in the "alpha" folder
-    And only one file carries that dashboard's uid
+  @grafana @in-grafana @gesture @ui @todo
+  Scenario: Move a dashboard to another mapped folder in Grafana
+    Given a dashboard file in "Demo"
+    When someone moves the dashboard into the "reports" Grafana folder
+    Then the file is gone from "Demo"
+    And the file arrives in "Reports", holding:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | the mapping's mode  |
 
-  # Moved somewhere Nextcloud does not mirror. The pull prunes the local file — the
-  # dashboard is not deleted, it simply left the mapped set, and the mirror follows.
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A dashboard moved to an unmapped Grafana folder loses its mirror
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the dashboard is moved to an unmapped Grafana folder
-    And the "alpha" mapping is pulled
-    Then no file for that dashboard remains in the "alpha" folder
+  @grafana @in-grafana @gesture @ui @todo
+  Scenario: Move a dashboard to an unmapped folder in Grafana
+    Given a dashboard file in "Demo"
+    When someone moves the dashboard into the "Archive" Grafana folder
+    Then the file is gone from "Demo"
+    And the file is recoverable from the Nextcloud trash
     And the dashboard still exists in Grafana
-
-  # notes: ../AGENTS.md#a-pull-never-relocates-a-file-the-user-filed-into-a-subfolder
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A pull never relocates a file the user filed into a subfolder
-    Given a managed "sync" dashboard file the user moved into a subfolder of "alpha"
-    When the dashboard is renamed in Grafana
-    And the "alpha" mapping is pulled
-    Then the file is still in that subfolder
-    And its name reflects the new title
-
-  # notes: ../AGENTS.md#moving-a-dashboard-into-a-tagged-subfolder-re-parents-it-in-grafana
-
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a dashboard into a tagged subfolder re-parents it in Grafana
-    Given a subfolder of "alpha" carrying the "grafana" tag
-    And a managed "sync" dashboard file in the "alpha" folder
-    When I move the file into a Nextcloud subfolder of the "alpha" folder
-    Then a matching Grafana subfolder is created under the "alpha" folder
-    And the dashboard is re-parented into that Grafana subfolder
-    And the dashboard keeps the same "grafana_uid"
-    And the file's "grafana_folderUid" updates to the new subfolder
-    And the file stays under the "alpha" mapping
-

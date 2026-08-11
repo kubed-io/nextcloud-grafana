@@ -1,83 +1,62 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#foldersrename
 
-Feature: Renaming a folder
-  As a Nextcloud user or admin
-  I want renaming a folder to either follow through or refuse
-  So that a rename never silently disconnects dashboards from their mapping
+Feature: Renaming a subfolder
+  As a Nextcloud user
+  I want a subfolder renamed on either side to be recognised as the same folder
+  So that a rename never costs a dashboard its uid, its history, or its URL
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
 
-  # ── the mapped folder itself ─────────────────────────────────────────────────────
+  # notes: ../AGENTS.md#the-mappings-in-the-background
+  # notes: ../AGENTS.md#a-subfolder-shares-its-name-with-grafana-exactly
 
-  # notes: ../AGENTS.md#renaming-a-mapped-folder-silently-orphans-its-mapping
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Renaming a mapped folder silently orphans its mapping
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I rename the mapped Nextcloud folder
-    Then the mapping no longer matches any folder
-    And the file inside it resolves to no mapping
-    And nothing warns the user that the connection is broken
-
-  # notes: ../AGENTS.md#renaming-a-mapped-folder-keeps-the-mapping-pointing-at-it
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Renaming a mapped folder keeps the mapping pointing at it
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I rename the mapped Nextcloud folder
-    Then the mapping still owns that folder under its new name
-    And the file inside it is still managed "sync" under the mapping
-    And nothing changes in Grafana
-
-  # The alternative, if following is not wanted: refuse the gesture rather than let
-  # it half-happen. Either answer is defensible; silence is not.
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: A mapped folder that cannot follow a rename refuses it with a reason
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I try to rename the mapped Nextcloud folder
-    Then the rename is refused with a message naming the mapping
-    And the folder keeps its name
-
-  # ── a mirrored subfolder ─────────────────────────────────────────────────────────
+    # ── RULE: the uid is what makes a rename a rename ─────────────────────────
+    # notes: ../AGENTS.md#a-nextcloud-folder-carries-its-grafana-folder-uid
 
   @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Renaming a mirrored subfolder renames the Grafana subfolder
-    Given a mirrored Grafana folder "Team A" under the "alpha" folder, holding a dashboard
-    When I rename the subfolder to "Team B"
-    Then the Grafana subfolder is renamed to "Team B"
-    And the dashboards inside keep their uids
+  Scenario: Rename a subfolder in Nextcloud
+    Given the folder "Demo/Team A" holding a dashboard
+    When I rename "Demo/Team A" to "Demo/Team B"
+    Then the Grafana folder is named "Team B"
+    And "Demo/Team B" holds:
+      | grafana_folder_uid | the uid it had before the rename |
+    And the dashboard inside it holds:
+      | grafana_uid | the uid it had before the rename |
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Renaming an untagged subfolder never reaches Grafana
-    Given an untagged subfolder of "alpha" holding a managed "sync" dashboard file
-    When I rename the subfolder
-    Then Grafana is not contacted
-    And the dashboard stays bound to the "alpha" mapping
+    # The uid is why this is a rename and not a delete plus a create: the folder that
+    # holds it is the same folder, whatever it is called.
+
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Rename a subfolder in Grafana
+    Given the folder "Demo/Team A" holding a dashboard
+    When someone renames the "Team A" Grafana folder to "Team B"
+    Then "Demo/Team B" exists in Nextcloud
+    And "Demo/Team A" is gone from Nextcloud
+    And "Demo/Team B" holds:
+      | grafana_folder_uid | the uid it had before the rename |
+    And the dashboard inside it holds:
+      | grafana_uid | the uid it had before the rename |
+
+    # Read by NAME this is one folder vanishing and another appearing; read by uid it
+    # is one folder with a new name.
+
+    # ── RULE: a rename Grafana will not take leaves the local one standing ────
 
   # notes: ../AGENTS.md#a-failed-subfolder-rename-leaves-the-local-rename-standing
   @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: A failed subfolder rename leaves the local rename standing
-    Given a mirrored Grafana folder under the "alpha" folder, holding a dashboard
-    And Grafana will reject the folder rename
-    When I rename the subfolder
-    Then the Nextcloud folder keeps its new name
+  Scenario: Rename a subfolder while Grafana is unreachable
+    Given the folder "Demo/Team A" holding a dashboard
+    And Grafana is unreachable
+    When I rename "Demo/Team A" to "Demo/Team B"
+    Then "Demo/Team B" exists in Nextcloud
     And the failure is reported to the user
+    And "Demo/Team B" holds:
+      | grafana_folder_uid | the uid it had before the rename |
 
-  # ── renamed on the Grafana side ──────────────────────────────────────────────────
-
-  # notes: ../AGENTS.md#renaming-the-mapped-folder-in-grafana-does-not-break-the-mapping
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: Renaming the mapped folder in Grafana does not break the mapping
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the "alpha" folder is renamed in Grafana
-    And the mapping is pulled
-    Then the mapping still resolves to that Grafana folder by uid
-    And the dashboards inside are unaffected
-
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: Renaming a mirrored Grafana subfolder renames the Nextcloud subfolder
-    Given a mirrored Grafana folder "Team A" under the "alpha" folder, holding a dashboard
-    When the Grafana subfolder is renamed to "Team B"
-    And the mapping is pulled
-    Then the Nextcloud subfolder is renamed to "Team B"
-    And the dashboard file inside keeps its uid and its place
+    # The local rename stands because Nextcloud already did it, and the uid is what
+    # lets the next sync finish the job rather than guess at a delete.

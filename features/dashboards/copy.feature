@@ -1,90 +1,91 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#dashboardscopy
 
-Feature: Copying a dashboard file always makes a new instance
+Feature: Copying a dashboard
   As a Nextcloud user
-  I want a copy to be a fresh dashboard, never a hijack of the original
-  So that duplicating a file is safe and predictable
+  I want a copy to be a new dashboard, never a hijack of the original
+  So that copying a file is safe and predictable
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a mapping with the following values:
+      | grafana folder | links    |
+      | nc folder      | Pointers |
+      | mode           | link     |
+    And a folder "Scratch" that is not mapped
 
-  # ══ COPIED IN NEXTCLOUD ════════════════════════════════════════════════════════
+  # notes: ../AGENTS.md#the-mappings-in-the-background
 
+    # ── RULE: the copy belongs to where it lands, never to where it came from ──
+
+  # notes: ../AGENTS.md#the-copy-belongs-to-where-it-lands
   @user @in-nextcloud @gesture @ui @todo
-  Scenario: Copy within a mapped sync folder becomes a new dashboard in Grafana
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I copy the file within the "alpha" folder
-    Then the copy carries no inherited "grafana_uid"
-    And the copy is registered as a NEW dashboard in Grafana with its own uid
-    And the original file and dashboard are unchanged
-    And there are now two distinct dashboards in Grafana
-
-  @user @in-nextcloud @gesture @ui
-  Scenario: Copy to outside any mapping is a plain untracked file
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I copy the file to a folder that is not mapped
-    Then the copy has no Grafana metadata
-    And no dashboard is created in Grafana for the copy
-    And the copy is treated as a plain document
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Copy of an unmapped file strips its metadata wherever it lands
-    Given an unmapped dashboard file that still carries its "grafana_uid"
-    When I copy the file to a folder that is not mapped
-    Then the copy has no Grafana metadata
-    And the original unmapped file keeps its "grafana_uid"
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Copy of an unmapped file into a mapping becomes a new dashboard
-    Given an unmapped dashboard file that still carries its "grafana_uid"
-    When I copy the file into the "alpha" folder
-    Then the copy carries no inherited "grafana_uid"
-    And the copy is registered as a NEW dashboard in Grafana with its own uid
-    And the original unmapped file's dashboard is not restored or duplicated
-
-  # ── a link copies like anything else: the copy is not a link ─────────────────────
-  # notes: ../AGENTS.md#copying-a-link-never-creates-a-second-dashboard
-
-  @user @in-nextcloud @gesture @ui
-  Scenario: Copying a link never creates a second dashboard
-    Given a folder mapped as "link" to the Grafana folder "links"
-    And a managed "link" dashboard file in that folder
-    When I copy the file within the "links" folder
-    Then no dashboard is created in Grafana for the copy
-    And the copy carries no inherited "grafana_uid"
-
-  # ══ COPIED IN GRAFANA ══════════════════════════════════════════════════════════
-  # notes: ../AGENTS.md#a-dashboard-duplicated-in-grafana-arrives-as-a-new-file
-
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A dashboard duplicated in Grafana arrives as a new file
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When the dashboard is duplicated in Grafana
-    And the "alpha" mapping is pulled
-    Then a second file appears in the mapped folder
-    And the two files carry different uids
-    And the original file is unchanged
-
-  # notes: ../AGENTS.md#a-duplicate-made-in-grafana-takes-the-mappings-mode-not-the-originals
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A duplicate made in Grafana takes the mapping's mode, not the original's
-    Given a folder mapped as "link" to the Grafana folder "links"
-    And a dashboard in the "links" Grafana folder
-    When the dashboard is duplicated in Grafana
-    And the "links" mapping is pulled
-    Then the new file is a "link" pointer
-
-  # notes: ../AGENTS.md#the-pulls-own-writes-are-never-treated-as-a-copy
-
-  # ── failure ──────────────────────────────────────────────────────────────────────
-
-  # notes: ../AGENTS.md#a-copy-whose-dashboard-cannot-be-created-stays-a-plain-file-and-says-so
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A copy whose dashboard cannot be created stays a plain file and says so
-    Given a managed "sync" dashboard file in the "alpha" folder
-    And Grafana will reject the creation
-    When I copy the file within the "alpha" folder
-    Then the copy carries no "grafana_uid"
-    And the failure is reported to the user
+  Scenario Outline: Copy a dashboard into a mapped folder
+    Given a dashboard file in "<source>"
+    When I copy the file into "Demo"
+    Then the copy holds:
+      | grafana_uid     | its own, not the original's |
+      | grafana_mapping | the mapping's id            |
+      | grafana_mode    | the mapping's mode          |
+    And the copy is a new dashboard in the "demo" Grafana folder
     And the original file and its dashboard are unchanged
+
+    Examples: wherever it came from, it belongs to Demo now
+      | source  |
+      | Demo    |
+      | Scratch |
+
+  @user @in-nextcloud @gesture @ui
+  Scenario Outline: Copy a dashboard into an unmapped folder
+    Given a dashboard file in "<source>"
+    When I copy the file into "Scratch"
+    Then the copy holds no Grafana metadata at all
+    And no dashboard is created in Grafana for the copy
+    And the copy's body is byte-for-byte the original's
+    And the original file and its dashboard are unchanged
+
+    Examples: the identity is stripped, the body it travelled with is not
+      | source   |
+      | Demo     |
+      | Pointers |
+      | Scratch  |
+
+  # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario Outline: Copy a dashboard between sync and link folders
+    Given a dashboard file in "<source>"
+    When I try to copy the file into "<destination>"
+    Then the copy is refused with a message
+    And no dashboard is created in Grafana for the copy
+    And "<destination>" holds no copy of the file
+    And the original file and its dashboard are unchanged
+
+    Examples: a link is read-only, so a copy neither authors into one nor escapes it
+      | source   | destination |
+      | Demo     | Pointers    |
+      | Pointers | Demo        |
+
+    # @unbuilt — THIS IS THE SPEC, AND THE APP DOES THE OPPOSITE TODAY: it accepts
+    # the copy and gives it the landing folder's mode.
+
+    # ── RULE: a dashboard copied in Grafana arrives as its own file ────────────
+
+  # notes: ../AGENTS.md#a-dashboard-copied-in-grafana-arrives-as-its-own-file
+  @grafana @in-grafana @gesture @ui @todo
+  Scenario Outline: Copy a dashboard in Grafana
+    Given a dashboard file in "<folder>"
+    When someone copies its dashboard in Grafana
+    Then the copy arrives as its own file in "<folder>"
+    And that file holds:
+      | grafana_uid     | its own, not the original's |
+      | grafana_mapping | the mapping's id            |
+      | grafana_mode    | the mapping's mode          |
+    And the original file and its dashboard are unchanged
+
+    Examples: the mapping it lands in decides the mode, not the file it came from
+      | folder   |
+      | Demo     |
+      | Pointers |

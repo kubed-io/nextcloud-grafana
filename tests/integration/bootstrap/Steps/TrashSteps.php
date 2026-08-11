@@ -36,8 +36,77 @@ trait TrashSteps {
 		$this->davDelete($this->currentFilePath);
 	}
 
+	/**
+	 * The bin is an ordinary Grafana folder, so a colleague can simply move a parked
+	 * dashboard back — done through Grafana's own API, with no involvement from this
+	 * app, exactly as it would happen in the UI.
+	 *
+	 * @Given its dashboard is back in the :title Grafana folder
+	 */
+	public function itsDashboardIsBackInTheGrafanaFolder(string $title): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' is not in Grafana to move");
+		}
+		$target = null;
+		foreach ($this->grafanaListFolders() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				$target = (string)($folder['uid'] ?? '');
+				break;
+			}
+		}
+		if ($target === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$title'");
+		}
+		$res = $this->grafanaClient()->request('POST', '/api/dashboards/db', [
+			'json' => [
+				'dashboard' => ['id' => null] + ($record['dashboard'] ?? []),
+				'folderUid' => $target,
+				'overwrite' => true,
+				'message' => "rescued out of the bin into '$title'",
+			],
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException('the rescue move failed: ' . (string)$res->getBody());
+		}
+	}
+
+	/** @Given its dashboard is gone from Grafana entirely */
+	public function itsDashboardIsGoneFromGrafanaEntirely(): void {
+		$this->grafanaDeleteDashboard($this->lastUid);
+		if ($this->grafanaGetDashboard($this->lastUid) !== null) {
+			throw new \RuntimeException("setup: dashboard '{$this->lastUid}' is still in Grafana");
+		}
+	}
+
+	/**
+	 * "Nothing was deleted" cannot be asserted directly, and the two ways to reach
+	 * this state have different dashboards to compare — one alive, one already gone.
+	 * So the claim is a pre/post comparison, captured as the purge is performed.
+	 *
+	 * @Then the dashboard is as it was before the purge
+	 */
+	public function theDashboardIsAsItWasBeforeThePurge(): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		$now = [
+			'exists' => $record !== null,
+			'folder' => (string)($record['meta']['folderUid'] ?? ''),
+		];
+		if ($now !== $this->grafanaBeforePurge) {
+			throw new \RuntimeException(
+				'the purge changed Grafana: was ' . json_encode($this->grafanaBeforePurge)
+				. ', now ' . json_encode($now),
+			);
+		}
+	}
+
 	/** @When I purge it from the trash */
 	public function iPurgeItFromTheTrash(): void {
+		$record = $this->lastUid === '' ? null : $this->grafanaGetDashboard($this->lastUid);
+		$this->grafanaBeforePurge = [
+			'exists' => $record !== null,
+			'folder' => (string)($record['meta']['folderUid'] ?? ''),
+		];
 		$entry = $this->requireTrashEntry();
 		$res = $this->davClient()->request('DELETE', $this->trashHref($entry));
 		$this->assertStatus($res, [204, 200], "purge $entry");
@@ -55,19 +124,66 @@ trait TrashSteps {
 		$this->currentFilePath = $this->trashedFrom;
 	}
 
-	/** @Then the file is in the Nextcloud trash */
+	/**
+	 * A GIVEN STATES WHAT IS TRUE, so it puts the file there rather than asserting
+	 * someone else already did. Every use of this sentence is a pre-state; getting
+	 * there requires a trash move, but that is the step's problem, not the
+	 * scenario's.
+	 *
+	 * @Given the file is in the Nextcloud trash
+	 */
 	public function theFileIsInTheTrash(): void {
-		Assert::assertNotNull($this->trashbinPathFor($this->trashedFrom), 'the file is not in the trash');
+		$this->iMoveItToTheTrash();
+		if ($this->trashbinPathFor($this->trashedFrom) === null) {
+			throw new \RuntimeException('setup: the file is not in the Nextcloud trash');
+		}
 	}
 
-	/** @Then the file is recoverable from the Nextcloud trash */
+	/**
+	 * The far side of the same pre-state: trashing with the bin on parks the
+	 * dashboard, and this names where it landed. One line per place.
+	 *
+	 * @Given its dashboard is parked in :folder
+	 */
+	public function itsDashboardIsParkedIn(string $folder): void {
+		$this->theDashboardIsInTheGrafanaFolder($folder);
+	}
+
+	/**
+	 * RECOVERABLE MEANS THE CONTENT SURVIVED, not merely that a row exists in the
+	 * trash. A second step said the same thing "with its JSON intact" and did the
+	 * real check — one claim in two wordings, the shorter being the weaker.
+	 *
+	 * @Then the file is recoverable from the Nextcloud trash
+	 */
 	public function theFileIsRecoverable(): void {
-		$this->theFileIsInTheTrash();
+		$this->theFileIsRecoverableWithItsJson();
 	}
 
-	/** @Then the link is recoverable from the Nextcloud trash */
-	public function theLinkIsRecoverable(): void {
-		$this->theFileIsInTheTrash();
+	/**
+	 * @Then it still holds no Grafana metadata
+	 *
+	 * The honest post-condition for trashing a file outside every mapping. It
+	 * replaced "Grafana is not contacted", which asserted `lastUid === ''` — the
+	 * ARRANGE, not the outcome, so it could never fail for the reason it claimed.
+	 */
+	public function itStillHoldsNoGrafanaMetadata(): void {
+		$entry = $this->requireTrashEntry();
+		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
+			$actual = $this->davReadMetadata($this->currentFilePath, $key);
+			if (($actual ?? '') !== '') {
+				throw new \RuntimeException("the trashed file at $entry carries $key ('$actual')");
+			}
+		}
+	}
+
+	/** @Then the dashboard is still absent from Grafana */
+	public function theDashboardIsStillAbsentFromGrafana(): void {
+		if ($this->lastUid !== '' && $this->grafanaGetDashboard($this->lastUid) !== null) {
+			throw new \RuntimeException(
+				"dashboard '{$this->lastUid}' is back in Grafana — it went when the file was trashed",
+			);
+		}
 	}
 
 	/**
@@ -86,15 +202,36 @@ trait TrashSteps {
 		Assert::assertObjectHasProperty('title', $body, 'the trashed file no longer holds a dashboard spec');
 	}
 
-	/** @Then the dashboard is moved into the :folder Grafana folder and not deleted */
-	public function theDashboardIsParkedIn(string $folder): void {
+	/**
+	 * WHERE THE DASHBOARD IS, stated as a state rather than as the movement that
+	 * put it there — a Then describes the world after, not the trip.
+	 *
+	 * Resolves the folder BY TITLE, which is the only thing that works for both
+	 * kinds of folder a scenario names: a mapping's folder (whose uid the mapping
+	 * table supplies verbatim) and the recycle bin (whose uid Grafana assigns when
+	 * the app creates it from a configured name).
+	 *
+	 * @Then the dashboard is in the :title Grafana folder
+	 */
+	public function theDashboardIsInTheGrafanaFolder(string $title): void {
 		$record = $this->grafanaGetDashboard($this->lastUid);
-		Assert::assertNotNull($record, "dashboard '{$this->lastUid}' was DELETED — bin-on must park it, not delete it");
-		Assert::assertSame(
-			$this->grafanaFolderUid($folder),
-			$record['meta']['folderUid'] ?? '',
-			"dashboard '{$this->lastUid}' is not in the '$folder' bin folder",
-		);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' no longer exists in Grafana");
+		}
+		$want = null;
+		foreach ($this->grafanaListFolders() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				$want = (string)($folder['uid'] ?? '');
+				break;
+			}
+		}
+		if ($want === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$title'");
+		}
+		$got = (string)($record['meta']['folderUid'] ?? '');
+		if ($got !== $want) {
+			throw new \RuntimeException("the dashboard is in Grafana folder '$got', not '$title' ('$want')");
+		}
 	}
 
 	/** @Then dashboard :label no longer exists in Grafana */
@@ -104,7 +241,7 @@ trait TrashSteps {
 
 	/** @Then dashboard :label is in the :folder Grafana folder and still exists */
 	public function dashboardIsInTheBinFolder(string $label, string $folder): void {
-		$this->theDashboardIsParkedIn($folder);
+		$this->theDashboardIsInTheGrafanaFolder($folder);
 	}
 
 	/** @Then no Grafana call is made by the purge */
@@ -169,7 +306,7 @@ trait TrashSteps {
 		$this->setBinOn($folder);
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveItToTheTrash();
-		$this->theDashboardIsParkedIn($folder);
+		$this->theDashboardIsInTheGrafanaFolder($folder);
 	}
 
 	/**
@@ -207,6 +344,89 @@ trait TrashSteps {
 			$this->dashboardFolderUid($this->lastUid),
 			'the rescued dashboard is not in its mapped folder',
 		);
+	}
+
+	/**
+	 * A Grafana folder no mapping points at.
+	 *
+	 * The MAPPED folders need no such Given — the Background's mapping tables name
+	 * them, and the app provisions them. An unmapped one exists only because the
+	 * scenario says so, exactly like the Nextcloud-side "Scratch".
+	 *
+	 * @Given a Grafana folder :title that is not mapped
+	 */
+	public function aGrafanaFolderThatIsNotMapped(string $title): void {
+		// grafanaFolderUid creates it on demand and registers it for teardown.
+		$this->grafanaFolderUid($title);
+	}
+
+	/**
+	 * Move a dashboard in Grafana, WITH THE PULL FOLDED IN. The destination is named
+	 * by title, so a mapped folder and an unmapped one are the same sentence — which
+	 * is the point: the gesture is identical and only the end state differs.
+	 *
+	 * @When someone moves the dashboard into the :title Grafana folder
+	 */
+	public function someoneMovesTheDashboardIntoTheGrafanaFolder(string $title): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' is not in Grafana to move");
+		}
+		$target = null;
+		foreach ($this->grafanaListFolders() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				$target = (string)($folder['uid'] ?? '');
+				break;
+			}
+		}
+		if ($target === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$title' to move into");
+		}
+		$res = $this->grafanaClient()->request('POST', '/api/dashboards/db', [
+			'json' => [
+				'dashboard' => ['id' => null] + ($record['dashboard'] ?? []),
+				'folderUid' => $target,
+				'overwrite' => true,
+				'message' => "moved into '$title' by a Grafana user",
+			],
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException("the Grafana move failed: " . (string)$res->getBody());
+		}
+		$this->trashedFrom = $this->currentFilePath;
+		$pull = $this->occ('grafana_sync:sync pull');
+		if ($pull['exit'] !== 0) {
+			throw new \RuntimeException("the pull after the Grafana move failed:\n{$pull['output']}");
+		}
+	}
+
+	/**
+	 * Deleting a dashboard in Grafana, WITH THE PULL FOLDED IN — nobody deletes a
+	 * dashboard in order to run a sync.
+	 *
+	 * @When someone deletes the dashboard in Grafana
+	 */
+	public function someoneDeletesTheDashboardInGrafana(): void {
+		if ($this->lastUid === '') {
+			throw new \RuntimeException('no dashboard behind the file under test');
+		}
+		// The prune is a delete like any other, so Nextcloud's trash catches it — but
+		// the trashbin lookup keys off the path the deleting step recorded, and here
+		// the deleter is the reconciler rather than a gesture.
+		$this->trashedFrom = $this->currentFilePath;
+		$this->grafanaDeleteDashboard($this->lastUid);
+		$res = $this->occ('grafana_sync:sync pull');
+		if ($res['exit'] !== 0) {
+			throw new \RuntimeException("the pull after the Grafana delete failed:\n{$res['output']}");
+		}
+	}
+
+	/** @Then the file is gone from :folder */
+	public function theFileIsGoneFrom(string $folder): void {
+		$name = basename($this->currentFilePath);
+		if (in_array($name, $this->davListDashboardFiles($folder), true)) {
+			throw new \RuntimeException("'$name' is still in '$folder' — its dashboard is gone from Grafana");
+		}
 	}
 
 	/** @Then the file is gone from the Nextcloud trash */

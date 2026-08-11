@@ -100,7 +100,65 @@ trait LifecycleSteps {
 		$this->currentFolder = $this->unmappedFolder();
 	}
 
+	/**
+	 * A NAMED folder outside every mapping.
+	 *
+	 * Named, not anonymous: a scenario that says where it puts a file reads in the
+	 * same vocabulary as the mapping tables above it, and "that folder" only ever
+	 * meant "whichever one the last Given happened to arrange".
+	 *
+	 * @Given a folder :folder that is not mapped
+	 */
+	public function aNamedFolderThatIsNotMapped(string $folder): void {
+		$this->davMkdir($folder);
+		$this->currentFolder = $folder;
+	}
+
 	// ── create ────────────────────────────────────────────────────────────────
+
+	/**
+	 * Create a file in a folder the scenario NAMES.
+	 *
+	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
+	 * server cannot tell the two apart, and it is the PUT that fires the listener.
+	 * Both phrasings are therefore one method — the menu is how a person describes
+	 * it, not a second code path.
+	 *
+	 * @When I create :filename in :folder via the Files "New" menu
+	 * @When I create :filename in :folder
+	 */
+	public function iCreateTheFileIn(string $filename, string $folder): void {
+		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$this->currentFolder = $folder;
+		$this->putDashboardFile($folder, $stem);
+	}
+
+	/**
+	 * The dashboard's name AND its folder, as one claim — they are one sentence
+	 * about where the new dashboard ended up, and splitting them said the same
+	 * thing twice. The name comes from the filename, because that is what the user
+	 * just typed; a body with no title must not produce an untitled dashboard.
+	 *
+	 * @Then the dashboard is named :title, in the :folder Grafana folder
+	 */
+	public function theDashboardIsNamedInTheGrafanaFolder(string $title, string $folder): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("Grafana has no dashboard with uid '{$this->lastUid}'");
+		}
+		$actual = (string)($record['dashboard']['title'] ?? '');
+		if ($actual !== $title) {
+			throw new \RuntimeException("the dashboard is named '$actual', not '$title' — it should take the filename");
+		}
+		// THE MAPPING TABLE'S `grafana folder` CELL IS THE UID, stored verbatim by
+		// add-mapping. Resolving it through grafanaFolderUid() would hash it into a
+		// `nc-t-…` uid belonging to the older arrange style, and compare two folders
+		// that were never the same one.
+		$got = (string)$this->dashboardFolderUid($this->lastUid);
+		if ($got !== $folder) {
+			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder'");
+		}
+	}
 
 	/** @When I create a new :ext file in that folder via the Files "New" menu */
 	public function iCreateANewFileViaTheNewMenu(string $ext): void {
@@ -174,6 +232,100 @@ trait LifecycleSteps {
 
 	// ── copy ──────────────────────────────────────────────────────────────────
 
+	/**
+	 * A dashboard file in a NAMED folder, whatever that folder happens to be.
+	 *
+	 * ONE ARRANGE FOR EVERY SOURCE, because a copy does not care what its source
+	 * was — that is the rule under test. Landing it in a mapped folder makes it
+	 * managed in that mapping's mode; landing it outside every mapping makes it a
+	 * plain document. The scenario names the folder and the Background says what
+	 * the folder IS, so nothing restates "sync" or "unmapped" here.
+	 *
+	 * @Given a dashboard file in :folder
+	 */
+	public function aDashboardFileIn(string $folder): void {
+		$this->davMkdir($folder);
+		$this->currentFolder = $folder;
+		$path = $this->putDashboardFile($folder, 'Source ' . bin2hex(random_bytes(3)));
+		$this->originalPath = $path;
+		$this->originalBody = $this->davGet($path);
+		// Managed only if it landed in a mapping; outside one there is no uid, and
+		// that is the arrange for half these scenarios rather than a failure.
+		$uid = $this->davReadMetadata($path, self::META_UID);
+		$this->lastUid = (string)$uid;
+		$this->grafanaBefore = ['folder' => '', 'title' => ''];
+		if ($this->lastUid !== '') {
+			$this->createdDashboardUids[] = $this->lastUid;
+			$record = $this->grafanaGetDashboard($this->lastUid);
+			$this->grafanaBefore = [
+				'folder' => (string)($record['meta']['folderUid'] ?? ''),
+				'title' => (string)($record['dashboard']['title'] ?? ''),
+			];
+		}
+	}
+
+	/** @When I copy the file into :folder */
+	public function iCopyTheFileInto(string $folder): void {
+		$this->davMkdir($folder);
+		$this->copyTarget = $folder . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana.json';
+		$this->davCopy($this->originalPath !== '' ? $this->originalPath : $this->currentFilePath, $this->copyTarget);
+	}
+
+	/** @Then the copy holds no Grafana metadata at all */
+	public function theCopyHoldsNoGrafanaMetadataAtAll(): void {
+		if (!$this->davExists($this->copyTarget)) {
+			throw new \RuntimeException("there is no copy at {$this->copyTarget}");
+		}
+		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
+			$actual = $this->davReadMetadata($this->copyTarget, $key);
+			if (($actual ?? '') !== '') {
+				throw new \RuntimeException(
+					"the copy carries $key ('$actual'), but a copy outside every mapping is nobody's",
+				);
+			}
+		}
+	}
+
+	/**
+	 * Nextcloud copies BYTES, so the copy's content is the original's content. The
+	 * app's whole contribution to a copy landing outside every mapping is what it
+	 * takes OFF — the identity — and this asserts it kept its hands off the rest.
+	 *
+	 * @Then the copy's body is byte-for-byte the original's
+	 */
+	public function theCopysBodyIsByteForByteTheOriginals(): void {
+		$copy = $this->davGet($this->copyTarget);
+		if ($copy !== $this->originalBody) {
+			throw new \RuntimeException(
+				"the copy's body differs from the original's: " . strlen($this->originalBody)
+				. ' bytes became ' . strlen($copy),
+			);
+		}
+	}
+
+	/**
+	 * THE ANTI-HIJACK INVARIANT. The original is read before the gesture and
+	 * compared after: it still has the uid it had, and its dashboard is still
+	 * there. That covers what three separate steps used to claim, because all
+	 * three are the same sentence — the original did not move.
+	 *
+	 * @Then the original file and its dashboard are unchanged
+	 */
+	public function theOriginalFileAndItsDashboardAreUnchanged(): void {
+		if ($this->originalPath === '') {
+			throw new \RuntimeException('no original was captured — a Given must establish one');
+		}
+		$now = (string)$this->davReadMetadata($this->originalPath, self::META_UID);
+		if ($now !== $this->lastUid) {
+			throw new \RuntimeException(
+				"the original's uid was '{$this->lastUid}' and is now '{$now}' — the copy changed it",
+			);
+		}
+		if ($this->lastUid !== '' && $this->grafanaGetDashboard($this->lastUid) === null) {
+			throw new \RuntimeException("the original's dashboard {$this->lastUid} is gone from Grafana");
+		}
+	}
+
 	/** @When I copy the file within the :mapping folder */
 	public function iCopyTheFileWithinTheFolder(string $mapping): void {
 		$this->copyTarget = $this->mappedFolder($mapping) . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana.json';
@@ -224,6 +376,94 @@ trait LifecycleSteps {
 	}
 
 	// ── move ──────────────────────────────────────────────────────────────────
+
+	/**
+	 * Move into a folder the scenario NAMES, mapped or not. The older phrasings
+	 * ("into the :mapping folder", "to a folder that is not mapped") each addressed
+	 * a different kind of destination, which put the destination's NATURE in the
+	 * step; here it is the Background's to state and the scenario just says where.
+	 *
+	 * @When I move the file into :folder
+	 */
+	public function iMoveTheFileIntoNamedFolder(string $folder): void {
+		$this->davMkdir($folder);
+		$dest = $folder . '/' . basename($this->currentFilePath);
+		$this->davMove($this->currentFilePath, $dest);
+		$this->currentFilePath = $dest;
+		$this->currentFolder = $folder;
+	}
+
+	/** @When I try to move the file into :folder */
+	public function iTryToMoveTheFileIntoNamedFolder(string $folder): void {
+		$this->davMkdir($folder);
+		$dest = $folder . '/' . basename($this->currentFilePath);
+		$this->lastMoveStatus = $this->davMoveStatus($this->currentFilePath, $dest);
+	}
+
+	/**
+	 * A mapping owns its whole SUBTREE, so a subfolder of a mapped folder is still
+	 * that mapping — this is the arrange for proving it.
+	 *
+	 * @When I move the file into a subfolder of :folder
+	 */
+	public function iMoveTheFileIntoASubfolderOfNamed(string $folder): void {
+		$sub = $folder . '/Filed ' . bin2hex(random_bytes(3));
+		$this->davMkdir($sub);
+		$dest = $sub . '/' . basename($this->currentFilePath);
+		$this->davMove($this->currentFilePath, $dest);
+		$this->currentFilePath = $dest;
+		// The mapping is still the parent's — the subfolder is local organisation.
+		$this->currentFolder = $folder;
+	}
+
+	/** @Then the file stays in :folder */
+	public function theFileStaysInNamedFolder(string $folder): void {
+		$expected = $folder . '/' . basename($this->currentFilePath);
+		if (!$this->davExists($expected)) {
+			throw new \RuntimeException("the file is no longer at $expected — the move was not refused");
+		}
+	}
+
+	/**
+	 * @Then nothing changes in Grafana
+	 *
+	 * The dashboard is still there, still called what it was, still in the folder it
+	 * was in. Stated as three positives rather than "nothing happened", which no
+	 * assertion can express.
+	 */
+	public function nothingChangesInGrafana(): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' is gone from Grafana");
+		}
+		$now = [
+			'folder' => (string)($record['meta']['folderUid'] ?? ''),
+			'title' => (string)($record['dashboard']['title'] ?? ''),
+		];
+		if ($now !== $this->grafanaBefore) {
+			throw new \RuntimeException(
+				'the dashboard changed: folder ' . $this->grafanaBefore['folder'] . " -> {$now['folder']}, "
+				. 'title ' . $this->grafanaBefore['title'] . " -> {$now['title']}",
+			);
+		}
+	}
+
+	/** @Then the file holds no Grafana metadata at all */
+	public function theFileHoldsNoGrafanaMetadataAtAll(): void {
+		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
+			$actual = $this->davReadMetadata($this->currentFilePath, $key);
+			if (($actual ?? '') !== '') {
+				throw new \RuntimeException("the file still carries $key ('$actual') after leaving every mapping");
+			}
+		}
+	}
+
+	/** @Then the dashboard is named after the file, in the :folder Grafana folder */
+	public function theDashboardIsNamedAfterTheFileIn(string $folder): void {
+		$stem = preg_replace('/\.grafana\.json$/', '', basename($this->currentFilePath)) ?? '';
+		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		$this->theDashboardIsNamedInTheGrafanaFolder($stem, $folder);
+	}
 
 	/** @When I rename the file within the :mapping folder */
 	public function iRenameTheFileWithinTheFolder(string $mapping): void {
@@ -282,7 +522,7 @@ trait LifecycleSteps {
 		Assert::assertNotNull($this->grafanaGetDashboard($this->lastUid), 'the dashboard was deleted or replaced');
 	}
 
-	/** @Then the dashboard is deleted in Grafana */
+	/** @Then the dashboard no longer exists in Grafana */
 	public function theDashboardIsDeletedInGrafana(): void {
 		Assert::assertNull($this->grafanaGetDashboard($this->lastUid), "dashboard '{$this->lastUid}' still exists in Grafana");
 	}

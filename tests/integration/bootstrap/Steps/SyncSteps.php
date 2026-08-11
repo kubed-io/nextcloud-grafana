@@ -151,6 +151,46 @@ trait SyncSteps {
 		$this->theFileWasCreatedWhenItsDashboardWas($path);
 	}
 
+	/** The panel title the last edit wrote, for the assertion that it arrived. */
+	private string $editedPanelTitle = '';
+
+	/**
+	 * Edit the file's panels and save — the gesture a person performs. The push is
+	 * folded in, as everywhere else: nobody edits a dashboard in order to run a sync.
+	 *
+	 * @When I edit the file's panels and save
+	 */
+	public function iEditTheFilesPanelsAndSave(): void {
+		// Object decode: an assoc round-trip rewrites the spec's empty `{}` objects as
+		// `[]`, which Grafana rejects. Editing the panels must not reshape the rest.
+		$spec = json_decode($this->davGet($this->currentFilePath), false, 512, JSON_THROW_ON_ERROR);
+		if (!$spec instanceof \stdClass) {
+			throw new \RuntimeException('the dashboard file is not a JSON object');
+		}
+		$this->editedPanelTitle = 'Edited-' . bin2hex(random_bytes(3));
+		$spec->panels = [(object)['type' => 'text', 'title' => $this->editedPanelTitle]];
+		$this->davPut($this->currentFilePath, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+		$this->occ('grafana_sync:sync push');
+	}
+
+	/** @Then the dashboard in Grafana holds the file's panels */
+	public function theDashboardHoldsTheFilesPanels(): void {
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			throw new \RuntimeException("Grafana has no dashboard '$uid'");
+		}
+		$titles = array_map(
+			static fn (array $p): string => (string)($p['title'] ?? ''),
+			(array)($record['dashboard']['panels'] ?? []),
+		);
+		if (!in_array($this->editedPanelTitle, $titles, true)) {
+			throw new \RuntimeException(
+				"Grafana's panels are [" . implode(', ', $titles) . "], without '{$this->editedPanelTitle}'",
+			);
+		}
+	}
+
 	/** @return list<array<string,mixed>> */
 	private function listMappingsForSync(): array {
 		$res = $this->occ('grafana_sync:list-mappings');
