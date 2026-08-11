@@ -153,7 +153,7 @@ trait MirrorSteps {
 		$mtime = $this->davReadTime($path, 'getlastmodified');
 		return $mtime === $updated
 			? null
-			: 'the file is dated ' . gmdate('c', (int)$mtime) . ", the dashboard changed at " . gmdate('c', $updated);
+			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated);
 	}
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */

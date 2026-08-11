@@ -391,7 +391,7 @@ trait TrashSteps {
 			],
 		]);
 		if ($res->getStatusCode() !== 200) {
-			throw new \RuntimeException("the Grafana move failed: " . (string)$res->getBody());
+			throw new \RuntimeException('the Grafana move failed: ' . (string)$res->getBody());
 		}
 		$this->trashedFrom = $this->currentFilePath;
 		$pull = $this->occ('grafana_sync:sync pull');
