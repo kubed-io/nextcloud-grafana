@@ -88,6 +88,31 @@ trait SetupTrait {
 	}
 
 	/**
+	 * Ensure a Grafana folder exists under an EXACT uid.
+	 *
+	 * The mapping table names a Grafana folder by uid and `add-mapping` stores that
+	 * string verbatim, so nothing else creates it. Without this the mapping points at
+	 * a folder Grafana does not have: create-on-land fails, no uid is stamped, and
+	 * every assertion downstream reads an empty uid rather than the real failure.
+	 *
+	 * {@see grafanaFolderUid} cannot serve here — it derives a `nc-t-…` uid from a
+	 * NAME, which is a different folder from the one the mapping points at.
+	 */
+	private function ensureGrafanaFolder(string $uid): void {
+		$res = $this->grafanaClient()->request('POST', '/api/folders', [
+			'json' => ['uid' => $uid, 'title' => $uid],
+		]);
+		$code = $res->getStatusCode();
+		if (!in_array($code, [200, 409, 412], true)) {
+			throw new \RuntimeException("creating Grafana folder '$uid' failed: HTTP $code\n" . (string)$res->getBody());
+		}
+		// Teardown only what we made — see grafanaFolderUid for why.
+		if ($code === 200 && !in_array($uid, $this->createdGrafanaFolders, true)) {
+			$this->createdGrafanaFolders[] = $uid;
+		}
+	}
+
+	/**
 	 * Create a mapping and its Nextcloud folder, and remember both as "the current
 	 * mapping" so later steps can say "the file" without repeating the path.
 	 *

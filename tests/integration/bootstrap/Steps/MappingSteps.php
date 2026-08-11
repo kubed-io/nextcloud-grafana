@@ -135,6 +135,10 @@ trait MappingSteps {
 		$form = $this->formValues($table);
 		$uid = $form['grafana folder'] ?? '';
 		unset($form['grafana folder']);
+		// The table names a Grafana folder by uid; make sure Grafana actually has one.
+		if ($uid !== '') {
+			$this->ensureGrafanaFolder($uid);
+		}
 		$res = $this->addMappingFromForm($uid, $form);
 		Assert::assertSame(0, $res['exit'], "the pre-state mapping could not be created:\n{$res['output']}");
 	}
