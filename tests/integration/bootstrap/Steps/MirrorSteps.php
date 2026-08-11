@@ -211,6 +211,22 @@ trait MirrorSteps {
 	 * remembered at arrange time — a Background may declare several, and the file
 	 * decides which one it belongs to by where it landed.
 	 */
+	/**
+	 * The stored mode of the mapping owning a Nextcloud folder.
+	 *
+	 * `link` is stored as `reference` on the wire, so this returns what the file
+	 * actually carries and a scenario never has to know the quirk.
+	 */
+	private function mappingModeForNcFolder(string $folder): string {
+		foreach ($this->listMappings() as $m) {
+			if ((string)($m['nc_folder'] ?? '') === $folder) {
+				$mode = (string)($m['mode'] ?? '');
+				return $mode === 'link' ? 'reference' : $mode;
+			}
+		}
+		throw new \RuntimeException("no mapping owns the Nextcloud folder '{$folder}'");
+	}
+
 	private function mappingIdForNcFolder(string $folder): string {
 		foreach ($this->listMappings() as $m) {
 			if ((string)($m['nc_folder'] ?? '') === $folder) {

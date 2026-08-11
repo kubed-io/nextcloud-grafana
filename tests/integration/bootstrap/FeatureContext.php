@@ -140,6 +140,13 @@ final class FeatureContext implements Context {
 	 */
 	private array $grafanaBefore = ['folder' => '', 'title' => ''];
 	private string $trashedFrom = '';
+	/**
+	 * The managed keys the file carried as it was trashed — the only moment they can
+	 * be read, because a trashed file's original path no longer resolves.
+	 *
+	 * @var array<string,string>
+	 */
+	private array $trashedMetadata = [];
 	private int $lastMoveStatus = 0;
 
 	public function __construct() {

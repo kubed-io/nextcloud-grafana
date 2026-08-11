@@ -33,6 +33,16 @@ trait TrashSteps {
 	/** @When I move it to the trash */
 	public function iMoveItToTheTrash(): void {
 		$this->trashedFrom = $this->currentFilePath;
+		// SNAPSHOT BEFORE THE DELETE. Once the file is in the trash its original path
+		// 404s, and davReadMetadata asserts a 207 — so any later read of the managed
+		// keys fails as an opaque Registry type error rather than as an answer.
+		$this->trashedMetadata = [];
+		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
+			$value = $this->davReadMetadata($this->currentFilePath, $key);
+			if (($value ?? '') !== '') {
+				$this->trashedMetadata[$key] = (string)$value;
+			}
+		}
 		$this->davDelete($this->currentFilePath);
 	}
 
@@ -168,12 +178,15 @@ trait TrashSteps {
 	 * ARRANGE, not the outcome, so it could never fail for the reason it claimed.
 	 */
 	public function itStillHoldsNoGrafanaMetadata(): void {
-		$entry = $this->requireTrashEntry();
-		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
-			$actual = $this->davReadMetadata($this->currentFilePath, $key);
-			if (($actual ?? '') !== '') {
-				throw new \RuntimeException("the trashed file at $entry carries $key ('$actual')");
+		$this->requireTrashEntry();
+		if ($this->trashedMetadata !== []) {
+			$pairs = [];
+			foreach ($this->trashedMetadata as $key => $value) {
+				$pairs[] = "$key='$value'";
 			}
+			throw new \RuntimeException(
+				'the file the app does not manage carries ' . implode(', ', $pairs),
+			);
 		}
 	}
 
