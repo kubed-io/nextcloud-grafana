@@ -177,6 +177,35 @@ trait MirrorSteps {
 					throw new \RuntimeException("no dashboard called '{$title}' was declared or created by this scenario");
 				}
 				return $actual === $want ? null : "expected the uid of '{$title}' ({$want}), found '{$actual}'";
+			case 'its own, not the one it arrived with':
+				// A MINT, NOT A RESTORE: the file carried an id in and the app decided it
+				// was not usable, so the answer is a fresh one. Asserting "different from
+				// what it arrived with" is what tells the two apart.
+				if (($actual ?? '') === '') {
+					return 'expected a uid of its own, found nothing';
+				}
+				return $actual !== $this->lastUid
+					? null
+					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
+			case 'the uid it had before it was trashed':
+			case 'the uid it had before the rename':
+			case 'the uid it had before the move':
+				// THE IDENTITY SURVIVED THE GESTURE. `set` would pass for any uid at all,
+				// and the whole claim is that it is the SAME one — that the app moved a
+				// thing rather than replacing it.
+				if ($property !== self::META_UID) {
+					// A folder's uid is not the dashboard uid the arrange captured. Fail
+					// loudly rather than compare the wrong two values silently.
+					throw new \RuntimeException(
+						"'{$expected}' is only defined for " . self::META_UID . ", not {$property}",
+					);
+				}
+				if ($this->lastUid === '') {
+					throw new \RuntimeException('the arrange captured no uid to compare against');
+				}
+				return $actual === $this->lastUid
+					? null
+					: "expected the uid it already had ({$this->lastUid}), found '{$actual}'";
 			case "the mapping's id":
 				$folder = trim(dirname($path), '/.');
 				$want = $this->mappingIdForNcFolder($folder);
@@ -201,6 +230,17 @@ trait MirrorSteps {
 			case 'absent':
 				return ($actual ?? '') === '' ? null : "expected it not to be stored, found '{$actual}'";
 			default:
+				// LITERALS ARE QUOTED, by the convention in this trait's docblock. An
+				// unquoted value that reached here is a phrase the table vocabulary does
+				// not implement — comparing it as a literal would assert the wrong thing
+				// and report it as a value mismatch, which is how `the mapping's mode`
+				// went unnoticed until it reached CI.
+				if (!str_starts_with($expected, '"') || !str_ends_with($expected, '"')) {
+					throw new \RuntimeException(
+						"the table says '{$expected}', which is not a value this vocabulary knows."
+						. ' Quote it to mean a literal, or add a case for it.',
+					);
+				}
 				$literal = trim($expected, '"');
 				return $actual === $literal ? null : "expected '{$literal}', found '{$actual}'";
 		}
