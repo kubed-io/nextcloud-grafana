@@ -95,18 +95,50 @@ trait MappingSteps {
 		$this->mappingDefaults = $out;
 	}
 
+	/** Whether this scenario has already reset the store — see the step's docblock. */
+	private bool $mappingsDeclared = false;
+
+	/**
+	 * Re-arm the once-per-scenario reset. Without it the second scenario in a
+	 * feature would append to the first one's leftovers.
+	 *
+	 * @BeforeScenario
+	 */
+	public function armMappingReset(): void {
+		$this->mappingsDeclared = false;
+	}
+
 	/**
 	 * @Given a mapping with the following values:
 	 *
-	 * The pre-state twin of `the admin maps the Grafana folder :uid with:`. It
-	 * resets the store first, so a scenario opening with it starts from a known
-	 * count rather than inheriting whatever the previous scenario left behind.
+	 * The pre-state twin of `the admin maps the Grafana folder :uid with:`.
+	 *
+	 * REPEATING IT DECLARES ANOTHER MAPPING; it does not replace the first. The
+	 * reset happens once per scenario, on the first use, which is what the isolation
+	 * was ever for — starting from a known count instead of inheriting whatever the
+	 * previous scenario left behind. Resetting on EVERY use meant a Background could
+	 * only ever describe one mapping, and silently: the second table wiped the first
+	 * and nothing said so.
 	 */
 	public function aMappingWithTheFollowingValues(TableNode $table): void {
-		$this->noGrafanaFoldersAreMapped();
+		if (!$this->mappingsDeclared) {
+			$this->noGrafanaFoldersAreMapped();
+			// PIN THE WRITEBACK TO INLINE. Without this every PUT is handled by a
+			// background job, so a file's uid is not stamped by the time the next step
+			// reads it and every assertion downstream sees an empty uid. The older
+			// `a folder mapped as … ` arrange has always done this; the table form was
+			// added without it, which is why it could only ever be used by scenarios
+			// that never looked at a uid.
+			$this->forceSyncTiming();
+			$this->mappingsDeclared = true;
+		}
 		$form = $this->formValues($table);
 		$uid = $form['grafana folder'] ?? '';
 		unset($form['grafana folder']);
+		// The table names a Grafana folder by uid; make sure Grafana actually has one.
+		if ($uid !== '') {
+			$this->ensureGrafanaFolder($uid);
+		}
 		$res = $this->addMappingFromForm($uid, $form);
 		Assert::assertSame(0, $res['exit'], "the pre-state mapping could not be created:\n{$res['output']}");
 	}

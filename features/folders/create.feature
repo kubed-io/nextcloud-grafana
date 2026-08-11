@@ -1,131 +1,72 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#folderscreate
 
-Feature: A folder as a Grafana folder — the opt-in, and the tag that marks it
+Feature: Creating a folder
   As a Nextcloud user
-  I want to choose which of my folders are Grafana folders
-  So that a mapped folder stays usable for ordinary things
+  I want the folders holding my dashboards to exist in Grafana too
+  So that the two trees look the same without my having to manage either
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a folder "Scratch" that is not mapped
 
-  # ── the permissive half, and it has to come first ────────────────────────────────
+  # notes: ../AGENTS.md#the-mappings-in-the-background
 
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A new folder inside a mapped folder is just a folder
-    When I create a folder "Just My Notes" inside the "alpha" folder
-    Then the folder carries no "grafana_folderUid"
-    And the folder does not carry the "grafana" tag
-    And no folder named "Just My Notes" is created in Grafana
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: An untagged subfolder still holds dashboards under the parent mapping
-    Given a folder "Scratch" inside the "alpha" folder that carries no "grafana" tag
-    When I create a ".grafana.json" file in that subfolder
-    Then a dashboard is created in the "alpha" Grafana folder
-    And the file is managed "sync" under the "alpha" mapping
+    # ── RULE: a folder is in Grafana when a dashboard is in it ────────────────
+    # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
 
   @user @in-nextcloud @gesture @ui @todo
-  Scenario: A folder created outside every mapping is not the app's business
-    When I create a folder that is not inside any mapped folder
-    Then Grafana is not contacted
+  Scenario: Create a folder inside a mapping
+    When I create the folder "Demo/Notes"
+    Then "Demo/Notes" holds:
+      | grafana_folder_uid | absent |
+    And Grafana holds no folder named "Notes"
 
-  # ── opting in ────────────────────────────────────────────────────────────────────
+    # An empty folder is just a folder. Nothing has asked for it in Grafana yet.
 
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: Tagging a folder "grafana" creates the folder in Grafana
-    Given a folder "Client Work" inside the "alpha" folder
-    When I assign the "grafana" tag to it
-    Then Grafana holds a folder named "Client Work"
-    And the Nextcloud folder carries a "grafana_folderUid"
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Create a dashboard inside a folder of a mapping
+    Given the folder "Demo/Team/Drafts" holding no dashboards
+    When I create "CPU Load.grafana.json" in "Demo/Team/Drafts"
+    Then Grafana holds "Team" under "demo", and "Drafts" under "Team"
+    And the dashboard is in the "Drafts" Grafana folder
+    And "Demo/Team" holds:
+      | grafana_folder_uid | the uid of the "Team" Grafana folder |
+    And "Demo/Team/Drafts" holds:
+      | grafana_folder_uid | the uid of the "Drafts" Grafana folder |
 
-  # notes: ../AGENTS.md#a-folder-opted-in-late-brings-the-dashboards-already-inside-it
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: A folder opted in late brings the dashboards already inside it
-    Given a folder "Late Opt In" inside the "alpha" folder holding two managed "sync" dashboard files
-    When I assign the "grafana" tag to it
-    Then Grafana holds a folder named "Late Opt In"
-    And both dashboards are re-parented into that Grafana folder
-    And both keep their "grafana_uid"
+    # The parents come with it: a dashboard three folders deep needs all three.
 
-  # The common path, because the pull tags every folder it mirrors. A second create
-  # here would leave two Nextcloud folders claiming one Grafana folder.
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: Tagging a folder that is already a Grafana folder changes nothing
-    Given a mirrored Grafana folder "Already Mine" under the "alpha" folder
-    When I assign the "grafana" tag to it
-    Then Grafana holds exactly one folder named "Already Mine"
-    And the Nextcloud folder keeps its "grafana_folderUid"
+    # ── RULE: a folder made in Grafana arrives as a folder ────────────────────
 
-  # Fail locally and take the tag back off, so the user can rename and re-tag — a
-  # two-step they control, rather than a half-created state they have to discover.
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: A folder tagged as a Grafana folder must have a usable name first
-    Given a folder inside the "alpha" folder whose name Grafana will not accept
-    When I assign the "grafana" tag to it
-    Then the app refuses and explains what is wrong with the name
-    And the tag is not left applied
-    And no folder is created in Grafana
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Create a folder in Grafana under a mapped folder
+    When someone creates the folder "Bubbles" under the "demo" Grafana folder
+    Then "Demo/Bubbles" exists in Nextcloud
+    And "Demo/Bubbles" holds:
+      | grafana_folder_uid | the uid of the "Bubbles" Grafana folder |
 
-  # notes: ../AGENTS.md#tagging-a-folder-outside-every-mapping-does-nothing-at-all
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: Tagging a folder outside every mapping does nothing at all
-    Given a folder "Holiday Photos" outside every mapped folder
-    When I assign the "grafana" tag to it
-    Then Grafana is not contacted
-    And the tag is left where the user put it
+  # notes: ../AGENTS.md#a-folder-the-user-made-for-something-else-stays-theirs
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: A folder the user made for something else stays theirs
+    Given the folder "Demo/Holiday Photos" holding no dashboards
+    When someone creates the folder "Bubbles" under the "demo" Grafana folder
+    Then "Demo/Holiday Photos" holds:
+      | grafana_folder_uid | absent |
 
-  # notes: ../AGENTS.md#tagging-the-mapped-folder-itself-creates-nothing
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: Tagging the mapped folder itself creates nothing
-    When I assign the "grafana" tag to the mapped folder
-    Then no new folder is created in Grafana
-    And the mapping still points at the "alpha" folder
+    # The pull claims the folders it mirrors and no others. A folder with no uid is
+    # a folder the app has never had anything to do with.
 
-  # ── opting out does not destroy anything ─────────────────────────────────────────
+    # ── RULE: the recycle bin's folder is the app's, not a user's ─────────────
+    # notes: ../AGENTS.md#a-folder-cannot-be-opted-in-under-the-recycle-bin-folders-name
 
-  # notes: ../AGENTS.md#removing-the-grafana-tag-does-not-delete-the-grafana-folder
-  @user @in-nextcloud @gesture @ui @occ @unbuilt
-  Scenario: Removing the "grafana" tag does not delete the Grafana folder
-    Given a mirrored Grafana folder "Keep Me" under the "alpha" folder
-    When I remove the "grafana" tag from it
-    Then Grafana still holds a folder named "Keep Me"
-    And the dashboards inside it are untouched
-
-  # ── the tag as the shared marker ─────────────────────────────────────────────────
-
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: A folder created in Grafana arrives as a tagged folder
-    Given a Grafana folder "Bubbles" exists under the "alpha" folder
-    When the "alpha" mapping is pulled
-    Then a Nextcloud folder "Bubbles" exists under the mapped folder
-    And it carries a "grafana_folderUid"
-    And it carries the "grafana" tag
-
-  # The tag decorates; `grafana_folderUid` decides. Because the id never went
-  # anywhere, the pull re-stamps the badge on every run.
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: A Grafana folder that lost its tag gets it back on the next pull
-    Given a mirrored Grafana folder "Retagged" under the "alpha" folder
-    And I remove the "grafana" tag from it
-    When the "alpha" mapping is pulled
-    Then the folder carries the "grafana" tag again
-
-  # The permissive rule, restated from the pull's side: a pull must not tag or claim
-  # folders the user made for their own purposes.
-  @grafana @in-grafana @occ @ui @unbuilt
-  Scenario: A pull never tags a folder the user made for something else
-    Given a folder "Scratch" inside the "alpha" folder that carries no "grafana" tag
-    When the "alpha" mapping is pulled
-    Then the folder still carries no "grafana" tag
-    And it still carries no "grafana_folderUid"
-
-  # ── the reserved folder ──────────────────────────────────────────────────────────
-  # notes: ../AGENTS.md#a-folder-cannot-be-opted-in-under-the-recycle-bin-folders-name
-  @user @in-nextcloud @gesture @ui @occ @recycle-bin @unbuilt
-  Scenario: A folder cannot be opted in under the recycle-bin folder's name
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  Scenario: Create a folder named after the recycle-bin folder
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a folder "nextcloud-trash" inside the "alpha" folder
-    When I assign the "grafana" tag to it
-    Then the app refuses and explains that the name is reserved
-    And the recycle-bin folder is untouched
+    And the folder "Demo/nextcloud-trash" holding no dashboards
+    When I create "CPU Load.grafana.json" in "Demo/nextcloud-trash"
+    Then the creation is refused with a message, explaining the name is reserved
+    And the recycle-bin folder still holds what it held

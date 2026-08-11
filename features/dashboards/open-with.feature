@@ -3,7 +3,7 @@
 Feature: Opening a dashboard file
   As a Nextcloud user
   I want the right openers for a dashboard file, and the right one on a plain click
-  So that I am never sent to a dashboard that is not there, and can always reach the JSON
+  So that I am never sent to a dashboard that is not there, and can always read the body
 
   Background:
     Given the app is connected to Grafana
@@ -26,7 +26,7 @@ Feature: Opening a dashboard file
       | unmapped | hidden            |
 
   @user @ui @blocked
-  Scenario Outline: The text editor is offered exactly when the file holds the JSON
+  Scenario Outline: The text editor is offered exactly when there is a body to edit
     Given a managed dashboard file in "<mode>" mode
     When I open its context menu
     Then "Open with text editor" is <offered or hidden>

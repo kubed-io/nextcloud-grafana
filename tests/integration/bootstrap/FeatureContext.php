@@ -112,7 +112,41 @@ final class FeatureContext implements Context {
 	private string $lastUid = '';
 	private string $newUid = '';
 	private string $copyTarget = '';
+	/**
+	 * THE FILE THE SCENARIO CALLS "the original" — which is NOT $currentFilePath.
+	 *
+	 * $currentFilePath is a cursor: it follows whatever the last gesture touched, so
+	 * a move or a rename repoints it. "The original" is a role, and it has to stay
+	 * put while the gesture happens somewhere else, or a post-condition about the
+	 * original silently reads the thing that just moved.
+	 */
+	private string $originalPath = '';
+	/** The original's bytes, read before the gesture — the byte-for-byte baseline. */
+	private string $originalBody = '';
+	/**
+	 * Whether the dashboard existed, and where, immediately before a purge.
+	 *
+	 * @var array{exists:bool,folder:string}
+	 */
+	private array $grafanaBeforePurge = ['exists' => false, 'folder' => ''];
+	/**
+	 * The dashboard's folder and title as they were BEFORE the gesture.
+	 *
+	 * "Nothing changed in Grafana" is a pre/post comparison and cannot be asserted
+	 * any other way: re-deriving the expected folder at assert time only proves the
+	 * derivation agrees with itself.
+	 *
+	 * @var array{folder:string,title:string}
+	 */
+	private array $grafanaBefore = ['folder' => '', 'title' => ''];
 	private string $trashedFrom = '';
+	/**
+	 * The managed keys the file carried as it was trashed — the only moment they can
+	 * be read, because a trashed file's original path no longer resolves.
+	 *
+	 * @var array<string,string>
+	 */
+	private array $trashedMetadata = [];
 	private int $lastMoveStatus = 0;
 
 	public function __construct() {

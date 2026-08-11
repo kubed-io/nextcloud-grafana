@@ -7,52 +7,51 @@ Feature: Looking at a dashboard file
 
   Background:
     Given the app is connected to Grafana
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a mapping with the following values:
+      | grafana folder | links    |
+      | nc folder      | Pointers |
+      | mode           | link     |
 
+  # notes: ../AGENTS.md#the-mappings-in-the-background
   # notes: ../AGENTS.md#view-dashboard
 
+    # ── RULE: a mirror reads as a dashboard, not as the JSON it happens to be ─
+
+  # notes: ../AGENTS.md#a-mapped-folder-shows-its-dashboards-as-dashboards
   @user @ui @todo
   Scenario: A mapped folder shows its dashboards as dashboards
-    Given a folder mapped as "sync" to the Grafana folder "flows"
-    And Grafana has dashboards in the "flows" folder
-    And the "flows" mapping has been synced
-    When the user views the contents of the mapped folder
+    Given a dashboard file in "Demo"
+    And a dashboard file in "Demo"
+    When I open "Demo" in the Files app
     Then the mapped folder shows the dashboards with the Grafana icon
-    # notes: ../AGENTS.md#a-mapped-folder-shows-its-dashboards-as-dashboards
 
-  @user @gesture @todo
+    # ── RULE: a client can read what the app knows about the file ────────────
+
+  # notes: ../AGENTS.md#viewing-the-dav-properties-on-a-file-shows-grafana-specific-details
+  @user @dav @todo
   Scenario Outline: Viewing the DAV properties on a file shows Grafana specific details
-    Given a mapping with the following values:
-      | grafana folder | <grafana folder> |
-      | nc folder      | <nc folder>      |
-      | mode           | <mode>           |
-    And a dashboard "<dashboard>" mirrored into that folder
+    Given a dashboard file in "<folder>"
     When a WebDAV client requests the file's properties
-    Then the response carries the properties the app manages:
-      | property                       | value               |
-      | nc:metadata-grafana_uid        | the dashboard's uid |
-      | nc:metadata-grafana_mapping    | the mapping's id    |
-      | nc:metadata-grafana_mode       | <stored mode>       |
-      | nc:metadata-grafana_version    | set                 |
-      | nc:metadata-grafana_syncedHash | set                 |
+    Then the file holds:
+      | grafana_uid        | the dashboard's uid |
+      | grafana_mapping    | the mapping's id    |
+      | grafana_mode       | the mapping's mode  |
+      | grafana_version    | set                 |
+      | grafana_syncedHash | set                 |
 
     Examples: both modes a mapping can hold
-      | mode | stored mode | grafana folder | nc folder | dashboard |
-      | sync | sync        | bananacat      | observe   | fuzzler   |
-      | link | reference   | applepie       | pointers  | wobbler   |
-
-    # notes: ../AGENTS.md#viewing-the-dav-properties-on-a-file-shows-grafana-specific-details
-
-  @user @gesture @todo
-  Scenario: What the app manages, only the app changes
-    Given a managed dashboard file
-    When a client tries to change "nc:metadata-grafana_uid" via PROPPATCH
-    Then the change is rejected — the sync engine owns these properties
-    And the property still names the dashboard it named before
-    # notes: ../AGENTS.md#what-the-app-manages-only-the-app-changes
+      | folder   |
+      | Demo     |
+      | Pointers |
 
   # notes: ../AGENTS.md#finding-dashboards-by-their-mode
-  @user @gesture @blocked
+  @user @dav @blocked
   Scenario: Finding dashboards by their mode
-    Given a "sync" dashboard file and a "link" dashboard file in the same user's storage
+    Given a dashboard file in "Demo"
+    And a dashboard file in "Pointers"
     When a DAV REPORT searches for files where "nc:metadata-grafana_mode" is "sync"
-    Then only the sync file is returned
+    Then only the file in "Demo" is returned

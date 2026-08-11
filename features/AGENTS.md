@@ -371,7 +371,53 @@ A link is a pointer body, so a copy of one holds a pointer and no dashboard JSON
 It must not inherit the pointer's identity, and it cannot become a sync file by
 accident — there are no bytes to create a dashboard from.
 
-### A dashboard duplicated in Grafana arrives as a new file
+### The copy belongs to where it lands
+
+A copy is never the original's identity — that is the whole feature. What decides
+what the copy IS, though, is the folder it landed in, not the folder it came from:
+a file copied out of a mapping into `Scratch` is a plain document, and a file
+copied out of `Scratch` into a mapping is a new dashboard. So the source is an
+Examples column and the destination is the scenario.
+
+That is why there is one arrange for every source. `a dashboard file in "<folder>"`
+makes a file wherever the scenario says, and the Background says what that folder
+is; the arrange asserts nothing about a uid, because outside a mapping there
+isn't one and that is the point rather than a failure.
+
+The original is checked as pre/post state — the uid it had, it still has, and its
+dashboard is still in Grafana. That single sentence replaced three separate claims
+(it kept its uid, it was not restored, it was not duplicated), which were three
+wordings of "the original did not move".
+
+### A copy never changes a file's mode
+
+A `link` folder is a read-only projection of Grafana. That is the ONLY thing a
+link is for, so a copy may not cross the boundary in either direction: not into a
+link folder (there is nothing a local file could become there) and not out of one
+into a mapping (that would promote a read-only pointer into an authored
+dashboard). Both directions end in the same refusal, so they are two rows of one
+scenario rather than two scenarios.
+
+The sibling n8n and penpot apps support no such crossing either. Copying a link
+file OUT to an unmapped folder is still fine — the result is a plain document,
+not a mode change.
+
+### RETIRED — a copy whose dashboard cannot be created
+
+The scenario opened `Given Grafana will reject the creation`, which is not a
+pre-state at all: it is a premonition, an action the server has not taken yet,
+written as though it were something already true. It also never said WHY the
+rejection happened or what came back, so nothing about it could be implemented
+against.
+
+It is gone rather than fixed, because for a COPY it describes something that can
+barely occur: the copy's body is the original's body, and the original was already
+accepted by Grafana. A rejection at copy time would mean Grafana changed its mind
+about bytes it had taken. The real failure — a body Grafana will not accept — is
+specified once, in `create.feature`, where a body first meets Grafana, and it is
+stated as a property of the FILE rather than a mood of the server.
+
+### A dashboard copied in Grafana arrives as its own file
 
 The mirror image: someone duplicates a dashboard in Grafana. The pull sees a new
 uid in the mapped folder and mirrors it like any other new dashboard — the copy
@@ -461,6 +507,62 @@ explained there.
 STATUS: create-on-land is built (CreateService + CreateInGrafanaListener,
 unit-tested and live-verified). @todo means the WebDAV step definitions are
 missing, not the code.
+
+### The mappings in the Background
+
+Two mappings, declared as tables — the Grafana folder, the Nextcloud folder and
+the mode spelled out per line — plus one folder that is mapped to nothing. Every
+scenario then names the folder it acts in, and the Background is what says what
+that folder IS. Nothing restates "sync" or "unmapped" in a step.
+
+The pair is the whole input space for a create: a `sync` mapping, a `link`
+mapping, and outside every mapping. The mode is not a scenario, it is a property
+of the folder the file landed in.
+
+**Declaring a second mapping used to wipe the first, silently.** `a mapping with
+the following values:` reset the store on every call, so a Background could only
+ever describe ONE mapping and nothing said so — `tags.feature` had been carrying
+two since the tag work, of which only the second existed at runtime. The reset now
+happens once per scenario, on first use, which is all the isolation was ever for.
+The sibling n8n app hit this first and was fixed the same way.
+
+### A link mapping authors nothing
+
+A link folder is a read-only projection of Grafana. A file appearing in one is a
+local file, and it can never become the dashboard it looks like — so the app
+should refuse the write rather than leave a `.grafana.json` sitting there looking
+managed. Creating the dashboard in Grafana is how a link folder gains a file.
+
+The scenario is @unbuilt: today the app accepts the file and leaves it unmanaged,
+which is the "creates no dashboard" claim the old scenario made. That claim was
+true and useless — it described what did not happen rather than what should.
+
+### RETIRED — the uid scenarios (a file carrying a uid, live or dead)
+
+Two scenarios were removed rather than converted:
+
+- *a file that already carries a uid re-adopts its dashboard instead of creating one*
+- *a file carrying a uid that no longer exists is created fresh*
+
+Both described a file ARRIVING somewhere with an identity already on it, which is
+a move, not a create — and both are already covered by `move.feature`, where the
+gesture belongs. Read as creates they describe something improbable: a file
+authored fresh has no uid to carry, so the premise only holds if someone hand-wrote
+one, or if a duplicate was dragged in. The uid is a post-condition on a structure,
+not an action.
+
+### RETIRED — two dashboards with the same title arrive as two distinct files
+
+Two files being two files is not a behaviour. What the scenario was reaching for —
+that a filename collision is resolved rather than one dashboard overwriting
+another — is a property of the naming rule, not of creation, and a count of files
+is the weakest possible statement about a tree.
+
+### RETIRED — a new dashboard is named after the file
+
+The name is end state, asserted where it is produced: the create scenario now says
+the dashboard is named after the file, in the mapped Grafana folder, as part of
+what that gesture leaves behind. A value on an object is not a behaviour.
 
 ### A file that already carries a uid re-adopts its dashboard instead of creating one
 
@@ -705,6 +807,25 @@ a stripped file restores as a NEW dashboard with a NEW uid, a kept one restores
 to the same dashboard. Identity is proven by what comes back, not by reading a
 property off a file in the bin.
 
+### A purge that cannot reach Grafana clears the file without deleting anything
+
+Cannot prove it is still parked → do not delete. Leaving a dashboard alive that
+could have gone is a recoverable leak; deleting one that should have lived is not.
+The Nextcloud side of the purge still completes, because the user's gesture was to
+empty their trash and that much is always safe.
+
+### RETIRED — the admin purge
+
+`purge.feature` used to describe an admin button that removed every dashboard file
+the app had created, across every mapping, on the promise that a later sync would
+bring them back. That promise only held for files that were faithful mirrors, and
+the ones that were not are exactly the ones you would miss.
+
+It was never built here — all three scenarios were @todo — so retiring it is a
+matter of deleting the spec rather than the code. The sibling n8n app HAD built it
+and removed it for the same reason. Purge now means one thing in both apps:
+emptying the Nextcloud trash, which finishes the delete the trash gesture started.
+
 ### Purging never deletes a dashboard someone rescued out of the bin
 
 Purging one of several parked dashboards must not sweep the rest. Same rule as
@@ -715,6 +836,197 @@ A colleague browsing Grafana sees a dashboard they still need sitting in
 "nextcloud-trash" and drags it back where it belongs. Weeks later the original user
 empties their Nextcloud trash. The purge must NOT chase the rescued dashboard down.
 Deleting by uid alone would destroy a live, in-use dashboard, and Grafana has no undo.
+
+### The Grafana bin needs the Nextcloud trash
+
+The recycle-bin folder is the Grafana half of the Nextcloud trash: trashing parks
+the dashboard, and emptying the trash is what finally deletes it. Turn the
+Nextcloud trash off and the second half never comes — the dashboard would sit in
+the bin folder forever, with nothing left in Nextcloud that could ever purge it.
+
+So the bin does not operate without the trash. A delete with the Nextcloud trash
+disabled deletes the dashboard outright, whatever the bin setting says.
+
+`files_trashbin` is a shipped Nextcloud app and CAN be disabled, so this is a real
+configuration rather than a hypothetical — it is simply one the app declines to
+support in bin mode. Neither n8n nor penpot models a disabled trash at all.
+
+### RETIRED — deleting a dashboard in Grafana whose file is already trashed
+
+Reaching it requires a mapped file to be in the Nextcloud trash while Grafana was
+never told, which the trash gesture does synchronously. It is therefore only
+reachable when a mapping is ALREADY out of sync — a bug state, not a behaviour, and
+a spec written against it would be a spec for broken code.
+
+The sibling n8n app still carries the equivalent (`purge.feature`, @unbuilt), and
+it states the OPPOSITE outcome — the trashed file is left alone. The two apps
+should not disagree; resolving that is open.
+
+### Restoring a sync file re-creates the dashboard with a new id (bin off)
+
+With the recycle bin off, the dashboard was destroyed when the file was trashed —
+Grafana has no undelete, so there is nothing to bring back. A restore therefore
+builds a NEW dashboard from the file's body: same content, new uid, new URL, empty
+version history.
+
+That is stated as `its own, not the one it arrived with`, the same expectation the
+copy and move specs use, because the failure it guards against is the same one:
+silently reusing an id that names something else, or nothing.
+
+### Emptying the bin in Grafana finishes the delete
+
+The bin folder is an ordinary Grafana folder, so anyone may clear it — and clearing
+it is the same gesture as emptying the Nextcloud trash, performed from the other
+side. A dashboard that was parked and is now permanently gone leaves a trashed file
+with nothing to be restored to, so that file is purged too.
+
+This is the legitimate twin of a scenario that was REMOVED from `delete.feature`
+("a dashboard deleted in Grafana whose file is already in the trash"). That one was
+only reachable when a mapping was already out of sync — a bug state. This one is
+reachable by design, because parking a dashboard is exactly what bin mode does and
+the bin is a folder like any other.
+
+OPEN — the trashed file's body still holds the full dashboard JSON, so purging it
+destroys the last copy. That is the same bargain the Nextcloud trash already makes
+when the user empties it themselves; whether the app should make it on their behalf,
+from a gesture performed in Grafana, is worth a second look before this is built.
+
+### The purge deletes what is in the bin, and only that
+
+Emptying the trash deletes the dashboard **if it is still parked in the bin folder**
+and does nothing to Grafana otherwise. Two situations reach "otherwise", and the app
+cannot tell them apart at purge time: someone rescued the dashboard back into its
+mapped folder, or someone deleted it outright.
+
+**Both are races that would not exist if the mirror were instantaneous.** A purge
+racing a rescue is a purge that ran before the rescue was visible; a purge racing a
+delete is one that ran before the delete was. Because the mirror is not instant, both
+are reachable, and both must end the same way — which is why they are two rows of
+one scenario rather than two scenarios.
+
+The end state is stated as a pre/post comparison — *the dashboard is as it was before
+the purge* — because "nothing was deleted" cannot be asserted directly, and the two
+rows have different dashboards to compare (one alive, one already gone).
+
+Leaving a dashboard alive that could have gone is a recoverable leak; deleting one
+that should have lived is not.
+
+### The suffix is Nextcloud's alone
+
+**Grafana permits two dashboards with the same title in one folder.** Verified
+against Grafana 13.0.2: two `POST /api/dashboards/db` with the same title, the same
+`folderUid` and `overwrite:false` both return 200, with different uids and the same
+slug. Nextcloud cannot do that — two files in a folder cannot share a name.
+
+So the app forces Nextcloud's rule onto the Nextcloud side ONLY. The second file
+takes a numbered suffix in its FILENAME; the JSON `title` and the Grafana title are
+left saying the real, duplicated name. Nothing is renamed in Grafana, and nothing is
+rewritten inside the file — the body already carries the true title and the metadata
+already carries the uid, so the filename is free to be a local display concern.
+
+**Which one takes the suffix is knowable, not arbitrary.** The app holds the prior
+state: the file already carrying that name had it first, so the arriving dashboard
+is the one that gets suffixed. Renaming the incumbent instead would move a file the
+user never touched.
+
+This is the one exception to *a name is one value living in three places*: the
+filename may carry a suffix the other two do not. That is a Nextcloud constraint
+leaking into a Nextcloud-only field, which is the cheapest place for it to leak.
+
+### A subfolder shares its name with Grafana exactly
+
+A subfolder under a mapping has the same name as its Grafana folder — the same
+string, case and all. `demo` is not `Demo`.
+
+There is nowhere to record a difference. A MAPPING can pair two unlike names because
+the mapping row holds both; a subfolder has only itself, so its name IS the Grafana
+folder's name and a rename on either side is a rename on both.
+
+A folder under a mapping that carries no `grafana_folder_uid` is not a subfolder in
+this sense at all — it is an ordinary Nextcloud folder that happens to sit inside a
+mapped tree, and it needs no scenarios, because the app does nothing to it.
+
+### A Nextcloud folder carries its Grafana folder uid
+
+A folder mirrored into Grafana stores that Grafana folder's uid in its own
+Nextcloud metadata, exactly as penpot stores `penpot_project_id` on a project
+folder. Penpot's `ProjectTags` states the principle outright: *the tag is not
+authoritative, the id is.* The same holds here, and it is what lets the folder
+gestures be specified at all.
+
+**Without the id, a rename is indistinguishable from a delete plus a create.** A
+reconciler seeing "a folder named X is gone and a folder named Y is here" has two
+readings and no way to choose: delete X's dashboards and re-create them under Y, or
+rename. The first loses uids, history and URLs. With the id on the folder, the same
+observation reads unambiguously as "the folder holding uid U is now called Y", and
+the fix is a rename on either side. Moving a folder is the same argument.
+
+It is PRE-STATE AND POST-STATE, not a mechanism: a scenario says a folder carries a
+uid the way a file says it carries one, in a table.
+
+**Naming.** `grafana_folderUid` already exists as a FILE key — "the Grafana folder
+this dashboard is in" — and is banked, never written. It should be retired rather
+than sat beside a folder key differing from it by one character: with the folder
+carrying its own uid, a dashboard's Grafana folder is simply its parent's, and a
+second copy on every file is a denormalisation that can go stale. The folder key is
+`grafana_folder_uid`.
+
+### When a folder deleted in Grafana may delete the Nextcloud folder
+
+Deleting a Grafana folder deletes the dashboards in it. What Nextcloud does depends
+on what else is in the mirrored folder:
+
+- **Only dashboards** → delete the Nextcloud folder too. Everything in it came from
+  the folder that was just deleted, so nothing of the user's is lost, and Nextcloud's
+  trash makes it reversible anyway.
+- **Anything else** → delete only the dashboard files, leave every other file where
+  it is, and remove `grafana_folder_uid` from the folder. The folder stops being a
+  mirror and goes back to being an ordinary folder. Deleting a user's spreadsheets
+  because a Grafana folder went away is not a trade the app gets to make.
+
+The reverse direction needs no such care. **Deleting a folder in Nextcloud is
+always safe to honour**: it is an ordinary Nextcloud delete, everything lands in the
+trash, and Nextcloud is better at restoring than this app would be.
+
+### A folder the user made for something else stays theirs
+
+A pull claims the folders it mirrors and no others. Under the tag model this needed
+saying twice — once as "do not tag what you did not make", once as "do not stamp an
+id on it". With the tag gone there is one marker left, so there is one rule: a
+folder holding no `grafana_folder_uid` is a folder the app has never had anything
+to do with, and a pull leaves it exactly so.
+
+### A subfolder is in Grafana when a dashboard is in it
+
+**The `grafana` tag on subfolders is retired.** A folder under a mapping exists in
+Grafana exactly when a dashboard lives somewhere beneath it — parents included. No
+tag, no opt-in.
+
+The tag model was borrowed from penpot, where it fits: penpot has teams → projects
+and nothing deeper, so "which projects are real" is a flat question. Grafana nests
+arbitrarily, like Nextcloud, and the tag then has to answer questions it cannot:
+`foo(mapping)/bar(tagged)/baz(untagged)` holding a dashboard in `baz` would leave
+Grafana with nowhere to put it, and `bar(untagged)/baz(tagged)` is the same problem
+upside down.
+
+Following the dashboards answers all of them at once. A leaf holding spreadsheets
+and no dashboards simply never appears; a dashboard three folders deep creates all
+three. Grafana 13 has native nested folders (`/api/folders` carries `parentUid`),
+so the shape is expressible on the far side.
+
+OPEN: what happens to a Grafana folder when its last dashboard leaves. Deleting it
+is destructive and racy; leaving it is untidy but safe. Not decided here.
+
+### A link cannot be deleted from Nextcloud
+
+A `link` is a read-only pointer at a dashboard Grafana owns. Deleting the pointer
+does not delete anything — it only makes the mapped folder disagree with the
+Grafana folder it mirrors, and the next pull writes the file straight back. So the
+gesture is refused rather than half-honoured.
+
+This is the same rule that blocks a copy from crossing into or out of a link
+folder, and the same one the sibling n8n app settled on: a link is Grafana's copy
+to remove.
 
 ### A dashboard deleted in Grafana loses its mirror in Nextcloud
 
@@ -1412,6 +1724,61 @@ because the tags were the interesting part there, and named after the pull.
 The behaviour is that someone edited a dashboard. The body arriving and the pills
 matching are both end states of that, which is why they are `Then`s here rather
 than a scenario in a file about tags.
+
+### Removing a mapping removes only the mapping
+
+**Nothing is trashed, nothing is deleted, nothing is sent to Grafana.** Removing a
+mapping deletes one row of configuration; the files stay exactly where they are and
+become unmapped, and every dashboard in Grafana is untouched.
+
+The feature used to describe the opposite — the connected files were trashed, their
+dashboards deleted or parked depending on the recycle-bin setting, and re-mapping
+plus restoring from the trash was how you got back. Six scenarios, most of them
+about undoing the damage the first one did.
+
+That was a lot of destruction in service of a gesture that means "stop syncing
+these". An unmapped file is already a well-defined thing everywhere else in this
+app: it keeps its `grafana_uid`, loses its `grafana_mapping`, and reads as
+`unmapped`. Removing a mapping simply produces that state for everything under the
+folder, which is the smallest thing the gesture could possibly mean.
+
+**Links are the one exception, and only because they hold nothing.** A link file is
+a pointer at a dashboard Grafana owns; with no mapping it points nowhere and there
+is no body to preserve, so it goes. Nothing is lost that a later re-map would not
+rebuild on the next sync.
+
+Re-connecting is therefore not this feature's problem. Adding a mapping over a
+folder of unmapped files is `mapping/create.feature`'s business, and it adopts them
+by uid like any other sync.
+
+OPEN — whether a removed link file lands in the Nextcloud trash on its way out.
+Nextcloud's own delete path would put it there; "as if the mapping was never there"
+argues it should not clutter the trash with pointers. Not decided.
+
+## mapping/rename
+
+`features/mapping/rename.feature`
+
+Renaming either side of a MAPPING. Split out of `folders/rename.feature`, which is
+about subfolders: the two obey opposite rules, and having them in one file was what
+made the subfolder scenarios look like they could carry a name Grafana did not
+share.
+
+### A mapping is a pair of ids, so a rename is a no-op
+
+A mapping records a Grafana folder UID and the Nextcloud folder it pairs with.
+Neither is a name, so renaming either side changes nothing that the mapping is built
+on — there is no reconnect to perform and nothing to send to Grafana.
+
+**This is the ONLY place two different names are legitimate.** `demo` in Grafana may
+pair with `Dashboards` in Nextcloud, because the mapping is the thing that holds the
+pair. A subfolder has nowhere to keep such a record, which is why it must share its
+name exactly.
+
+The safety of the whole gesture rests on the Nextcloud side being held by id too. If
+the mapping stores a PATH, a rename orphans it and every dashboard under it silently
+stops resolving — which is what the old `folders/rename.feature` recorded as a known
+defect. Holding the folder id instead removes the defect rather than warning about it.
 
 ## mapping/delete
 

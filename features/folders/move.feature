@@ -7,102 +7,99 @@ Feature: Moving a folder
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
-    And a folder mapped as "sync" to the Grafana folder "beta"
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a mapping with the following values:
+      | grafana folder | reports |
+      | nc folder      | Reports |
+      | mode           | sync    |
+    And a mapping with the following values:
+      | grafana folder | links    |
+      | nc folder      | Pointers |
+      | mode           | link     |
+    And a folder "Scratch" that is not mapped
 
-  # ── what happens today ───────────────────────────────────────────────────────────
+  # notes: ../AGENTS.md#the-mappings-in-the-background
 
-  # Recorded as a known defect. The files' paths change, so their mapping membership
-  # changes, but no listener acts on a folder move — Grafana hears nothing.
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a folder of dashboards out of a mapping desyncs them silently
-    Given a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I move the subfolder to a folder that is not mapped
-    Then the three files no longer resolve to any mapping
-    And their dashboards are untouched in Grafana
-    And nothing tells the user the two sides no longer agree
-
-  # ── moves inside the mapped set ──────────────────────────────────────────────────
-
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a subfolder within its own mapping changes nothing
-    Given a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I move the subfolder elsewhere inside the "alpha" folder
-    Then the three files stay managed "sync" under the "alpha" mapping
-    And Grafana is not contacted
+    # ── RULE: the folder's uid is what makes a move a move ────────────────────
+    # notes: ../AGENTS.md#a-nextcloud-folder-carries-its-grafana-folder-uid
 
   @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a subfolder into another mapping re-parents its dashboards, keeping uids
-    Given a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I move the subfolder into the "beta" folder
-    Then all three dashboards move to the "beta" Grafana folder
-    And each keeps its "grafana_uid"
-    And each file re-stamps its mapping to "beta"
+  Scenario: Move a folder within its own mapping
+    Given the folder "Demo/Team" holding three dashboards
+    When I move "Demo/Team" into "Demo/Archive"
+    Then "Demo/Archive/Team" holds the same files it held before the move
+    And the Grafana folder "Team" is under "Archive", holding the same dashboards
+    And "Demo/Archive/Team" holds:
+      | grafana_folder_uid | the uid it had before the move |
 
-  # ── leaving the mapped set: the decision ─────────────────────────────────────────
-  # These two are alternatives, not both. Whichever is chosen, the other should be
-  # deleted from this file rather than left as an unresolved pair.
+    # Without the uid this reads as a folder disappearing and another appearing, and
+    # three dashboards would be deleted and re-created under new ones.
+
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Move a folder into another mapping
+    Given the folder "Demo/Team" holding three dashboards
+    When I move "Demo/Team" into "Reports"
+    Then "Reports/Team" holds the same files it held before the move
+    And the Grafana folder "Team" is under "reports", holding the same dashboards
+    And "Reports/Team" holds:
+      | grafana_folder_uid | the uid it had before the move |
+
+    # ── RULE: leaving the mapped set is leaving it, dashboard by dashboard ────
+    # notes: ../AGENTS.md#the-recycle-bin-folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: Moving a folder out of every mapping applies the per-file rule to each dashboard
+  Scenario: Move a folder out of every mapping with the recycle bin off
     Given the Grafana recycle-bin folder is off
-    And a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I move the subfolder to a folder that is not mapped
-    Then all three dashboards are deleted in Grafana
-    And all three files keep their full JSON and lose their Grafana identity
+    And the folder "Demo/Team" holding three dashboards
+    When I move "Demo/Team" into "Scratch"
+    Then "Scratch/Team" holds the same files it held before the move
+    And none of those dashboards exists in Grafana
+    And "Scratch/Team" holds:
+      | grafana_folder_uid | absent |
+
+    # Nothing is lost: the files keep their bodies, so the dashboards can be made
+    # again by moving the folder back into a mapping.
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: Moving a folder out of every mapping is refused rather than deleting many dashboards
-    Given the Grafana recycle-bin folder is off
-    And a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I try to move the subfolder to a folder that is not mapped
-    Then the move is refused with a message naming how many dashboards it would delete
-    And the subfolder stays where it was
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: With the recycle bin on, moving a folder out parks its dashboards instead
+  Scenario: Move a folder out of every mapping with the recycle bin on
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a subfolder of "alpha" holding three managed "sync" dashboard files
-    When I move the subfolder to a folder that is not mapped
-    Then all three dashboards are parked in "nextcloud-trash"
-    And all three files KEEP their "grafana_uid"
+    And the folder "Demo/Team" holding three dashboards
+    When I move "Demo/Team" into "Scratch"
+    Then "Scratch/Team" holds the same files it held before the move
+    And those dashboards are in the "nextcloud-trash" Grafana folder
 
-  # ── arriving from outside ────────────────────────────────────────────────────────
-
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a folder of untracked dashboard files into a mapping creates them all
-    Given a folder outside every mapping holding three untracked ".grafana.json" files
-    When I move the folder into the "alpha" folder
-    Then three dashboards are created in the "alpha" Grafana folder
-    And each file is stamped with its new uid
+    # ── RULE: arriving in a mapping makes every dashboard in it real ──────────
 
   @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: A folder move that fails part-way reports what did and did not happen
-    Given a folder outside every mapping holding three untracked ".grafana.json" files
-    And Grafana will reject the creation of one of them
-    When I move the folder into the "alpha" folder
-    Then the user is told which dashboards were created and which were not
-    And the files that failed carry no "grafana_uid"
+  Scenario: Move a folder of unmapped files into a mapping
+    Given the folder "Scratch/Team" holding three dashboards
+    When I move "Scratch/Team" into "Demo"
+    Then "Demo/Team" holds the same files it held before the move
+    And the Grafana folder "Team" is under "demo", holding a dashboard for each of them
+    And "Demo/Team" holds:
+      | grafana_folder_uid | the uid of the "Team" Grafana folder |
 
-  # ── link mappings ────────────────────────────────────────────────────────────────
-  # A link is a read-only pointer, and move-dashboard.feature blocks moving one out
-  # of its mapping. A folder move must not become the way around that guard.
+    # ── RULE: a folder move is not a way around the link guard ────────────────
+    # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
 
   @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: A folder move cannot smuggle a link out of its mapping
-    Given a folder mapped as "link" to the Grafana folder "links"
-    And a subfolder of it holding a managed "link" dashboard file
-    When I try to move the subfolder to a folder that is not mapped
-    Then the move is refused
-    And the dashboard in Grafana is untouched
+  Scenario Outline: Move a folder between sync and link mappings
+    Given the folder "<source>/Team" holding three dashboards
+    When I try to move "<source>/Team" into "<destination>"
+    Then the move is refused with a message
+    And "<source>/Team" stays where it was
 
-  # ── the mapped folder itself ─────────────────────────────────────────────────────
-  # Same root cause as rename-folder.feature: the mapping is a path string, so moving
-  # the folder it names orphans it.
+    Examples: a mode belongs to the folder, and a folder move may not change one
+      | source   | destination |
+      | Demo     | Pointers    |
+      | Pointers | Demo        |
 
-  @admin @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Moving a mapped folder orphans its mapping
-    Given a managed "sync" dashboard file in the "alpha" folder
-    When I move the mapped Nextcloud folder somewhere else
-    Then the mapping no longer matches any folder
-    And nothing warns the admin that the connection is broken
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Move a folder of links out of its mapping
+    Given the folder "Pointers/Team" holding three dashboards
+    When I try to move "Pointers/Team" into "Scratch"
+    Then the move is refused with a message
+    And all three dashboards still exist in Grafana

@@ -1,114 +1,81 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#dashboardscreate
 
-Feature: Create a dashboard from Nextcloud
+Feature: Creating a dashboard
   As a Nextcloud user
-  I want to create Grafana dashboards by making files
+  I want a dashboard I make on either side to exist on both
   So that I can author dashboards without opening the Grafana UI
 
   Background:
     Given the app is connected to Grafana
+    And a mapping with the following values:
+      | grafana folder | demo |
+      | nc folder      | Demo |
+      | mode           | sync |
+    And a mapping with the following values:
+      | grafana folder | links    |
+      | nc folder      | Pointers |
+      | mode           | link     |
+    And a folder "Scratch" that is not mapped
 
-  # ══ CREATED IN NEXTCLOUD ═══════════════════════════════════════════════════════
+  # notes: ../AGENTS.md#the-mappings-in-the-background
+
+    # ── RULE: where the file lands decides whether it is a dashboard ───────────
 
   @user @in-nextcloud @gesture @ui
-  Scenario: New file in a mapped sync folder becomes a real dashboard
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When I create a new ".grafana.json" file in that folder via the Files "New" menu
+  Scenario: Create a new dashboard in a mapped folder
+    When I create "CPU Load.grafana.json" in "Demo" via the Files "New" menu
     Then a matching dashboard is created in Grafana
-    And the dashboard is created in the "demo" folder
-    And the file is stamped with the dashboard's "grafana_uid"
+    And the dashboard is named "CPU Load", in the "demo" Grafana folder
+    And "Demo/CPU Load.grafana.json" holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | "sync"              |
 
   @user @in-nextcloud @gesture @ui @todo
-  Scenario: A dashboard file created outside any mapped folder stays unmanaged
-    Given a folder that is not mapped
-    When I create a ".grafana.json" file in that folder
+  Scenario: Create an unmapped dashboard
+    When I create "CPU Load.grafana.json" in "Scratch"
     Then no dashboard is created in Grafana
-    And the file has no "grafana_uid" metadata
-    And the file is treated as a plain, untracked document, not "unmapped"
+    And "Scratch/CPU Load.grafana.json" holds no Grafana metadata at all
 
-  # ── what lands, and what it carries ──────────────────────────────────────────────
+  # notes: ../AGENTS.md#a-link-mapping-authors-nothing
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Creating a dashboard file in a link-mapped folder is refused
+    When I try to create "CPU Load.grafana.json" in "Pointers"
+    Then the creation is refused with a message
+    And no dashboard is created in Grafana
+    And "Pointers" holds no file named "CPU Load.grafana.json"
 
-  # notes: ../AGENTS.md#a-file-that-already-carries-a-uid-re-adopts-its-dashboard-instead-of-creating-one
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A file that already carries a uid re-adopts its dashboard instead of creating one
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    And a dashboard "uid-A" exists in the "demo" Grafana folder
-    When I place a ".grafana.json" file whose JSON carries uid "uid-A" in that folder
-    Then no second dashboard is created in Grafana
-    And the file is stamped with "uid-A"
+    # @unbuilt — THIS IS THE SPEC, AND THE APP DOES THE OPPOSITE TODAY: it accepts
+    # the file and leaves it unmanaged. A link folder is Grafana's to write, so a
+    # file authored into one can never become the dashboard it looks like.
 
-  # notes: ../AGENTS.md#a-file-carrying-a-uid-that-no-longer-exists-is-created-fresh
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A file carrying a uid that no longer exists is created fresh
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When I place a ".grafana.json" file whose JSON carries a uid no dashboard uses in that folder
-    Then a dashboard is created in Grafana from the file's JSON body
-    And the file is stamped with the uid it was given
-
-  # The dashboard's name comes from the filename, because that is what the user just
-  # typed. A body with no title must not produce an untitled dashboard.
-  @user @in-nextcloud @gesture @ui
-  Scenario: A new dashboard is named after the file
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When I create "CPU Load.grafana.json" in that folder
-    Then a dashboard named "CPU Load" is created in Grafana
-
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: A file that is not valid JSON creates nothing and says so
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When I create a ".grafana.json" file with invalid JSON in that folder
-    Then no dashboard is created in Grafana
-    And the failure is reported to the user
-    And the file is left where the user put it
-
-  # ── a link mapping authors nothing ───────────────────────────────────────────────
-  # A link folder is a read-only projection of Grafana. A file appearing in one is a
-  # local file, not an instruction to create a dashboard.
-
-  @user @in-nextcloud @gesture @ui
-  Scenario: A new file in a link-mapped folder creates no dashboard
-    Given a folder mapped as "link" to the Grafana folder "links"
-    When I create a ".grafana.json" file in that folder
-    Then no dashboard is created in Grafana
-    And the file has no "grafana_uid" metadata
-
-  # ── failure ──────────────────────────────────────────────────────────────────────
+    # ── RULE: a creation that cannot finish leaves a plain file ────────────────
 
   # notes: ../AGENTS.md#a-failed-creation-leaves-an-unstamped-file-not-a-half-managed-one
   @user @in-nextcloud @gesture @ui @todo
-  Scenario: A failed creation leaves an unstamped file, not a half-managed one
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    And Grafana will reject the creation
-    When I create a ".grafana.json" file in that folder
-    Then the file has no "grafana_uid" metadata
-    And the failure is reported to the user
+  Scenario Outline: A body that cannot become a dashboard leaves a plain file
+    When I create "CPU Load.grafana.json" in "Demo" holding <body>
+    Then no dashboard is created in Grafana
+    And the failure is reported to the user, naming what was wrong with it
+    And "Demo/CPU Load.grafana.json" holds no Grafana metadata at all
 
-  # ══ CREATED IN GRAFANA ═════════════════════════════════════════════════════════
-  # The other direction, and the one that runs first in practice: dashboards already
-  # exist in Grafana when a mapping is made. A pull is how they arrive.
+    Examples: caught here or caught by Grafana, the file is left as the user wrote it
+      | body                        |
+      | text that will not parse    |
+      | a dashboard Grafana rejects |
 
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A dashboard created in Grafana arrives as a file
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When a dashboard is created in the "demo" Grafana folder
-    And the "demo" mapping is pulled
-    Then a matching ".grafana.json" file appears in the mapped folder
-    And it is stamped with the dashboard's uid
+    # ── RULE: a dashboard made in Grafana arrives in the folder mapped to it ───
 
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: A dashboard created in a link-mapped Grafana folder arrives as a pointer
-    Given a folder mapped as "link" to the Grafana folder "links"
-    When a dashboard is created in the "links" Grafana folder
-    And the "links" mapping is pulled
-    Then a pointer file appears in the mapped folder
-    And it holds no dashboard JSON body
+  @grafana @in-grafana @gesture @ui @todo
+  Scenario Outline: Create a dashboard in Grafana
+    When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
+    Then "<nc folder>/CPU Load.grafana.json" holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | "<mode>"            |
+    And the file holds "<contents>"
 
-  # Two dashboards can share a title; a filename cannot be shared. The collision
-  # suffix is what keeps one dashboard to one file when that happens.
-  @grafana @in-grafana @occ @ui @todo
-  Scenario: Two dashboards with the same title arrive as two distinct files
-    Given a folder mapped as "sync" to the Grafana folder "demo"
-    When two dashboards both named "CPU Load" are created in the "demo" Grafana folder
-    And the "demo" mapping is pulled
-    Then two files exist in the mapped folder
-    And each carries a different uid
+    Examples: one gesture, and the mapping decides what the file is
+      | grafana folder | nc folder | mode | contents                   |
+      | demo           | Demo      | sync | the dashboard's full JSON  |
+      | links          | Pointers  | link | a pointer to the dashboard |

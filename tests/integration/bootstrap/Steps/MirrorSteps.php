@@ -88,6 +88,22 @@ trait MirrorSteps {
 	}
 
 	/**
+	 * The same table, for the file the gesture just touched.
+	 *
+	 * A move or a rename decides the path itself, so a scenario cannot name one
+	 * without restating the app's naming rules — and would then be asserting its own
+	 * arithmetic rather than the app's behaviour.
+	 *
+	 * @Then the file holds:
+	 */
+	public function theFileHolds(TableNode $table): void {
+		if ($this->currentFilePath === '') {
+			throw new \RuntimeException('no file to inspect — a Given must arrange one');
+		}
+		$this->theMirrorHolds($this->currentFilePath, $table);
+	}
+
+	/**
 	 * A mirror's metadata, as the end state of whatever just happened.
 	 *
 	 * @Then /^"([^"]*)" holds:$/
@@ -95,6 +111,17 @@ trait MirrorSteps {
 	public function theMirrorHolds(string $path, TableNode $table): void {
 		$failures = [];
 		foreach ($table->getRowsHash() as $property => $expected) {
+			// `Modified` IS NOT A METADATA KEY, and it belongs in this table anyway: it
+			// is state the file carries, read in the same glance as the rest. The times
+			// are GRAFANA'S — a mirror wears the dashboard's clock, not the sync's — so
+			// a rename that reaches Grafana must move it.
+			if ($property === 'Modified') {
+				$problem = $this->checkModifiedRow($path, $expected);
+				if ($problem !== null) {
+					$failures[] = "  {$property}: {$problem}";
+				}
+				continue;
+			}
 			$actual = $this->davReadMetadata($path, $property);
 			$problem = $this->checkMetadataRow($path, $property, $expected, $actual);
 			if ($problem !== null) {
@@ -104,6 +131,29 @@ trait MirrorSteps {
 		if ($failures !== []) {
 			throw new \RuntimeException("'{$path}' is not in the state the scenario describes:\n" . implode("\n", $failures));
 		}
+	}
+
+	/** The `Modified` row: the file's mtime against the dashboard's meta.updated. */
+	private function checkModifiedRow(string $path, string $expected): ?string {
+		if ($expected !== 'when the dashboard last changed in Grafana') {
+			return "unknown expectation '{$expected}'";
+		}
+		$uid = (string)$this->davReadMetadata($path, self::META_UID);
+		if ($uid === '') {
+			return 'the file carries no uid, so there is no dashboard to date it by';
+		}
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			return "dashboard '{$uid}' is gone from Grafana";
+		}
+		$updated = strtotime((string)($record['meta']['updated'] ?? ''));
+		if (!is_int($updated)) {
+			return 'Grafana reported no meta.updated to compare against';
+		}
+		$mtime = $this->davReadTime($path, 'getlastmodified');
+		return $mtime === $updated
+			? null
+			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated);
 	}
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */
@@ -117,17 +167,112 @@ trait MirrorSteps {
 
 		switch ($expected) {
 			case "the dashboard's uid":
+				// SEEDED FIRST, then the one this scenario just made. A pull scenario
+				// declares its dashboards up front and the uid is knowable by title; a
+				// create scenario has no title to look up, because the dashboard did not
+				// exist until the gesture — there the uid the app stamped is the answer.
 				$title = preg_replace('/\.grafana\.json$/', '', basename($path)) ?? '';
-				$want = $this->seededDashboards[$title]
-					?? throw new \RuntimeException("no dashboard called '{$title}' was declared by this scenario");
+				$want = $this->seededDashboards[$title] ?? $this->lastUid;
+				if ($want === '') {
+					throw new \RuntimeException("no dashboard called '{$title}' was declared or created by this scenario");
+				}
 				return $actual === $want ? null : "expected the uid of '{$title}' ({$want}), found '{$actual}'";
+			case 'its own, not the one it arrived with':
+				// A MINT, NOT A RESTORE: the file carried an id in and the app decided it
+				// was not usable, so the answer is a fresh one. Asserting "different from
+				// what it arrived with" is what tells the two apart.
+				if (($actual ?? '') === '') {
+					return 'expected a uid of its own, found nothing';
+				}
+				return $actual !== $this->lastUid
+					? null
+					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
+			case 'the uid it had before it was trashed':
+			case 'the uid it had before the rename':
+			case 'the uid it had before the move':
+				// THE IDENTITY SURVIVED THE GESTURE. `set` would pass for any uid at all,
+				// and the whole claim is that it is the SAME one — that the app moved a
+				// thing rather than replacing it.
+				if ($property !== self::META_UID) {
+					// A folder's uid is not the dashboard uid the arrange captured. Fail
+					// loudly rather than compare the wrong two values silently.
+					throw new \RuntimeException(
+						"'{$expected}' is only defined for " . self::META_UID . ", not {$property}",
+					);
+				}
+				if ($this->lastUid === '') {
+					throw new \RuntimeException('the arrange captured no uid to compare against');
+				}
+				return $actual === $this->lastUid
+					? null
+					: "expected the uid it already had ({$this->lastUid}), found '{$actual}'";
+			case "the mapping's id":
+				$folder = trim(dirname($path), '/.');
+				$want = $this->mappingIdForNcFolder($folder);
+				return $actual === $want ? null : "expected the id of the mapping owning '{$folder}' ({$want}), found '{$actual}'";
+			case "the mapping's mode":
+				// `link` is stored as `reference`, so the folder answers this and the
+				// scenario never has to know the wire value.
+				$folder = trim(dirname($path), '/.');
+				$want = $this->mappingModeForNcFolder($folder);
+				return $actual === $want ? null : "expected the mode of the mapping owning '{$folder}' ({$want}), found '{$actual}'";
+			case "its own, not the original's":
+				// PRESENCE IS TOO WEAK HERE. A uid that is merely non-empty could be the
+				// one it was copied from, and that is the entire anti-hijack claim.
+				if (($actual ?? '') === '') {
+					return 'expected a uid of its own, found nothing';
+				}
+				return $actual !== $this->lastUid
+					? null
+					: "it reused the original's uid ({$actual}) — two files would claim one dashboard";
 			case 'set':
 				return ($actual ?? '') !== '' ? null : 'expected a value, found nothing';
 			case 'absent':
 				return ($actual ?? '') === '' ? null : "expected it not to be stored, found '{$actual}'";
 			default:
+				// LITERALS ARE QUOTED, by the convention in this trait's docblock. An
+				// unquoted value that reached here is a phrase the table vocabulary does
+				// not implement — comparing it as a literal would assert the wrong thing
+				// and report it as a value mismatch, which is how `the mapping's mode`
+				// went unnoticed until it reached CI.
+				if (!str_starts_with($expected, '"') || !str_ends_with($expected, '"')) {
+					throw new \RuntimeException(
+						"the table says '{$expected}', which is not a value this vocabulary knows."
+						. ' Quote it to mean a literal, or add a case for it.',
+					);
+				}
 				$literal = trim($expected, '"');
 				return $actual === $literal ? null : "expected '{$literal}', found '{$actual}'";
 		}
+	}
+
+	/**
+	 * The mapping owning a Nextcloud folder, read from the live store rather than
+	 * remembered at arrange time — a Background may declare several, and the file
+	 * decides which one it belongs to by where it landed.
+	 */
+	/**
+	 * The stored mode of the mapping owning a Nextcloud folder.
+	 *
+	 * `link` is stored as `reference` on the wire, so this returns what the file
+	 * actually carries and a scenario never has to know the quirk.
+	 */
+	private function mappingModeForNcFolder(string $folder): string {
+		foreach ($this->listMappings() as $m) {
+			if ((string)($m['nc_folder'] ?? '') === $folder) {
+				$mode = (string)($m['mode'] ?? '');
+				return $mode === 'link' ? 'reference' : $mode;
+			}
+		}
+		throw new \RuntimeException("no mapping owns the Nextcloud folder '{$folder}'");
+	}
+
+	private function mappingIdForNcFolder(string $folder): string {
+		foreach ($this->listMappings() as $m) {
+			if ((string)($m['nc_folder'] ?? '') === $folder) {
+				return (string)($m['id'] ?? '');
+			}
+		}
+		throw new \RuntimeException("no mapping owns the Nextcloud folder '{$folder}'");
 	}
 }

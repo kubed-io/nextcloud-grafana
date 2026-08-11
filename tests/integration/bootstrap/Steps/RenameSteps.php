@@ -29,6 +29,58 @@ trait RenameSteps {
 	private const JOB_PUSH = 'OCA\\GrafanaSync\\BackgroundJob\\PushDashboardJob';
 	private const JOB_RENAME = 'OCA\\GrafanaSync\\BackgroundJob\\ReconcileNameJob';
 
+	/**
+	 * A dashboard file with a NAME the scenario chose, in a folder it names.
+	 *
+	 * @Given a dashboard file named :filename in :folder
+	 */
+	public function aDashboardFileNamedIn(string $filename, string $folder): void {
+		$this->davMkdir($folder);
+		$this->currentFolder = $folder;
+		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$this->putDashboardFile($folder, $stem);
+		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($this->lastUid !== '') {
+			$this->createdDashboardUids[] = $this->lastUid;
+		}
+	}
+
+	/**
+	 * The three places a name lives, as three assertions.
+	 *
+	 * They are one value, but each line names WHERE it is being checked, so a
+	 * failure says which of the three drifted without the reader decoding a
+	 * compound sentence. The filename check re-resolves first: a rename made in
+	 * Grafana, or made by editing the title, moves the file out from under the
+	 * path the scenario last knew.
+	 *
+	 * @Then the file is named :filename
+	 */
+	public function theFileIsNamed(string $filename): void {
+		if (!$this->davExists($this->currentFilePath)) {
+			$moved = $this->currentFolder . '/' . $filename;
+			if ($this->davExists($moved)) {
+				$this->currentFilePath = $moved;
+			}
+		}
+		$actual = basename($this->currentFilePath);
+		if ($actual !== $filename || !$this->davExists($this->currentFilePath)) {
+			throw new \RuntimeException("expected a file named '$filename', found '$actual'");
+		}
+	}
+
+	/** @Then the JSON title is :title */
+	public function theJsonTitleIs(string $title): void {
+		$spec = json_decode($this->davGet($this->currentFilePath), true, 512, JSON_THROW_ON_ERROR);
+		if (!is_array($spec)) {
+			throw new \RuntimeException("the file at {$this->currentFilePath} is not JSON");
+		}
+		$actual = (string)($spec['title'] ?? '');
+		if ($actual !== $title) {
+			throw new \RuntimeException("the JSON title is '$actual', not '$title'");
+		}
+	}
+
 	/** @When I rename the file to :filename */
 	public function iRenameTheFileTo(string $filename): void {
 		$dest = dirname($this->currentFilePath) . '/' . $filename;
@@ -48,7 +100,10 @@ trait RenameSteps {
 		$this->iRenameTheFileTo('Link Check ' . bin2hex(random_bytes(3)) . '.grafana.json');
 	}
 
-	/** @When I edit the file and change the JSON :field field to :value */
+	/**
+	 * @When I edit the file and change the JSON :field field to :value
+	 * @When I change the JSON :field field to :value
+	 */
 	public function iEditTheJsonField(string $field, string $value): void {
 		// Object decode: this PUTs the whole body back, and an assoc round-trip would
 		// rewrite the spec's empty `{}` objects as `[]`. Editing the title must not
@@ -72,7 +127,10 @@ trait RenameSteps {
 		Assert::assertSame($value, (string)($spec[$field] ?? ''), "the JSON $field did not become '$value'");
 	}
 
-	/** @Then the dashboard is renamed to :title in Grafana */
+	/**
+	 * @Then the dashboard is named :title in Grafana
+	 * @Then the dashboard is renamed to :title in Grafana
+	 */
 	public function theDashboardIsRenamedInGrafana(string $title): void {
 		$record = $this->grafanaGetDashboard($this->lastUid);
 		Assert::assertNotNull($record, "Grafana has no dashboard '{$this->lastUid}'");
