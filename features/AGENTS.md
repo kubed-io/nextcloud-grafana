@@ -2277,6 +2277,38 @@ when a folder is the gesture" is @todo. The aggregate behaviour — reporting wh
 came back, and what came back with a different identity — is @unbuilt: nothing in
 `lib/` treats a folder restore as one event.
 
+### Dashboards leaving the bin bring their folder out of the trash
+
+The other door into a restore, and the mirror of the Grafana-side purge: someone
+moves the parked dashboards out of the bin folder in Grafana, and the reconcile
+notices they are live again. The trashed Nextcloud folder follows them out.
+
+Bin-on only, for the same reason the Grafana-side purge is: with the bin off the
+dashboards were destroyed at trash time, so there is nothing in Grafana to move and
+no signal to observe.
+
+The uids are what make this a restore rather than a second copy — they name files
+that already exist in the Nextcloud trash, so those are brought back rather than
+written fresh beside them.
+
+**THE NEXTCLOUD TRASH IS WHAT MAKES THIS WORK, and it is worth being explicit about
+why the Grafana bin does not need to be cleverer.** Nextcloud's trash keeps a
+deleted folder as a whole subtree, with its original path, so the structure is never
+lost on that side. The Grafana bin can therefore be a FLAT holding pen keyed by uid:
+the dashboards sit in one folder with no hierarchy, and the restore rebuilds the
+Grafana folders from the Nextcloud tree and re-files each dashboard by its uid. Two
+sides, and only the one that already had the structure has to remember it.
+
+### A restore out of the bin brings back whatever shared the folder
+
+A folder comes out of the Nextcloud trash **whole**. A spreadsheet that rode into the
+trash inside the folder rides back out with it, because Nextcloud restores the node
+and everything under it — this app is not selectively reassembling a folder.
+
+That is the restore being unsurprising rather than clever, and it is the counterpart
+to the delete rule: a Grafana-side delete may not destroy a user's non-dashboard
+files, and a Grafana-side restore does not leave them behind either.
+
 ### A folder restore reports which dashboards came back with new identities
 
 The aggregate gap, same shape as the one in delete-folder.feature: each file is

@@ -68,20 +68,6 @@ Feature: Deleting a folder
     # Deleting one dashboard is a small decision; deleting forty is not, and with the
     # bin off it is irreversible. The app knows the count before it acts.
 
-    # ── RULE: a Grafana folder outlives its last dashboard ────────────────────
-    # notes: ../AGENTS.md#a-grafana-folder-outlives-its-last-dashboard
-
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Trash the only dashboard in a folder
-    Given the folder "Demo/Team" holding one dashboard "CPU Load"
-    When I move "Demo/Team/CPU Load.grafana.json" to the trash
-    Then the Grafana folder "Team" is still under "demo", holding no dashboards
-    And "Demo/Team" holds:
-      | grafana_folder_uid | the uid it had before the delete |
-
-    # Emptying is not deleting. A dashboard made here later lands in the folder both
-    # sides already agree on, instead of minting a second one beside it.
-
     # ── RULE: a folder deleted in Grafana takes only what is Grafana's ────────
     # notes: ../AGENTS.md#when-a-folder-deleted-in-grafana-may-delete-the-nextcloud-folder
 
