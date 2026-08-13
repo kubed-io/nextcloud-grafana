@@ -23,21 +23,32 @@ Feature: Emptying the trash of a folder
     # notes: ../AGENTS.md#a-purge-reaches-everything-the-trash-gesture-put-there
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario Outline: Purge a trashed folder of dashboards
-    Given the Grafana recycle bin is <bin>
+  Scenario: Purge a trashed folder with the recycle bin off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
+    And none of the three dashboards exists in Grafana
+    And none of the three files holds a "grafana_uid"
+    When I purge "Demo/Team" from the trash
+    Then Grafana is not contacted
+    And "Demo/Team" is gone from the Nextcloud trash
+
+    # The dashboards went when the folder was trashed and the files lost their ids
+    # with them, so there is nothing left to finish on the far side.
+
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: Purge a trashed folder with the recycle bin on
+    Given the Grafana recycle bin is on
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    And the three dashboards are parked in "nextcloud-trash"
+    And each of the three files still holds its "grafana_uid"
     When I purge "Demo/Team" from the trash
     Then none of the three dashboards exists in Grafana
     And "Demo/Team" is gone from the Nextcloud trash
 
-    Examples: the bin decides where they waited, not whether they go
-      | bin |
-      | off |
-      | on  |
-
-    # One gesture, three dashboards. The count is the only thing that differs from
-    # purging one file, which is why the bin modes are a row and not two scenarios.
+    # Three parked dashboards, three deletes. This is where the bin's promise ends
+    # and the cascade it was holding back becomes permanent.
 
   # notes: ../AGENTS.md#a-purge-reaches-through-every-level-it-was-given
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
@@ -46,6 +57,7 @@ Feature: Emptying the trash of a folder
     And the folder "Demo/Team" holding a dashboard
     And the folder "Demo/Team/Drafts" holding two dashboards
     And "Demo/Team" is in the Nextcloud trash
+    And the three dashboards are parked in "nextcloud-trash"
     When I purge "Demo/Team" from the trash
     Then none of the three dashboards exists in Grafana
     And "Demo/Team" is gone from the Nextcloud trash
@@ -61,6 +73,7 @@ Feature: Emptying the trash of a folder
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" also holds "Budget.xlsx"
     And "Demo/Team" is in the Nextcloud trash
+    And the three dashboards are parked in "nextcloud-trash"
     When I purge "Demo/Team" from the trash
     Then none of the three dashboards exists in Grafana
     And the dashboards Nextcloud never managed are still in "nextcloud-trash"

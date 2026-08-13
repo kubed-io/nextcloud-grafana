@@ -2279,8 +2279,27 @@ that it puts a survivable step in front of an unsurvivable one.
 ### A purge reaches everything the trash gesture put there
 
 A purge finishes whatever the trash started, so purging a trashed folder reaches
-every dashboard that folder held. The bin modes are an Examples row rather than two
-scenarios: the bin decides where the dashboards were *waiting*, not whether they go.
+every dashboard that folder held.
+
+**The two bin modes are two SCENARIOS, not two rows of one.** An earlier cut wrote
+them as an `Examples` column on the grounds that the bin only decides where the
+dashboards were waiting. That is wrong, and the suite's own test for an outline says
+so: the rows can only be written as *sentences*, never as values, because the
+PRE-STATE differs.
+
+| | after the folder was trashed | what the purge does |
+|---|---|---|
+| bin **off** | the dashboards are already gone, and the files lost their uids with them | nothing — Grafana is never contacted |
+| bin **on** | the dashboards are parked in the bin folder, and the files still carry the uids that match them | three deletes |
+
+The end states read alike — no dashboards in Grafana either way — and that is exactly
+the trap. It is true for opposite reasons, so a single outline would have asserted
+"none exist" in a run where the app did nothing and in a run where it destroyed
+three dashboards, and passed both. The asymmetry is where a bug in the bin-on path
+would hide.
+
+`dashboards/purge.feature` already made this split for a single file; the folder file
+now matches it rather than compressing it.
 
 **This is where the two bins earn their keep, and it is worth spelling out because
 the far side is unforgiving.** A Grafana folder delete **cascades** — measured, not
