@@ -21,10 +21,34 @@ use JsonSerializable;
  * folder API — saga Ch1 "Difference #1"), Grafana has real, nestable folders, so a
  * mapping is a folder-to-folder mirror with nothing to invent.
  *
- * We key on the folder **uid**, not its title, so a mapping survives a folder
- * rename in Grafana (the uid is immutable; the title is display-only and refreshed
- * on sync). `grafanaFolderTitle` is carried purely so the admin panel / occ output
- * can show a human name without a round-trip to Grafana.
+ * ## BOTH SIDES ARE HELD BY ID
+ *
+ * | side | authority | display / creation |
+ * |---|---|---|
+ * | Grafana | `grafanaFolderUid` | `grafanaFolderTitle` |
+ * | Nextcloud | `ncFolderId` | `ncFolder` |
+ *
+ * We key on the Grafana folder **uid**, not its title, so a mapping survives a
+ * folder rename in Grafana (the uid is immutable; the title is display-only and
+ * refreshed on sync). `grafanaFolderTitle` is carried purely so the admin panel /
+ * occ output can show a human name without a round-trip to Grafana.
+ *
+ * **The Nextcloud side works the same way, and did not used to.** `ncFolder` was
+ * the authority — a path string the resolver prefix-matched — so renaming a mapped
+ * folder left the mapping pointing at a name nothing had any more, and every file
+ * beneath it silently resolved to no mapping at all. No error, no sync, no clue.
+ * `ncFolderId` is the Nextcloud file id of the mapped folder, which survives both a
+ * rename and a move, so the mapping is a pair of ids and a rename is a no-op
+ * (`features/mapping/rename.feature`).
+ *
+ * `ncFolder` stays because something has to NAME the folder when it is first
+ * created, and the panel has to show something — exactly the job
+ * `grafanaFolderTitle` does on the other side. It is no longer what anything
+ * resolves on.
+ *
+ * `ncFolderId` is **0 until the folder exists**: a mapping can be saved before its
+ * folder is provisioned, and an old mapping predates the field. Both self-heal —
+ * see {@see MappingService::resolveForPath()}.
  *
  * Mode model (mirrors the master, saga Ch2 §14): a mapping's mode is exactly
  * **`sync`** (full dashboard body lives in Nextcloud, edits push back) or **`link`**
@@ -61,17 +85,20 @@ use JsonSerializable;
  * Groups are therefore read on demand ({@see StorageService::groupsOf()}) and
  * written straight through ({@see MappingService::updateGroups()}).
  *
- * Subfolder model (saga Ch2, revised): `syncSubfolders` is the per-mapping toggle
- * for the lazy, presence-driven subfolder mirror. **Off by default** (the n8n-like
- * flat model: a subfolder is cosmetic local Nextcloud organisation, invisible to
- * Grafana). On: a Nextcloud subfolder mirrors to a Grafana subfolder the moment a
- * dashboard lands in it. Persists today; the mirroring engine acts on it later.
+ * ## WHAT IS NOT ON THIS OBJECT: A SUBFOLDER TOGGLE
+ *
+ * There was a `syncSubfolders` flag here, stored and validated and read by nothing.
+ * It is gone. A subfolder is in Grafana exactly when a dashboard lives beneath it
+ * — that is the whole rule, it is per-folder, and it needs no per-mapping switch
+ * (`features/folders/create.feature`). A flag would only be able to say "never
+ * mirror subfolders", which is not a thing anyone asked for.
  *
  * Invariants:
  *  - `grafanaFolderUid` MUST be non-empty.
  *  - `ncFolder` MUST be non-empty (after normalising away surrounding slashes).
  *  - `mode` MUST be `sync` or `link`.
  *  - `format` MUST be `json` or `yaml`.
+ *  - `ncFolderId` is 0 or a real Nextcloud file id; never negative.
  */
 final class Mapping implements JsonSerializable {
 	public const MODE_SYNC = 'sync';
@@ -90,8 +117,36 @@ final class Mapping implements JsonSerializable {
 		public readonly string $mode,
 		public readonly string $format,
 		public readonly bool $useTeamFolder,
-		public readonly bool $syncSubfolders,
+		public readonly int $ncFolderId = 0,
 	) {
+	}
+
+	/** The same mapping with its Nextcloud folder id filled in. */
+	public function withNcFolderId(int $id): self {
+		return new self(
+			$this->id,
+			$this->grafanaFolderUid,
+			$this->grafanaFolderTitle,
+			$this->ncFolder,
+			$this->mode,
+			$this->format,
+			$this->useTeamFolder,
+			$id,
+		);
+	}
+
+	/** The same mapping with its Nextcloud folder name refreshed after a rename. */
+	public function withNcFolder(string $ncFolder): self {
+		return new self(
+			$this->id,
+			$this->grafanaFolderUid,
+			$this->grafanaFolderTitle,
+			self::normaliseFolder($ncFolder),
+			$this->mode,
+			$this->format,
+			$this->useTeamFolder,
+			$this->ncFolderId,
+		);
 	}
 
 	/**
@@ -160,9 +215,10 @@ final class Mapping implements JsonSerializable {
 		$useTeamFolder = array_key_exists('use_team_folder', $data)
 			&& filter_var($data['use_team_folder'], FILTER_VALIDATE_BOOLEAN);
 
-		// Subfolder sync. Default FALSE (flat, n8n-like) — an omitted flag means off.
-		$syncSubfolders = array_key_exists('sync_subfolders', $data)
-			&& filter_var($data['sync_subfolders'], FILTER_VALIDATE_BOOLEAN);
+		// The Nextcloud folder id. 0 means "not resolved yet" — either the folder has
+		// not been provisioned, or this row predates the field. A negative id is
+		// nonsense, so it reads as 0 rather than being trusted.
+		$ncFolderId = max(0, (int)($data['nc_folder_id'] ?? 0));
 
 		if ($uid === '') {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
@@ -179,7 +235,7 @@ final class Mapping implements JsonSerializable {
 			throw new \InvalidArgumentException('format must be "json" or "yaml"');
 		}
 
-		return new self($id, $uid, $title, $ncFolder, $mode, $format, $useTeamFolder, $syncSubfolders);
+		return new self($id, $uid, $title, $ncFolder, $mode, $format, $useTeamFolder, $ncFolderId);
 	}
 
 	/** @return array<string,mixed> */
@@ -189,10 +245,10 @@ final class Mapping implements JsonSerializable {
 			'grafana_folder_uid' => $this->grafanaFolderUid,
 			'grafana_folder_title' => $this->grafanaFolderTitle,
 			'nc_folder' => $this->ncFolder,
+			'nc_folder_id' => $this->ncFolderId,
 			'mode' => $this->mode,
 			'format' => $this->format,
 			'use_team_folder' => $this->useTeamFolder,
-			'sync_subfolders' => $this->syncSubfolders,
 		];
 	}
 

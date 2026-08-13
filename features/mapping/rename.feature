@@ -17,7 +17,7 @@ Feature: Renaming a mapped folder
 
     # ── RULE: a mapping is held by id on both sides, so a rename reaches it ───
 
-  @admin @in-nextcloud @gesture @ui @unbuilt
+  @admin @in-nextcloud @gesture @ui @todo
   Scenario: Rename the mapped Nextcloud folder
     Given a dashboard file in "Demo"
     When I rename "Demo" to "Dashboards"
@@ -32,7 +32,7 @@ Feature: Renaming a mapped folder
     # Nextcloud folder it pairs with is the one it has always pointed at.
 
   # notes: ../AGENTS.md#renaming-the-mapped-folder-in-grafana-does-not-break-the-mapping
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Rename the mapped Grafana folder
     Given a dashboard file in "Demo"
     When someone renames the "demo" Grafana folder to "metrics"
