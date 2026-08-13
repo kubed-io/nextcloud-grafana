@@ -26,6 +26,7 @@ use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
 use OCA\GrafanaSync\Listener\TrashPurgeHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
 use OCP\AppFramework\App;
@@ -154,8 +155,9 @@ final class Application extends App implements IBootstrap {
 		// type-hint, so this is ordinary dependency injection rather than a container
 		// lookup — no deprecated surface touched, and the dependency is now visible in
 		// the signature instead of buried in a get() call.
-		$context->injectFn(static function (DashboardMetadata $metadata): void {
+		$context->injectFn(static function (DashboardMetadata $metadata, FolderMetadata $folders): void {
 			$metadata->register();
+			$folders->register();
 		});
 
 		// Register the scheduled Grafana→NC pull. IJobList::add is idempotent, so

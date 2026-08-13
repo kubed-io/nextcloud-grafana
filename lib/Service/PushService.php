@@ -38,6 +38,7 @@ final class PushService {
 		private MappingService $mappings,
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
+		private FolderMirror $folderMirror,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -84,7 +85,7 @@ final class PushService {
 		// hand-edited `uid` in the file can never retarget a different dashboard.
 		$spec->uid = $managed->uid;
 
-		$body = DashboardBody::toUpsertBody($spec, $this->resolveFolderUid($managed), $node->getName());
+		$body = DashboardBody::toUpsertBody($spec, $this->resolveFolderUid($node, $managed), $node->getName());
 		$resp = $this->grafana->upsertDashboard($body);
 
 		// Full success: stamp the synced hash so this exact content won't re-trigger a
@@ -100,8 +101,23 @@ final class PushService {
 
 	/**
 	 * The Grafana folder uid a push should place the dashboard in, so a writeback never
-	 * yanks a dashboard out of its folder. Prefer the file's banked `grafana_folderUid`
-	 * (a later course writes it); otherwise resolve from the originating mapping.
+	 * yanks a dashboard out of its folder.
+	 *
+	 * **The banked `grafana_folderUid` still wins, and must for now.** It records the
+	 * Grafana folder a PULLED dashboard actually lives in — and the pull does not
+	 * mirror Grafana's folder tree yet, so a dashboard sitting three folders deep in
+	 * Grafana arrives flat in the mapping's root in Nextcloud. Resolving from the
+	 * file's Nextcloud location while that is true would push the dashboard out of its
+	 * Grafana subfolder and into the mapping root: a silent relocation of somebody
+	 * else's dashboard, on a gesture that was only ever an edit.
+	 *
+	 * So {@see FolderMirror} answers only when the file has no banked folder — which is
+	 * exactly the file CREATED in Nextcloud, where its location is the only truth there
+	 * is, and where the Grafana folders have to be brought into existence to receive
+	 * it.
+	 *
+	 * When the pull mirrors the tree, the two answers converge and the banked key
+	 * becomes the denormalisation it always was; it can be dropped then, not before.
 	 *
 	 * General placement (null → {@see DashboardBody::toUpsertBody} omits folderUid) is
 	 * reached **only** via an explicit reserved-root (`/`) mapping. Any "can't determine
@@ -110,7 +126,7 @@ final class PushService {
 	 * to General on the next push (moving it out of its folder). Failing instead leaves
 	 * the file to retry once the mapping is restored/re-created; the notifier shows why.
 	 */
-	private function resolveFolderUid(ManagedFile $managed): ?string {
+	private function resolveFolderUid(Node $node, ManagedFile $managed): ?string {
 		if ($managed->folderUid !== '') {
 			return $managed->folderUid;
 		}
@@ -125,7 +141,6 @@ final class PushService {
 				'Cannot push: the mapping this dashboard belongs to no longer exists — restore or re-map it before pushing.',
 			);
 		}
-		// '/' reserved-root = General / no folder.
-		return $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
+		return $this->folderMirror->folderUidFor($node, $mapping);
 	}
 }
