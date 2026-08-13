@@ -29,10 +29,10 @@ Feature: Syncing one mapping from its card
 
   # ── the whole-instance mirror, which is still one mapping ──────────────────
 
-  # notes: ../AGENTS.md#a-root-mapping-with-subfolder-sync-mirrors-the-whole-instance
+  # notes: ../AGENTS.md#a-root-mapping-mirrors-the-whole-instance
   @admin @occ @ui @unbuilt
-  Scenario: A root mapping with subfolder sync mirrors the whole instance
-    Given a folder mapped as "sync" to the Grafana root "/" with "Sync subfolders" on
+  Scenario: A root mapping mirrors the whole instance
+    Given a folder mapped as "sync" to the Grafana root "/"
     And Grafana has dashboards at the root and inside nested folders
     When the admin syncs one mapping
     Then every Grafana folder that holds dashboards appears as a nested Nextcloud subfolder

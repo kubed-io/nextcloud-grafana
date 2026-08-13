@@ -66,6 +66,7 @@ default:
       - '%paths.base%/../../features/mapping/sync-now.feature'
       - '%paths.base%/../../features/mapping/delete.feature'
       - '%paths.base%/../../features/mapping/rename.feature'
+      - '%paths.base%/../../features/mapping/move.feature'
       contexts: &contexts
       - OCA\GrafanaSync\Tests\Integration\FeatureContext
 

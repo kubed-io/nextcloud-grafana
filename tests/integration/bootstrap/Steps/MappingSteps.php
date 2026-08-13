@@ -181,12 +181,6 @@ trait MappingSteps {
 			(bool)($m['use_team_folder'] ?? false),
 			'storage',
 		);
-		Assert::assertSame(
-			($expected['subfolders'] ?? 'off') === 'on',
-			(bool)($m['sync_subfolders'] ?? false),
-			'subfolder sync',
-		);
-
 		$wanted = $this->groupList($expected['groups'] ?? '');
 		$stored = array_values(array_map('strval', (array)($m['nc_groups'] ?? [])));
 		sort($wanted);
@@ -394,9 +388,6 @@ trait MappingSteps {
 		}
 		if (array_key_exists('storage', $form)) {
 			$data['use_team_folder'] = $this->storageToModel($form['storage']);
-		}
-		if (array_key_exists('subfolders', $form)) {
-			$data['sync_subfolders'] = $form['subfolders'] === 'on';
 		}
 
 		return $this->occ('grafana_sync:add-mapping ' . escapeshellarg(json_encode($data, JSON_THROW_ON_ERROR)));

@@ -15,7 +15,6 @@ Feature: Admin configures folder mappings
       | format     | json                      |
       | groups     |                           |
       | storage    | admin folder              |
-      | subfolders | off                       |
 
     # A mapping is one fact, so it is one sentence plus a table of what is in it.
     # notes: ../AGENTS.md#the-preconditions
@@ -29,23 +28,22 @@ Feature: Admin configures folder mappings
       | format     | <format>     |
       | groups     | <groups>     |
       | storage    | <storage>    |
-      | subfolders | <subfolders> |
     Then the mapping matches the form, unset fields at their defaults
 
     # The mode x format matrix, one row per combination.
 
     Examples: every mode, and every serialization format
-      | uid     | nc folder | mode | format | groups | storage      | subfolders |
-      | observe | observe   | sync | json   |        | team folder  |            |
-      | secrets | secrets   | link | json   |        | team folder  |            |
-      | network | network   | sync | yaml   |        | admin folder |            |
-      | build   | build     | link | yaml   |        | admin folder |            |
+      | uid     | nc folder | mode | format | groups | storage      |
+      | observe | observe   | sync | json   |        | team folder  |
+      | secrets | secrets   | link | json   |        | team folder  |
+      | network | network   | sync | yaml   |        | admin folder |
+      | build   | build     | link | yaml   |        | admin folder |
 
     Examples: and the fields that have a default
-      | uid       | nc folder | mode | format | groups | storage | subfolders |
-      | defaulted |           |      |        |        |         |            |
-      | grouped   | grouped   | sync |        | admin  |         |            |
-      | nested    | nested    | sync |        |        |         | on         |
+      | uid       | nc folder | mode | format | groups | storage |
+      | defaulted |           |      |        |        |         |
+      | grouped   | grouped   | sync |        | admin  |         |
+      | nested    | nested    | sync |        |        |         |
 
     # notes: ../AGENTS.md#creating-a-mapping-saves-the-form
 

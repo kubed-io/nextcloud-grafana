@@ -1691,11 +1691,25 @@ started. So it is one reusable sentence rather than two `Then`s spelled out
 here, and any later behaviour that produces a mirror can assert it the same
 way.
 
-### A root mapping with subfolder sync mirrors the whole instance
+### A root mapping mirrors the whole instance
 
-The Grafana root "/" mapped to a Nextcloud folder with "Sync subfolders" on. The
-root encloses every folder, so the sync walks the entire Grafana folder tree — a
-one-to-one mirror. Lands with the subfolder course.
+The Grafana root "/" mapped to a Nextcloud folder. The root encloses every folder,
+so the sync walks the entire Grafana folder tree — a one-to-one mirror. Lands with
+the subfolder course.
+
+**There is no longer a toggle in this sentence.** It used to read "with Sync
+subfolders on", naming a per-mapping flag that was stored, validated, and read by
+no code path. Subfolders are not opt-in: a folder is in Grafana exactly when a
+dashboard lives beneath it. So a root mapping mirroring everything is not a mode
+someone selects, it is what mapping the root MEANS.
+
+**Why the flag could not earn its place: the mapping already is the switch.** The
+only thing "subfolders off" could express is *mirror this folder but nothing under
+it* — and anyone who wants a flat mirror can already have one by mapping a LEAF in
+Grafana to a leaf in Nextcloud. The depth of the mirror is chosen by which folder you
+map, which is a decision the admin makes anyway and can see. A second control that
+re-decides it from the other end is a way for the two to disagree, and it costs a
+branch in every folder path in the app for a case the mapping already covers.
 
 ## dashboards/edit
 
@@ -1783,6 +1797,22 @@ The safety of the whole gesture rests on the Nextcloud side being held by id too
 the mapping stores a PATH, a rename orphans it and every dashboard under it silently
 stops resolving — which is what the old `folders/rename.feature` recorded as a known
 defect. Holding the folder id instead removes the defect rather than warning about it.
+
+**BUILT.** `Mapping::ncFolderId` is the Nextcloud file id of the mapped folder and
+`MappingService::resolveForPath()` looks the folder up by it, so the resolver follows
+a rename or a move without anything having to observe either. The stored `ncFolder`
+is now only a label, and it is caught up whenever the lookup finds it stale — so the
+admin panel cannot keep showing a folder name that no longer exists.
+
+Two things it deliberately does NOT do. It never falls back to the name once an id is
+known: a folder that was deleted matches nothing, because a new folder reusing the old
+name is a different folder and adopting it would point the mapping somewhere nobody
+chose. And it never overwrites a real id with 0 — a backend that cannot answer leaves
+the mapping to self-heal on the next resolve instead.
+
+Old rows, and mappings saved before their folder was provisioned, carry id 0 and heal
+on first use: the name is resolved once, the id is banked, and the name is never used
+for lookup again.
 
 ## mapping/delete
 
@@ -1970,6 +2000,51 @@ A mapping names a Grafana folder by **uid**, not by title, so a title change in
 Grafana does not break it. Whether the Nextcloud folder should follow is the open
 question — it is the user's own file tree, and the mapping was created against a
 folder the admin named.
+
+## mapping/move
+
+`features/mapping/move.feature`
+
+Moving either side of a MAPPING. The sibling of `mapping/rename.feature`, and a
+separate file because a move is a separate gesture: a rename gives the folder a new
+NAME under the same parent, a move gives it a new PARENT under the same name. You
+cannot do both at once from Nextcloud, and the two have different reasons for being
+safe.
+
+### A mapping is a pair of ids, so a move is a no-op
+
+The same argument as the rename, arriving from the other direction — see
+[A mapping is a pair of ids, so a rename is a no-op](#a-mapping-is-a-pair-of-ids-so-a-rename-is-a-no-op)
+for the model. A Nextcloud file id is stable across a move as well as a rename, so
+the resolver finds the folder wherever it now sits, and the stored `ncFolder` label
+is caught up to the new path.
+
+**The two halves are safe for different reasons, which is worth not blurring.** The
+Nextcloud half needed the id: before it, a move orphaned the mapping exactly as a
+rename did, because both change the path that was being matched. The Grafana half
+never needed anything — a mapping has always named the Grafana folder by uid, and a
+uid does not change when a folder is re-parented. So one of these scenarios records
+a fix and the other records an invariant that already held.
+
+### Moving the mapped folder in Grafana does not break the mapping
+
+A mapping names a Grafana folder by **uid**, so re-parenting it in Grafana changes
+nothing the mapping rests on, and the Nextcloud folder does not follow. Same rule as
+the rename: the mapping is the one place a differing pair is legitimate, whether the
+pair differs by name or by location.
+
+### A mapped folder that was deleted is not re-adopted by name
+
+The mapping holds the folder's id, so when the folder is trashed the mapping resolves
+to nothing — correctly. A new folder created with the same name is a **different
+folder** with a different id, and the mapping must not silently adopt it.
+
+This is the failure mode a name-keyed mapping cannot avoid and an id-keyed one gets
+for free: under the old model, deleting `Demo` and making a new `Demo` would have
+re-bound the mapping to a folder nobody chose, and started writing dashboards into
+it. `@unbuilt` because deciding what the admin should SEE in that state — a mapping
+pointing at nothing — is its own question, and the app currently just resolves to
+nothing quietly.
 
 ## dashboards/ignore — RETIRED (specified, never built, now removed)
 

@@ -27,6 +27,16 @@ final class MappingServiceTest extends TestCase {
 	/** Shared backing store for the fake IAppConfig, keyed by config key. */
 	private array $store = [];
 
+	/**
+	 * Where each Nextcloud folder id currently is, as the server would answer.
+	 *
+	 * This is the fixture a rename is expressed in: move the path a mapping's id
+	 * points at, and nothing else changes.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $folderPaths = [];
+
 	private function config(): IAppConfig {
 		$store = &$this->store;
 		$config = $this->createMock(IAppConfig::class);
@@ -62,11 +72,18 @@ final class MappingServiceTest extends TestCase {
 				if ($groups !== null) {
 					$this->appliedGroups[$m->id] = StorageService::normaliseGroups($groups);
 				}
-				return $this->createStub(\OCP\Files\Folder::class);
+				// The provisioned folder answers with the id the fixture gave the
+				// mapping, so a test that pins an id keeps it through `add()`.
+				$folder = $this->createStub(\OCP\Files\Folder::class);
+				$folder->method('getId')->willReturn($m->ncFolderId);
+				return $folder;
 			},
 		);
 		$storage->method('groupsOf')->willReturnCallback(
 			fn (Mapping $m): array => $this->appliedGroups[$m->id] ?? [],
+		);
+		$storage->method('pathOfFolderId')->willReturnCallback(
+			fn (int $id): ?string => $this->folderPaths[$id] ?? null,
 		);
 
 		return $storage;
@@ -180,6 +197,87 @@ final class MappingServiceTest extends TestCase {
 		$hit = $svc->resolveForPath('/admin/files/dashboards/observe/cpu.grafana.json');
 		self::assertNotNull($hit);
 		self::assertSame($inner->id, $hit->id, 'the deepest (longest-prefix) mapping wins');
+	}
+
+	/**
+	 * THE DEFECT THIS FIELD EXISTS TO REMOVE.
+	 *
+	 * Renaming a mapped folder used to orphan the mapping: it stored the name, so
+	 * after the rename nothing was called that any more and every file underneath
+	 * resolved to no mapping — silently, with no error and no sync. Holding the
+	 * folder ID means the rename is a no-op, which is what
+	 * `features/mapping/rename.feature` says must happen.
+	 */
+	public function testAMappedFolderThatWasRenamedStillResolves(): void {
+		$svc = $this->service();
+		$this->folderPaths[512] = 'Demo';
+		$saved = $svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-demo',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 512,
+		]));
+
+		// The admin renames the folder in Nextcloud. Nothing tells the mapping.
+		$this->folderPaths[512] = 'Dashboards';
+
+		$hit = $svc->resolveForPath('/admin/files/Dashboards/cpu.grafana.json');
+		self::assertNotNull($hit, 'the mapping must follow its folder through a rename');
+		self::assertSame($saved->id, $hit->id);
+
+		// And the old name is now just a name — nothing lives there to claim.
+		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana.json'));
+
+		// The stored label catches up too, so the panel and `occ` do not keep showing
+		// a folder that no longer exists.
+		self::assertSame('Dashboards', $svc->getById($saved->id)?->ncFolder);
+
+		// And the RETURNED object carries the caught-up label, not the copy the
+		// resolve loop started with. MoveGuardListener puts this straight into a
+		// message, so a stale one names the folder the admin just stopped using.
+		self::assertSame('Dashboards', $hit->ncFolder);
+	}
+
+	/**
+	 * A move is a different gesture from a rename — new parent, same name — and the
+	 * id covers it for the same reason: it is the folder that moved, not the mapping.
+	 */
+	public function testAMappedFolderThatWasMovedStillResolves(): void {
+		$svc = $this->service();
+		$this->folderPaths[77] = 'Demo';
+		$saved = $svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-demo',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 77,
+		]));
+
+		$this->folderPaths[77] = 'Archive/Demo';
+
+		$hit = $svc->resolveForPath('/admin/files/Archive/Demo/cpu.grafana.json');
+		self::assertNotNull($hit);
+		self::assertSame($saved->id, $hit->id);
+	}
+
+	/**
+	 * A folder that is genuinely gone matches nothing. It is NOT repaired by falling
+	 * back to the stored name: a new folder that happens to reuse the name is a
+	 * different folder, and adopting it would point the mapping somewhere nobody
+	 * chose.
+	 */
+	public function testAMappingWhoseFolderIsGoneMatchesNothing(): void {
+		$svc = $this->service();
+		$this->folderPaths[900] = 'Demo';
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-demo',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 900,
+		]));
+
+		unset($this->folderPaths[900]);
+
+		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana.json'));
 	}
 
 	public function testResolveForPathRespectsSegmentBoundaries(): void {

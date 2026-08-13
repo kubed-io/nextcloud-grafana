@@ -181,6 +181,42 @@ final class StorageService {
 		return $node instanceof Folder ? $node : null;
 	}
 
+	/**
+	 * Where the folder with this Nextcloud file id lives right now, relative to the
+	 * acting user's files root (`Demo`, `dashboards/observe`), or null if it is gone.
+	 *
+	 * This is how a mapping finds its folder after a rename or a move: the id is
+	 * stable across both, so the answer is always current without anything having had
+	 * to observe the change. One lookup covers both backends — a Team Folder is a
+	 * mount inside the user's root, so `getFirstNodeById()` reaches it the same way it
+	 * reaches an admin-owned folder.
+	 *
+	 * Returns null for an id that is gone, or one that resolves to a file rather than
+	 * a folder. Callers treat that as "matches nothing" rather than repairing it by
+	 * name; see {@see MappingService::currentFolderOf()}.
+	 */
+	public function pathOfFolderId(int $folderId): ?string {
+		if ($folderId <= 0) {
+			return null;
+		}
+		try {
+			$uid = $this->teamFolders->resolveActorUid();
+			$home = $this->rootFolder->getUserFolder($uid);
+			$node = $home->getFirstNodeById($folderId);
+			if (!$node instanceof Folder) {
+				return null;
+			}
+			$relative = $home->getRelativePath($node->getPath());
+			if ($relative === null) {
+				return null;
+			}
+			$relative = trim($relative, '/');
+			return $relative === '' ? null : $relative;
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
 	/** `mkdir -p` under $base; throws if a segment exists as a non-folder. */
 	private function mkdirP(Folder $base, string $path): Folder {
 		$path = trim($path, '/');

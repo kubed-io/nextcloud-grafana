@@ -36,7 +36,7 @@
 
 /* grafana-folder | mode      (row 1)
  * nc-folder      | format    (row 2)
- *                | tf        (row 3)
+ * tf                        (row 3)
  * actions                    (row 4, spans the two left columns)
  * groups spans all four rows in the third (wider) column. */
 .grafana-sync-mappings__grid {
@@ -49,10 +49,9 @@
 
 .gf-folder     { grid-area: 1 / 1; }
 .gf-nc         { grid-area: 2 / 1; }
-.gf-subfolders { grid-area: 3 / 1; align-self: center; } /* under NC folder, left of Team Folder */
 .gf-mode       { grid-area: 1 / 2; }
 .gf-format     { grid-area: 2 / 2; }
-.gf-tf         { grid-area: 3 / 2; align-self: center; }
+.gf-tf         { grid-area: 3 / 1; align-self: center; }
 .gf-groups { grid-area: 1 / 3 / 5 / 4; align-self: stretch; } /* span all rows in col 3 */
 
 /* ⓘ info button next to each field label — a pure-CSS hover/focus tooltip
@@ -242,7 +241,7 @@
 		grid-template-columns: 1fr;
 		grid-template-rows: auto;
 	}
-	.gf-folder, .gf-nc, .gf-subfolders, .gf-mode, .gf-format, .gf-tf, .gf-groups,
+	.gf-folder, .gf-nc, .gf-mode, .gf-format, .gf-tf, .gf-groups,
 	.grafana-sync-mappings__actions {
 		grid-area: auto;
 	}

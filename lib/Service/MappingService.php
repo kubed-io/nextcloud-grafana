@@ -32,6 +32,20 @@ final class MappingService {
 	 */
 	private ?array $cache = null;
 
+	/**
+	 * Request-scoped memo of folder id → current path.
+	 *
+	 * `resolveForPath()` runs on every file operation and asks once per mapping, so
+	 * without this a folder with three mappings above it costs three filesystem
+	 * lookups per gesture. The service is a per-request singleton and a folder cannot
+	 * move mid-request, so memoising is free correctness-wise. `false` memoises "asked
+	 * and it is gone", which is worth caching too — a mapping pointing at a deleted
+	 * folder would otherwise pay the full lookup on every single resolve.
+	 *
+	 * @var array<int, string|false>
+	 */
+	private array $pathMemo = [];
+
 	public function __construct(
 		private readonly IAppConfig $config,
 		private StorageService $storage,
@@ -89,7 +103,15 @@ final class MappingService {
 		$all = $this->list();
 		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, null);
 		$this->assertIdUnique($all, $mapping->id);
-		$this->storage->ensureFolder($mapping, $groups);
+		// Provisioning is where the Nextcloud half of the pair becomes knowable, so
+		// bank the folder id here rather than leaving the first resolve to discover it.
+		// A backend that cannot say (id 0) leaves the mapping to self-heal instead —
+		// never overwrite a real id with "unknown".
+		$folder = $this->storage->ensureFolder($mapping, $groups);
+		$folderId = $folder->getId();
+		if ($folderId > 0) {
+			$mapping = $mapping->withNcFolderId($folderId);
+		}
 		$all[] = $mapping;
 		$this->persist($all);
 		return $mapping;
@@ -182,10 +204,16 @@ final class MappingService {
 	 * every enclosing folder is a path-prefix of the node, the longest matching
 	 * `ncFolder` is unambiguously the deepest, so we keep the longest.
 	 *
-	 * Kept in the service now (ahead of the sync listeners that consume it) because
-	 * it is pure model logic, cheaply unit-tested, and the shape the sync chapter
-	 * builds on — the master's longest-prefix resolver, finally used on a real
-	 * folder tree instead of an emulated one.
+	 * **The folder each mapping names is looked up by ID, not by the stored name.**
+	 * That is the whole point: a mapped folder that has been renamed still resolves,
+	 * because the id finds it wherever it now is and whatever it is now called. The
+	 * stored `ncFolder` is only a label. Before this, the resolver matched the stored
+	 * string, so renaming a mapped folder orphaned every file beneath it in silence.
+	 *
+	 * Kept in the service (ahead of the sync listeners that consume it) because the
+	 * nearest-enclosing rule is model logic and cheaply unit-tested — the master's
+	 * longest-prefix resolver, finally used on a real folder tree instead of an
+	 * emulated one.
 	 */
 	public function resolveForPath(string $ncPath): ?Mapping {
 		if (!preg_match('#/files/(.+)$#', $ncPath, $m)) {
@@ -195,7 +223,7 @@ final class MappingService {
 		$best = null;
 		$bestLen = -1;
 		foreach ($this->list() as $mapping) {
-			$folder = trim($mapping->ncFolder, '/');
+			$folder = $this->currentFolderOf($mapping);
 			if ($folder === '') {
 				continue;
 			}
@@ -209,7 +237,90 @@ final class MappingService {
 				$best = $mapping;
 			}
 		}
+		// Hand back the CURRENT object, not the one the loop started with. Resolving
+		// can self-heal a mapping — bank a folder id, catch a stale label up to a
+		// rename — and `$best` is the pre-rewrite copy. A caller that reads
+		// `ncFolder` off it (MoveGuardListener puts it in a user-facing message)
+		// would otherwise name the folder the admin has just stopped using.
+		if ($best !== null) {
+			$best = $this->getById($best->id) ?? $best;
+		}
 		return $best;
+	}
+
+	/**
+	 * Where a mapping's folder is RIGHT NOW, relative to the user's files root, or
+	 * `''` when it cannot be found.
+	 *
+	 * The id is the authority, so the answer follows the folder through a rename or a
+	 * move without anything having to notice either happened.
+	 *
+	 * **Self-heal.** A mapping saved before its folder was provisioned — or before
+	 * this field existed at all — carries id 0. Rather than refuse it, we resolve the
+	 * stored name once, bank the id, and never look it up by name again. That is the
+	 * only remaining path lookup in the app, and it happens at most once per mapping.
+	 *
+	 * A mapping whose folder has genuinely been deleted keeps its id and resolves to
+	 * `''`, so it simply matches nothing. It is not repaired by falling back to the
+	 * name — a new folder that happens to reuse the old name is a different folder,
+	 * and quietly adopting it is how a mapping ends up pointing somewhere nobody
+	 * chose.
+	 */
+	private function currentFolderOf(Mapping $mapping): string {
+		if ($mapping->ncFolderId > 0) {
+			$memo = $this->pathMemo[$mapping->ncFolderId] ?? null;
+			if ($memo === null) {
+				$memo = $this->storage->pathOfFolderId($mapping->ncFolderId) ?? false;
+				$this->pathMemo[$mapping->ncFolderId] = $memo;
+			}
+			if ($memo === false) {
+				return '';
+			}
+			$path = $memo;
+			// The stored name is a LABEL, so when the folder has been renamed or moved
+			// the label is simply out of date — catch it up. Without this the resolver
+			// would be right while the admin panel and `occ` still showed the old name,
+			// which is the same defect one layer up.
+			if ($path !== trim($mapping->ncFolder, '/')) {
+				$this->rewrite($mapping->id, static fn (Mapping $m): Mapping => $m->withNcFolder($path));
+			}
+			return $path;
+		}
+
+		$name = trim($mapping->ncFolder, '/');
+		if ($name === '') {
+			return '';
+		}
+		$found = $this->storage->findFolder($mapping);
+		if ($found === null) {
+			// Not provisioned yet. Fall back to the name for this resolve only, so a
+			// mapping still works in the window before its folder exists.
+			return $name;
+		}
+		$id = $found->getId();
+		if ($id > 0) {
+			$this->rewrite($mapping->id, static fn (Mapping $m): Mapping => $m->withNcFolderId($id));
+		}
+		return $name;
+	}
+
+	/**
+	 * Replace one mapping in the stored list, in memory and on disk.
+	 *
+	 * Used only for the two facts the app learns about a mapping rather than being
+	 * told: its folder's id, and that folder's current name.
+	 *
+	 * @param callable(Mapping): Mapping $change
+	 */
+	private function rewrite(string $id, callable $change): void {
+		$all = $this->list();
+		foreach ($all as $i => $existing) {
+			if ($existing->id === $id) {
+				$all[$i] = $change($existing);
+				$this->persist($all);
+				return;
+			}
+		}
 	}
 
 	/**

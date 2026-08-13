@@ -28,7 +28,7 @@ final class MappingTest extends TestCase {
 			'mode' => 'sync',
 			'format' => 'yaml',
 			'use_team_folder' => false,
-			'sync_subfolders' => true,
+			'nc_folder_id' => 4242,
 		]);
 
 		self::assertSame('abc123', $m->id);
@@ -38,7 +38,7 @@ final class MappingTest extends TestCase {
 		self::assertSame('sync', $m->mode);
 		self::assertSame('yaml', $m->format);
 		self::assertFalse($m->useTeamFolder);
-		self::assertTrue($m->syncSubfolders);
+		self::assertSame(4242, $m->ncFolderId);
 	}
 
 	/**
@@ -87,16 +87,64 @@ final class MappingTest extends TestCase {
 		self::assertArrayNotHasKey('nc_groups', $m->toArray());
 	}
 
-	public function testSyncSubfoldersDefaultsOff(): void {
+	/**
+	 * THE FOLDER ID IS THE NEXTCLOUD HALF OF THE PAIR, and it is allowed to be
+	 * missing: a mapping can be saved before its folder is provisioned, and rows
+	 * written before the field existed have none. 0 means "not resolved yet" and
+	 * self-heals on the first resolve — it is not an error to store.
+	 */
+	public function testTheFolderIdIsZeroUntilItIsKnown(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
 			'nc_folder' => 'observe',
 			'mode' => 'sync',
 		]);
-		self::assertFalse($m->syncSubfolders);
-		// …and round-trips through toArray/fromArray when enabled.
-		$enabled = Mapping::fromArray(['grafana_folder_uid' => 'uid2', 'nc_folder' => 'x', 'mode' => 'sync', 'sync_subfolders' => true]);
-		self::assertTrue(Mapping::fromArray($enabled->toArray())->syncSubfolders);
+		self::assertSame(0, $m->ncFolderId);
+
+		// A negative id is nonsense rather than a smaller number — it must not be
+		// trusted through to a lookup, so it reads as "not resolved yet".
+		$bogus = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid2',
+			'nc_folder' => 'x',
+			'mode' => 'sync',
+			'nc_folder_id' => -7,
+		]);
+		self::assertSame(0, $bogus->ncFolderId);
+	}
+
+	public function testTheFolderIdSurvivesARoundTrip(): void {
+		$m = Mapping::fromArray([
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'observe',
+			'mode' => 'sync',
+			'nc_folder_id' => 99,
+		]);
+		self::assertSame(99, Mapping::fromArray($m->toArray())->ncFolderId);
+	}
+
+	/**
+	 * A RENAME CHANGES THE LABEL, NOT THE MAPPING. Both withers keep the id that
+	 * makes this the same mapping — that is the whole point of holding the pair.
+	 */
+	public function testRenamingTheFolderKeepsTheIdAndTheMapping(): void {
+		$m = Mapping::fromArray([
+			'id' => 'keepme',
+			'grafana_folder_uid' => 'uid1',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 512,
+		]);
+
+		$renamed = $m->withNcFolder('Dashboards');
+		self::assertSame('Dashboards', $renamed->ncFolder);
+		self::assertSame(512, $renamed->ncFolderId);
+		self::assertSame('keepme', $renamed->id);
+		self::assertSame('uid1', $renamed->grafanaFolderUid);
+
+		$stamped = $m->withNcFolderId(777);
+		self::assertSame(777, $stamped->ncFolderId);
+		self::assertSame('Demo', $stamped->ncFolder);
+		self::assertSame('keepme', $stamped->id);
 	}
 
 	public function testGeneratesAnIdWhenNoneGiven(): void {

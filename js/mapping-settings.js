@@ -143,7 +143,6 @@
 			function (cb) { groups.push(cb.value); }
 		);
 		var tfEl = card.querySelector('.js-use-team-folder');
-		var subEl = card.querySelector('.js-sync-subfolders');
 		return {
 			id: card.dataset.id || '',
 			grafana_folder_uid: uid,
@@ -153,7 +152,6 @@
 			format: format,
 			nc_groups: groups,
 			use_team_folder: tfEl ? tfEl.checked : true,
-			sync_subfolders: subEl ? subEl.checked : false,
 		};
 	}
 
@@ -234,7 +232,6 @@
 		nc: t('grafana_sync', 'Name of the Nextcloud folder the dashboards appear in.'),
 		mode: t('grafana_sync', 'Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
 		format: t('grafana_sync', 'JSON: the classic Grafana dashboard model (.grafana.json). YAML: the newer k8s-style dashboard schema (.grafana.yaml).'),
-		subfolders: t('grafana_sync', 'Off (default): subfolders are local Nextcloud folders only — the dashboard stays in the mapped folder. On: a subfolder mirrors to a Grafana subfolder the moment a dashboard lands in it. Saved with the mapping; the mirroring engine lands in a later release.'),
 		tf: t('grafana_sync', 'On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 		groups: t('grafana_sync', 'Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 	};
@@ -272,8 +269,6 @@
 			+     folderControl() + '</div>'
 			+   '<div class="grafana-sync-field gf-nc"><label>' + t('grafana_sync', 'Nextcloud folder') + info(DESC.nc) + '</label>'
 			+     '<input type="text" class="js-nc-folder" placeholder="' + escapeHtml(t('grafana_sync', 'dashboards')) + '" /></div>'
-			+   '<div class="grafana-sync-field gf-subfolders"><label class="grafana-sync-checkbox">'
-			+     '<input type="checkbox" class="js-sync-subfolders" /> ' + t('grafana_sync', 'Sync subfolders') + info(DESC.subfolders) + '</label></div>'
 			+   '<div class="grafana-sync-field gf-mode"><label>' + t('grafana_sync', 'Mode') + info(DESC.mode) + '</label>'
 			+     '<select class="js-mode">'
 			+       '<option value="sync" selected>' + t('grafana_sync', 'Sync') + '</option>'
