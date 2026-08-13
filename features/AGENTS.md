@@ -2324,15 +2324,33 @@ That is the whole argument for the bin: it converts an irreversible cascade into
 move. The purge is the moment the user says they meant it, and only then does the
 cascade become permanent.
 
-### A purge reaches through every level it was given
+### What the folder held is an example, not a scenario
 
-Depth is not a special case. A trashed folder holding folders holding dashboards is
-purged as one subtree, because that is what the trash held — Nextcloud trashes the
-whole thing as a unit, and the purge finishes exactly that unit.
+**Recursive is recursive.** A trashed folder is purged as one subtree because that is
+what the trash held — Nextcloud trashes the whole thing as a unit and the purge
+finishes exactly that unit. Whether the subtree happens to contain nested folders,
+empty folders, or a spreadsheet does not change the rule, the pre-state, or the end
+state, so those belong in an `Examples` column: one dashboard, three, a subfolder
+holding more, a subfolder holding none, a folder with a `.xlsx` in it.
 
-It earns a scenario rather than a row because the nesting is the *point*: this is the
-Nextcloud-side mirror of the cascade Grafana does natively, and the two have to agree
-about what "everything underneath" means or a purge leaves orphans on one side.
+An earlier cut gave nesting its own scenario on the grounds that "the nesting is the
+point". It is not — the *reaching* is the point, and depth is one of several ways a
+folder can be shaped. Writing each shape as a scenario would state one rule five
+times and invite the five to drift.
+
+**This is the mirror image of the bin split above, and the pair is worth reading
+together.** Both were decided by the same question — *do the rows differ only in
+values, or in sentences?* The bin modes differ in sentences (the dashboards are
+parked, or already gone), so they are scenarios. The contents differ only in values,
+so they are rows. Getting either backwards costs something real: as an outline the
+bin modes hid an asymmetry, and as scenarios the contents duplicated a rule.
+
+**The Grafana side does NOT collapse this way**, which is the tell that the axis is
+genuinely about outcome and not about tidiness. There, whether the Nextcloud mirror
+holds non-dashboard files changes the END STATE — the folder is deleted outright, or
+it survives stripped of its dashboards and its `grafana_folder_uid` — so those are two
+scenarios in `folders/delete.feature`. Same input shape, different answer, because the
+gesture arrives from the other side.
 
 ## the grafana: namespace — RETIRED ENTIRELY
 
