@@ -114,6 +114,17 @@ final class GrafanaClientTest extends TestCase {
 		);
 	}
 
+	public function testAFolderWriteWithoutAUidFailsRatherThanBankingAnEmptyOne(): void {
+		$calls = new \ArrayObject();
+		$client = $this->client($this->response('{"title":"Drafts","version":1}'), $calls);
+
+		// An empty uid does not read as "unknown" downstream — it reads as `absent`,
+		// the spec's word for "not a Grafana folder" — so a malformed 2xx must never
+		// reach the caller as a valid shape.
+		$this->expectException(\RuntimeException::class);
+		$client->createFolder('Drafts');
+	}
+
 	public function testRenameFolderSendsOverwriteSoGrafanaDoesNotRefuseIt(): void {
 		$calls = new \ArrayObject();
 		$client = $this->client($this->response('{"uid":"abc","title":"Team B","version":2}'), $calls);

@@ -264,12 +264,24 @@ final class GrafanaClient {
 	 * everything the app persists is here, and anything it needs later should be added
 	 * deliberately rather than by leaking the raw body to callers.
 	 *
+	 * **A missing uid is fatal rather than empty.** The uid is the folder's identity —
+	 * it is what makes a rename a rename instead of a delete plus a create — and the
+	 * caller banks it as `grafana_folder_uid`. An empty string there does not read as
+	 * "unknown", it reads as `absent`, which is the spec's way of saying *this folder
+	 * is not a Grafana folder at all*. So a malformed 2xx would quietly un-manage the
+	 * folder and leave every later lookup matching nothing. Failing here costs one
+	 * request; failing later costs a mirror nobody can repair.
+	 *
 	 * @param array<string,mixed> $body
 	 * @return array{uid:string, title:string, parentUid:string, version:int}
 	 */
 	private function folderShape(array $body): array {
+		$uid = (string)($body['uid'] ?? '');
+		if ($uid === '') {
+			throw new \RuntimeException('Grafana returned a folder with no uid.');
+		}
 		return [
-			'uid' => (string)($body['uid'] ?? ''),
+			'uid' => $uid,
 			'title' => (string)($body['title'] ?? ''),
 			'parentUid' => (string)($body['parentUid'] ?? ''),
 			'version' => (int)($body['version'] ?? 0),
