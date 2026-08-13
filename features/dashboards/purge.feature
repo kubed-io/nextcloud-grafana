@@ -72,6 +72,39 @@ Feature: Emptying the trash
       | back in the "demo" Grafana folder    |
       | gone from Grafana entirely           |
 
+    # ── RULE: a purge reaches everything the trash gesture put there ──────────
+    # notes: ../AGENTS.md#a-purge-reaches-everything-the-trash-gesture-put-there
+
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario Outline: Empty the trash holding a folder of dashboards
+    Given the Grafana recycle-bin folder is <bin>
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    When I purge "Demo/Team" from the trash
+    Then none of the three dashboards exists in Grafana
+    And "Demo/Team" is gone from the Nextcloud trash
+
+    Examples: the bin decides where they waited, not whether they go
+      | bin                             |
+      | off                             |
+      | on and set to "nextcloud-trash" |
+
+    # One gesture, three dashboards, and the count is the only thing that differs
+    # from purging one file — which is why this is a row and not a rule of its own.
+
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  Scenario: Empty the trash holding a folder of dashboards and other files
+    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" also holds "Budget.xlsx"
+    And "Demo/Team" is in the Nextcloud trash
+    When I purge "Demo/Team" from the trash
+    Then none of the three dashboards exists in Grafana
+    And no dashboard Nextcloud never managed is deleted from Grafana
+
+    # The spreadsheet has no far side, so it goes the way any purged file goes and
+    # takes nothing with it.
+
     # ── RULE: emptying the bin in Grafana finishes the delete from that side ──
     # notes: ../AGENTS.md#emptying-the-bin-in-grafana-finishes-the-delete
 
