@@ -8,11 +8,11 @@ Feature: Changing a dashboard's tags
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | flows |
+      | grafana folder | Flows |
       | nc folder      | Flows |
       | mode           | sync  |
     And a mapping with the following values:
-      | grafana folder | reports |
+      | grafana folder | Reports |
       | nc folder      | Reports |
       | mode           | link    |
     And a folder "Scratch" that is not mapped

@@ -8,12 +8,12 @@ Feature: Copying a folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo         |
+      | grafana folder | Demo         |
       | nc folder      | Demo         |
       | mode           | sync         |
       | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | shared      |
+      | grafana folder | Shared      |
       | nc folder      | Shared      |
       | mode           | sync        |
       | storage        | team folder |
@@ -83,6 +83,19 @@ Feature: Copying a folder
 
     # A link folder is Grafana's to write. Copying one would have to author three
     # dashboards into a mapping that never writes back.
+
+    # ── RULE: there is no such thing as a copy made in Grafana ────────────────
+    # notes: ../AGENTS.md#a-folder-copied-in-grafana-is-indistinguishable-from-a-new-one
+
+  @grafana @in-grafana @decision
+  Scenario: A folder duplicated in Grafana arrives as a new folder
+    Given the folder "Demo/Team" holding three dashboards
+    When someone creates a folder under "Demo" holding copies of those dashboards
+    Then it arrives in Nextcloud as an ordinary new folder
+    And nothing marks it as a copy of "Demo/Team"
+
+    # Grafana has no duplicate-folder call, so a "copy" there is a create plus
+    # creates — and nothing distinguishes it from any other new folder.
 
     # ── RULE: a copy Grafana will not take creates nothing ────────────────────
 

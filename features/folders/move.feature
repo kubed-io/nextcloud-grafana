@@ -8,11 +8,11 @@ Feature: Moving a folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
-      | grafana folder | reports |
+      | grafana folder | Reports |
       | nc folder      | Reports |
       | mode           | sync    |
     And a mapping with the following values:
@@ -44,7 +44,7 @@ Feature: Moving a folder
     Given the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" into "Reports"
     Then "Reports/Team" holds the same files it held before the move
-    And the Grafana folder "Team" is under "reports", holding the same dashboards
+    And the Grafana folder "Team" is under "Reports", holding the same dashboards
     And "Reports/Team" holds:
       | grafana_folder_uid | the uid it had before the move |
 
@@ -79,7 +79,7 @@ Feature: Moving a folder
     Given the folder "Scratch/Team" holding three dashboards
     When I move "Scratch/Team" into "Demo"
     Then "Demo/Team" holds the same files it held before the move
-    And the Grafana folder "Team" is under "demo", holding a dashboard for each of them
+    And the Grafana folder "Team" is under "Demo", holding a dashboard for each of them
     And "Demo/Team" holds:
       | grafana_folder_uid | the uid of the "Team" Grafana folder |
 
@@ -104,3 +104,33 @@ Feature: Moving a folder
     When I try to move "Pointers/Team" into "Scratch"
     Then the move is refused with a message
     And all three dashboards still exist in Grafana
+
+    # ── RULE: a folder moved in Grafana moves in Nextcloud ────────────────────
+    # notes: ../AGENTS.md#a-folder-moved-in-grafana-is-recognised-by-its-uid
+
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Move a folder in Grafana
+    Given the folder "Demo/Team" holding three dashboards
+    And the folder "Demo/Archive" holding no dashboards
+    When someone moves the "Team" Grafana folder under "Archive"
+    Then "Demo/Archive/Team" holds the same files "Demo/Team" did
+    And "Demo/Team" is gone from Nextcloud
+    And "Demo/Archive/Team" holds:
+      | grafana_folder_uid | the uid it had before the move |
+
+    # Read by name this is one folder vanishing and another appearing; read by uid
+    # it is one folder with a new parent.
+
+  # notes: ../AGENTS.md#a-move-and-a-rename-at-once-is-just-a-move
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Move and rename a folder in Grafana at once
+    Given the folder "Demo/Team" holding three dashboards
+    And the folder "Demo/Archive" holding no dashboards
+    When someone moves the "Team" Grafana folder under "Archive" and renames it "Squad"
+    Then "Demo/Archive/Squad" holds the same files "Demo/Team" did
+    And "Demo/Team" is gone from Nextcloud
+    And "Demo/Archive/Squad" holds:
+      | grafana_folder_uid | the uid it had before the move |
+
+    # Grafana can do both in one go where a Files gesture cannot. The uid makes it
+    # one move to a new place under a new name, not a delete and a create.

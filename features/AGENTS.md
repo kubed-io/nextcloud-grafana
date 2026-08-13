@@ -416,6 +416,49 @@ dashboard is still in Grafana. That single sentence replaced three separate clai
 (it kept its uid, it was not restored, it was not duplicated), which were three
 wordings of "the original did not move".
 
+### A folder copied in Grafana is indistinguishable from a new one
+
+`folders/copy.feature` has no ordinary Grafana-side scenario, and that is a
+`@decision` rather than a gap.
+
+Grafana has **no duplicate-folder call**. Someone "copying" a folder there creates a
+folder and creates dashboards in it, and from this app's side that is exactly what
+arrives: a new folder with new uids and new dashboards, reaching Nextcloud through
+`folders/create.feature`. There is no signal that says *this one is a copy of that
+one* — the resemblance is in the titles and the panels, which is far too arbitrary
+for code to act on.
+
+So the app does not try. A duplicated folder is mirrored as the new folder it is,
+and the scenario records the absence so the asymmetry with the Nextcloud side reads
+as a decision instead of an oversight.
+
+### A folder moved in Grafana is recognised by its uid
+
+The Nextcloud half of a folder move was the defect the mapping re-key fixed; the
+Grafana half is the mirror of it, and it needs nothing new to be correct — a uid does
+not change when a folder is re-parented, so the reconcile sees the same folder in a
+new place and moves the Nextcloud one to match.
+
+Read by NAME this is one folder vanishing and another appearing, and a name-keyed
+mirror would delete three dashboards and re-create them under new uids. Read by UID
+it is one folder with a new parent.
+
+### A move and a rename at once is just a move
+
+**Grafana can do both in one request where a Files gesture cannot.** `POST
+/api/folders/{uid}/move` re-parents and `PUT /api/folders/{uid}` renames, and nothing
+stops a client doing them back to back before the next reconcile — so the app can
+observe a folder whose parent AND title both changed since it last looked.
+
+That is not a race to defend against, and it does not need a rule of its own: the uid
+identifies the folder, so the two changes are just the new pre-state. It is a MOVE to
+a new place under a new name, applied in one step. Treating it as anything more
+elaborate — a delete plus a create, or a rename that must be sequenced after a move —
+would be inventing a problem the id already solved.
+
+The scenario exists to pin that, because it is the case a name-keyed implementation
+gets catastrophically wrong and an id-keyed one gets right without trying.
+
 ### A copied folder is a new folder
 
 A folder copy creates a second Grafana folder holding second dashboards, each with
@@ -1001,6 +1044,24 @@ saying twice — once as "do not tag what you did not make", once as "do not sta
 id on it". With the tag gone there is one marker left, so there is one rule: a
 folder holding no `grafana_folder_uid` is a folder the app has never had anything
 to do with, and a pull leaves it exactly so.
+
+### A subfolder shares its name with Grafana exactly, case included
+
+A mapped folder may pair two different names — that is the mapping's whole job, and
+the one place a differing pair is legitimate. **A subfolder has nowhere to keep such
+a record**, so it is matched by name, and the match is exact: same string, same case.
+`Team` is not `team`.
+
+**The specs used to obscure this by pairing `demo` with `Demo`.** Twenty files
+mapped a Grafana folder to a Nextcloud one that differed only in capitalisation,
+directly above subfolders that had to agree exactly — so a reader could not tell
+which difference was deliberate and which was a slip, and neither could a reviewer.
+The mapped pairs are now identical strings (`Demo` ↔ `Demo`), which leaves exactly
+one differing pair in the suite — `links` ↔ `Pointers` — where the difference is
+obvious, intentional, and impossible to read as a typo.
+
+The rule to keep: if two names in a scenario differ, the difference must MEAN
+something. Case is not a meaning.
 
 ### A subfolder is in Grafana when a dashboard is in it
 

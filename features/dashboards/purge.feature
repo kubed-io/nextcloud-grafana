@@ -8,7 +8,7 @@ Feature: Emptying the trash
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a folder "Scratch" that is not mapped
@@ -70,7 +70,7 @@ Feature: Emptying the trash
 
     Examples: two ways to get here, and the purge cannot tell them apart
       | where                                |
-      | back in the "demo" Grafana folder    |
+      | back in the "Demo" Grafana folder    |
       | gone from Grafana entirely           |
 
     # ── RULE: emptying the bin in Grafana finishes the delete from that side ──

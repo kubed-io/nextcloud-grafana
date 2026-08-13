@@ -8,7 +8,7 @@ Feature: Copying a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
@@ -30,7 +30,7 @@ Feature: Copying a dashboard
       | grafana_uid     | its own, not the original's |
       | grafana_mapping | the mapping's id            |
       | grafana_mode    | the mapping's mode          |
-    And the copy is a new dashboard in the "demo" Grafana folder
+    And the copy is a new dashboard in the "Demo" Grafana folder
     And the original file and its dashboard are unchanged
 
     Examples: wherever it came from, it belongs to Demo now

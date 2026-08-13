@@ -8,7 +8,7 @@ Feature: Restoring a dashboard file from the trash
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a folder "Scratch" that is not mapped
@@ -26,7 +26,7 @@ Feature: Restoring a dashboard file from the trash
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When I restore it from the trash
-    Then the dashboard is in the "demo" Grafana folder
+    Then the dashboard is in the "Demo" Grafana folder
     And the file holds:
       | grafana_uid     | the uid it had before it was trashed |
       | grafana_mapping | the mapping's id                     |
@@ -66,9 +66,9 @@ Feature: Restoring a dashboard file from the trash
     Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
-    And its dashboard is back in the "demo" Grafana folder
+    And its dashboard is back in the "Demo" Grafana folder
     When I restore it from the trash
-    Then the dashboard is in the "demo" Grafana folder
+    Then the dashboard is in the "Demo" Grafana folder
     And there is exactly one file for that dashboard
 
   # notes: ../AGENTS.md#restoring-into-a-mapping-that-no-longer-exists-leaves-a-plain-file
@@ -90,7 +90,7 @@ Feature: Restoring a dashboard file from the trash
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
-    When someone moves the dashboard into the "demo" Grafana folder
+    When someone moves the dashboard into the "Demo" Grafana folder
     Then the file is back in "Demo"
     And there is exactly one file for that dashboard
     And the file holds:

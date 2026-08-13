@@ -8,11 +8,11 @@ Feature: Moving a dashboard file
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
-      | grafana folder | reports |
+      | grafana folder | Reports |
       | nc folder      | Reports |
       | mode           | sync    |
     And a mapping with the following values:
@@ -33,7 +33,7 @@ Feature: Moving a dashboard file
     Given a dashboard file in "Demo"
     And a folder "Demo/Team/Drafts" holding no dashboards
     When I move the file into "Demo/Team/Drafts"
-    Then Grafana holds "Team" under "demo", and "Drafts" under "Team"
+    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
     And the dashboard is in the "Drafts" Grafana folder
     And the file holds:
       | grafana_uid     | the dashboard's uid |
@@ -100,7 +100,7 @@ Feature: Moving a dashboard file
     Given a dashboard file in "Scratch"
     When I move the file into "Demo"
     Then a matching dashboard is created in Grafana
-    And the dashboard is named after the file, in the "demo" Grafana folder
+    And the dashboard is named after the file, in the "Demo" Grafana folder
     And the file holds:
       | grafana_uid     | set                |
       | grafana_mapping | the mapping's id   |
@@ -110,7 +110,7 @@ Feature: Moving a dashboard file
   Scenario: Move a dashboard from one mapping to another
     Given a dashboard file in "Demo"
     When I move the file into "Reports"
-    Then the dashboard is in the "reports" Grafana folder
+    Then the dashboard is in the "Reports" Grafana folder
     And the dashboard is not deleted or recreated
     And the file holds:
       | grafana_uid     | the dashboard's uid |
@@ -122,7 +122,7 @@ Feature: Moving a dashboard file
     Given the Grafana recycle bin is on
     And an unmapped dashboard file whose Grafana dashboard is parked in the "nextcloud-trash" folder
     When I move the file into "Reports"
-    Then the dashboard is in the "reports" Grafana folder
+    Then the dashboard is in the "Reports" Grafana folder
     And the dashboard keeps the same "grafana_uid"
     And the file holds:
       | grafana_mapping | the mapping's id   |
@@ -147,7 +147,7 @@ Feature: Moving a dashboard file
   @grafana @in-grafana @gesture @ui @todo
   Scenario: Move a dashboard to another mapped folder in Grafana
     Given a dashboard file in "Demo"
-    When someone moves the dashboard into the "reports" Grafana folder
+    When someone moves the dashboard into the "Reports" Grafana folder
     Then the file is gone from "Demo"
     And the file arrives in "Reports", holding:
       | grafana_uid     | the dashboard's uid |

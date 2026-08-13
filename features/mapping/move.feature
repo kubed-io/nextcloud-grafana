@@ -8,7 +8,7 @@ Feature: Moving a mapped folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a folder "Archive" that is not mapped
@@ -27,7 +27,7 @@ Feature: Moving a mapped folder
       | grafana_uid     | the dashboard's uid |
       | grafana_mapping | the mapping's id    |
       | grafana_mode    | the mapping's mode  |
-    And the dashboard is in the "demo" Grafana folder
+    And the dashboard is in the "Demo" Grafana folder
 
     # Nothing is sent to Grafana. The mapping names a folder UID there, and the
     # Nextcloud folder it pairs with is the one it has always pointed at.
@@ -37,7 +37,7 @@ Feature: Moving a mapped folder
   Scenario: Move the mapped Grafana folder
     Given a dashboard file in "Demo"
     And a Grafana folder "Retired" that is not mapped
-    When someone moves the "demo" Grafana folder under "Retired"
+    When someone moves the "Demo" Grafana folder under "Retired"
     Then the mapping's Grafana folder is still the one it was created with
     And the file holds:
       | grafana_uid     | the dashboard's uid |

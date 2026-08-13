@@ -8,7 +8,7 @@ Feature: Creating a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
@@ -25,7 +25,7 @@ Feature: Creating a dashboard
   Scenario: Create a new dashboard in a mapped folder
     When I create "CPU Load.grafana.json" in "Demo" via the Files "New" menu
     Then a matching dashboard is created in Grafana
-    And the dashboard is named "CPU Load", in the "demo" Grafana folder
+    And the dashboard is named "CPU Load", in the "Demo" Grafana folder
     And "Demo/CPU Load.grafana.json" holds:
       | grafana_uid     | the dashboard's uid |
       | grafana_mapping | the mapping's id    |

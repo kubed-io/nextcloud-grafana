@@ -8,7 +8,7 @@ Feature: Restoring a folder from the trash
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo         |
+      | grafana folder | Demo         |
       | nc folder      | Demo         |
       | mode           | sync         |
       | storage        | admin folder |
@@ -27,7 +27,7 @@ Feature: Restoring a folder from the trash
     And those three dashboards are in the "nextcloud-trash" Grafana folder
     When I restore "Demo/Team" from the Nextcloud trash
     Then "Demo/Team" holds the same files it held before
-    And the Grafana folder "Team" is under "demo", holding three dashboards
+    And the Grafana folder "Team" is under "Demo", holding three dashboards
     And each of them kept the uid it had before
 
     # Nothing was destroyed, so nothing has to be rebuilt: the dashboards come back
@@ -41,7 +41,7 @@ Feature: Restoring a folder from the trash
     And those three dashboards no longer exist in Grafana
     When I restore "Demo/Team" from the Nextcloud trash
     Then "Demo/Team" holds the same files it held before
-    And the Grafana folder "Team" is under "demo", holding three dashboards
+    And the Grafana folder "Team" is under "Demo", holding three dashboards
     And the user is told that three dashboards came back under new uids
 
     # The dashboards went at trash time, so a restore can only build new ones from
@@ -56,7 +56,7 @@ Feature: Restoring a folder from the trash
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards are in the "nextcloud-trash" Grafana folder
-    When someone moves those three dashboards into a "Team" folder under "demo"
+    When someone moves those three dashboards into a "Team" folder under "Demo"
     Then "Demo/Team" is back in Nextcloud, holding the same files
     And each of them kept the uid it had before
 
@@ -71,7 +71,7 @@ Feature: Restoring a folder from the trash
     And "Demo/Team" also holds "Budget.xlsx"
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards are in the "nextcloud-trash" Grafana folder
-    When someone moves those three dashboards into a "Team" folder under "demo"
+    When someone moves those three dashboards into a "Team" folder under "Demo"
     Then "Demo/Team" is back in Nextcloud, holding the same files
     And "Demo/Team" holds "Budget.xlsx"
 

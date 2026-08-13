@@ -8,7 +8,7 @@ Feature: Emptying the trash of a folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And the Grafana recycle-bin folder is named "nextcloud-trash"

@@ -8,7 +8,7 @@ Feature: Creating a folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo         |
+      | grafana folder | Demo         |
       | nc folder      | Demo         |
       | mode           | sync         |
       | storage        | admin folder |
@@ -27,7 +27,7 @@ Feature: Creating a folder
   Scenario: Create a dashboard in a folder of a mapping
     Given the folder "Demo/Team/Drafts" holding no dashboards
     When I create "CPU Load.grafana.json" in "Demo/Team/Drafts"
-    Then Grafana holds "Team" under "demo", and "Drafts" under "Team"
+    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
     And the dashboard is in the "Drafts" Grafana folder
     And "Demo/Team" holds:
       | grafana_folder_uid | the uid of the "Team" Grafana folder |

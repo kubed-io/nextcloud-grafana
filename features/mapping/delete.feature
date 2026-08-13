@@ -8,7 +8,7 @@ Feature: Removing a folder mapping
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
@@ -24,13 +24,13 @@ Feature: Removing a folder mapping
   @admin @in-nextcloud @occ @ui @unbuilt
   Scenario: Remove a sync mapping
     Given a dashboard file in "Demo"
-    When the admin removes the "demo" mapping
+    When the admin removes the "Demo" mapping
     Then "Demo" holds the same files it held before
     And the file holds:
       | grafana_uid     | the dashboard's uid |
       | grafana_mapping | absent              |
       | grafana_mode    | "unmapped"          |
-    And the dashboard is in the "demo" Grafana folder
+    And the dashboard is in the "Demo" Grafana folder
     And there is exactly 1 configured mapping
 
     # It keeps its uid because the dashboard is still there. The file is simply no

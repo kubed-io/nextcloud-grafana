@@ -8,7 +8,7 @@ Feature: Deleting a folder
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
@@ -29,7 +29,7 @@ Feature: Deleting a folder
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then none of the three dashboards exists in Grafana
-    And the Grafana folder "Team" is gone from "demo"
+    And the Grafana folder "Team" is gone from "Demo"
     And all three files are recoverable from the Nextcloud trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
@@ -38,7 +38,7 @@ Feature: Deleting a folder
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
-    And the Grafana folder "Team" is gone from "demo"
+    And the Grafana folder "Team" is gone from "Demo"
     And all three files are recoverable from the Nextcloud trash
 
     # The bin decides what happens to the DASHBOARDS. The folder goes either way:

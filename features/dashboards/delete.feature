@@ -8,7 +8,7 @@ Feature: Trashing a dashboard file
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | demo |
+      | grafana folder | Demo |
       | nc folder      | Demo |
       | mode           | sync |
     And a mapping with the following values:
@@ -68,7 +68,7 @@ Feature: Trashing a dashboard file
   Scenario: Trash the only dashboard in a folder
     Given the folder "Demo/Team" holding one dashboard "CPU Load"
     When I move "Demo/Team/CPU Load.grafana.json" to the trash
-    Then the Grafana folder "Team" is still under "demo", holding no dashboards
+    Then the Grafana folder "Team" is still under "Demo", holding no dashboards
     And "Demo/Team" holds:
       | grafana_folder_uid | the uid it had before the delete |
 
