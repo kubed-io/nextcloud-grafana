@@ -44,14 +44,17 @@ Feature: Deleting a folder
     # The bin decides what happens to the DASHBOARDS. The folder goes either way:
     # trashing it is a delete, and a delete carries whatever the folder held.
 
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Trash a folder of dashboards in a link mapping
+  # notes: ../AGENTS.md#a-link-folder-cannot-be-trashed-either
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Trash a folder in a link mapping
     Given the folder "Pointers/Team" holding three dashboards
-    When I move "Pointers/Team" to the trash
-    Then all three dashboards still exist in Grafana
+    When I try to move "Pointers/Team" to the trash
+    Then the trash is refused with a message
+    And "Pointers/Team" stays where it was
     And the Grafana folder "Team" is still under "links"
 
-    # A link is Grafana's to remove, folder included.
+    # The same refusal a single link gets, for the same reason: under a link the
+    # tree is Grafana's, and Nextcloud is a read-only mirror of it.
 
     # ── RULE: one gesture, many dashboards — say so before and after ──────────
 

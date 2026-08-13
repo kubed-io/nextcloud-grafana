@@ -11,10 +11,6 @@ Feature: Emptying the trash of a folder
       | grafana folder | demo |
       | nc folder      | Demo |
       | mode           | sync |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -75,13 +71,5 @@ Feature: Emptying the trash of a folder
     # A folder purge is still a set of individual deletes, so it can no more clear
     # the bin wholesale than purging one file can.
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Purge a trashed folder from a link mapping
-    Given the folder "Pointers/Team" holding three dashboards
-    And "Pointers/Team" is in the Nextcloud trash
-    When I purge "Pointers/Team" from the trash
-    Then all three dashboards still exist in Grafana
-    And the Grafana folder "Team" is still under "links"
-
-    # A link never owned the dashboards, so finishing the delete on the Nextcloud
-    # side finishes all of it.
+    # A link folder has no scenario in this file, deliberately: it cannot be trashed,
+    # so it can never be in the trash to purge — see folders/delete.feature.

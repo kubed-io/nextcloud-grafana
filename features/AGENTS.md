@@ -1059,6 +1059,26 @@ This is the same rule that blocks a copy from crossing into or out of a link
 folder, and the same one the sibling n8n app settled on: a link is Grafana's copy
 to remove.
 
+### A link folder cannot be trashed either
+
+The same refusal, one level up. Under a link mapping **the tree is Grafana's** —
+the dashboards, the folders, and the shape of both — and Nextcloud is a read-only
+mirror of it, with the one addition that other file types may be created alongside.
+If a link says a folder exists, then it exists, and the mirror has no standing to
+remove it.
+
+`folders/delete.feature` used to permit this and merely decline to propagate it:
+trashing a link folder was allowed, and Grafana was left alone. That is the
+half-honoured shape the single-file rule above already rejects — the folder leaves
+the mirror, the next pull writes it straight back, and in between the two sides
+disagree for no reason anyone chose.
+
+**Which is why `folders/purge.feature` has no link scenario.** A purge can only act
+on something that reached the trash, and a link folder cannot get there. Writing the
+scenario anyway would specify an end state for a state the app must never be in — and
+an earlier cut of that file did exactly that, describing what a purge "would" do to a
+link folder as though the trash step in front of it were permitted.
+
 ### A dashboard deleted in Grafana loses its mirror in Nextcloud
 
 MOVED HERE FROM `reconcile.feature`, where it was phrased "Sync from Grafana
