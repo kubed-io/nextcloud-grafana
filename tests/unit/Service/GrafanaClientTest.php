@@ -191,6 +191,10 @@ final class GrafanaClientTest extends TestCase {
 	 */
 	private function client(object $result, \ArrayObject $calls): GrafanaClient {
 		$config = $this->createStub(IAppConfig::class);
+		// Two parameters against an interface that declares five: PHP passes extra
+		// positional arguments to a userland function without complaint (only too FEW
+		// is an ArgumentCountError), so the callback takes the two it reads and lets
+		// `$default`/`$lazy`/`$sensitive` fall on the floor.
 		$config->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key): string => $key === 'grafana_url'
 				? 'https://grafana.test'
