@@ -852,35 +852,6 @@ That is stated as `its own, not the one it arrived with`, the same expectation t
 copy and move specs use, because the failure it guards against is the same one:
 silently reusing an id that names something else, or nothing.
 
-### A purge reaches everything the trash gesture put there
-
-A purge finishes whatever the trash started, so purging a trashed FOLDER reaches
-every dashboard that folder held. This is a row on the existing rule rather than a
-rule of its own: the only thing that differs from purging one file is the count.
-
-**This is where the two bins earn their keep, and it is worth spelling out because
-the far side is unforgiving.** A Grafana folder delete **cascades** — measured, not
-assumed: deleting a parent removed its nested child in one request, with no
-confirmation and nothing to undo it, because a service account has no trash to reach.
-So a single mis-aimed folder delete can destroy an arbitrarily deep subtree.
-
-Two separate safety nets sit in front of that, and they cover different halves:
-
-| | what it protects | how you get back |
-|---|---|---|
-| the **Nextcloud trash** | the FILES, always, in both bin modes | restore the folder |
-| the **Grafana recycle-bin folder** | the DASHBOARDS and their uids | restore re-files them, ids intact |
-
-With the bin OFF, trashing a folder deletes its dashboards in Grafana immediately;
-the files survive in the Nextcloud trash, so a restore rebuilds the dashboards from
-their bodies but they come back with NEW uids. With the bin ON, the dashboards are
-only parked, so a restore returns the SAME dashboards — the uids, the URLs and the
-history survive.
-
-That is the whole argument for the bin: it converts an irreversible cascade into a
-move. The purge is the moment the user says they meant it, and only then does the
-cascade become permanent.
-
 ### Emptying the bin in Grafana finishes the delete
 
 The bin folder is an ordinary Grafana folder, so anyone may clear it — and clearing
@@ -2264,6 +2235,58 @@ came back, and what came back with a different identity — is @unbuilt: nothing
 The aggregate gap, same shape as the one in delete-folder.feature: each file is
 restored correctly and nobody is told what the gesture cost. Under bin-off that
 cost is every uid in the folder.
+
+## folders/purge
+
+`features/folders/purge.feature`
+
+Emptying the Nextcloud trash of a trashed FOLDER — the folder half of
+`dashboards/purge.feature`, and the second half of the gesture
+`folders/delete.feature` starts.
+
+The two files split the same way they do for a single dashboard: **delete** is the
+trash step, **purge** is the one that cannot be undone. Keeping them apart is what
+makes the bin argument below legible — the whole point of the recycle-bin folder is
+that it puts a survivable step in front of an unsurvivable one.
+
+### A purge reaches everything the trash gesture put there
+
+A purge finishes whatever the trash started, so purging a trashed folder reaches
+every dashboard that folder held. The bin modes are an Examples row rather than two
+scenarios: the bin decides where the dashboards were *waiting*, not whether they go.
+
+**This is where the two bins earn their keep, and it is worth spelling out because
+the far side is unforgiving.** A Grafana folder delete **cascades** — measured, not
+assumed: deleting a parent removed its nested child in one request, with no
+confirmation and nothing to undo it, because a service account has no trash to reach.
+So a single mis-aimed folder delete can destroy an arbitrarily deep subtree.
+
+Two separate safety nets sit in front of that, and they cover different halves:
+
+| | what it protects | how you get back |
+|---|---|---|
+| the **Nextcloud trash** | the FILES, always, in both bin modes | restore the folder |
+| the **Grafana recycle-bin folder** | the DASHBOARDS and their uids | restore re-files them, ids intact |
+
+With the bin OFF, trashing a folder deletes its dashboards in Grafana immediately;
+the files survive in the Nextcloud trash, so a restore rebuilds the dashboards from
+their bodies but they come back with NEW uids. With the bin ON, the dashboards are
+only parked, so a restore returns the SAME dashboards — the uids, the URLs and the
+history survive.
+
+That is the whole argument for the bin: it converts an irreversible cascade into a
+move. The purge is the moment the user says they meant it, and only then does the
+cascade become permanent.
+
+### A purge reaches through every level it was given
+
+Depth is not a special case. A trashed folder holding folders holding dashboards is
+purged as one subtree, because that is what the trash held — Nextcloud trashes the
+whole thing as a unit, and the purge finishes exactly that unit.
+
+It earns a scenario rather than a row because the nesting is the *point*: this is the
+Nextcloud-side mirror of the cascade Grafana does natively, and the two have to agree
+about what "everything underneath" means or a purge leaves orphans on one side.
 
 ## the grafana: namespace — RETIRED ENTIRELY
 
