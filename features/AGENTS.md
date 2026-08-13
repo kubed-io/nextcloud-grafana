@@ -2344,6 +2344,42 @@ That is the whole argument for the bin: it converts an irreversible cascade into
 move. The purge is the moment the user says they meant it, and only then does the
 cascade become permanent.
 
+### A purge in the Grafana bin reaches back into the Nextcloud trash
+
+A purge has two doors, and the file previously had only one. Emptying the Nextcloud
+trash is the obvious one; the other is someone deleting the parked dashboards in
+Grafana, which the next reconcile notices — an item in our trash is no longer in
+Grafana's.
+
+**This door only exists when the recycle bin is ON**, and that is not a caveat but
+the whole precondition. Grafana has no trash of its own; the bin folder IS the trash,
+and it exists only because this app made it. With the bin off there is nothing parked
+to delete and no signal to observe — the dashboards went at trash time, so the
+Nextcloud trash is already the only copy.
+
+The end state is the same as the Nextcloud-side purge, reached from the other side:
+the dashboards are gone for good, so the trashed mirror has nothing left to be
+restored to and follows them out.
+
+### A Grafana purge may not destroy what was never Grafana's
+
+The respectful half, and it splits into two scenarios for exactly the reason the
+Grafana-side folder delete does — the contents change the END STATE:
+
+| the trashed mirror held | what a Grafana-side purge leaves |
+|---|---|
+| only dashboards | nothing — the folder goes from the Nextcloud trash too |
+| dashboards and other files | the folder stays in the trash, holding only the others |
+
+A spreadsheet in a trashed folder has no far side. Nothing that happened in Grafana
+can be a reason to destroy it, even though the gesture that triggered this was a
+delete. So the purge takes the dashboard files and stops, and the folder remains in
+the trash — still restorable, just no longer carrying anything Grafana knows about.
+
+This is the same asymmetry recorded below for the Nextcloud-side purge: contents are
+a ROW when the gesture starts in Nextcloud (everything goes either way) and a
+SCENARIO when it starts in Grafana (the answer differs).
+
 ### What the folder held is an example, not a scenario
 
 **Recursive is recursive.** A trashed folder is purged as one subtree because that is

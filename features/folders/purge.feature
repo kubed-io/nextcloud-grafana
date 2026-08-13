@@ -73,3 +73,33 @@ Feature: Emptying the trash of a folder
 
     # A link folder has no scenario in this file, deliberately: it cannot be trashed,
     # so it can never be in the trash to purge — see folders/delete.feature.
+
+    # ── RULE: a purge in the Grafana bin finishes the delete from that side ───
+    # notes: ../AGENTS.md#a-purge-in-the-grafana-bin-reaches-back-into-the-nextcloud-trash
+
+  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  Scenario: Purge a trashed folder's dashboards in the Grafana bin
+    Given the Grafana recycle bin is on
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    And the three dashboards are parked in "nextcloud-trash"
+    When someone deletes those three dashboards from "nextcloud-trash" in Grafana
+    Then "Demo/Team" is gone from the Nextcloud trash
+
+    # The parked dashboards were the only thing a restore could have brought back,
+    # so with them gone the trashed mirror has nothing left to be restored to.
+
+  # notes: ../AGENTS.md#a-grafana-purge-may-not-destroy-what-was-never-grafanas
+  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  Scenario: Purge a trashed folder's dashboards in the Grafana bin, where the mirror holds other files
+    Given the Grafana recycle bin is on
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" also holds "Budget.xlsx"
+    And "Demo/Team" is in the Nextcloud trash
+    And the three dashboards are parked in "nextcloud-trash"
+    When someone deletes those three dashboards from "nextcloud-trash" in Grafana
+    Then the three dashboard files are gone from the Nextcloud trash
+    And "Demo/Team" is still in the Nextcloud trash, holding "Budget.xlsx"
+
+    # The same respect the Grafana-side folder delete shows: a spreadsheet has no
+    # far side, so nothing that happened in Grafana may destroy it.
