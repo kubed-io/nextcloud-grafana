@@ -321,3 +321,54 @@ namespace OCP\Settings {
 		}
 	}
 }
+
+namespace OCP\Security {
+	// GrafanaClient decrypts the stored service-account token on every request; the
+	// client test mocks this to hand back a known plaintext.
+	if (!interface_exists(ICrypto::class, false)) {
+		interface ICrypto {
+			public function encrypt(string $input, string $password = ''): string;
+
+			public function decrypt(string $input, string $password = ''): string;
+		}
+	}
+}
+
+namespace OCP\Http\Client {
+	// The GrafanaClient folder-write tests mock this trio to drive request() without a
+	// network: IClientService hands out an IClient, whose verb methods return an
+	// IResponse the client decodes. CONTRIBUTING names IClientService as a collaborator
+	// to MOCK rather than a boundary to skip, so these exist to make that possible.
+	//
+	// `getBody()` is left untyped because the real one returns string|resource, and the
+	// tests only ever hand back a string.
+	if (!interface_exists(IResponse::class, false)) {
+		interface IResponse {
+			public function getBody();
+
+			public function getStatusCode(): int;
+		}
+	}
+	if (!interface_exists(IClient::class, false)) {
+		interface IClient {
+			public function get(string $uri, array $options = []): IResponse;
+
+			public function post(string $uri, array $options = []): IResponse;
+
+			public function put(string $uri, array $options = []): IResponse;
+
+			public function delete(string $uri, array $options = []): IResponse;
+		}
+	}
+	if (!interface_exists(IClientService::class, false)) {
+		interface IClientService {
+			public function newClient(): IClient;
+		}
+	}
+	// Thrown by the real client when NC's SSRF guard refuses a local address.
+	// GrafanaClient catches it BY TYPE, so it must be a distinct class here.
+	if (!class_exists(LocalServerException::class, false)) {
+		class LocalServerException extends \Exception {
+		}
+	}
+}
