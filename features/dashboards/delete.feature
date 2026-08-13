@@ -16,6 +16,7 @@ Feature: Trashing a dashboard file
       | nc folder      | Pointers |
       | mode           | link     |
     And a folder "Scratch" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -24,7 +25,7 @@ Feature: Trashing a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And a dashboard file in "Demo"
     When I move it to the trash
     Then the dashboard no longer exists in Grafana
@@ -32,7 +33,7 @@ Feature: Trashing a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     When I move it to the trash
     Then the dashboard is in the "nextcloud-trash" Grafana folder
@@ -60,13 +61,27 @@ Feature: Trashing a dashboard file
     Then the file is recoverable from the Nextcloud trash
     And it still holds no Grafana metadata
 
+    # ── RULE: a Grafana folder outlives its last dashboard ────────────────────
+    # notes: ../AGENTS.md#a-grafana-folder-outlives-its-last-dashboard
+
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Trash the only dashboard in a folder
+    Given the folder "Demo/Team" holding one dashboard "CPU Load"
+    When I move "Demo/Team/CPU Load.grafana.json" to the trash
+    Then the Grafana folder "Team" is still under "demo", holding no dashboards
+    And "Demo/Team" holds:
+      | grafana_folder_uid | the uid it had before the delete |
+
+    # Emptying is not deleting. A dashboard made here later lands in the folder both
+    # sides already agree on, instead of minting a second one beside it.
+
     # ── RULE: the Grafana bin only works while the Nextcloud trash does ────────
 
   # notes: ../AGENTS.md#the-grafana-bin-needs-the-nextcloud-trash
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Delete a dashboard with the Nextcloud trash disabled
     Given the Nextcloud trash is disabled
-    And the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And the Grafana recycle bin is on
     And a dashboard file in "Demo"
     When I delete it
     Then the dashboard no longer exists in Grafana

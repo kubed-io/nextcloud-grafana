@@ -16,6 +16,7 @@ Feature: Creating a folder
       | grafana folder | links    |
       | nc folder      | Pointers |
       | mode           | link     |
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -71,7 +72,7 @@ Feature: Creating a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Create a dashboard in a folder named after the recycle-bin folder
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/nextcloud-trash" holding no dashboards
     When I create "CPU Load.grafana.json" in "Demo/nextcloud-trash"
     Then the creation is refused with a message, explaining the name is reserved

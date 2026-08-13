@@ -20,6 +20,7 @@ Feature: Moving a folder
       | nc folder      | Pointers |
       | mode           | link     |
     And a folder "Scratch" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -52,7 +53,7 @@ Feature: Moving a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a folder out of every mapping with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" into "Scratch"
     Then "Scratch/Team" holds the same files it held before the move
@@ -65,7 +66,7 @@ Feature: Moving a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a folder out of every mapping with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" into "Scratch"
     Then "Scratch/Team" holds the same files it held before the move

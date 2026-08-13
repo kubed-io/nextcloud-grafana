@@ -12,6 +12,7 @@ Feature: Restoring a folder from the trash
       | nc folder      | Demo         |
       | mode           | sync         |
       | storage        | admin folder |
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -20,7 +21,7 @@ Feature: Restoring a folder from the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a folder with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards are in the "nextcloud-trash" Grafana folder
@@ -34,7 +35,7 @@ Feature: Restoring a folder from the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Restore a folder with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards no longer exist in Grafana
@@ -45,3 +46,34 @@ Feature: Restoring a folder from the trash
 
     # The dashboards went at trash time, so a restore can only build new ones from
     # the files — and re-minting three identities is worth saying out loud.
+
+    # ── RULE: dashboards coming back in Grafana bring their folder with them ──
+    # notes: ../AGENTS.md#dashboards-leaving-the-bin-bring-their-folder-out-of-the-trash
+
+  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  Scenario: Move a trashed folder's dashboards out of the bin in Grafana
+    Given the Grafana recycle bin is on
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    And those three dashboards are in the "nextcloud-trash" Grafana folder
+    When someone moves those three dashboards into a "Team" folder under "demo"
+    Then "Demo/Team" is back in Nextcloud, holding the same files
+    And each of them kept the uid it had before
+
+    # The uids name files that already exist in the trash, so they are restored
+    # rather than written a second time beside them.
+
+  # notes: ../AGENTS.md#a-restore-out-of-the-bin-brings-back-whatever-shared-the-folder
+  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  Scenario: Move a trashed folder's dashboards out of the bin, where the folder held other files
+    Given the Grafana recycle bin is on
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" also holds "Budget.xlsx"
+    And "Demo/Team" is in the Nextcloud trash
+    And those three dashboards are in the "nextcloud-trash" Grafana folder
+    When someone moves those three dashboards into a "Team" folder under "demo"
+    Then "Demo/Team" is back in Nextcloud, holding the same files
+    And "Demo/Team" holds "Budget.xlsx"
+
+    # A folder comes out of the Nextcloud trash whole — the spreadsheet rode in with
+    # it and rides back out.

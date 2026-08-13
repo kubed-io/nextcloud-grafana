@@ -89,6 +89,7 @@ default:
       - '%paths.base%/../../features/folders/move.feature'
       - '%paths.base%/../../features/folders/rename.feature'
       - '%paths.base%/../../features/folders/restore.feature'
+      - '%paths.base%/../../features/folders/purge.feature'
       - '%paths.base%/../../features/dashboards/view.feature'
       - '%paths.base%/../../features/dashboards/open-with.feature'
       - '%paths.base%/../../features/dashboards/tags.feature'

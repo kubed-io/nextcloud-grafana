@@ -244,13 +244,40 @@ It is a setting of the APP, not a property of a mapping, which is why the bin
 folder may not itself be mapped — it holds dashboards Nextcloud does not manage,
 so no operation may ever clear it wholesale.
 
-### The recycle-bin folder is off by default and can be enabled with a folder name
+**IT IS TWO SETTINGS, AND THE SPEC SAYS THEM SEPARATELY.** `bin_folder` names the
+folder; `bin_enabled` turns the feature on. They are independent in the panel — an
+admin can type a folder name and leave the checkbox alone — and independent in the
+code, which has an explicit error for the combination the old phrasing could not
+express: *"enabled but no folder name is set"* ({@see RecycleBin}).
+
+So the name lives in the **Background**, where configuration belongs, and each
+scenario says only `the Grafana recycle bin is on` / `off`. Before this, every
+scenario carried `on and set to "nextcloud-trash"` — one sentence asserting two
+facts, which meant a scenario that only wanted to flip the switch had to restate
+the configuration, and the bin modes could not be an `Examples` column without the
+folder name riding along in every row.
+
+**The setter and the assertion are worded differently on purpose.** Behat ignores
+the keyword when matching, so `Given the recycle bin is on` and `Then the recycle
+bin is on` would be ONE step registered twice — which Behat refuses, failing every
+scenario in the suite. Worse, whichever registration won would SET the value while
+a `Then` was asking it to be checked, so the assertion could never fail. The old
+`Then the Grafana recycle-bin folder is off` in `mapping/create.feature` had exactly
+that shape and escaped notice only because the scenario is `@todo`. The assertion is
+now `the Grafana recycle bin setting reads on|off`.
+
+### The recycle bin is off by default, and naming a folder does not enable it
 
 Off by default: a move-out or delete is a true Grafana delete. Turned on, the
 admin names an existing Grafana folder to act as the bin, so a delete MOVES
 the dashboard there with its uid intact and a restore returns the same
 dashboard. It is a setting of the app, not a property of a mapping — which is
 why the bin folder may not itself be mapped.
+
+The scenario walks the two settings **one at a time**, because that is the order
+the panel allows and because the middle state is the interesting one: after naming
+the folder the bin is still off, and nothing has started moving dashboards into it.
+Naming a folder is not consent.
 
 
 ## mapping/manage-groups
@@ -1031,6 +1058,26 @@ gesture is refused rather than half-honoured.
 This is the same rule that blocks a copy from crossing into or out of a link
 folder, and the same one the sibling n8n app settled on: a link is Grafana's copy
 to remove.
+
+### A link folder cannot be trashed either
+
+The same refusal, one level up. Under a link mapping **the tree is Grafana's** —
+the dashboards, the folders, and the shape of both — and Nextcloud is a read-only
+mirror of it, with the one addition that other file types may be created alongside.
+If a link says a folder exists, then it exists, and the mirror has no standing to
+remove it.
+
+`folders/delete.feature` used to permit this and merely decline to propagate it:
+trashing a link folder was allowed, and Grafana was left alone. That is the
+half-honoured shape the single-file rule above already rejects — the folder leaves
+the mirror, the next pull writes it straight back, and in between the two sides
+disagree for no reason anyone chose.
+
+**Which is why `folders/purge.feature` has no link scenario.** A purge can only act
+on something that reached the trash, and a link folder cannot get there. Writing the
+scenario anyway would specify an end state for a state the app must never be in — and
+an earlier cut of that file did exactly that, describing what a purge "would" do to a
+link folder as though the trash step in front of it were permitted.
 
 ### A dashboard deleted in Grafana loses its mirror in Nextcloud
 
@@ -2230,11 +2277,168 @@ when a folder is the gesture" is @todo. The aggregate behaviour — reporting wh
 came back, and what came back with a different identity — is @unbuilt: nothing in
 `lib/` treats a folder restore as one event.
 
+### Dashboards leaving the bin bring their folder out of the trash
+
+The other door into a restore, and the mirror of the Grafana-side purge: someone
+moves the parked dashboards out of the bin folder in Grafana, and the reconcile
+notices they are live again. The trashed Nextcloud folder follows them out.
+
+Bin-on only, for the same reason the Grafana-side purge is: with the bin off the
+dashboards were destroyed at trash time, so there is nothing in Grafana to move and
+no signal to observe.
+
+The uids are what make this a restore rather than a second copy — they name files
+that already exist in the Nextcloud trash, so those are brought back rather than
+written fresh beside them.
+
+**THE NEXTCLOUD TRASH IS WHAT MAKES THIS WORK, and it is worth being explicit about
+why the Grafana bin does not need to be cleverer.** Nextcloud's trash keeps a
+deleted folder as a whole subtree, with its original path, so the structure is never
+lost on that side. The Grafana bin can therefore be a FLAT holding pen keyed by uid:
+the dashboards sit in one folder with no hierarchy, and the restore rebuilds the
+Grafana folders from the Nextcloud tree and re-files each dashboard by its uid. Two
+sides, and only the one that already had the structure has to remember it.
+
+### A restore out of the bin brings back whatever shared the folder
+
+A folder comes out of the Nextcloud trash **whole**. A spreadsheet that rode into the
+trash inside the folder rides back out with it, because Nextcloud restores the node
+and everything under it — this app is not selectively reassembling a folder.
+
+That is the restore being unsurprising rather than clever, and it is the counterpart
+to the delete rule: a Grafana-side delete may not destroy a user's non-dashboard
+files, and a Grafana-side restore does not leave them behind either.
+
 ### A folder restore reports which dashboards came back with new identities
 
 The aggregate gap, same shape as the one in delete-folder.feature: each file is
 restored correctly and nobody is told what the gesture cost. Under bin-off that
 cost is every uid in the folder.
+
+## folders/purge
+
+`features/folders/purge.feature`
+
+Emptying the Nextcloud trash of a trashed FOLDER — the folder half of
+`dashboards/purge.feature`, and the second half of the gesture
+`folders/delete.feature` starts.
+
+The two files split the same way they do for a single dashboard: **delete** is the
+trash step, **purge** is the one that cannot be undone. Keeping them apart is what
+makes the bin argument below legible — the whole point of the recycle-bin folder is
+that it puts a survivable step in front of an unsurvivable one.
+
+### A purge reaches everything the trash gesture put there
+
+A purge finishes whatever the trash started, so purging a trashed folder reaches
+every dashboard that folder held.
+
+**The two bin modes are two SCENARIOS, not two rows of one.** An earlier cut wrote
+them as an `Examples` column on the grounds that the bin only decides where the
+dashboards were waiting. That is wrong, and the suite's own test for an outline says
+so: the rows can only be written as *sentences*, never as values, because the
+PRE-STATE differs.
+
+| | after the folder was trashed | what the purge does |
+|---|---|---|
+| bin **off** | the dashboards are already gone, and the files lost their uids with them | nothing — Grafana is never contacted |
+| bin **on** | the dashboards are parked in the bin folder, and the files still carry the uids that match them | three deletes |
+
+The end states read alike — no dashboards in Grafana either way — and that is exactly
+the trap. It is true for opposite reasons, so a single outline would have asserted
+"none exist" in a run where the app did nothing and in a run where it destroyed
+three dashboards, and passed both. The asymmetry is where a bug in the bin-on path
+would hide.
+
+`dashboards/purge.feature` already made this split for a single file; the folder file
+now matches it rather than compressing it.
+
+**This is where the two bins earn their keep, and it is worth spelling out because
+the far side is unforgiving.** A Grafana folder delete **cascades** — measured, not
+assumed: deleting a parent removed its nested child in one request, with no
+confirmation and nothing to undo it, because a service account has no trash to reach.
+So a single mis-aimed folder delete can destroy an arbitrarily deep subtree.
+
+Two separate safety nets sit in front of that, and they cover different halves:
+
+| | what it protects | how you get back |
+|---|---|---|
+| the **Nextcloud trash** | the FILES, always, in both bin modes | restore the folder |
+| the **Grafana recycle-bin folder** | the DASHBOARDS and their uids | restore re-files them, ids intact |
+
+With the bin OFF, trashing a folder deletes its dashboards in Grafana immediately;
+the files survive in the Nextcloud trash, so a restore rebuilds the dashboards from
+their bodies but they come back with NEW uids. With the bin ON, the dashboards are
+only parked, so a restore returns the SAME dashboards — the uids, the URLs and the
+history survive.
+
+That is the whole argument for the bin: it converts an irreversible cascade into a
+move. The purge is the moment the user says they meant it, and only then does the
+cascade become permanent.
+
+### A purge in the Grafana bin reaches back into the Nextcloud trash
+
+A purge has two doors, and the file previously had only one. Emptying the Nextcloud
+trash is the obvious one; the other is someone deleting the parked dashboards in
+Grafana, which the next reconcile notices — an item in our trash is no longer in
+Grafana's.
+
+**This door only exists when the recycle bin is ON**, and that is not a caveat but
+the whole precondition. Grafana has no trash of its own; the bin folder IS the trash,
+and it exists only because this app made it. With the bin off there is nothing parked
+to delete and no signal to observe — the dashboards went at trash time, so the
+Nextcloud trash is already the only copy.
+
+The end state is the same as the Nextcloud-side purge, reached from the other side:
+the dashboards are gone for good, so the trashed mirror has nothing left to be
+restored to and follows them out.
+
+### A Grafana purge may not destroy what was never Grafana's
+
+The respectful half, and it splits into two scenarios for exactly the reason the
+Grafana-side folder delete does — the contents change the END STATE:
+
+| the trashed mirror held | what a Grafana-side purge leaves |
+|---|---|
+| only dashboards | nothing — the folder goes from the Nextcloud trash too |
+| dashboards and other files | the folder stays in the trash, holding only the others |
+
+A spreadsheet in a trashed folder has no far side. Nothing that happened in Grafana
+can be a reason to destroy it, even though the gesture that triggered this was a
+delete. So the purge takes the dashboard files and stops, and the folder remains in
+the trash — still restorable, just no longer carrying anything Grafana knows about.
+
+This is the same asymmetry recorded below for the Nextcloud-side purge: contents are
+a ROW when the gesture starts in Nextcloud (everything goes either way) and a
+SCENARIO when it starts in Grafana (the answer differs).
+
+### What the folder held is an example, not a scenario
+
+**Recursive is recursive.** A trashed folder is purged as one subtree because that is
+what the trash held — Nextcloud trashes the whole thing as a unit and the purge
+finishes exactly that unit. Whether the subtree happens to contain nested folders,
+empty folders, or a spreadsheet does not change the rule, the pre-state, or the end
+state, so those belong in an `Examples` column: one dashboard, three, a subfolder
+holding more, a subfolder holding none, a folder with a `.xlsx` in it.
+
+An earlier cut gave nesting its own scenario on the grounds that "the nesting is the
+point". It is not — the *reaching* is the point, and depth is one of several ways a
+folder can be shaped. Writing each shape as a scenario would state one rule five
+times and invite the five to drift.
+
+**This is the mirror image of the bin split above, and the pair is worth reading
+together.** Both were decided by the same question — *do the rows differ only in
+values, or in sentences?* The bin modes differ in sentences (the dashboards are
+parked, or already gone), so they are scenarios. The contents differ only in values,
+so they are rows. Getting either backwards costs something real: as an outline the
+bin modes hid an asymmetry, and as scenarios the contents duplicated a rule.
+
+**The Grafana side does NOT collapse this way**, which is the tell that the axis is
+genuinely about outcome and not about tidiness. There, whether the Nextcloud mirror
+holds non-dashboard files changes the END STATE — the folder is deleted outright, or
+it survives stripped of its dashboards and its `grafana_folder_uid` — so those are two
+scenarios in `folders/delete.feature`. Same input shape, different answer, because the
+gesture arrives from the other side.
 
 ## the grafana: namespace — RETIRED ENTIRELY
 

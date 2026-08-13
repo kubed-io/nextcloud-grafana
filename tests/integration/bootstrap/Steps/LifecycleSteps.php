@@ -32,14 +32,40 @@ trait LifecycleSteps {
 		$this->setupMapping($name, $mode);
 	}
 
-	/** @Given the Grafana recycle-bin folder is off */
-	public function theRecycleBinIsOff(): void {
-		$this->setBinOff();
+	/**
+	 * NAMING THE BIN FOLDER AND SWITCHING IT ON ARE TWO SEPARATE FACTS, because they
+	 * are two separate settings (`bin_folder` and `bin_enabled`) and the admin panel
+	 * lets you set one without the other. Saying them in one step made a state the
+	 * app has an explicit error for — enabled with no folder name — unwriteable, and
+	 * put configuration inside every scenario that only wanted to flip the switch.
+	 *
+	 * @Given the Grafana recycle-bin folder is named :folder
+	 */
+	public function theRecycleBinFolderIsNamed(string $folder): void {
+		$this->setBinFolder($folder);
 	}
 
-	/** @Given the Grafana recycle-bin folder is on and set to :folder */
-	public function theRecycleBinIsOnAndSetTo(string $folder): void {
-		$this->setBinOn($folder);
+	/** @Given the Grafana recycle bin is :state */
+	public function theRecycleBinIs(string $state): void {
+		$this->setBinEnabled($state === 'on');
+	}
+
+	/**
+	 * The ASSERTION, deliberately worded differently from the setter above.
+	 *
+	 * Behat ignores the keyword when matching, so `Given …is on` and `Then …is on`
+	 * would be ONE step registered twice — Behat refuses the second and fails every
+	 * scenario in the suite. Worse, whichever won would SET the value while a `Then`
+	 * was asking it to be checked, so the assertion could never fail. The old
+	 * `Then the Grafana recycle-bin folder is off` in mapping/create.feature had
+	 * exactly that shape and only escaped notice because the scenario is @todo.
+	 *
+	 * @Then the Grafana recycle bin setting reads :state
+	 */
+	public function theRecycleBinSettingReads(string $state): void {
+		$res = $this->occ('config:app:get ' . self::APP_ID . ' bin_enabled --default-value=0');
+		$actual = trim($res['output']) === '1' ? 'on' : 'off';
+		Assert::assertSame($state, $actual, 'the recycle-bin setting');
 	}
 
 	/**
@@ -661,7 +687,8 @@ trait LifecycleSteps {
 	 * @Given an unmapped dashboard file that still carries its :key
 	 */
 	public function anUnmappedFileStillCarryingItsUid(string $key): void {
-		$this->setBinOn('nextcloud-trash');
+		$this->setBinFolder('nextcloud-trash');
+		$this->setBinEnabled(true);
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveTheFileToAnUnmappedFolder();
 		Assert::assertSame(
@@ -678,7 +705,7 @@ trait LifecycleSteps {
 	 * @Given a plain :ext file whose Grafana identity was stripped, outside any mapping
 	 */
 	public function aStrippedPlainFileOutsideAnyMapping(string $ext): void {
-		$this->setBinOff();
+		$this->setBinEnabled(false);
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveTheFileToAnUnmappedFolder();
 		Assert::assertNull(
