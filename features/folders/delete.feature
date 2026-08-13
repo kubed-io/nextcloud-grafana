@@ -22,27 +22,35 @@ Feature: Deleting a folder
     # ── RULE: trashing a folder is trashing each dashboard in it ──────────────
     # notes: ../AGENTS.md#the-recycle-bin-folder
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Trash a folder of dashboards with the recycle bin off
     Given the Grafana recycle-bin folder is off
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then none of the three dashboards exists in Grafana
+    And the Grafana folder "Team" is gone from "demo"
     And all three files are recoverable from the Nextcloud trash
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Trash a folder of dashboards with the recycle bin on
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
+    And the Grafana folder "Team" is gone from "demo"
     And all three files are recoverable from the Nextcloud trash
+
+    # The bin decides what happens to the DASHBOARDS. The folder goes either way:
+    # trashing it is a delete, and a delete carries whatever the folder held.
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Trash a folder of dashboards in a link mapping
     Given the folder "Pointers/Team" holding three dashboards
     When I move "Pointers/Team" to the trash
     Then all three dashboards still exist in Grafana
+    And the Grafana folder "Team" is still under "links"
+
+    # A link is Grafana's to remove, folder included.
 
     # ── RULE: one gesture, many dashboards — say so before and after ──────────
 
@@ -55,6 +63,20 @@ Feature: Deleting a folder
 
     # Deleting one dashboard is a small decision; deleting forty is not, and with the
     # bin off it is irreversible. The app knows the count before it acts.
+
+    # ── RULE: a Grafana folder outlives its last dashboard ────────────────────
+    # notes: ../AGENTS.md#a-grafana-folder-outlives-its-last-dashboard
+
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Trash the only dashboard in a folder
+    Given the folder "Demo/Team" holding one dashboard "CPU Load"
+    When I move "Demo/Team/CPU Load.grafana.json" to the trash
+    Then the Grafana folder "Team" is still under "demo", holding no dashboards
+    And "Demo/Team" holds:
+      | grafana_folder_uid | the uid it had before the delete |
+
+    # Emptying is not deleting. A dashboard made here later lands in the folder both
+    # sides already agree on, instead of minting a second one beside it.
 
     # ── RULE: a folder deleted in Grafana takes only what is Grafana's ────────
     # notes: ../AGENTS.md#when-a-folder-deleted-in-grafana-may-delete-the-nextcloud-folder

@@ -155,6 +155,128 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * Create a Grafana folder, optionally nested under `$parentUid`.
+	 *
+	 * Grafana mints the uid — unlike a dashboard, a folder cannot be created with a
+	 * caller-chosen one — so the returned uid is what the Nextcloud folder banks as
+	 * `grafana_folder_uid`. Nesting is Grafana ≥ 11 and verified live on 13.0.2; an
+	 * empty `$parentUid` creates at the root.
+	 *
+	 * The response carries the full ancestor chain in `parents[]`, which is what lets
+	 * a pull rebuild a nested path from one call instead of walking upwards.
+	 *
+	 * Titles are NOT unique in Grafana — creating a second folder with a name that is
+	 * already taken succeeds and returns a different uid. Callers that mean "make sure
+	 * this exists" must resolve first ({@see resolveFolderUidByTitle}); this method
+	 * always creates.
+	 *
+	 * @return array{uid:string, title:string, parentUid:string, version:int}
+	 */
+	public function createFolder(string $title, string $parentUid = ''): array {
+		$body = ['title' => $title];
+		if ($parentUid !== '') {
+			$body['parentUid'] = $parentUid;
+		}
+		$res = $this->request('POST', '/api/folders', [], $body);
+		return $this->folderShape($this->decode($res));
+	}
+
+	/**
+	 * Rename a folder in place, keeping its uid: `PUT /api/folders/{uid}`.
+	 *
+	 * **Grafana guards this with an optimistic-concurrency check.** A bare title PUT
+	 * comes back `412 The dashboard has been changed by someone else` — measured, not
+	 * assumed, and the docs do not lead with it. Two ways past it: send the folder's
+	 * current `version`, or send `overwrite:true`. We send `overwrite:true` so a
+	 * rename is ONE request rather than a read-then-write, and because a read-then-
+	 * write is not actually safer here — it widens the window it appears to close.
+	 *
+	 * Last-writer-wins is the right trade for a mirror: the Nextcloud rename already
+	 * happened, and the uid is what makes this a rename rather than a delete plus a
+	 * create, so the title is safe to force.
+	 *
+	 * @return array{uid:string, title:string, parentUid:string, version:int}
+	 */
+	public function renameFolder(string $uid, string $title): array {
+		$res = $this->request(
+			'PUT',
+			'/api/folders/' . rawurlencode($uid),
+			[],
+			['title' => $title, 'overwrite' => true],
+		);
+		return $this->folderShape($this->decode($res));
+	}
+
+	/**
+	 * Re-parent a folder: `POST /api/folders/{uid}/move`.
+	 *
+	 * A dedicated endpoint rather than a field on the update call, and it takes no
+	 * version — so unlike {@see renameFolder()} there is no precondition to satisfy.
+	 * An empty `$parentUid` moves the folder to the root.
+	 *
+	 * The uid survives, which is the whole point: a move must not cost the folder its
+	 * identity, or every dashboard beneath it would read as deleted-and-recreated.
+	 *
+	 * @return array{uid:string, title:string, parentUid:string, version:int}
+	 */
+	public function moveFolder(string $uid, string $parentUid = ''): array {
+		$res = $this->request(
+			'POST',
+			'/api/folders/' . rawurlencode($uid) . '/move',
+			[],
+			['parentUid' => $parentUid],
+		);
+		return $this->folderShape($this->decode($res));
+	}
+
+	/**
+	 * Delete a folder: `DELETE /api/folders/{uid}`.
+	 *
+	 * **This CASCADES.** Verified live: deleting a parent removed its nested child
+	 * without a second call, and Grafana asks nothing before doing it. So one request
+	 * can destroy an arbitrarily deep subtree and every dashboard in it — which is
+	 * why the spec makes the app count what it is about to delete and say so
+	 * (`folders/delete.feature`, "Trash a folder of many dashboards"). The count has
+	 * to come from Nextcloud's side beforehand; Grafana will not offer it.
+	 *
+	 * Irreversible, like {@see deleteDashboard()} — a service account has no trash to
+	 * reach. Reversibility is the Nextcloud trashbin plus, when it is on, the Grafana
+	 * recycle-bin folder the delete engine parks dashboards in instead.
+	 *
+	 * A 404 is success: the folder is already gone, which is the end state wanted, so
+	 * a re-run is a no-op rather than an error.
+	 */
+	public function deleteFolder(string $uid): void {
+		try {
+			$this->request('DELETE', '/api/folders/' . rawurlencode($uid));
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus === 404) {
+				return; // already gone — the end state we wanted
+			}
+			throw $e;
+		}
+	}
+
+	/**
+	 * Normalise a folder write's response to the one shape callers bank.
+	 *
+	 * Grafana returns a fat record (permissions, timestamps, the `parents[]` chain);
+	 * everything the app persists is here, and anything it needs later should be added
+	 * deliberately rather than by leaking the raw body to callers.
+	 *
+	 * @param array<string,mixed> $body
+	 * @return array{uid:string, title:string, parentUid:string, version:int}
+	 */
+	private function folderShape(array $body): array {
+		return [
+			'uid' => (string)($body['uid'] ?? ''),
+			'title' => (string)($body['title'] ?? ''),
+			'parentUid' => (string)($body['parentUid'] ?? ''),
+			'version' => (int)($body['version'] ?? 0),
+		];
+	}
+
+	/**
 	 * List the dashboards Grafana holds, scoped by folder, normalised to the small
 	 * shape the pull reconciler indexes on: `{uid, title, folderUid, url, tags}`.
 	 * This is the "which dashboards exist" half of the pull — the reconciler then

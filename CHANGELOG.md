@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING:** the `grafana:sync` / `grafana:link` / `grafana:unmapped` pills are gone. The mapping already decides a file's mode and the file still carries it as metadata, so the pills were a second copy nobody could edit. They are deleted on upgrade, which also removes them from the tag picker. The `grafana` folder tag is a different thing and stays.
+- **BREAKING:** the `grafana:sync` / `grafana:link` / `grafana:unmapped` pills are gone. The mapping already decides a file's mode and the file still carries it as metadata, so the pills were a second copy nobody could edit. They are deleted on upgrade, which also removes them from the tag picker.
 
 - **BREAKING:** requires Nextcloud **31** (was 30). Nextcloud 30 is end of life.
 - **BREAKING:** a mapping is immutable except for its groups. Remove it and add it again to change one.
@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A mapped folder appears as soon as you save the mapping, and one that cannot be provisioned is not saved at all.
 - The groups a mapped folder is shared with are read from the folder, so sharing it anywhere shows up here.
 - A `link` mapping's folder is no longer read-only.
+- Internal: the Grafana client can create, rename, move and delete folders; nothing calls it yet.
+- Internal: subfolders become Grafana folders by holding a dashboard, replacing the unbuilt `grafana` opt-in tag.
 - Immutable fields on the admin cards no longer say "(fixed)".
 - The connection is one Instance card, and it shows whether a token is already stored.
 - Test connection moved into Sync Actions.

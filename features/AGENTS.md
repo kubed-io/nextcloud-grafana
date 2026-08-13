@@ -389,6 +389,35 @@ dashboard is still in Grafana. That single sentence replaced three separate clai
 (it kept its uid, it was not restored, it was not duplicated), which were three
 wordings of "the original did not move".
 
+### A copied folder is a new folder
+
+A folder copy creates a second Grafana folder holding second dashboards, each with
+its own uid. Nothing is ever claimed twice — which is the whole reason the feature
+needs stating at all.
+
+**The file used to hold two mutually exclusive specs.** Four scenarios described
+the copy creating new dashboards; a fifth said a folder copy is REFUSED rather than
+bulk-duplicating them, on the grounds that forty dashboards is a lot to make by
+accident. Both cannot be the behaviour, and a file that says both says nothing.
+
+Creating wins, for the same reason the forty-dashboard warning was dropped from
+`folders/move.feature`: a copy destroys nothing. The warning argument is about
+irreversibility, and there is none here — the user can delete what they did not
+want, and the originals were never touched.
+
+### A folder scenario is about the folder
+
+What happens to each file INSIDE a copied folder is `dashboards/copy.feature`'s
+subject, and it says it once there. A folder scenario says what the folder holds
+afterwards, on both sides — the same files it had, and a Grafana folder with the
+dashboards to match.
+
+That is what collapsed four scenarios into one: "dashboards never inherit the
+originals' uids" and "copying a folder creates new dashboards" are one gesture with
+one end state, and "the copy does not inherit the folder uid" and "…does not
+inherit the `grafana` tag" were the same again for the folder itself. The tag half
+is gone entirely — see the nesting model, which retired it.
+
 ### A copy never changes a file's mode
 
 A `link` folder is a read-only projection of Grafana. That is the ONLY thing a
@@ -448,40 +477,33 @@ A copy is ALWAYS a new instance, never a second claim on an existing one. For a
 dashboard file that means the copy's `grafana_uid` is stripped and a fresh
 dashboard is created (copy-dashboard.feature). For a folder the same rule has to
 hold twice over: the copied folder must not inherit the original's
-`grafana_folderUid`, and neither must any dashboard file inside it.
+`grafana_folder_uid`, and neither must any dashboard file inside it.
 
 The failure this prevents is the one that has no clean repair: two Nextcloud
 folders both stamped with one Grafana folder uid, or two files both claiming one
 dashboard. The next pull then has two candidates for one uid and no way to choose,
 and whichever it writes, the other silently diverges.
 
-── THE `grafana` TAG IS NOT COPIED ──────────────────────────────────────────────
+── COPY, DO NOT REFUSE — SETTLED ────────────────────────────────────────────────
 
-A folder becomes a Grafana folder by being TAGGED (create-folder.feature) — a
-deliberate act with a name. Nextcloud copies system tags along with a folder, so
-a naive copy would opt the duplicate in without anyone asking, and the app would
-create a Grafana folder nobody named. The copy must land as a plain folder; if
-the user wants it mirrored, they tag it, which is the same one gesture as before.
+This file used to carry both readings at once: four scenarios creating new
+dashboards, and a fifth refusing the copy outright the way the penpot sibling
+refuses a project-folder copy. Creating won — a copy destroys nothing, so the
+irreversibility argument behind refusing does not apply, and the same reasoning
+retired the forty-dashboard warning from `folders/move.feature`. The reasoning is
+in [A copied folder is a new folder](#a-copied-folder-is-a-new-folder).
 
-This is the folder analogue of "copy is the single safest point to strip
-metadata": whatever the source was, the copy starts clean.
-
-── THE ALTERNATIVE: REFUSE ──────────────────────────────────────────────────────
-
-The penpot sibling refuses a project-folder copy outright rather than defining
-what a duplicated project means. That is a legitimate answer here too, and
-cheaper to get right — a folder copy is a bulk create with a partial-failure mode
-(move-folder.feature has the same problem), and "one gesture, forty new
-dashboards" is not obviously what anyone wants. Both readings are written below;
-whichever is chosen, delete the other rather than leaving the pair unresolved.
+There is no tag to worry about copying. The `grafana` opt-in tag a previous cut of
+this section described was retired with the nesting model, so a copied folder is
+plain by construction rather than by being stripped.
 
 ── STATUS ───────────────────────────────────────────────────────────────────────
 
 Nextcloud fires `NodeCopiedEvent` per node, and `CopyListener` acts on Files only,
-so the FILES inside a copied folder already take the normal copy path — those
-scenarios are @todo. Everything about the folder's own identity is @unbuilt:
-nothing reads or strips `grafana_folderUid`, and there is no folder write API to
-create a duplicate with.
+so the FILES inside a copied folder already take the normal copy path. Everything
+about the folder's own identity is @unbuilt: nothing reads or strips
+`grafana_folder_uid`, and although `GrafanaClient::createFolder` now exists, no
+listener calls it.
 
 ### The pull's own folder writes are never treated as a copy
 
@@ -600,101 +622,58 @@ made the state of this surface legible at all (see STATUS below).
 
 ── THE ASYMMETRY ────────────────────────────────────────────────────────────────
 
-    every mirrored Grafana folder  →  a folder in Nextcloud     (automatic)
-    SOME Nextcloud folders         →  a folder in Grafana       (opt-in only)
+    every mirrored Grafana folder            →  a folder in Nextcloud   (automatic)
+    a Nextcloud folder with a dashboard in it →  a folder in Grafana    (automatic)
+    a Nextcloud folder with anything else     →  nothing
 
-A folder created inside a mapped folder is an ORDINARY FOLDER. Nothing is sent,
-nothing is inferred, and it can hold anything the user likes — notes, exports,
-screenshots, a subfolder of references. **A mapped folder is a real folder and
-must stay usable for ordinary things.** A mapping that silently turned every
-subfolder into a Grafana folder would make the mapped folder unusable for
-anything but dashboards, which is not a trade a user agreed to.
+A folder created inside a mapped folder is an ORDINARY FOLDER until a dashboard
+lands somewhere beneath it. Nothing is sent, nothing is inferred, and it can hold
+anything the user likes — notes, exports, screenshots, a subfolder of references.
+**A mapped folder is a real folder and must stay usable for ordinary things.** A
+mapping that turned every subfolder into a Grafana folder on sight would make the
+mapped folder unusable for anything but dashboards, which is not a trade a user
+agreed to.
 
-── THE OPT-IN IS THE `grafana` TAG ──────────────────────────────────────────────
+The rule deciding which is which is the nesting model, in
+[A subfolder is in Grafana when a dashboard is in it](#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it)
+— which also records why the `grafana` opt-in tag this section used to describe was
+retired, and why the per-mapping "Sync subfolders" flag it would have replaced is
+dead weight rather than a fallback.
 
-Assigning the `grafana` tag to a folder says "make this a Grafana folder" — a
-deliberate act with a name, exactly as "+ New → Grafana dashboard" is for files.
-The tag is ALSO how the app marks the folders it mirrors, so both directions share
-one visible marker: **if it carries the tag, it is a Grafana folder, whoever made
-it one.** A user cannot tell — and should not have to — whether a folder started
-life in Grafana or was opted in from Nextcloud.
+── THE ID DECIDES, AND IT IS THE ONLY MARKER ────────────────────────────────────
 
-THE MAPPED FOLDER ITSELF NEEDS NO TAG. It is already bound to a Grafana folder by
-the mapping; that IS its identity. The tag answers the question the mapping does
-not: which of the folders *underneath* it are Grafana folders. Same shape as the
-penpot sibling, where a mapped team folder is untagged and the projects inside it
-carry the `penpot` tag.
+`grafana_folder_uid` on the folder is what the app acts on: a folder carrying one
+is a Grafana folder, whoever made it one. There is no second, visible badge to keep
+in step with it — one fewer thing that can disagree with itself, and the same
+reason dashboards are tracked by `grafana_uid` rather than by filename. Names
+change; ids should not.
 
-WHY A TAG AND NOT A CHECKBOX. The current schema has a per-mapping "Sync
-subfolders" flag, and it is the wrong shape twice over: it is all-or-nothing for a
-whole mapping, and it infers intent from a folder's mere existence. It is also
-inert — `syncSubfolders` is stored and validated but no code path reads it, so it
-is a promise the app does not keep. A tag is per-folder, is a first-class
-Nextcloud gesture with an event (`TagAssignedEvent`), and survives a rename or a
-move in a way a name convention or a path-scoped flag cannot.
+── STATUS: THE CLIENT CAN WRITE FOLDERS; NOTHING CALLS IT YET ───────────────────
 
-WHY A TAG AND NOT A NAME CONVENTION: the same reason the app tracks dashboards by
-`grafana_uid` rather than by filename. Names change; markers should not.
+`GrafanaClient` now has `createFolder`, `renameFolder`, `moveFolder` and
+`deleteFolder` alongside the reads, each measured against a live Grafana 13.0.2
+rather than taken from the docs — the surprises are written on the methods (a
+rename is refused without `overwrite`; a delete cascades through every descendant).
 
-── THE TAG DECORATES; THE ID DECIDES ────────────────────────────────────────────
-
-`grafana_folderUid` on the folder is what the app acts on. The tag is the visible
-badge, re-stamped by every pull — which is why a missing tag is never a state the
-app has to repair specially, and why removing the tag cannot destroy anything.
-
-── STATUS: THE WHOLE FOLDER SURFACE IS UNBUILT ──────────────────────────────────
-
-`GrafanaClient` has exactly three folder methods — `listFolders`,
-`resolveFolderUidByTitle`, `listDashboards` — all READS. There is no createFolder,
-renameFolder, deleteFolder or moveFolder anywhere in `lib/`, and nothing
-subscribes to `TagAssignedEvent`. So every scenario requiring a folder write is
-@unbuilt, not @todo: no test could pass, because there is nothing to call.
-
-That distinction only became visible when folders were split out of the file
-features. While "moving a dashboard into a subfolder" and "creating the subfolder"
-lived in one file under one file-level @todo, an entire missing subsystem looked
-like a handful of missing tests.
+**That is the API layer and nothing above it.** No listener subscribes to a folder
+event, and nothing resolves a Nextcloud folder to a Grafana one. So every scenario
+here is still @unbuilt: the call exists, but nothing reaches it. The gap is
+deliberate — the mapping is still keyed by PATH STRING, so a folder rename or move
+orphans it, and building folder gestures on that is building on the defect.
 
 The scenarios that ARE testable today are the ones whose correct outcome is that
-nothing happens in Grafana — which is also the default path, and the one that
-keeps a mapped folder usable.
+nothing happens in Grafana — which is also the default path, and the one that keeps
+a mapped folder usable.
 
-NOTE ON REQUIREMENTS: `TagAssignedEvent` needs Nextcloud 32. `appinfo/info.xml`
-currently declares 31 (for IDeclarativeSettingsFormWithHandlers) — building this
-means raising that floor, which is a decision for the PR that builds it, not for
-the one that specifies it.
+NOTE ON REQUIREMENTS: the nesting model needs no new Nextcloud event, because a
+dashboard being created is already observed. The `TagAssignedEvent` floor of
+Nextcloud 32 that the tag model would have forced is one of the things retiring it
+bought back — `appinfo/info.xml` can stay where it is.
 
-### A folder opted in late brings the dashboards already inside it
-
-THE REASON TO ALLOW OPTING IN LATE. A folder someone has been filling with
-dashboards becomes a Grafana folder WITH its contents, rather than forcing the
-decision up front. Before the tag those dashboards belonged to the parent
-mapping's folder — a folder inside a mapping is still inside the mapping — and
-one re-parent moves the lot without re-creating or re-id'ing anything.
-
-### Tagging a folder outside every mapping does nothing at all
-
-Tags are instance-wide, so this is not an error to report — no mapping could be
-resolved for that folder even in principle. Stripping a user's own tag off a
-folder this app has no business touching would be a worse surprise than an
-inert label.
-
-### Tagging the mapped folder itself creates nothing
-
-The mapped folder's identity is the mapping. Tagging it is redundant, and acting
-on the tag would create a second Grafana folder alongside the one it is already
-bound to.
-
-### Removing the "grafana" tag does not delete the Grafana folder
-
-Untagging is unmapping, not deleting — the same rule as moving a dashboard out of
-a mapping. Destroying a Grafana folder and everything in it because someone
-removed a label would be the worst kind of surprise, and Grafana has no undo.
-
-### A folder cannot be opted in under the recycle-bin folder's name
+### The recycle-bin folder's name is reserved
 
 The recycle-bin folder holds parked dashboards and dashboards Nextcloud does not
-manage (see delete-dashboard.feature). Letting a tagged folder resolve to it
+manage (see `dashboards/delete.feature`). Letting a user's folder resolve to it
 would put the app's own scratch space under user control.
 
 ## dashboards/delete
@@ -1014,8 +993,33 @@ and no dashboards simply never appears; a dashboard three folders deep creates a
 three. Grafana 13 has native nested folders (`/api/folders` carries `parentUid`),
 so the shape is expressible on the far side.
 
-OPEN: what happens to a Grafana folder when its last dashboard leaves. Deleting it
-is destructive and racy; leaving it is untidy but safe. Not decided here.
+### A Grafana folder outlives its last dashboard
+
+When the last dashboard leaves a folder — trashed, moved out, or deleted in Grafana
+— the folder stays on BOTH sides, mapped and holding nothing. **Emptying is not
+deleting.**
+
+Deleting it is destructive and racy: the app would have to decide on every single
+dashboard delete whether the folder is now empty, and it cannot know whether
+someone is mid-write into it. Leaving it is untidy and safe, and the untidiness is
+SELF-CORRECTING — the next dashboard created there lands in the folder both sides
+already agree on, instead of minting a second one beside it.
+
+**The GESTURE decides, which is what keeps this from contradicting the delete
+rules.** An explicit folder delete in Nextcloud is unambiguous intent and
+propagates to Grafana whatever the folder held; a folder that merely became empty
+was never deleted by anyone. Read together:
+
+| what happened | the Grafana folder |
+|---|---|
+| its last dashboard left | stays |
+| the Nextcloud folder was trashed | deleted, whatever else it held |
+| someone deleted it in Grafana | gone, and the mirror keeps any non-dashboard files |
+
+This is the asymmetry `folders/delete.feature` spells out. It is deliberate: a
+Nextcloud folder delete acts on the thing that IS the folder, so it carries; a
+Grafana folder delete must not destroy a user's unrelated files, so it only takes
+the dashboards.
 
 ### A link cannot be deleted from Nextcloud
 

@@ -7,38 +7,41 @@ Feature: Restoring a folder from the trash
 
   Background:
     Given the app is connected to Grafana
-    And a folder mapped as "sync" to the Grafana folder "alpha"
+    And a mapping with the following values:
+      | grafana folder | demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
 
-  # ══ RESTORED IN NEXTCLOUD ══════════════════════════════════════════════════════
+  # notes: ../AGENTS.md#the-mappings-in-the-background
+
+    # ── RULE: what the bin kept decides what a restore can give back ──────────
+    # notes: ../AGENTS.md#the-recycle-bin-folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a trashed subfolder brings its dashboards back with the same ids (bin on)
+  Scenario: Restore a folder with the recycle bin on
     Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
-    And a trashed subfolder whose three dashboards are parked in "nextcloud-trash"
-    When I restore the subfolder from the trash
-    Then all three dashboards are back in the "alpha" Grafana folder
-    And each keeps the uid it had before
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    And those three dashboards are in the "nextcloud-trash" Grafana folder
+    When I restore "Demo/Team" from the Nextcloud trash
+    Then "Demo/Team" holds the same files it held before
+    And the Grafana folder "Team" is under "demo", holding three dashboards
+    And each of them kept the uid it had before
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
-  Scenario: Restoring a trashed subfolder re-creates its dashboards with new ids (bin off)
-    Given the Grafana recycle-bin folder is off
-    And a trashed subfolder holding three dashboard files whose dashboards were deleted
-    When I restore the subfolder from the trash
-    Then three dashboards exist in Grafana holding the files' content
-    And each has a new uid
+    # Nothing was destroyed, so nothing has to be rebuilt: the dashboards come back
+    # with the ids, URLs and history they always had.
 
-  # notes: ../AGENTS.md#a-folder-restore-reports-which-dashboards-came-back-with-new-identities
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: A folder restore reports which dashboards came back with new identities
+  Scenario: Restore a folder with the recycle bin off
     Given the Grafana recycle-bin folder is off
-    And a trashed subfolder holding three dashboard files whose dashboards were deleted
-    When I restore the subfolder from the trash
-    Then the user is told that three dashboards were re-created with new uids
+    And the folder "Demo/Team" holding three dashboards
+    And "Demo/Team" is in the Nextcloud trash
+    And those three dashboards no longer exist in Grafana
+    When I restore "Demo/Team" from the Nextcloud trash
+    Then "Demo/Team" holds the same files it held before
+    And the Grafana folder "Team" is under "demo", holding three dashboards
+    And the user is told that three dashboards came back under new uids
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: A folder restore that fails part-way reports what did and did not come back
-    Given a trashed subfolder holding three dashboard files whose dashboards were deleted
-    And Grafana will reject the creation of one of them
-    When I restore the subfolder from the trash
-    Then the user is told which dashboards came back and which did not
-    And the files that failed carry no "grafana_uid"
+    # The dashboards went at trash time, so a restore can only build new ones from
+    # the files — and re-minting three identities is worth saying out loud.
