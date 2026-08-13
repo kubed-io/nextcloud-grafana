@@ -179,10 +179,24 @@ final class FolderMirrorTest extends TestCase {
 				break;
 			}
 		}
+
 		$folder = $this->createStub(Folder::class);
 		$folder->method('getId')->willReturn($parentId);
 		$folder->method('getName')->willReturn(basename($parentPath));
-		$folder->method('getParent')->willReturnCallback(fn (): Folder => $this->parentOf($parentId));
+		$folder->method('getParent')->willReturnCallback(
+			// Id 0 is the synthetic top of the fake tree — a path the fixture does not
+			// define. Recursing there would build root stubs forever and die of a stack
+			// overflow, which reads as a hung suite rather than a failed test. The
+			// production walk stops before this (an unknown id resolves to no path), so
+			// reaching it means a change let the walk climb past the mapped folder —
+			// exactly the bug testTheWalkStopsRatherThanClimbingOutOfTheMapping guards,
+			// and it should say so out loud.
+			fn (): Folder => $parentId === 0
+				? throw new \LogicException(
+					'The walk climbed past the top of the fake tree — it should have stopped at the mapped folder.',
+				)
+				: $this->parentOf($parentId),
+		);
 		return $folder;
 	}
 
