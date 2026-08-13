@@ -244,13 +244,40 @@ It is a setting of the APP, not a property of a mapping, which is why the bin
 folder may not itself be mapped — it holds dashboards Nextcloud does not manage,
 so no operation may ever clear it wholesale.
 
-### The recycle-bin folder is off by default and can be enabled with a folder name
+**IT IS TWO SETTINGS, AND THE SPEC SAYS THEM SEPARATELY.** `bin_folder` names the
+folder; `bin_enabled` turns the feature on. They are independent in the panel — an
+admin can type a folder name and leave the checkbox alone — and independent in the
+code, which has an explicit error for the combination the old phrasing could not
+express: *"enabled but no folder name is set"* ({@see RecycleBin}).
+
+So the name lives in the **Background**, where configuration belongs, and each
+scenario says only `the Grafana recycle bin is on` / `off`. Before this, every
+scenario carried `on and set to "nextcloud-trash"` — one sentence asserting two
+facts, which meant a scenario that only wanted to flip the switch had to restate
+the configuration, and the bin modes could not be an `Examples` column without the
+folder name riding along in every row.
+
+**The setter and the assertion are worded differently on purpose.** Behat ignores
+the keyword when matching, so `Given the recycle bin is on` and `Then the recycle
+bin is on` would be ONE step registered twice — which Behat refuses, failing every
+scenario in the suite. Worse, whichever registration won would SET the value while
+a `Then` was asking it to be checked, so the assertion could never fail. The old
+`Then the Grafana recycle-bin folder is off` in `mapping/create.feature` had exactly
+that shape and escaped notice only because the scenario is `@todo`. The assertion is
+now `the Grafana recycle bin setting reads on|off`.
+
+### The recycle bin is off by default, and naming a folder does not enable it
 
 Off by default: a move-out or delete is a true Grafana delete. Turned on, the
 admin names an existing Grafana folder to act as the bin, so a delete MOVES
 the dashboard there with its uid intact and a restore returns the same
 dashboard. It is a setting of the app, not a property of a mapping — which is
 why the bin folder may not itself be mapped.
+
+The scenario walks the two settings **one at a time**, because that is the order
+the panel allows and because the middle state is the interesting one: after naming
+the folder the bin is still off, and nothing has started moving dashboards into it.
+Naming a folder is not consent.
 
 
 ## mapping/manage-groups

@@ -16,6 +16,7 @@ Feature: Deleting a folder
       | nc folder      | Pointers |
       | mode           | link     |
     And a folder "Scratch" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -24,7 +25,7 @@ Feature: Deleting a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Trash a folder of dashboards with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then none of the three dashboards exists in Grafana
@@ -33,7 +34,7 @@ Feature: Deleting a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Trash a folder of dashboards with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" to the trash
     Then all three dashboards are in the "nextcloud-trash" Grafana folder
@@ -56,7 +57,7 @@ Feature: Deleting a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Trash a folder of many dashboards
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding forty dashboards
     When I move "Demo/Team" to the trash
     Then I am warned that forty dashboards will be permanently deleted in Grafana

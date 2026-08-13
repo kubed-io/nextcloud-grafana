@@ -108,15 +108,21 @@ Feature: Admin configures folder mappings
   # notes: ../AGENTS.md#the-recycle-bin-folder
 
   @recycle-bin @todo
-  Scenario: The recycle-bin folder is off by default and can be enabled with a folder name
+  Scenario: The recycle bin is off by default, and naming a folder does not enable it
     Given the app is enabled
-    Then the Grafana recycle-bin folder is off
-    When the admin enables the Grafana recycle-bin folder and sets it to "nextcloud-trash"
-    Then the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Then the Grafana recycle bin setting reads off
+    When the admin names the Grafana recycle-bin folder "nextcloud-trash"
+    Then the Grafana recycle bin setting reads off
+    When the admin turns the Grafana recycle bin on
+    Then the Grafana recycle bin setting reads on
+
+    # Two settings, and the panel lets you save one without the other — naming the
+    # folder is not consent to start moving dashboards into it.
 
   @recycle-bin @unbuilt
   Scenario: The recycle-bin folder cannot also be a mapped folder
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle-bin folder is named "nextcloud-trash"
+    And the Grafana recycle bin is on
     When the admin maps the Grafana folder "nextcloud-trash" with:
       | nc folder | trash |
       | mode      | sync  |

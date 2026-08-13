@@ -252,15 +252,21 @@ trait SetupTrait {
 	}
 
 	/** Turn the Grafana recycle-bin folder off (the default), explicitly. */
-	private function setBinOff(): void {
-		$this->occ('config:app:set ' . self::APP_ID . ' bin_enabled --value=0 --type=boolean');
+	/**
+	 * Name the recycle-bin folder, and make sure it exists in Grafana.
+	 *
+	 * Independent of {@see setBinEnabled()} because the two are separate settings —
+	 * `bin_folder` is stored whether or not the feature is on, exactly as the admin
+	 * panel allows.
+	 */
+	private function setBinFolder(string $folderTitle): void {
+		$this->grafanaFolderUid($folderTitle); // ensure it exists in Grafana
+		$this->occ('config:app:set ' . self::APP_ID . ' bin_folder --value=' . escapeshellarg($folderTitle));
 	}
 
-	/** Turn the recycle-bin folder on and point it at a real Grafana folder. */
-	private function setBinOn(string $folderTitle): void {
-		$this->grafanaFolderUid($folderTitle); // ensure it exists in Grafana
-		$this->occ('config:app:set ' . self::APP_ID . ' bin_enabled --value=1 --type=boolean');
-		$this->occ('config:app:set ' . self::APP_ID . ' bin_folder --value=' . escapeshellarg($folderTitle));
+	/** Flip the recycle-bin switch, leaving the configured folder name alone. */
+	private function setBinEnabled(bool $on): void {
+		$this->occ('config:app:set ' . self::APP_ID . ' bin_enabled --value=' . ($on ? '1' : '0') . ' --type=boolean');
 	}
 
 	/**

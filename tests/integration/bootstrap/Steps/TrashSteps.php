@@ -299,7 +299,7 @@ trait TrashSteps {
 
 	/** @Given a trashed sync dashboard file whose dashboard is already deleted */
 	public function aTrashedSyncFileWhoseDashboardIsGone(): void {
-		$this->setBinOff();
+		$this->setBinEnabled(false);
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveItToTheTrash();
 		Assert::assertNull($this->grafanaGetDashboard($this->lastUid), 'the arrangement failed: bin-off trashing must delete the dashboard');
@@ -316,7 +316,8 @@ trait TrashSteps {
 
 	/** @Given a trashed sync dashboard file whose dashboard is parked in :folder */
 	public function aTrashedFileParkedIn(string $folder): void {
-		$this->setBinOn($folder);
+		$this->setBinFolder($folder);
+		$this->setBinEnabled(true);
 		$this->aManagedDashboardFile('sync');
 		$this->iMoveItToTheTrash();
 		$this->theDashboardIsInTheGrafanaFolder($folder);

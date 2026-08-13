@@ -21,6 +21,7 @@ Feature: Moving a dashboard file
       | mode           | link     |
     And a folder "Scratch" that is not mapped
     And a Grafana folder "Archive" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -47,7 +48,7 @@ Feature: Moving a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Move a dashboard out of its mapping with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And a dashboard file in "Demo"
     When I move the file into "Scratch"
     Then the dashboard no longer exists in Grafana
@@ -56,7 +57,7 @@ Feature: Moving a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a dashboard out of its mapping with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     When I move the file into "Scratch"
     Then the dashboard is in the "nextcloud-trash" Grafana folder
@@ -118,7 +119,7 @@ Feature: Moving a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a file back into a mapping while its dashboard sits in the bin
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And an unmapped dashboard file whose Grafana dashboard is parked in the "nextcloud-trash" folder
     When I move the file into "Reports"
     Then the dashboard is in the "reports" Grafana folder

@@ -16,6 +16,7 @@ Feature: Trashing a dashboard file
       | nc folder      | Pointers |
       | mode           | link     |
     And a folder "Scratch" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -24,7 +25,7 @@ Feature: Trashing a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And a dashboard file in "Demo"
     When I move it to the trash
     Then the dashboard no longer exists in Grafana
@@ -32,7 +33,7 @@ Feature: Trashing a dashboard file
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     When I move it to the trash
     Then the dashboard is in the "nextcloud-trash" Grafana folder
@@ -66,7 +67,7 @@ Feature: Trashing a dashboard file
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Delete a dashboard with the Nextcloud trash disabled
     Given the Nextcloud trash is disabled
-    And the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    And the Grafana recycle bin is on
     And a dashboard file in "Demo"
     When I delete it
     Then the dashboard no longer exists in Grafana

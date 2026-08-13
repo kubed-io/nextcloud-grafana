@@ -12,6 +12,7 @@ Feature: Emptying the trash
       | nc folder      | Demo |
       | mode           | sync |
     And a folder "Scratch" that is not mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -21,7 +22,7 @@ Feature: Emptying the trash
   # notes: ../AGENTS.md#emptying-the-trash-for-a-bin-off-file-touches-nothing-in-grafana
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     When I purge it from the trash
@@ -32,7 +33,7 @@ Feature: Emptying the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Empty the trash with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
@@ -45,7 +46,7 @@ Feature: Emptying the trash
   # notes: ../AGENTS.md#a-purge-never-clears-the-bin-folder-wholesale
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Empty the trash for one file while others are parked
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
@@ -59,7 +60,7 @@ Feature: Emptying the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario Outline: Empty the trash when the dashboard is not in the bin
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is <where>
@@ -77,7 +78,7 @@ Feature: Emptying the trash
 
   @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
   Scenario: Empty the bin folder in Grafana
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
@@ -90,7 +91,7 @@ Feature: Emptying the trash
   # notes: ../AGENTS.md#a-purge-that-cannot-reach-grafana-clears-the-file-without-deleting-anything
   @user @in-nextcloud @gesture @ui @recycle-bin @blocked
   Scenario: Empty the trash while Grafana is unreachable
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And a trashed sync dashboard file whose dashboard is parked in "nextcloud-trash"
     And Grafana is unreachable
     When I purge it from the trash

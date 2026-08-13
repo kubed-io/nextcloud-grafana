@@ -15,6 +15,7 @@ Feature: Emptying the trash of a folder
       | grafana folder | links    |
       | nc folder      | Pointers |
       | mode           | link     |
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -23,7 +24,7 @@ Feature: Emptying the trash of a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario Outline: Purge a trashed folder of dashboards
-    Given the Grafana recycle-bin folder is <bin>
+    Given the Grafana recycle bin is <bin>
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     When I purge "Demo/Team" from the trash
@@ -31,9 +32,9 @@ Feature: Emptying the trash of a folder
     And "Demo/Team" is gone from the Nextcloud trash
 
     Examples: the bin decides where they waited, not whether they go
-      | bin                             |
-      | off                             |
-      | on and set to "nextcloud-trash" |
+      | bin |
+      | off |
+      | on  |
 
     # One gesture, three dashboards. The count is the only thing that differs from
     # purging one file, which is why the bin modes are a row and not two scenarios.
@@ -41,7 +42,7 @@ Feature: Emptying the trash of a folder
   # notes: ../AGENTS.md#a-purge-reaches-through-every-level-it-was-given
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Purge a trashed folder of nested folders
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding a dashboard
     And the folder "Demo/Team/Drafts" holding two dashboards
     And "Demo/Team" is in the Nextcloud trash
@@ -56,7 +57,7 @@ Feature: Emptying the trash of a folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Purge a trashed folder holding other files too
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" also holds "Budget.xlsx"
     And "Demo/Team" is in the Nextcloud trash

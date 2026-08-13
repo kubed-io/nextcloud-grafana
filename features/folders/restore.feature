@@ -12,6 +12,7 @@ Feature: Restoring a folder from the trash
       | nc folder      | Demo         |
       | mode           | sync         |
       | storage        | admin folder |
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -20,7 +21,7 @@ Feature: Restoring a folder from the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a folder with the recycle bin on
-    Given the Grafana recycle-bin folder is on and set to "nextcloud-trash"
+    Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards are in the "nextcloud-trash" Grafana folder
@@ -34,7 +35,7 @@ Feature: Restoring a folder from the trash
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Restore a folder with the recycle bin off
-    Given the Grafana recycle-bin folder is off
+    Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
     And "Demo/Team" is in the Nextcloud trash
     And those three dashboards no longer exist in Grafana
