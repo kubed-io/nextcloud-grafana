@@ -188,8 +188,8 @@ final class StorageService {
 	 * This is how a mapping finds its folder after a rename or a move: the id is
 	 * stable across both, so the answer is always current without anything having had
 	 * to observe the change. One lookup covers both backends — a Team Folder is a
-	 * mount inside the user's root, so `getById()` reaches it the same way it reaches
-	 * an admin-owned folder.
+	 * mount inside the user's root, so `getFirstNodeById()` reaches it the same way it
+	 * reaches an admin-owned folder.
 	 *
 	 * Returns null for an id that is gone, or one that resolves to a file rather than
 	 * a folder. Callers treat that as "matches nothing" rather than repairing it by

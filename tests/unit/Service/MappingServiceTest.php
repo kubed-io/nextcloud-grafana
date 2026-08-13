@@ -231,6 +231,11 @@ final class MappingServiceTest extends TestCase {
 		// The stored label catches up too, so the panel and `occ` do not keep showing
 		// a folder that no longer exists.
 		self::assertSame('Dashboards', $svc->getById($saved->id)?->ncFolder);
+
+		// And the RETURNED object carries the caught-up label, not the copy the
+		// resolve loop started with. MoveGuardListener puts this straight into a
+		// message, so a stale one names the folder the admin just stopped using.
+		self::assertSame('Dashboards', $hit->ncFolder);
 	}
 
 	/**

@@ -32,6 +32,20 @@ final class MappingService {
 	 */
 	private ?array $cache = null;
 
+	/**
+	 * Request-scoped memo of folder id → current path.
+	 *
+	 * `resolveForPath()` runs on every file operation and asks once per mapping, so
+	 * without this a folder with three mappings above it costs three filesystem
+	 * lookups per gesture. The service is a per-request singleton and a folder cannot
+	 * move mid-request, so memoising is free correctness-wise. `false` memoises "asked
+	 * and it is gone", which is worth caching too — a mapping pointing at a deleted
+	 * folder would otherwise pay the full lookup on every single resolve.
+	 *
+	 * @var array<int, string|false>
+	 */
+	private array $pathMemo = [];
+
 	public function __construct(
 		private readonly IAppConfig $config,
 		private StorageService $storage,
@@ -223,6 +237,14 @@ final class MappingService {
 				$best = $mapping;
 			}
 		}
+		// Hand back the CURRENT object, not the one the loop started with. Resolving
+		// can self-heal a mapping — bank a folder id, catch a stale label up to a
+		// rename — and `$best` is the pre-rewrite copy. A caller that reads
+		// `ncFolder` off it (MoveGuardListener puts it in a user-facing message)
+		// would otherwise name the folder the admin has just stopped using.
+		if ($best !== null) {
+			$best = $this->getById($best->id) ?? $best;
+		}
 		return $best;
 	}
 
@@ -246,10 +268,15 @@ final class MappingService {
 	 */
 	private function currentFolderOf(Mapping $mapping): string {
 		if ($mapping->ncFolderId > 0) {
-			$path = $this->storage->pathOfFolderId($mapping->ncFolderId);
-			if ($path === null) {
+			$memo = $this->pathMemo[$mapping->ncFolderId] ?? null;
+			if ($memo === null) {
+				$memo = $this->storage->pathOfFolderId($mapping->ncFolderId) ?? false;
+				$this->pathMemo[$mapping->ncFolderId] = $memo;
+			}
+			if ($memo === false) {
 				return '';
 			}
+			$path = $memo;
 			// The stored name is a LABEL, so when the folder has been renamed or moved
 			// the label is simply out of date — catch it up. Without this the resolver
 			// would be right while the admin panel and `occ` still showed the old name,

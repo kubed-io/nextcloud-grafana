@@ -2001,6 +2001,51 @@ Grafana does not break it. Whether the Nextcloud folder should follow is the ope
 question — it is the user's own file tree, and the mapping was created against a
 folder the admin named.
 
+## mapping/move
+
+`features/mapping/move.feature`
+
+Moving either side of a MAPPING. The sibling of `mapping/rename.feature`, and a
+separate file because a move is a separate gesture: a rename gives the folder a new
+NAME under the same parent, a move gives it a new PARENT under the same name. You
+cannot do both at once from Nextcloud, and the two have different reasons for being
+safe.
+
+### A mapping is a pair of ids, so a move is a no-op
+
+The same argument as the rename, arriving from the other direction — see
+[A mapping is a pair of ids, so a rename is a no-op](#a-mapping-is-a-pair-of-ids-so-a-rename-is-a-no-op)
+for the model. A Nextcloud file id is stable across a move as well as a rename, so
+the resolver finds the folder wherever it now sits, and the stored `ncFolder` label
+is caught up to the new path.
+
+**The two halves are safe for different reasons, which is worth not blurring.** The
+Nextcloud half needed the id: before it, a move orphaned the mapping exactly as a
+rename did, because both change the path that was being matched. The Grafana half
+never needed anything — a mapping has always named the Grafana folder by uid, and a
+uid does not change when a folder is re-parented. So one of these scenarios records
+a fix and the other records an invariant that already held.
+
+### Moving the mapped folder in Grafana does not break the mapping
+
+A mapping names a Grafana folder by **uid**, so re-parenting it in Grafana changes
+nothing the mapping rests on, and the Nextcloud folder does not follow. Same rule as
+the rename: the mapping is the one place a differing pair is legitimate, whether the
+pair differs by name or by location.
+
+### A mapped folder that was deleted is not re-adopted by name
+
+The mapping holds the folder's id, so when the folder is trashed the mapping resolves
+to nothing — correctly. A new folder created with the same name is a **different
+folder** with a different id, and the mapping must not silently adopt it.
+
+This is the failure mode a name-keyed mapping cannot avoid and an id-keyed one gets
+for free: under the old model, deleting `Demo` and making a new `Demo` would have
+re-bound the mapping to a folder nobody chose, and started writing dashboards into
+it. `@unbuilt` because deciding what the admin should SEE in that state — a mapping
+pointing at nothing — is its own question, and the app currently just resolves to
+nothing quietly.
+
 ## dashboards/ignore — RETIRED (specified, never built, now removed)
 
 Two exclude tags were specified here — `nextcloud:ignore` set on a dashboard in

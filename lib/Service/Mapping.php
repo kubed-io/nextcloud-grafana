@@ -121,7 +121,13 @@ final class Mapping implements JsonSerializable {
 	) {
 	}
 
-	/** The same mapping with its Nextcloud folder id filled in. */
+	/**
+	 * The same mapping with its Nextcloud folder id filled in.
+	 *
+	 * Clamped like {@see fromArray()} does, because the invariant belongs to the
+	 * FIELD and not to one way in. A negative id is nonsense however it arrives, and
+	 * an internal caller can reach here without passing through validation at all.
+	 */
 	public function withNcFolderId(int $id): self {
 		return new self(
 			$this->id,
@@ -131,7 +137,7 @@ final class Mapping implements JsonSerializable {
 			$this->mode,
 			$this->format,
 			$this->useTeamFolder,
-			$id,
+			max(0, $id),
 		);
 	}
 
