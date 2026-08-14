@@ -55,6 +55,8 @@ use Psr\Log\LoggerInterface;
  * and the uid means the next pull sees the same folder under a name that disagrees
  * and settles it. A local rename that stands while Grafana is unreachable is the
  * specified behaviour, not a consolation.
+ *
+ * @implements IEventListener<NodeRenamedEvent>
  */
 final class FolderRenameListener implements IEventListener {
 	public function __construct(
@@ -67,6 +69,7 @@ final class FolderRenameListener implements IEventListener {
 	) {
 	}
 
+	#[\Override]
 	public function handle(Event $event): void {
 		// Our own writes rename folders too — the pull's tree reconcile follows a
 		// Grafana rename by renaming the Nextcloud folder. Without this the reconcile
