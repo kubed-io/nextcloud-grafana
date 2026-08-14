@@ -70,9 +70,19 @@ final class TagSyncService {
 	 * of Grafana is needed — the tags are already in the bytes on disk.
 	 */
 	public function applyToDashboard(File $file, TagSet $fromBody): void {
-		$this->guard->run(function () use ($file, $fromBody): void {
-			$this->ncTags->set($file->getId(), $fromBody);
-		});
+		try {
+			$this->guard->run(function () use ($file, $fromBody): void {
+				$this->ncTags->set($file->getId(), $fromBody);
+			});
+		} catch (\Throwable $e) {
+			// The mirror is written and correct; only its tags are behind. A pull must
+			// not fail over that, and the next one re-applies them.
+			$this->logger->warning('grafana_sync: could not apply a dashboard\'s tags in Nextcloud', [
+				'app' => Application::APP_ID,
+				'fileId' => $file->getId(),
+				'exception' => $e,
+			]);
+		}
 	}
 
 	/**
@@ -98,9 +108,17 @@ final class TagSyncService {
 			]);
 			return;
 		}
-		$this->guard->run(function () use ($folder, $tags): void {
-			$this->ncTags->set($folder->getId(), $tags);
-		});
+		try {
+			$this->guard->run(function () use ($folder, $tags): void {
+				$this->ncTags->set($folder->getId(), $tags);
+			});
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: could not apply a folder\'s tags in Nextcloud', [
+				'app' => Application::APP_ID,
+				'folderId' => $folder->getId(),
+				'exception' => $e,
+			]);
+		}
 	}
 
 	// ── outbound: Nextcloud → Grafana ──────────────────────────────────────────

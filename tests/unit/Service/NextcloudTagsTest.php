@@ -42,6 +42,7 @@ final class NextcloudTagsTest extends TestCase {
 	private array $calls = [];
 
 	private int $nextId = 100;
+	private bool $readFails = false;
 
 	public function testReadsTheNamesOfWhatIsAssigned(): void {
 		$this->catalog = ['1' => 'dns', '2' => 'linux'];
@@ -121,6 +122,31 @@ final class NextcloudTagsTest extends TestCase {
 		self::assertTrue(TagSet::of(['dns'])->equals($this->tags()->of(self::FILE)));
 	}
 
+	/**
+	 * A FAILED READ IS NOT AN EMPTY SET. Downstream, "no tags" legitimately means
+	 * REMOVE EVERYTHING, and the push carries that to Grafana — so a database blip
+	 * that answered empty would silently strip a dashboard's tags, which has no undo
+	 * on the far side. It has to travel as a failure instead.
+	 */
+	public function testAFailedReadThrowsRatherThanLookingLikeNoTags(): void {
+		$this->readFails = true;
+
+		$this->expectException(\RuntimeException::class);
+		$this->tags()->of(self::FILE);
+	}
+
+	/** And the same read failure must stop a set() from computing a diff against it. */
+	public function testAFailedReadStopsAWriteInsteadOfRemovingEverything(): void {
+		$this->readFails = true;
+
+		try {
+			$this->tags()->set(self::FILE, TagSet::of(['dns']));
+			self::fail('the write should not have been attempted');
+		} catch (\RuntimeException) {
+			self::assertSame([], $this->calls, 'nothing was assigned or unassigned');
+		}
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	private function tags(string $refuse = ''): NextcloudTags {
@@ -159,7 +185,12 @@ final class NextcloudTagsTest extends TestCase {
 
 		$mapper = $this->createStub(ISystemTagObjectMapper::class);
 		$mapper->method('getTagIdsForObjects')->willReturnCallback(
-			fn (array $objIds): array => [(string)$objIds[0] => $this->assigned[(int)$objIds[0]] ?? []],
+			function (array $objIds): array {
+				if ($this->readFails) {
+					throw new \RuntimeException('the tag tables are unreachable');
+				}
+				return [(string)$objIds[0] => $this->assigned[(int)$objIds[0]] ?? []];
+			},
 		);
 		$mapper->method('assignTags')->willReturnCallback(
 			function (string $objId, string $type, array $ids): void {

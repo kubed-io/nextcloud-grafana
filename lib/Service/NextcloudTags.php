@@ -35,6 +35,20 @@ use Psr\Log\LoggerInterface;
  * object type for everything in the file tree, so a folder's tags and a dashboard
  * file's tags come from the same table with the same calls. That is why folder tag
  * sync and dashboard tag sync share this class rather than each growing their own.
+ *
+ * ## A FAILED READ IS NOT AN EMPTY SET
+ *
+ * Reading throws. It would be easy to log-and-return-empty, and it would be wrong:
+ * downstream, "no tags" is a legitimate answer that means REMOVE EVERYTHING, and the
+ * push would carry that to Grafana. A database or permission failure would then
+ * silently strip a dashboard's tags — the one outcome with no undo on the far side.
+ *
+ * The single exception is an id in the assignment table with no catalog row, which
+ * is not a failure at all: that tag is genuinely gone, and skipping it is the right
+ * answer rather than a guess.
+ *
+ * Writing still logs and returns false. There the worst case is that the far side
+ * stays as it was, which the next sync corrects.
  */
 final class NextcloudTags {
 	private const OBJECT_TYPE = 'files';
@@ -57,9 +71,11 @@ final class NextcloudTags {
 				foreach ($this->tagManager->getTagsByIds([$id]) as $tag) {
 					$names[] = $tag->getName();
 				}
-			} catch (\Throwable) {
-				// A tag id in the assignment table with no catalog row. Nothing to
-				// name it, and one orphan must not blank out the others.
+			} catch (TagNotFoundException) {
+				// An id in the assignment table with no catalog row. There is nothing
+				// to name it, it genuinely is not a tag any more, and one orphan must
+				// not blank out the others. THIS IS THE ONLY FAILURE WORTH SKIPPING —
+				// see the class docblock for why everything else propagates.
 				continue;
 			}
 		}
@@ -129,19 +145,17 @@ final class NextcloudTags {
 	 * compare the two strictly, which is exactly how a first attempt at this class
 	 * concluded that no folder anywhere could be tagged.
 	 *
+	 * THROWS RATHER THAN ANSWERING EMPTY, and that is the important part. An empty
+	 * answer here does not mean "the read failed" downstream — it means **this node
+	 * has no tags**, which {@see set()} would turn into "remove every tag" and the
+	 * push would then carry to Grafana. A database blip must never be able to strip
+	 * a dashboard's tags, so the failure travels instead of being flattened into a
+	 * value that looks like a legitimate answer.
+	 *
 	 * @return list<string>
 	 */
 	private function currentIds(int $fileId): array {
-		try {
-			$byObject = $this->objectMapper->getTagIdsForObjects([(string)$fileId], self::OBJECT_TYPE);
-		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync: could not read a node\'s tags', [
-				'app' => Application::APP_ID,
-				'fileId' => $fileId,
-				'exception' => $e,
-			]);
-			return [];
-		}
+		$byObject = $this->objectMapper->getTagIdsForObjects([(string)$fileId], self::OBJECT_TYPE);
 
 		$ids = [];
 		foreach ($byObject as $tagIds) {

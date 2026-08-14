@@ -85,10 +85,12 @@ final class TagChangeListener implements IEventListener {
 			return;
 		}
 
-		// The whole current set, not the delta the event carries — see the class docblock.
-		$wanted = $this->ncTags->of($fileId);
-
 		try {
+			// The whole current set, not the delta the event carries — see the class
+			// docblock. INSIDE the try on purpose: reading the tags can now throw, and
+			// acting on a partial set would push a tag removal nobody asked for.
+			$wanted = $this->ncTags->of($fileId);
+
 			if ($node instanceof Folder) {
 				$this->tagSync->pushFolder($node, $wanted);
 				return;
