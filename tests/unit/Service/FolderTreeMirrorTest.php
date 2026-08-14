@@ -43,6 +43,9 @@ final class FolderTreeMirrorTest extends TestCase {
 
 	private int $nextId = 100;
 
+	/** When set, newFolder() throws for a child of this name — one unmakeable folder. */
+	private string $refuseCreateOf = '';
+
 	public function testAGrafanaFolderWithNoMirrorIsCreatedAndStamped(): void {
 		$this->grafanaFolders = [
 			['uid' => 'gf-team', 'title' => 'Team', 'parentUid' => 'gf-demo'],
@@ -193,6 +196,9 @@ final class FolderTreeMirrorTest extends TestCase {
 		$f->method('newFolder')->willReturnCallback(
 			function (string $name) use ($path): Folder {
 				$this->creates[] = [$path, $name];
+				if ($name === $this->refuseCreateOf) {
+					throw new \RuntimeException('cannot create ' . $name);
+				}
 				return $this->folder($path . '/' . $name, $this->nextId++);
 			},
 		);
@@ -231,4 +237,53 @@ final class FolderTreeMirrorTest extends TestCase {
 
 		return new FolderTreeMirror($grafana, $folders, new NullLogger());
 	}
+
+	/**
+	 * ONE BAD FOLDER MUST NOT TAKE THE PULL WITH IT. `newFolder()` throws on a name
+	 * collision, a permission problem, a name the storage refuses — all local to one
+	 * folder. Letting it escape would abort the reconcile and the pull around it, so
+	 * one unmakeable folder would stop every dashboard in the mapping from syncing.
+	 */
+	public function testAFolderThatCannotBeCreatedIsSkippedAndTheRestContinue(): void {
+		$this->grafanaFolders = [
+			['uid' => 'gf-bad', 'title' => 'Bad', 'parentUid' => 'gf-demo'],
+			['uid' => 'gf-good', 'title' => 'Good', 'parentUid' => 'gf-demo'],
+		];
+		$this->refuseCreateOf = 'Bad';
+		$root = $this->folder('/alice/files/Demo', 10);
+
+		$placed = $this->mirror()->sync($root, $this->mapping());
+
+		self::assertArrayNotHasKey('gf-bad', $placed);
+		self::assertArrayHasKey('gf-good', $placed, 'the rest of the tree still mirrors');
+	}
+
+	/** Its children go too — they find no parent placed, so they are skipped in turn. */
+	public function testTheChildrenOfASkippedFolderAreSkippedToo(): void {
+		$this->grafanaFolders = [
+			['uid' => 'gf-bad', 'title' => 'Bad', 'parentUid' => 'gf-demo'],
+			['uid' => 'gf-kid', 'title' => 'Kid', 'parentUid' => 'gf-bad'],
+		];
+		$this->refuseCreateOf = 'Bad';
+		$root = $this->folder('/alice/files/Demo', 10);
+
+		$placed = $this->mirror()->sync($root, $this->mapping());
+
+		self::assertSame([], $placed);
+		self::assertSame([['/alice/files/Demo', 'Bad']], $this->creates, 'Kid was never attempted');
+	}
+
+	/**
+	 * A folder whose parent Grafana never reports is skipped rather than created at
+	 * the root — placing it there would invent a structure neither side has.
+	 */
+	public function testAFolderWithAnUnplaceableParentIsSkipped(): void {
+		$this->grafanaFolders = [['uid' => 'gf-orphan', 'title' => 'Orphan', 'parentUid' => 'gf-nowhere']];
+		$root = $this->folder('/alice/files/Demo', 10);
+
+		self::assertSame([], $this->mirror()->sync($root, $this->mapping()));
+		self::assertSame([], $this->creates);
+	}
+
+	// ── harness additions ──────────────────────────────────────────────────────
 }

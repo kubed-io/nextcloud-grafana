@@ -96,9 +96,25 @@ final class FolderTreeMirror {
 				continue;
 			}
 
-			$placed[$uid] = isset($byUid[$uid])
-				? $this->reconcile($byUid[$uid], $parent, $folder['title'], $uid)
-				: $this->create($parent, $folder['title'], $uid);
+			// ONE BAD FOLDER MUST NOT TAKE THE PULL WITH IT. newFolder() throws on a
+			// name collision with an existing file, on a permission problem, on a name
+			// the storage refuses — all of them local to one folder. Letting that
+			// escape would abort the reconcile AND the pull around it, so a single
+			// unmakeable folder would stop every dashboard in the mapping from syncing.
+			// Skip it, say so, and carry on; its children are skipped in turn because
+			// they will find no parent placed.
+			try {
+				$placed[$uid] = isset($byUid[$uid])
+					? $this->reconcile($byUid[$uid], $parent, $folder['title'], $uid)
+					: $this->create($parent, $folder['title'], $uid);
+			} catch (\Throwable $e) {
+				$this->logger->warning('grafana_sync: could not mirror a Grafana folder; skipping it', [
+					'app' => 'grafana_sync',
+					'uid' => $uid,
+					'title' => $folder['title'],
+					'exception' => $e,
+				]);
+			}
 		}
 
 		return $placed;
@@ -114,21 +130,27 @@ final class FolderTreeMirror {
 	 * @return array<string, array{title:string, parentUid:string}>
 	 */
 	private function descendantsOf(string $rootUid): array {
-		$all = [];
+		// Index by PARENT once. Walking the flat list again for every level was
+		// quadratic — with the tree three deep it read every folder three times, and
+		// a whole-instance mapping is exactly where that bites.
+		$byParent = [];
 		foreach ($this->grafana->listFolders() as $row) {
-			$all[$row['uid']] = ['title' => $row['title'], 'parentUid' => $row['parentUid']];
+			$byParent[$row['parentUid']][] = $row;
 		}
 
-		// Walk down from the root, level by level, so the result is already in
-		// parents-before-children order.
+		// Breadth-first from the root, so the result is already in
+		// parents-before-children order and a child always has somewhere to go.
 		$out = [];
 		$frontier = [$rootUid];
 		while ($frontier !== []) {
 			$next = [];
-			foreach ($all as $uid => $row) {
-				if (in_array($row['parentUid'], $frontier, true) && !isset($out[$uid])) {
-					$out[$uid] = $row;
-					$next[] = $uid;
+			foreach ($frontier as $parentUid) {
+				foreach ($byParent[$parentUid] ?? [] as $row) {
+					if (isset($out[$row['uid']])) {
+						continue; // a cycle, or a folder listed twice; either way, once is enough
+					}
+					$out[$row['uid']] = ['title' => $row['title'], 'parentUid' => $row['parentUid']];
+					$next[] = $row['uid'];
 				}
 			}
 			$frontier = $next;
@@ -144,8 +166,10 @@ final class FolderTreeMirror {
 	private function indexMirroredFolders(Folder $root): array {
 		$found = [];
 		$queue = [$root];
-		while ($queue !== []) {
-			$current = array_shift($queue);
+		// An index-based cursor rather than array_shift(), which reindexes the whole
+		// queue on every pop and turns a deep tree quadratic.
+		for ($i = 0; $i < count($queue); $i++) {
+			$current = $queue[$i];
 			foreach ($current->getDirectoryListing() as $node) {
 				if (!$node instanceof Folder) {
 					continue;

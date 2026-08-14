@@ -59,6 +59,7 @@ final class SyncService {
 		private PushService $push,
 		private IMimeTypeLoader $mimeLoader,
 		private MirrorTimes $times,
+		private FolderTreeMirror $tree,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -289,6 +290,11 @@ final class SyncService {
 		try {
 			$targetFolder = $this->storage->ensureFolder($mapping);
 
+			// Bring the Nextcloud folder tree into agreement with Grafana's BEFORE
+			// placing anything, so every dashboard has a folder to land in. The map it
+			// returns is grafana folder uid → the Nextcloud folder mirroring it.
+			$placed = $this->tree->sync($targetFolder, $mapping);
+
 			$processed = 0;
 			$succeeded = 0;
 			$failed = 0;
@@ -298,12 +304,16 @@ final class SyncService {
 			$nameCounts = [];
 			$seenUids = [];
 
-			foreach ($this->grafana->listDashboards($this->grafanaScope($mapping)) as $row) {
+			foreach ($this->dashboardRows($mapping, $placed) as $row) {
 				$processed++;
 				$uid = $row['uid'];
 				$seenUids[$uid] = true;
 				try {
-					if ($this->writeDashboard($targetFolder, $mapping, $row, $existingByUid, $nameCounts)) {
+					// A dashboard lands in the Nextcloud folder mirroring the Grafana
+					// folder that holds it; anything we have no mirror for falls back to
+					// the mapping's root, which is where it used to go unconditionally.
+					$into = $placed[$row['folderUid'] ?? ''] ?? $targetFolder;
+					if ($this->writeDashboard($into, $mapping, $row, $existingByUid, $nameCounts)) {
 						$unchanged++;
 					}
 					$succeeded++;
@@ -334,11 +344,37 @@ final class SyncService {
 	}
 
 	/**
+	 * Every dashboard the mapping covers: the ones in its own Grafana folder, plus the
+	 * ones in each folder beneath it that we now mirror.
+	 *
+	 * Grafana's `/api/search` is NOT recursive — a folder scope returns that folder's
+	 * DIRECT children only — so a tree costs one request per folder. That is the shape
+	 * of the API rather than a choice; the alternative is listing the whole instance and
+	 * discarding most of it, which is worse on every instance that is not tiny.
+	 *
+	 * **This also fixes a prune hazard.** The pull only ever listed the mapping's own
+	 * folder, so a dashboard living in a Grafana subfolder was never `seen` — and any
+	 * mirror of it looked stale and was pruned. Walking the tree is what makes those
+	 * dashboards visible to the run that is deciding what to delete.
+	 *
+	 * @param array<string, Folder> $placed
+	 * @return iterable<array{uid:string, title:string, folderUid:string, url:string, tags:list<string>}>
+	 */
+	private function dashboardRows(Mapping $mapping, array $placed): iterable {
+		yield from $this->grafana->listDashboards($this->grafanaScope($mapping));
+		foreach (array_keys($placed) as $folderUid) {
+			yield from $this->grafana->listDashboards($folderUid);
+		}
+	}
+
+	/**
 	 * Translate a mapping's stored Grafana folder uid into the `/api/search` scope
 	 * {@see GrafanaClient::listDashboards()} takes: the reserved-root `/` selects the
 	 * "General" area (no-folder dashboards); any other value is a real folder uid whose
-	 * direct children are walked. (Whole-instance cascade — scope `null` — is a subfolder
-	 * course concern; this flat course always scopes to exactly one folder.)
+	 * direct children are walked.
+	 *
+	 * This is the mapping's OWN folder only. The folders beneath it are scoped one at a
+	 * time by {@see dashboardRows()}, because Grafana's search does not recurse.
 	 */
 	private function grafanaScope(Mapping $mapping): string {
 		return $mapping->grafanaFolderUid === '/'
