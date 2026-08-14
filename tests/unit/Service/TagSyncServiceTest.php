@@ -87,11 +87,25 @@ final class TagSyncServiceTest extends TestCase {
 		self::assertNull($this->written);
 	}
 
-	public function testAnUnmanagedFileIsTheUsersOwn(): void {
+	/**
+	 * AN UNMAPPED FILE STILL GETS ITS BODY UPDATED. Tag sync is a mapped-file feature
+	 * in that nothing reaches Grafana — but the file's own two surfaces keep tracking
+	 * each other, which is what lets a tag applied out here survive being moved back
+	 * into a mapping. `features/AGENTS.md` states it as a positive for that reason.
+	 */
+	public function testAnUnmappedFilesTwoSurfacesStillTrackEachOther(): void {
 		$this->managed = null;
 
-		self::assertFalse($this->service()->pushDashboard($this->file('{"tags":[]}'), TagSet::of(['mine'])));
-		self::assertNull($this->written);
+		self::assertTrue($this->service()->pushDashboard($this->file('{"tags":["dns"]}'), TagSet::of(['mine'])));
+		self::assertSame(['mine'], json_decode((string)$this->written, true)['tags']);
+	}
+
+	/** ...and nothing about that reaches Grafana. */
+	public function testAnUnmappedFileNeverReachesGrafana(): void {
+		$this->managed = null;
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->service()->pushDashboard($this->file('{"tags":["dns"]}'), TagSet::of(['mine']));
 	}
 
 	public function testAFileThatIsNotJsonIsLeftAlone(): void {

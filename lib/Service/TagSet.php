@@ -45,6 +45,21 @@ final class TagSet {
 	 */
 	public const FOLDER_ANNOTATION = 'nextcloud.kubed.io/tags';
 
+	/**
+	 * THE RESERVED ROOT MAPPING (`/`) HAS NO FOLDER TO TAG.
+	 *
+	 * A mapping may name `/` instead of a folder uid, meaning the whole Grafana
+	 * instance. That is not an object: there is no folder resource behind it, so
+	 * there is nothing to hang an annotation on and nothing to read one back from.
+	 * Folder tag sync is therefore a **plain-folder** feature on both sides — a
+	 * mapped folder or a subfolder under one — and a root mapping simply declines,
+	 * in both directions, rather than inventing a place to put the value.
+	 *
+	 * The dashboards inside a root mapping are unaffected: their tags are in their
+	 * own bodies and travel exactly as they do anywhere else.
+	 */
+	public const ROOT_FOLDER = '/';
+
 	/** @var list<string> normalised: trimmed, non-empty, unique, in first-seen order */
 	private array $tags;
 

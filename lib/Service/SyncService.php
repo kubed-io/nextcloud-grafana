@@ -302,7 +302,7 @@ final class SyncService {
 			// own folder, which nothing stamps) so it is done by mapping uid.
 			$this->tagSync->applyToFolder($targetFolder, $mapping->grafanaFolderUid);
 			foreach ($placed as $folderUid => $folder) {
-				$this->tagSync->applyToFolder($folder, (string)$folderUid);
+				$this->tagSync->applyToFolder($folder, $folderUid);
 			}
 
 			$processed = 0;

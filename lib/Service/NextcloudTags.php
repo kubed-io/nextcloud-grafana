@@ -155,7 +155,7 @@ final class NextcloudTags {
 	/** The catalog id for this tag name, creating the tag if Nextcloud has never seen it. */
 	private function resolveOrCreate(string $name): ?string {
 		try {
-			return (string)$this->tagManager->getTag($name, true, true)->getId();
+			return $this->tagManager->getTag($name, true, true)->getId();
 		} catch (TagNotFoundException) {
 			// Not in the catalog yet — the common case for a tag arriving from Grafana.
 		} catch (\Throwable $e) {
@@ -168,12 +168,12 @@ final class NextcloudTags {
 		}
 
 		try {
-			return (string)$this->tagManager->createTag($name, true, true)->getId();
+			return $this->tagManager->createTag($name, true, true)->getId();
 		} catch (\Throwable $e) {
 			// A concurrent sync may have created it between the lookup and here, which
 			// is a race this app can lose gracefully — ask once more before giving up.
 			try {
-				return (string)$this->tagManager->getTag($name, true, true)->getId();
+				return $this->tagManager->getTag($name, true, true)->getId();
 			} catch (\Throwable) {
 				$this->logger->warning('grafana_sync: could not create a tag, so it was not imported', [
 					'app' => Application::APP_ID,

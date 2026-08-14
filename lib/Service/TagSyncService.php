@@ -83,7 +83,9 @@ final class TagSyncService {
 	 * field would be a poor trade.
 	 */
 	public function applyToFolder(Folder $folder, string $grafanaUid): void {
-		if ($grafanaUid === '') {
+		// A root mapping is the whole instance, not a folder — see TagSet::ROOT_FOLDER.
+		// It declines in this direction too, so the two halves cannot disagree.
+		if ($grafanaUid === '' || $grafanaUid === TagSet::ROOT_FOLDER) {
 			return;
 		}
 		try {
@@ -114,13 +116,20 @@ final class TagSyncService {
 	 */
 	public function pushDashboard(File $file, TagSet $wanted): bool {
 		$managed = $this->metadata->read($file->getId());
-		if (!$managed?->isManaged()) {
-			return false; // a plain file the user tagged — theirs alone
-		}
-		if ($managed->mode !== '' && !$managed->isSync()) {
-			return false; // a link's tags are Grafana's; the next pull restores them
+
+		// A LINK IS THE ONLY REFUSAL. Its tags are Grafana's, and the next pull puts
+		// Grafana's set back — writing the body here would change a pointer's contents
+		// to something the mirror is about to overwrite.
+		if ($managed?->isLink() === true) {
+			return false;
 		}
 
+		// AN UNMAPPED FILE STILL GETS ITS BODY UPDATED, and that is deliberate rather
+		// than an oversight. Tag sync is a mapped-file feature in the sense that nothing
+		// reaches Grafana — but the file's OWN TWO SURFACES still track each other, which
+		// is what makes a tag applied out here survive being moved back into a mapping.
+		// Nothing below calls Grafana; the write is only a write, and PushService will
+		// not push a file with no uid.
 		try {
 			$spec = json_decode($file->getContent(), false, 512, JSON_THROW_ON_ERROR);
 		} catch (\JsonException $e) {
@@ -135,7 +144,8 @@ final class TagSyncService {
 			return false;
 		}
 
-		$current = TagSet::of(is_array($spec->tags ?? null) ? $spec->tags : []);
+		$inBody = $spec->tags ?? null;
+		$current = TagSet::of(is_array($inBody) ? $inBody : []);
 		if ($current->equals($wanted)) {
 			return false; // already agrees — writing would only restart the loop
 		}
@@ -177,7 +187,7 @@ final class TagSyncService {
 		$uid = $folder->getId() === $mapping->ncFolderId
 			? $mapping->grafanaFolderUid
 			: $this->folders->uidOf($folder->getId());
-		if ($uid === '' || $uid === '/') {
+		if ($uid === '' || $uid === TagSet::ROOT_FOLDER) {
 			// Either a folder the user made for their own reasons, or the reserved root
 			// mapping — which is the whole Grafana instance, not a folder that can carry
 			// an annotation.

@@ -145,7 +145,13 @@ final class Application extends App implements IBootstrap {
 		// rather than dispatchTyped(), so a MapperEvent::class registration never fires.
 		// The typed TagAssignedEvent/TagUnassignedEvent pair would be nicer and is
 		// @since 32, while info.xml still declares min-version 31.
+		// The constants carry @deprecated 22.0.0, and they are used anyway: the
+		// replacement pair is @since 32 while info.xml declares min-version 31, and
+		// the mapper still dispatches these on 33. Suppressed rather than silenced —
+		// when the floor moves to 32 this becomes two typed registrations.
+		/** @psalm-suppress DeprecatedConstant */
 		$context->registerEventListener(MapperEvent::EVENT_ASSIGN, TagChangeListener::class);
+		/** @psalm-suppress DeprecatedConstant */
 		$context->registerEventListener(MapperEvent::EVENT_UNASSIGN, TagChangeListener::class);
 
 		// Files-app openers (Course 5): load the frontend bundle that adds the "Open in

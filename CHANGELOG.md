@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Tags sync both ways: change them in Nextcloud, in the file, or in Grafana, and every surface agrees.
-- Folders carry tags too — a folder tagged in Grafana is tagged in Nextcloud, and the other way round.
+- Mapped folders and their subfolders carry tags too, in both directions. A root (`/`) mapping is the whole instance rather than a folder, so it has none.
 - A sync brings tags with it, on the folders and the dashboards alike.
 - Scheduled sync from Grafana now runs — the setting existed but nothing read it.
 - A dashboard file carries the dashboard's own created and modified dates, not the sync's.

@@ -82,7 +82,7 @@ Feature: Changing a dashboard's tags
     # ── RULE: a change only travels where the mode lets it ─────────────────────
 
   # notes: ../AGENTS.md#changing-the-tags-on-a-link-does-not-change-them-in-grafana
-  @user @in-nextcloud @gesture @ui
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Changing the tags on a link does not change them in Grafana
     Given a dashboard file in "Reports" whose tags are "prod, dns"
     When I change the Nextcloud tags to "prod, dns, mine"

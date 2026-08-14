@@ -104,7 +104,8 @@ final class PushService {
 		// by hand is a way to change them — and Grafana has just accepted that change.
 		// Without this the file and Grafana would agree while the Nextcloud tags said
 		// something else, until a pull happened to correct it.
-		$tags = TagSet::of(is_array($spec->tags ?? null) ? $spec->tags : []);
+		$inBody = $spec->tags ?? null;
+		$tags = TagSet::of(is_array($inBody) ? $inBody : []);
 		$this->tagSync->applyToDashboard($node, $tags);
 		return true;
 	}

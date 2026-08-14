@@ -133,6 +133,12 @@ trait TagSteps {
 	 * proves the plumbing the scenario is about to exercise actually exists.
 	 */
 	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags): void {
+		// NOTE FOR WHOEVER MAKES THE LINK SCENARIO LIVE: this arrange writes through
+		// DAV, and a link mapping refuses that by design (the link-write guard), so a
+		// link mirror has to be seeded in Grafana and pulled instead. The mode is not
+		// knowable here — `mappingModes` is filled by SetupTrait's arrange, not by the
+		// table-based Background this file uses — so that branch needs the table step
+		// to record modes first. Hence the one @todo left in dashboards/tags.feature.
 		$this->aDashboardFileIn($folder);
 		// `the file holds:` reads the CURSOR, not the original — and the arrange above
 		// only sets the latter, so without this every Modified assertion in this file
