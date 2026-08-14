@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
+use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
@@ -35,6 +36,7 @@ final class DeleteServiceTest extends TestCase {
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
 	private CreateService $create;
+	private FolderMirror $folderMirror;
 	private RecycleBin $recycleBin;
 	private DeleteService $service;
 
@@ -42,11 +44,18 @@ final class DeleteServiceTest extends TestCase {
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->create = $this->createMock(CreateService::class);
+		// A restore puts the dashboard back where the FILE is, which for a file at the
+		// mapping root is the mapping's own folder — the answer the assertions below use.
+		$this->folderMirror = $this->createStub(FolderMirror::class);
+		$this->folderMirror->method('folderUidFor')->willReturnCallback(
+			fn (\OCP\Files\Node $n, Mapping $m): ?string => $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
+		);
 		$this->recycleBin = $this->createMock(RecycleBin::class);
 		$this->service = new DeleteService(
 			$this->grafana,
 			$this->metadata,
 			$this->create,
+			$this->folderMirror,
 			$this->recycleBin,
 			new SyncGuard(),
 			new NullLogger(),

@@ -1261,21 +1261,42 @@ Grafana version history, for as many dashboards as the folder held.
   | restore the folder        | N NEW uids (create-on-land) | N restored, uids preserved |
   | empty the trash           | nothing left to do          | N permanent deletes        |
 
-── THE ORDERING QUESTION NOBODY HAS ANSWERED ────────────────────────────────────
+── CORRECTED: NEXTCLOUD DOES NOT DECOMPOSE A FOLDER GESTURE ─────────────────────
 
-Nextcloud fires `BeforeNodeDeletedEvent` per node, so the app sees N file deletes
-rather than one folder delete. That mostly works — each file takes the normal path
-— but it means there is no transaction and no summary: a folder delete that fails
-on dashboard 7 of 12 leaves five dashboards deleted, one delete aborted, and six
-untouched, with nothing telling the user which is which. Every individual file
-behaved correctly and the aggregate is still a mess.
+This section used to say that Nextcloud fires `BeforeNodeDeletedEvent` per node, so
+a folder delete arrived as N file deletes and "mostly worked". **That was wrong**,
+and every conclusion drawn from it was wrong with it. Verified against the running
+instance:
+
+- `View::unlink()` on a directory runs ONE `basicOperation('rmdir', …, ['delete'])`.
+  One event fires, for the folder. The storage layer removes everything inside it
+  with no hook at all.
+- `Trashbin::delete()` emits one legacy `preDelete` for the trashed entry, then
+  `$node->delete()` takes the whole subtree silently. `deleteAll()` emits one per
+  TOP-LEVEL entry and none deeper.
+- `Trashbin::restore()` dispatches one `NodeRestoredEvent`, for the restored node.
+
+All three of the app's per-file handlers require a `File`, so all three did nothing
+at all for a folder. Trashing a folder of dashboards left every one of them live in
+Grafana; emptying the trash left every parked one there forever.
+
+The subtree walk Nextcloud does not do is now `FolderCascade`, driven by
+`FolderDeleteListener`, `TrashPurgeHook` and `RestoreFromTrashListener`.
+
+── THE ORDERING QUESTION, WHICH IS REAL BUT SMALLER THAN IT LOOKED ──────────────
+
+With the gesture handled as one event the partial-failure story is mostly gone: the
+bin-OFF case is a SINGLE `DELETE /api/folders` that cascades, so it either happens
+or it does not. The bin-ON case is still N upserts followed by one folder delete,
+and a failure partway leaves some dashboards parked and some not — but the folder
+delete is last, so nothing is destroyed by a half-finished park.
 
 ── STATUS ───────────────────────────────────────────────────────────────────────
 
-The per-file path is built (DeleteService, unit-tested), so the scenarios that are
-only "does the per-file rule hold when a folder is the gesture" are @todo. The
-aggregate behaviour — confirmation, partial-failure reporting, restoring a folder
-as a unit — is @unbuilt: nothing in `lib/` treats a folder delete as one event.
+The Nextcloud-side gesture is built and unit-tested: trash (both bin modes), the
+link refusal, purge-from-trash, and restore. `@unbuilt` is now only what genuinely
+has no code — the count-and-warn confirmation, which needs the front end, and the
+two `@in-grafana` scenarios, which belong to the pull.
 
 ### Trashing the mapped folder itself deletes its dashboards but keeps the mapping
 

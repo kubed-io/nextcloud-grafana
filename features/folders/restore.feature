@@ -33,7 +33,7 @@ Feature: Restoring a folder from the trash
     # Nothing was destroyed, so nothing has to be rebuilt: the dashboards come back
     # with the ids, URLs and history they always had.
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a folder with the recycle bin off
     Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards

@@ -105,10 +105,17 @@ namespace OCA\Files_Trashbin\Events {
 	// nextcloud/ocp). Stubbing it — rather than suppressing — lets Psalm resolve it as a real
 	// Event subclass, so the restore listener's `@implements IEventListener<NodeRestoredEvent>`
 	// type-checks cleanly, exactly as an OCP event would.
+	// Constructable, so the restore listener can be driven directly — the FOLDER branch
+	// especially, which is the one that keeps a folder trash from being a one-way door.
 	if (!class_exists(NodeRestoredEvent::class, false)) {
 		class NodeRestoredEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private ?\OCP\Files\Node $target = null,
+			) {
+			}
+
 			public function getTarget(): \OCP\Files\Node {
-				throw new \RuntimeException('stub');
+				return $this->target ?? throw new \RuntimeException('stub');
 			}
 		}
 	}
