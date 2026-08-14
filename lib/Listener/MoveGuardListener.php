@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Listener;
 
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCP\EventDispatcher\Event;
@@ -63,6 +64,7 @@ use OCP\Files\Node;
  */
 final class MoveGuardListener implements IEventListener {
 	public function __construct(
+		private FolderMetadata $folders,
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
 	) {
@@ -115,6 +117,20 @@ final class MoveGuardListener implements IEventListener {
 	 * decided after the fact, not here.
 	 */
 	private function guardFolder(Folder $source, Node $target): void {
+		// ONLY A MIRRORED FOLDER IS CONSTRAINED. A folder under a mapping is a plain
+		// folder until a dashboard lands beneath it — that is the rule that keeps a
+		// mapped folder usable for notes, exports and anything else — so a folder this
+		// app has never stamped is the user's own and moves wherever they like. Without
+		// this check the mode rules applied to every folder under a mapping, and a
+		// "Notes" folder inside a link mapping could not be dragged out of it.
+		try {
+			if ($this->folders->uidOf($source->getId()) === '') {
+				return;
+			}
+		} catch (\Throwable) {
+			return; // cannot classify → never block
+		}
+
 		$srcMapping = $this->mappings->resolveForPath($source->getPath());
 		if ($srcMapping === null) {
 			return; // outside every mapping — nothing to enforce

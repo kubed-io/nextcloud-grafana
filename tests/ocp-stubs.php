@@ -249,6 +249,16 @@ namespace OCP\EventDispatcher {
 	}
 }
 
+namespace OCP\Exceptions {
+	// Thrown by MoveGuardListener to abort a move before it happens; Nextcloud shows
+	// the message to the user. Stubbed so the guard can be unit-tested at all — it
+	// could not be before, which is why its folder branch shipped without one.
+	if (!class_exists(AbortedEventException::class, false)) {
+		class AbortedEventException extends \Exception {
+		}
+	}
+}
+
 namespace OCP\Files\Events\Node {
 	// The two node events the name-sync / writeback / move listeners key off. nextcloud/ocp
 	// ships no event classes, so the standalone unit suite needs constructable stubs to exercise
@@ -262,6 +272,25 @@ namespace OCP\Files\Events\Node {
 
 			public function getNode(): \OCP\Files\Node {
 				return $this->node;
+			}
+		}
+	}
+	// The pre-move gate MoveGuardListener throws from. Constructable like its
+	// post-move sibling, so the guard can be driven directly.
+	if (!class_exists(BeforeNodeRenamedEvent::class, false)) {
+		class BeforeNodeRenamedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $source,
+				private \OCP\Files\Node $target,
+			) {
+			}
+
+			public function getSource(): \OCP\Files\Node {
+				return $this->source;
+			}
+
+			public function getTarget(): \OCP\Files\Node {
+				return $this->target;
 			}
 		}
 	}

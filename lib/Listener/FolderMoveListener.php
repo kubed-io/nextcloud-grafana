@@ -56,6 +56,8 @@ use Psr\Log\LoggerInterface;
  * folder gives the uid of its new PARENT, because the walk starts at the node's
  * parent — so a folder dragged into a subfolder that Grafana has never seen brings
  * that subfolder into existence, exactly as a dashboard landing there would.
+ *
+ * @implements IEventListener<NodeRenamedEvent>
  */
 final class FolderMoveListener implements IEventListener {
 	public function __construct(
@@ -112,10 +114,24 @@ final class FolderMoveListener implements IEventListener {
 		try {
 			$parentUid = $this->folderMirror->folderUidFor($target, $mapping);
 			$this->grafana->moveFolder($uid, $parentUid ?? '');
+
+			// A WebDAV MOVE can change the parent AND the basename in one operation, and
+			// FolderRenameListener steps aside the moment the parent differs — so if this
+			// listener only re-parented, a drag that also renamed would leave the Grafana
+			// folder correctly placed under a stale title, with nothing else coming to fix
+			// it. Grafana has no call that does both: /move takes a parentUid, the title
+			// is a separate PUT. So it is two calls here, even though Nextcloud did it in
+			// one.
+			$name = $target->getName();
+			if ($name !== $event->getSource()->getName()) {
+				$this->grafana->renameFolder($uid, $name);
+			}
+
 			$this->logger->info('grafana_sync: re-parented a mirrored folder in Grafana', [
 				'app' => Application::APP_ID,
 				'uid' => $uid,
 				'parentUid' => $parentUid,
+				'name' => $name,
 			]);
 		} catch (\Throwable $e) {
 			// The Nextcloud move already happened and cannot be undone from here. Say so:

@@ -127,6 +127,31 @@ final class FolderMoveListenerTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A WebDAV MOVE can change the parent AND the basename in one operation, and the
+	 * rename listener steps aside the moment the parent differs — so without this the
+	 * Grafana folder would be correctly placed under a stale title, with nothing else
+	 * coming to fix it. Grafana has no call that does both.
+	 */
+	public function testAMoveThatAlsoRenamesSendsBoth(): void {
+		$this->stamped = [20 => 'gf-team'];
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+		$this->grafana->expects(self::once())->method('moveFolder')->with('gf-team', 'gf-resolved');
+		$this->grafana->expects(self::once())->method('renameFolder')->with('gf-team', 'Squad');
+
+		$this->listener()->handle($this->moved('/alice/files/Demo/Team', '/alice/files/Demo/Archive/Squad', 20));
+	}
+
+	/** A move that keeps the name sends only the move — no pointless title write. */
+	public function testAMoveThatKeepsTheNameDoesNotRename(): void {
+		$this->stamped = [20 => 'gf-team'];
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+		$this->grafana->expects(self::once())->method('moveFolder');
+		$this->grafana->expects(self::never())->method('renameFolder');
+
+		$this->listener()->handle($this->moved('/alice/files/Demo/Team', '/alice/files/Demo/Archive/Team', 20));
+	}
+
 	public function testAGrafanaFailureDoesNotEscapeAndIsReported(): void {
 		$this->stamped = [20 => 'gf-team'];
 		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
