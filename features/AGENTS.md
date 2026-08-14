@@ -2084,6 +2084,78 @@ name while the file carries the new one — a silent three-way disagreement, whi
 is the one outcome this whole feature exists to prevent. @unbuilt: bailing is not
 refusing, and nothing tells the user.
 
+## folders/tags
+
+`features/folders/tags.feature`
+
+TAGGING A FOLDER — the folder half of `dashboards/tags.feature`, and the answer is
+that there isn't one.
+
+### A Grafana folder has nowhere to put a tag
+
+Measured against the live instance, not assumed. A folder's entire spec is:
+
+    FolderSpec:
+      properties: [description, title]
+      required:   [title]
+
+There is no tags field. The `tags: []` that `/api/search?type=dash-folder` returns
+for every folder is the shared search-result envelope — the same shape dashboards
+come back in — and for a folder it is always empty and never writable. It is a
+convincing decoy: anything reading it would look like folder tags worked.
+
+**A folder IS a Kubernetes object**, so it has `metadata.labels` and
+`metadata.annotations`, and both accept our keys. Probed and verified:
+
+- labels are genuinely INDEXED — `?labelSelector=nextcloud.kubed.io/folder-id=12345`
+  returned exactly the folder, and 0 for a miss
+- `merge-patch+json` sets one key and deletes one with `null`, leaving
+  `grafana.app/*` untouched — no wholesale map overwrite
+- a legacy rename and a legacy move both PRESERVE labels, annotations and description
+- annotations take arbitrary text: `Q3 Review, café, ops/urgent, 日本語` round-tripped
+
+So the tag COULD be stored. It is not, for two reasons:
+
+1. **Nothing in Grafana can see it.** There is no UI to read or write labels or
+   annotations on a folder, the folder tags column is permanently empty, and the
+   legacy API does not surface any of it. A tag written there is a note posted into
+   a room with no door — a mirror with one surface, unlike every other mirror here.
+2. **Labels cannot hold a real tag anyway.** k8s validation is enforced:
+   `tag.kubed.io/Q3 Review` → 422, `café` → 422, and a VALUE of `Q3 Review` → 422.
+   Only annotations are lossless, and annotations are not selectable (a
+   `fieldSelector` on one returns 400), so the searchability that made labels
+   attractive is exactly what we would lose.
+
+The dashboards inside a folder carry tags both ways. The folder does not.
+
+### Nothing in Grafana can start a folder tag change
+
+The `@in-grafana` scenario is a `@decision` rather than an `@unbuilt`, because the
+absence is permanent and one-sided: the pull does not decline to look for folder
+tags, there is nothing on the far side to look at. Stated as its own scenario so a
+folder tag is known to SURVIVE a sync — the mirror never reaches in to reconcile a
+field Grafana has no opinion about.
+
+### Tagging the mapped folder is an example, not a feature file
+
+There is no `mapping/tags.feature`. Tagging the mapped folder itself and tagging a
+subfolder end in exactly the same place — a Nextcloud tag and an untouched Grafana
+— so the difference is a pre-state, which makes it an EXAMPLE ROW. A second file
+would restate one behaviour twice.
+
+The Team Folder question that prompted the idea turned out to be a dining-room
+detail, not a kitchen one: at the storage layer `ISystemTagObjectMapper` assigned
+and read back a tag on a Team Folder root exactly as it did on a plain folder, and
+`haveTag` answered true for both. What differs is what the Files app offers, which
+is not this app's behaviour to specify. Mappings now default to an admin-owned
+folder anyway, so the Background's mapped folders are plain ones.
+
+### If the engine is ever built, mind the event floor
+
+`TagAssignedEvent` / `TagUnassignedEvent` are `@since 32`; `info.xml` still says
+`min-version="31"`. The legacy `MapperEvent::EVENT_ASSIGN` / `EVENT_UNASSIGN`
+works on both, so the floor only has to move if the typed events are wanted.
+
 ## folders/rename
 
 `features/folders/rename.feature`
