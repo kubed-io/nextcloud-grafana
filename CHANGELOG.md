@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Creating a dashboard in a subfolder now creates the matching folders in Grafana, parents included.
 - Syncing from Grafana now mirrors its folder tree: dashboards arrive in the matching Nextcloud subfolder instead of all landing in one folder.
 - Renaming a mirrored folder in Nextcloud renames it in Grafana too.
+- Moving a mirrored folder re-parents it in Grafana, and moving one between sync and link folders is refused.
 - A dashboard file now shows the time Grafana recorded the change, not the moment Nextcloud saved it.
 - A folder can hold only one mapping, and the Grafana recycle-bin folder can no longer be mapped at all.
 - Creating a dashboard file in a link-mapped folder is now refused instead of leaving an unmanaged file behind.

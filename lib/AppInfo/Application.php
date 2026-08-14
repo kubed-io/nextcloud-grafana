@@ -16,6 +16,7 @@ use OCA\GrafanaSync\BackgroundJob\ScheduledPullJob;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
+use OCA\GrafanaSync\Listener\FolderMoveListener;
 use OCA\GrafanaSync\Listener\FolderRenameListener;
 use OCA\GrafanaSync\Listener\LoadFilesScriptListener;
 use OCA\GrafanaSync\Listener\MotionListener;
@@ -115,6 +116,7 @@ final class Application extends App implements IBootstrap {
 		// The folder half of a rename — every other listener filters to files on its
 		// first line, so a folder gesture had nothing watching it.
 		$context->registerEventListener(NodeRenamedEvent::class, FolderRenameListener::class);
+		$context->registerEventListener(NodeRenamedEvent::class, FolderMoveListener::class);
 
 		// DAV link-write guard (Course 4 · Slice 2b): attach LinkWriteGuardPlugin to every
 		// Sabre server so a raw WebDAV PUT / desktop-client edit can't overwrite a link
