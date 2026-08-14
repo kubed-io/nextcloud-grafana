@@ -45,8 +45,9 @@ use Psr\Log\LoggerInterface;
  * folder is deleted is destroyed with it.
  *
  * It does NOT count what it is about to reach and warn about it. The Nextcloud trash is
- * that confirmation, and emptying it is the second one — see `folders/delete.feature`'s
- * notes.
+ * that confirmation, and emptying it is the second one — see
+ * `features/AGENTS.md`, "RETIRED — warning that forty dashboards are about to be
+ * deleted".
  *
  * | step                | bin OFF                                  | bin ON                                    |
  * |---------------------|------------------------------------------|-------------------------------------------|
