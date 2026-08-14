@@ -102,6 +102,10 @@ namespace OCP\Files {
 			public function nodeExists(string $path): bool;
 
 			public function newFile(string $path, $content = null): File;
+
+			// FolderTreeMirror creates a Nextcloud folder for each Grafana folder it
+			// finds, so the pull can place dashboards in the folder that mirrors theirs.
+			public function newFolder(string $path): Folder;
 		}
 	}
 	if (!interface_exists(IMimeTypeLoader::class, false)) {
