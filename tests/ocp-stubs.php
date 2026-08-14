@@ -101,11 +101,22 @@ namespace OCP\Files {
 
 			public function nodeExists(string $path): bool;
 
+			// TrashPurgeHook resolves the legacy hook's trash-relative path against the
+			// home folder's parent, since the trash sits beside /files rather than in it.
+			public function get(string $path): Node;
+
 			public function newFile(string $path, $content = null): File;
 
 			// FolderTreeMirror creates a Nextcloud folder for each Grafana folder it
 			// finds, so the pull can place dashboards in the folder that mirrors theirs.
 			public function newFolder(string $path): Folder;
+		}
+	}
+	// The storage root — declared after Folder, which it extends. TrashPurgeHook asks it
+	// for a user's home so it can step up into /files_trashbin.
+	if (!interface_exists(IRootFolder::class, false)) {
+		interface IRootFolder extends Folder {
+			public function getUserFolder(string $userId): Folder;
 		}
 	}
 	if (!interface_exists(IMimeTypeLoader::class, false)) {
@@ -265,6 +276,22 @@ namespace OCP\Files\Events\Node {
 	// a listener directly. Just enough surface for `instanceof` + the getters the app calls.
 	if (!class_exists(NodeWrittenEvent::class, false)) {
 		class NodeWrittenEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $node,
+			) {
+			}
+
+			public function getNode(): \OCP\Files\Node {
+				return $this->node;
+			}
+		}
+	}
+	// The pre-delete gate both delete listeners key off. Nextcloud fires exactly ONE of
+	// these for a folder delete and none for its contents, which is the whole reason
+	// FolderDeleteListener + FolderCascade exist — so the folder case has to be
+	// constructable here to be tested at all.
+	if (!class_exists(BeforeNodeDeletedEvent::class, false)) {
+		class BeforeNodeDeletedEvent extends \OCP\EventDispatcher\Event {
 			public function __construct(
 				private \OCP\Files\Node $node,
 			) {

@@ -14,11 +14,13 @@ use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderCascade;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\Files\Folder;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -43,6 +45,7 @@ final class RestoreFromTrashListener implements IEventListener {
 		private DeleteService $deleteService,
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
+		private FolderCascade $cascade,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -57,11 +60,28 @@ final class RestoreFromTrashListener implements IEventListener {
 			return;
 		}
 		$target = $event->getTarget();
+
+		// A FOLDER restore is one event for the whole subtree — Nextcloud fires nothing
+		// for the files inside it, exactly as it fires nothing for them on the way in
+		// (see {@see \OCA\GrafanaSync\Service\FolderCascade}). Without this branch a
+		// folder trash would be a ONE-WAY DOOR: the delete cascade reaches every
+		// dashboard, and nothing brings any of them back.
+		if ($target instanceof Folder) {
+			foreach ($this->cascade->dashboardFilesIn($target) as $file) {
+				$this->restoreOne($file);
+			}
+			return;
+		}
+
 		if (!FilenameCodec::isDashboardFile($target)) {
 			return;
 		}
 		/** @var \OCP\Files\File $target — isDashboardFile guarantees a File */
+		$this->restoreOne($target);
+	}
 
+	/** The per-file rule table, reached one file at a time or a whole folder at a time. */
+	private function restoreOne(\OCP\Files\File $target): void {
 		$managed = $this->metadata->read($target->getId());
 		if ($managed !== null && $managed->isManaged()) {
 			// BIN ON parked path: move the dashboard back into its stored mapping's folder. If the

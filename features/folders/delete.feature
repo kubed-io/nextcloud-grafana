@@ -23,7 +23,7 @@ Feature: Deleting a folder
     # ── RULE: trashing a folder is trashing each dashboard in it ──────────────
     # notes: ../AGENTS.md#the-recycle-bin-folder
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Trash a folder of dashboards with the recycle bin off
     Given the Grafana recycle bin is off
     And the folder "Demo/Team" holding three dashboards
@@ -32,7 +32,7 @@ Feature: Deleting a folder
     And the Grafana folder "Team" is gone from "Demo"
     And all three files are recoverable from the Nextcloud trash
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Trash a folder of dashboards with the recycle bin on
     Given the Grafana recycle bin is on
     And the folder "Demo/Team" holding three dashboards
@@ -45,7 +45,7 @@ Feature: Deleting a folder
     # trashing it is a delete, and a delete carries whatever the folder held.
 
   # notes: ../AGENTS.md#a-link-folder-cannot-be-trashed-either
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Trash a folder in a link mapping
     Given the folder "Pointers/Team" holding three dashboards
     When I try to move "Pointers/Team" to the trash

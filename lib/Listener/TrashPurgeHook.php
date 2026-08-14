@@ -12,8 +12,10 @@ namespace OCA\GrafanaSync\Listener;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
+use OCA\GrafanaSync\Service\FolderCascade;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
+use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -36,6 +38,10 @@ use Psr\Log\LoggerInterface;
  *     hardDelete is a no-op (the dashboard is long gone).
  *   - link / untracked → no-op.
  *
+ * A trashed **folder** arrives here the same way and gets one hook for the whole subtree —
+ * Nextcloud emits nothing for its contents — so it is handed to {@see FolderCascade::purge()},
+ * which walks it and applies the rule above to each parked dashboard it finds.
+ *
  * A failure is logged and swallowed: a legacy hook can't cleanly abort the purge, and a parked
  * dashboard left behind in the bin is a recoverable leak, never data loss.
  */
@@ -43,6 +49,7 @@ final class TrashPurgeHook {
 	public function __construct(
 		private DeleteService $deleteService,
 		private DashboardMetadata $metadata,
+		private FolderCascade $cascade,
 		private SyncGuard $guard,
 		private IUserSession $userSession,
 		private IRootFolder $rootFolder,
@@ -61,10 +68,18 @@ final class TrashPurgeHook {
 			return;
 		}
 		$path = $params['path'] ?? '';
-		// Cheap pre-filter: a trashed dashboard's name is "<orig>.grafana.json.d<timestamp>".
-		if ($path === '' || !str_contains($path, '.grafana.json')) {
+		if ($path === '') {
 			return;
 		}
+		// NO NAME-BASED PRE-FILTER ANY MORE. A trashed dashboard is
+		// "<orig>.grafana.json.d<timestamp>", so `.grafana.json` used to settle the whole
+		// question without resolving anything — but it also silently dropped every FOLDER,
+		// and a folder's name says nothing about what is inside it. A purged folder emits
+		// ONE hook, for itself, and none for its contents (see {@see FolderCascade}), so
+		// that fast path was the reason emptying the trash left a folder's parked
+		// dashboards in Grafana forever. There is no name that distinguishes "Team.d123"
+		// from "Report.d123", so the node has to be resolved to find out.
+		//
 		// Whose trash is this? An interactive purge has a session user; a background retention
 		// cleanup ({@see \OCA\Files_Trashbin\BackgroundJob\ExpireTrash}) has none, but it sets up
 		// the filesystem for the user it's processing, so \OC_User::getUser() names them. Try the
@@ -89,6 +104,13 @@ final class TrashPurgeHook {
 			$node = $this->rootFolder->getUserFolder($uid)->getParent()->get(ltrim($path, '/'));
 		} catch (\Throwable) {
 			return; // couldn't resolve — nothing we can safely act on
+		}
+		if ($node instanceof Folder) {
+			// One hook, a whole subtree. The cascade walks it and purges each parked
+			// dashboard; it logs and swallows its own failures, for the same reason this
+			// method does.
+			$this->cascade->purge($node);
+			return;
 		}
 		if (!$node instanceof File) {
 			return;

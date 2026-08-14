@@ -50,6 +50,7 @@ final class DeleteService {
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
 		private CreateService $createService,
+		private FolderMirror $folderMirror,
 		private RecycleBin $recycleBin,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
@@ -186,7 +187,11 @@ final class DeleteService {
 			}
 			$spec = $this->decodeSpec($node->getContent());
 			$spec->uid = $managed->uid;
-			$folderUid = $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
+			// Where the file actually IS, not where its mapping starts. Restoring a whole
+			// folder brings back files that live in subfolders, and the folder cascade
+			// deleted the Grafana folders on the way in — so this both puts each dashboard
+			// back under the right parent and re-creates any level that is missing.
+			$folderUid = $this->folderMirror->folderUidFor($node, $mapping);
 			$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
 			$version = isset($resp['version']) ? (string)$resp['version'] : '';
 			if ($version !== '') {

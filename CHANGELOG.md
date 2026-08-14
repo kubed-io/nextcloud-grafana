@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Syncing from Grafana now mirrors its folder tree: dashboards arrive in the matching Nextcloud subfolder instead of all landing in one folder.
 - Renaming a mirrored folder in Nextcloud renames it in Grafana too.
 - Moving a mirrored folder re-parents it in Grafana, and moving one between sync and link folders is refused.
+- Trashing a mirrored folder deletes it in Grafana, parking its dashboards in the recycle-bin folder when that is on.
+- A folder in a link mapping can no longer be trashed, the same as a single link file.
 - A dashboard file now shows the time Grafana recorded the change, not the moment Nextcloud saved it.
 - A folder can hold only one mapping, and the Grafana recycle-bin folder can no longer be mapped at all.
 - Creating a dashboard file in a link-mapped folder is now refused instead of leaving an unmanaged file behind.
@@ -67,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Internal: a Background could only ever declare one folder mapping — a second one silently replaced the first (no behaviour change; test harness only).
 - The Sync Settings checkboxes could never be saved. The recycle-bin one is the serious half: it silently reverting meant every trashed dashboard was permanently deleted in Grafana, which has no undo.
+- Trashing a folder did nothing in Grafana at all. Nextcloud fires one delete event for a folder and none for the files inside it, so every dashboard under it stayed live — the folder gesture now reaches all of them.
+- Emptying the Nextcloud trash left a purged folder's parked dashboards in Grafana forever, for the same reason.
+- Restoring a folder from the trash now brings its dashboards back, instead of leaving the delete one-way.
+- A restored dashboard goes back into the subfolder it came from, not the top of its mapping.
 - Emptying the Nextcloud trash never deleted parked dashboards, so Grafana kept them forever.
 - A sync no longer marks every dashboard file as modified.
 - Pulled dashboards no longer have their empty JSON objects turned into empty arrays, which corrupted the file and was pushed back to Grafana.

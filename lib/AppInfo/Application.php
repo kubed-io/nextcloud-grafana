@@ -16,6 +16,7 @@ use OCA\GrafanaSync\BackgroundJob\ScheduledPullJob;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
+use OCA\GrafanaSync\Listener\FolderDeleteListener;
 use OCA\GrafanaSync\Listener\FolderMoveListener;
 use OCA\GrafanaSync\Listener\FolderRenameListener;
 use OCA\GrafanaSync\Listener\LoadFilesScriptListener;
@@ -130,6 +131,12 @@ final class Application extends App implements IBootstrap {
 		// NOT a typed event — it's the legacy \OCP\Trashbin preDelete hook, wired in boot().
 		$context->registerEventListener(BeforeNodeDeletedEvent::class, DeleteToGrafanaListener::class);
 		$context->registerEventListener(NodeRestoredEvent::class, RestoreFromTrashListener::class);
+
+		// The FOLDER half of the same gesture. It is a separate listener rather than a
+		// branch in the one above because Nextcloud does NOT decompose a folder delete:
+		// one event fires, for the folder, and none for anything inside it. Everything
+		// under a trashed folder is reached by walking it — see FolderCascade.
+		$context->registerEventListener(BeforeNodeDeletedEvent::class, FolderDeleteListener::class);
 
 		// Files-app openers (Course 5): load the frontend bundle that adds the "Open in
 		// Grafana" / "Open with text editor" row actions and the "Grafana dashboard" New-menu
