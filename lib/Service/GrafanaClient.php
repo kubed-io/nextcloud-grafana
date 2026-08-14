@@ -477,18 +477,23 @@ final class GrafanaClient {
 	 * rename and a legacy move both preserve annotations written here, also verified —
 	 * so mixing them is safe, but tags are only reachable through `folder.grafana.app`.
 	 *
-	 * A 404 answers an empty set rather than throwing: a folder that is gone has no
-	 * tags, and a tag read is never the right place to discover a missing folder.
+	 * **A 404 THROWS, and does not answer an empty set.** An earlier cut did the
+	 * latter, reasoning that a folder which is gone has no tags. That is true and
+	 * useless: the caller writes what it gets back into Nextcloud, and an empty set
+	 * there does not mean "unknown" — it means REMOVE EVERY TAG. So a stale or
+	 * mistyped uid, or a folder deleted in Grafana, would silently wipe the tags a
+	 * user had put on the Nextcloud folder.
+	 *
+	 * The same rule {@see NextcloudTags} follows on its own reads: a failure has to
+	 * travel as a failure, because every "safe default" here is indistinguishable
+	 * from a legitimate instruction to delete. {@see TagSyncService::applyToFolder()}
+	 * already logs and skips, which leaves the folder exactly as it was.
+	 *
+	 * A folder that exists with no annotation is NOT this case — that is a 200 with
+	 * nothing in it, and an empty set is the correct answer.
 	 */
 	public function readFolderTags(string $uid): TagSet {
-		try {
-			$body = $this->decode($this->request('GET', self::folderResource($uid)));
-		} catch (GrafanaApiException $e) {
-			if ($e->httpStatus === 404) {
-				return TagSet::empty();
-			}
-			throw $e;
-		}
+		$body = $this->decode($this->request('GET', self::folderResource($uid)));
 		$annotations = $body['metadata']['annotations'] ?? [];
 		$raw = is_array($annotations) ? ($annotations[TagSet::FOLDER_ANNOTATION] ?? null) : null;
 		return TagSet::fromAnnotation(is_string($raw) ? $raw : null);
@@ -700,10 +705,17 @@ final class GrafanaClient {
 		return new GrafanaApiException($e->getMessage(), 0, $e);
 	}
 
+	/**
+	 * PATCH is here for the app-platform folder API, the only surgical way to set one
+	 * annotation without carrying the whole metadata map. It was missing, so every
+	 * folder-tag write threw "Unsupported HTTP method" — invisible until the client
+	 * got a test of its own.
+	 */
 	private function dispatch(IClient $client, string $method, string $url, array $opts): IResponse {
 		switch (strtoupper($method)) {
 			case 'GET':    return $client->get($url, $opts);
 			case 'PUT':    return $client->put($url, $opts);
+			case 'PATCH':  return $client->patch($url, $opts);
 			case 'POST':   return $client->post($url, $opts);
 			case 'DELETE': return $client->delete($url, $opts);
 			default:

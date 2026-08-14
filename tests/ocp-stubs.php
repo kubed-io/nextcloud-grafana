@@ -422,6 +422,9 @@ namespace OCP\Http\Client {
 
 			public function put(string $uri, array $options = []): IResponse;
 
+			// The app-platform folder API's verb, for a merge patch of one annotation.
+			public function patch(string $uri, array $options = []): IResponse;
+
 			public function delete(string $uri, array $options = []): IResponse;
 		}
 	}
