@@ -344,13 +344,6 @@ final class SyncService {
 	}
 
 	/**
-	 * Translate a mapping's stored Grafana folder uid into the `/api/search` scope
-	 * {@see GrafanaClient::listDashboards()} takes: the reserved-root `/` selects the
-	 * "General" area (no-folder dashboards); any other value is a real folder uid whose
-	 * direct children are walked. (Whole-instance cascade — scope `null` — is a subfolder
-	 * course concern; this flat course always scopes to exactly one folder.)
-	 */
-	/**
 	 * Every dashboard the mapping covers: the ones in its own Grafana folder, plus the
 	 * ones in each folder beneath it that we now mirror.
 	 *
@@ -374,6 +367,15 @@ final class SyncService {
 		}
 	}
 
+	/**
+	 * Translate a mapping's stored Grafana folder uid into the `/api/search` scope
+	 * {@see GrafanaClient::listDashboards()} takes: the reserved-root `/` selects the
+	 * "General" area (no-folder dashboards); any other value is a real folder uid whose
+	 * direct children are walked.
+	 *
+	 * This is the mapping's OWN folder only. The folders beneath it are scoped one at a
+	 * time by {@see dashboardRows()}, because Grafana's search does not recurse.
+	 */
 	private function grafanaScope(Mapping $mapping): string {
 		return $mapping->grafanaFolderUid === '/'
 			? GrafanaClient::FOLDER_GENERAL
