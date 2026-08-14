@@ -22,7 +22,7 @@ Feature: Changing a dashboard's tags
     # ── RULE: applying a set of tags is ONE gesture, on any surface ─────────────
     # notes: ../AGENTS.md#applying-a-set-of-tags-is-one-gesture
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario Outline: Changing a dashboard's tags in Nextcloud changes them in Grafana
     Given a dashboard file in "Flows" whose tags are "<tags before>"
     When I change the Nextcloud tags to "<tags after>"
@@ -42,7 +42,7 @@ Feature: Changing a dashboard's tags
       |             | dns               |
       | 2024, linux | 2024, linux, prod |
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario Outline: Changing a dashboard's tags in the file changes them in Grafana
     Given a dashboard file in "Flows" whose tags are "<tags before>"
     When I change the tags in the file to "<tags after>"
@@ -60,7 +60,7 @@ Feature: Changing a dashboard's tags
       |             | dns, linux       |
       | dns, linux  |                  |
 
-  @grafana @in-grafana @occ @ui @todo
+  @grafana @in-grafana @occ @ui
   Scenario Outline: Changing a dashboard's tags in Grafana changes them in Nextcloud
     Given a dashboard file in "Flows" whose tags are "<tags before>"
     When the dashboard's tags are changed to "<tags after>" in Grafana
@@ -82,7 +82,7 @@ Feature: Changing a dashboard's tags
     # ── RULE: a change only travels where the mode lets it ─────────────────────
 
   # notes: ../AGENTS.md#changing-the-tags-on-a-link-does-not-change-them-in-grafana
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Changing the tags on a link does not change them in Grafana
     Given a dashboard file in "Reports" whose tags are "prod, dns"
     When I change the Nextcloud tags to "prod, dns, mine"
@@ -91,7 +91,7 @@ Feature: Changing a dashboard's tags
     And the file can be found by a Nextcloud tag search for "prod"
 
   # notes: ../AGENTS.md#changing-the-tags-on-a-file-the-mapping-does-not-own
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Changing the tags on an unmapped file keeps them local
     Given a dashboard file in "Scratch" whose tags are "dns"
     When I change the Nextcloud tags to "mine"

@@ -49,6 +49,8 @@ use Psr\Log\LoggerInterface;
  * A pull importing tags assigns them, which lands right back here. {@see SyncGuard}
  * covers that, and {@see TagSyncService} compares sets on top of it for the case the
  * guard cannot see — a scheduled pull and a user's click in two different requests.
+ *
+ * @implements IEventListener<MapperEvent>
  */
 final class TagChangeListener implements IEventListener {
 	public function __construct(

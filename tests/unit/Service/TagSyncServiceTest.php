@@ -41,6 +41,7 @@ final class TagSyncServiceTest extends TestCase {
 	private ?ManagedFile $managed = null;
 	private string $folderUid = 'gf-team';
 	private string $mode = Mapping::MODE_SYNC;
+	private bool $rootMapping = false;
 	private ?string $written = null;
 
 	protected function setUp(): void {
@@ -147,6 +148,31 @@ final class TagSyncServiceTest extends TestCase {
 		self::assertFalse($this->service()->pushFolder($this->folder(), TagSet::of(['mine'])));
 	}
 
+	/**
+	 * THE MAPPED FOLDER IS NEVER STAMPED, so asking FolderMetadata for it answers ''
+	 * — and reading that as "not ours" would refuse to tag the most obvious folder in
+	 * the mapping. Its uid is the mapping's, which is what the pull uses for it too.
+	 */
+	public function testTheMappedFolderItselfPushesToTheMappingsGrafanaFolder(): void {
+		$this->folderUid = ''; // nothing stamps the mapping's own folder
+		$this->grafana->method('readFolderTags')->willReturn(TagSet::empty());
+		$this->grafana->expects(self::once())->method('writeFolderTags')->with(
+			'gf-demo',
+			self::callback(fn (TagSet $t): bool => $t->equals(TagSet::of(['quarterly']))),
+		);
+
+		self::assertTrue($this->service()->pushFolder($this->folder(id: 30), TagSet::of(['quarterly'])));
+	}
+
+	/** A root mapping is the whole instance, not a folder that can carry an annotation. */
+	public function testARootMappingHasNoFolderToTag(): void {
+		$this->folderUid = '';
+		$this->rootMapping = true;
+		$this->grafana->expects(self::never())->method('writeFolderTags');
+
+		self::assertFalse($this->service()->pushFolder($this->folder(id: 30), TagSet::of(['quarterly'])));
+	}
+
 	public function testAFolderInALinkMappingIsNotPushed(): void {
 		$this->mode = Mapping::MODE_LINK;
 		$this->grafana->expects(self::never())->method('writeFolderTags');
@@ -198,8 +224,9 @@ final class TagSyncServiceTest extends TestCase {
 		$mappings->method('resolveForPath')->willReturnCallback(
 			fn (): Mapping => Mapping::fromArray([
 				'id' => 'm-demo',
-				'grafana_folder_uid' => 'gf-demo',
+				'grafana_folder_uid' => $this->rootMapping ? '/' : 'gf-demo',
 				'nc_folder' => 'Demo',
+				'nc_folder_id' => 30,
 				'mode' => $this->mode,
 			]),
 		);
@@ -228,9 +255,9 @@ final class TagSyncServiceTest extends TestCase {
 		return $file;
 	}
 
-	private function folder(): Folder {
+	private function folder(int $id = 20): Folder {
 		$folder = $this->createStub(Folder::class);
-		$folder->method('getId')->willReturn(20);
+		$folder->method('getId')->willReturn($id);
 		$folder->method('getPath')->willReturn('/alice/files/Demo/Team');
 		return $folder;
 	}

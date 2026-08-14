@@ -164,14 +164,24 @@ final class TagSyncService {
 	 * tags are not part of anything Nextcloud would otherwise send.
 	 */
 	public function pushFolder(Folder $folder, TagSet $wanted): bool {
-		$uid = $this->folders->uidOf($folder->getId());
-		if ($uid === '') {
-			return false; // a folder the user made for their own reasons
-		}
-
 		$mapping = $this->mappings->resolveForPath($folder->getPath());
 		if ($mapping === null || $mapping->mode !== Mapping::MODE_SYNC) {
 			return false; // outside a mapping, or a link — Grafana owns the state
+		}
+
+		// THE MAPPED FOLDER ITSELF IS NEVER STAMPED. FolderMirror and FolderTreeMirror
+		// stamp SUBfolders only, so asking FolderMetadata for the mapping's own folder
+		// answers '' — and reading that as "not ours" would silently refuse to tag the
+		// most obvious folder in the mapping. Its Grafana uid is the mapping's, which
+		// is the same source the pull uses when it dresses that folder on the way in.
+		$uid = $folder->getId() === $mapping->ncFolderId
+			? $mapping->grafanaFolderUid
+			: $this->folders->uidOf($folder->getId());
+		if ($uid === '' || $uid === '/') {
+			// Either a folder the user made for their own reasons, or the reserved root
+			// mapping — which is the whole Grafana instance, not a folder that can carry
+			// an annotation.
+			return false;
 		}
 
 		try {

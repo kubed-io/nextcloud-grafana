@@ -9,8 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Integration\Steps;
 
-use PHPUnit\Framework\Assert;
-
 /**
  * Tags, on a dashboard file and on a folder (`dashboards/tags.feature`,
  * `folders/tags.feature`, and the tag half of `connection/sync-now.feature`).
@@ -53,7 +51,9 @@ trait TagSteps {
 	 * into a folder's annotation happens to be the API.
 	 */
 	public function theFoldersTagsAreChangedToInGrafana(string $tags): void {
-		Assert::assertNotSame('', $this->currentGrafanaFolder, 'no Grafana folder in play');
+		if ($this->currentGrafanaFolder === '') {
+			throw new \RuntimeException('no Grafana folder is in play for this scenario');
+		}
 		$this->grafanaSetFolderTags($this->currentGrafanaFolder, $this->parseTags($tags));
 	}
 
@@ -79,24 +79,21 @@ trait TagSteps {
 
 	/** @Then the tags on the Grafana folder :uid are :tags */
 	public function theTagsOnTheGrafanaFolderAre(string $uid, string $tags): void {
-		$expected = $this->parseTags($tags);
-		sort($expected);
-		Assert::assertSame(
-			$expected,
+		$this->assertSameTags(
+			$this->parseTags($tags),
 			$this->grafanaFolderTags($uid),
-			"the Grafana folder $uid does not carry the expected tags",
+			"the tags on the Grafana folder $uid",
 		);
 	}
 
 	/** @Then the tags in the file :path are :tags */
 	public function theTagsInTheFileAre(string $path, string $tags): void {
 		$decoded = json_decode($this->davGet($path), true);
-		Assert::assertIsArray($decoded, "the file $path is not JSON");
+		if (!is_array($decoded)) {
+			throw new \RuntimeException("the file $path is not JSON");
+		}
 		$actual = array_values(array_filter(array_map('trim', (array)($decoded['tags'] ?? []))));
-		sort($actual);
-		$expected = $this->parseTags($tags);
-		sort($expected);
-		Assert::assertSame($expected, $actual, "the body of $path does not carry the expected tags");
+		$this->assertSameTags($this->parseTags($tags), $actual, "the tags in the body of $path");
 	}
 
 	/**
@@ -107,7 +104,9 @@ trait TagSteps {
 	 */
 	public function theFileCanBeFoundByATagSearchFor(string $path, string $tag): void {
 		$tagId = $this->findTagId($tag);
-		Assert::assertNotNull($tagId, "Nextcloud has no tag named \"$tag\"");
+		if ($tagId === null) {
+			throw new \RuntimeException("Nextcloud has no tag named \"$tag\", so nothing could match a search for it");
+		}
 
 		$body = '<?xml version="1.0"?>'
 			. '<oc:filter-files xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">'
@@ -117,11 +116,114 @@ trait TagSteps {
 			'headers' => ['Content-Type' => 'application/xml'],
 			'body' => $body,
 		]);
-		Assert::assertStringContainsString(
-			rawurlencode(basename($path)),
-			str_replace('%2F', '/', rawurlencode((string)$res->getBody())),
-			"a tag search for \"$tag\" did not return $path",
+		$body = (string)$res->getBody();
+		if (!str_contains($body, rawurlencode(basename($path))) && !str_contains($body, basename($path))) {
+			throw new \RuntimeException("a tag search for \"$tag\" did not return $path");
+		}
+	}
+
+	// ── dashboards ─────────────────────────────────────────────────────────────
+
+	/**
+	 * @Given a dashboard file in :folder whose tags are :tags
+	 *
+	 * Seeded through the FILE, not through Grafana, because that is the pre-state the
+	 * scenarios describe — a mirror that already carries tags. The write goes out over
+	 * DAV so the app's own push carries it to Grafana, which means the arrange also
+	 * proves the plumbing the scenario is about to exercise actually exists.
+	 */
+	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags): void {
+		$this->aDashboardFileIn($folder);
+		// `the file holds:` reads the CURSOR, not the original — and the arrange above
+		// only sets the latter, so without this every Modified assertion in this file
+		// fails on "no file to inspect" rather than on anything it is about.
+		$this->currentFilePath = $this->originalPath;
+		if (trim($tags) !== '') {
+			$this->writeTagsIntoFile($this->originalPath, $this->parseTags($tags));
+		}
+	}
+
+	/** @When I change the Nextcloud tags to :tags */
+	public function iChangeTheNextcloudTagsTo(string $tags): void {
+		$this->setNextcloudTags($this->originalPath, $this->parseTags($tags));
+	}
+
+	/** @When I change the tags in the file to :tags */
+	public function iChangeTheTagsInTheFileTo(string $tags): void {
+		$this->writeTagsIntoFile($this->originalPath, $this->parseTags($tags));
+	}
+
+	/**
+	 * @When the dashboard's tags are changed to :tags in Grafana
+	 *
+	 * The pull that brings it back is the step's business, not the scenario's — nobody
+	 * performs a sync as an act of intent, so it does not appear in the Gherkin.
+	 */
+	public function theDashboardsTagsAreChangedToInGrafana(string $tags): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		$spec = $record['dashboard'] ?? [];
+		$spec['tags'] = $this->parseTags($tags);
+		$this->grafanaCreateTaggedDashboard(
+			$this->lastUid,
+			(string)($spec['title'] ?? 'Untitled'),
+			(string)($record['meta']['folderUid'] ?? ''),
+			$this->parseTags($tags),
 		);
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/** @Then the dashboard's tags are :tags in Nextcloud */
+	public function theDashboardsTagsAreInNextcloud(string $tags): void {
+		$this->assertNextcloudTags($this->originalPath, $tags);
+	}
+
+	/** @Then the dashboard's tags are :tags in the file */
+	public function theDashboardsTagsAreInTheFile(string $tags): void {
+		$this->theTagsInTheFileAre($this->originalPath, $tags);
+	}
+
+	/**
+	 * @Then the dashboard's tags are :tags in Grafana
+	 * @Then the dashboard's tags are still :tags in Grafana
+	 *
+	 * Both phrasings mean the same assertion. "still" reads better after a gesture
+	 * that was supposed to change nothing, and a scenario should not have to pick a
+	 * worse sentence to reuse a step.
+	 */
+	public function theDashboardsTagsAreInGrafana(string $tags): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		$actual = array_values(array_filter(array_map('trim', (array)($record['dashboard']['tags'] ?? []))));
+		$this->assertSameTags($this->parseTags($tags), $actual, "the tags on Grafana dashboard {$this->lastUid}");
+	}
+
+	/**
+	 * @Then the file's tags settle back to :tags
+	 *
+	 * A link's state is Grafana's, so the local change is not refused — it is simply
+	 * overwritten the next time the mirror is brought up to date.
+	 */
+	public function theFilesTagsSettleBackTo(string $tags): void {
+		$this->theAdminPullsFromGrafana();
+		$this->theTagsInTheFileAre($this->originalPath, $tags);
+	}
+
+	/** @Then the file can be found by a Nextcloud tag search for :tag */
+	public function theCurrentFileCanBeFoundByATagSearchFor(string $tag): void {
+		$this->theFileCanBeFoundByATagSearchFor($this->originalPath, $tag);
+	}
+
+	/**
+	 * Put a tag set into a dashboard file's body, over DAV.
+	 *
+	 * @param list<string> $tags
+	 */
+	private function writeTagsIntoFile(string $path, array $tags): void {
+		$decoded = json_decode($this->davGet($path), true);
+		if (!is_array($decoded)) {
+			throw new \RuntimeException("the file $path is not JSON");
+		}
+		$decoded['tags'] = array_values($tags);
+		$this->davPut($path, json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 	}
 
 	// ── helpers ────────────────────────────────────────────────────────────────
@@ -143,7 +245,7 @@ trait TagSteps {
 			$id = $this->findTagId($name) ?? $this->createTag($name);
 			$this->davClient()->request(
 				'PUT',
-				'../systemtags-relations/files/' . $fileId . '/' . $id,
+				'../../systemtags-relations/files/' . $fileId . '/' . $id,
 				['http_errors' => false],
 			);
 		}
@@ -156,7 +258,7 @@ trait TagSteps {
 			if ($id !== null) {
 				$this->davClient()->request(
 					'DELETE',
-					'../systemtags-relations/files/' . $fileId . '/' . $id,
+					'../../systemtags-relations/files/' . $fileId . '/' . $id,
 					['http_errors' => false],
 				);
 			}
@@ -164,18 +266,42 @@ trait TagSteps {
 	}
 
 	private function assertNextcloudTags(string $path, string $tags): void {
-		$expected = $this->parseTags($tags);
+		$this->assertSameTags(
+			$this->parseTags($tags),
+			$this->nextcloudTagsOf($path),
+			"the Nextcloud tags on $path",
+		);
+	}
+
+	/**
+	 * Compare two tag sets, order-insensitively, WITHOUT a PHPUnit assertion.
+	 *
+	 * PHPUnit 12's failure exporter reaches into `PHPUnit\TextUI\Configuration\Registry`,
+	 * which is null under Behat because there is no TextUI bootstrap — so a failing
+	 * `assertSame` on two arrays throws an opaque "Registry::get(): … null returned"
+	 * TypeError that hides the actual mismatch. {@see \OCA\GrafanaSync\Tests\Integration\Support\WebDavTrait::assertStatus()}
+	 * already documents this for statuses; the same applies to every value comparison
+	 * here, and arrays hit it hardest because they always build a diff.
+	 *
+	 * @param list<string> $expected
+	 * @param list<string> $actual
+	 */
+	private function assertSameTags(array $expected, array $actual, string $what): void {
 		sort($expected);
-		$actual = $this->nextcloudTagsOf($path);
 		sort($actual);
-		Assert::assertSame($expected, $actual, "$path does not carry the expected Nextcloud tags");
+		if ($expected !== $actual) {
+			throw new \RuntimeException(
+				$what . " are wrong.\n  expected: [" . implode(', ', $expected) . ']'
+				. "\n  actual:   [" . implode(', ', $actual) . ']',
+			);
+		}
 	}
 
 	/** @return list<string> */
 	private function nextcloudTagsOf(string $path): array {
 		$res = $this->davClient()->request(
 			'PROPFIND',
-			'../systemtags-relations/files/' . $this->fileIdOf($path),
+			'../../systemtags-relations/files/' . $this->fileIdOf($path),
 			[
 				'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
 				'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">'
@@ -187,7 +313,7 @@ trait TagSteps {
 	}
 
 	private function findTagId(string $name): ?string {
-		$res = $this->davClient()->request('PROPFIND', '../systemtags/', [
+		$res = $this->davClient()->request('PROPFIND', '../../systemtags/', [
 			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
 			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">'
 				. '<d:prop><oc:id/><oc:display-name/></d:prop></d:propfind>',
@@ -212,7 +338,7 @@ trait TagSteps {
 	}
 
 	private function createTag(string $name): string {
-		$this->davClient()->request('POST', '../systemtags/', [
+		$this->davClient()->request('POST', '../../systemtags/', [
 			'headers' => ['Content-Type' => 'application/json'],
 			'body' => json_encode([
 				'name' => $name,
@@ -222,7 +348,9 @@ trait TagSteps {
 			'http_errors' => false,
 		]);
 		$id = $this->findTagId($name);
-		Assert::assertNotNull($id, "could not create the Nextcloud tag \"$name\"");
+		if ($id === null) {
+			throw new \RuntimeException("could not create the Nextcloud tag \"$name\"");
+		}
 		return $id;
 	}
 
@@ -240,7 +368,7 @@ trait TagSteps {
 				. '<d:prop><oc:fileid/></d:prop></d:propfind>',
 		]);
 		if (preg_match('#<oc:fileid>(\d+)</oc:fileid>#', (string)$res->getBody(), $m) !== 1) {
-			Assert::fail("could not read the file id of $path");
+			throw new \RuntimeException("could not read the file id of $path");
 		}
 		return $m[1];
 	}
