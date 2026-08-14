@@ -29,6 +29,8 @@ Feature: Changing a dashboard's tags
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
     And the dashboard's tags are "<tags after>" in Grafana
+    And the file holds:
+      | Modified | when the dashboard last changed in Grafana |
 
     Examples: adding, subtracting, and doing both at once are one gesture
       | tags before | tags after        |
@@ -47,6 +49,8 @@ Feature: Changing a dashboard's tags
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
     And the dashboard's tags are "<tags after>" in Grafana
+    And the file holds:
+      | Modified | when the dashboard last changed in Grafana |
 
     Examples: the same gesture, typed into the JSON instead of clicked on the file
       | tags before | tags after       |
@@ -63,7 +67,8 @@ Feature: Changing a dashboard's tags
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
     And the dashboard's tags are "<tags after>" in Grafana
-    And nothing else in the file changed
+    And the file holds:
+      | Modified | when the dashboard last changed in Grafana |
 
     Examples: Grafana is the system of record, so its set wins outright
       | tags before | tags after       |

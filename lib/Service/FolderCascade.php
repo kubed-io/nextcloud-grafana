@@ -44,6 +44,11 @@ use Psr\Log\LoggerInterface;
  * to park every dashboard BEFORE the folder goes, since anything still inside when the
  * folder is deleted is destroyed with it.
  *
+ * It does NOT count what it is about to reach and warn about it. The Nextcloud trash is
+ * that confirmation, and emptying it is the second one — see
+ * `features/AGENTS.md`, "RETIRED — warning that forty dashboards are about to be
+ * deleted".
+ *
  * | step                | bin OFF                                  | bin ON                                    |
  * |---------------------|------------------------------------------|-------------------------------------------|
  * | trash the folder    | delete the folder; it cascades over every | park each dashboard in the bin, THEN      |
@@ -135,15 +140,6 @@ final class FolderCascade {
 				]);
 			}
 		}
-	}
-
-	/**
-	 * How many dashboards a folder gesture is about to reach. The spec makes the app say
-	 * this out loud before a bin-off folder trash, and Grafana will not offer the number —
-	 * its cascade reports nothing — so it has to be counted on this side beforehand.
-	 */
-	public function countDashboardsIn(Folder $folder): int {
-		return count($this->dashboardsIn($folder));
 	}
 
 	/**

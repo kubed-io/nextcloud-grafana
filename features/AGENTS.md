@@ -1291,12 +1291,33 @@ or it does not. The bin-ON case is still N upserts followed by one folder delete
 and a failure partway leaves some dashboards parked and some not — but the folder
 delete is last, so nothing is destroyed by a half-finished park.
 
+### RETIRED — warning that forty dashboards are about to be deleted
+
+`Scenario: Trash a folder of many dashboards` is gone, and so is the "one gesture,
+many dashboards — say so before and after" rule it was the only member of.
+
+**The trashbin already is the confirmation, and the purge is the second one.**
+Deleting in Nextcloud is always safe: it goes to the trash, whatever it held. The
+irreversible step is emptying the trash, and by then the user has performed two
+separate destructive gestures on the same thing — that is already "are you really,
+absolutely sure", expressed as a workflow rather than a dialog. Bolting a count
+warning onto the first, safest step adds friction where nothing is at stake.
+
+It is also **not Nextcloud behaviour**. Nextcloud does not warn you for deleting a
+folder of forty of anything, and an app inventing a confirmation the platform does
+not have makes this app feel unlike the rest of the Files experience.
+
+The only thing that would bring it back: Nextcloud growing such a rule itself, at
+which point the app would follow the platform rather than lead it.
+
+`FolderCascade::countDashboardsIn()` existed solely for this and was removed with
+it. Counting the subtree is one line if it is ever wanted again.
+
 ── STATUS ───────────────────────────────────────────────────────────────────────
 
 The Nextcloud-side gesture is built and unit-tested: trash (both bin modes), the
-link refusal, purge-from-trash, and restore. `@unbuilt` is now only what genuinely
-has no code — the count-and-warn confirmation, which needs the front end, and the
-two `@in-grafana` scenarios, which belong to the pull.
+link refusal, purge-from-trash, and restore. `@unbuilt` is now only the two
+`@in-grafana` scenarios, which belong to the pull.
 
 ### Trashing the mapped folder itself deletes its dashboards but keeps the mapping
 
@@ -2063,6 +2084,161 @@ name while the file carries the new one — a silent three-way disagreement, whi
 is the one outcome this whole feature exists to prevent. @unbuilt: bailing is not
 refusing, and nothing tells the user.
 
+## folders/tags
+
+`features/folders/tags.feature`
+
+TAGGING A FOLDER — the folder half of `dashboards/tags.feature`, and the answer is
+that there isn't one.
+
+### A folder's tags are one set on both sides
+
+Folder tags sync **both ways**, like everything else in this app. Change them in
+Nextcloud and they appear on the Grafana folder; change them in Grafana and they
+appear on the Nextcloud folder.
+
+**THE STORE IS AN ANNOTATION, `nextcloud.kubed.io/tags`.** A folder has no tags
+field of Grafana's own, but it is a Kubernetes object, so it has `metadata.labels`
+and `metadata.annotations` and both accept our keys. Labels were the tempting choice
+because they are INDEXED — `?labelSelector=` really filters server-side, verified
+against the live instance. They are also unusable for this: k8s validation rejects
+anything a real tag is likely to contain. Measured — `tag.kubed.io/Q3 Review` → 422,
+`café` → 422, and a label VALUE of `Q3 Review` → 422, on both the key and the value.
+
+Annotations have no such limit. `Q3 Review, café, ops/urgent, 日本語` round-tripped
+exactly. So a Nextcloud tag maps to an annotation with **no escaping, no
+normalisation and no reverse lookup table** — which is what makes the port between
+the two sides a straight copy rather than a lossy encoding. The price is that
+Grafana cannot search them, since annotations are not selectable (a `fieldSelector`
+on one returns 400). That price is worth paying: an unsearchable tag that is still
+the user's actual tag beats a searchable one that has been mangled into
+`Q3-Review`, where `Q3 Review` and `Q3-Review` would collide.
+
+### TWO CORRECTIONS THIS SECTION HAS ALREADY SURVIVED
+
+Recorded because both were confident and both were wrong, in the same direction —
+mistaking *a surface I could see* for *the whole surface*.
+
+**"A folder's tags never arrive from Grafana."** This confused the UI having no
+control with the thing being impossible. Grafana's folder screen offers no way to
+set labels or annotations; the API does, and so does the MCP. A behaviour is not
+defined by which surface reached it — everywhere else in this spec the medium goes
+unmentioned unless the medium is the point.
+
+**"A tag applied in Nextcloud stays in Nextcloud."** The argument was that pushing
+outward would leak somebody's private filing into a shared Grafana, where no screen
+could show it back to them. It reads plausibly and it is still wrong, because it
+argues against the premise of the whole app: this is a bidirectional mirror, and
+carving out one field as outbound-only makes it a mirror with a blind spot. The
+same reasoning would have refused dashboard tags. A tag is a tag; it syncs.
+
+### Tagging a folder in a link mapping does not reach Grafana
+
+The mode rule holds for folder tags exactly as it does for a dashboard's — under a
+link, Grafana owns the state and Nextcloud is a mirror of it, so a tag applied here
+does not travel and settles back on the next sync. This is the folder-level twin of
+"changing the tags on a link does not change them in Grafana".
+
+### A folder tag does not move the clock, and that is measured
+
+Grafana owns a mirrored folder's modified time exactly as it owns a dashboard's.
+The surprise is what counts as a change. Measured on the live instance:
+
+| write | `resourceVersion` | `generation` | `version` | `updated` |
+|---|---|---|---|---|
+| create | set | 1 | 1 | = created |
+| annotation (i.e. a TAG) | advances | 1 | 1 | **unmoved** |
+| `spec.description` | advances | 2 | 2 | **moves** |
+| `spec.title` (legacy rename) | advances | — | 2 | **moves** |
+
+Only a SPEC change is an update. Tags live in `metadata.annotations`, so by
+Grafana's own reckoning tagging a folder is not a modification at all. Nextcloud
+agrees from the other side: assigning a systemtag left the folder's mtime
+identical (`1786735702` before and after).
+
+So the end state is "the time did not move", and both sides arrive there on their
+own. This is the OPPOSITE of a dashboard, where `tags` is a top-level key in the
+spec body — so a dashboard tag change IS a save, and its `updated` moves, which is
+why `dashboards/tags.feature` asserts the file carries Grafana's new time.
+
+**The consequence for whoever builds the pull:** a folder tag change cannot be
+detected by comparing timestamps, because there is no timestamp change to compare.
+The annotation value itself has to be compared, or `resourceVersion` tracked. Do
+not reach for the mtime here; it will always say nothing happened.
+
+### A Grafana folder has nowhere to put a tag OF ITS OWN
+
+Measured against the live instance, not assumed. A folder's entire spec is:
+
+    FolderSpec:
+      properties: [description, title]
+      required:   [title]
+
+There is no tags field. The `tags: []` that `/api/search?type=dash-folder` returns
+for every folder is the shared search-result envelope — the same shape dashboards
+come back in — and for a folder it is always empty and never writable. It is a
+convincing decoy: anything reading it would look like folder tags worked.
+
+**A folder IS a Kubernetes object**, so it has `metadata.labels` and
+`metadata.annotations`, and both accept our keys. Probed and verified:
+
+- labels are genuinely INDEXED — `?labelSelector=nextcloud.kubed.io/folder-id=12345`
+  returned exactly the folder, and 0 for a miss
+- `merge-patch+json` sets one key and deletes one with `null`, leaving
+  `grafana.app/*` untouched — no wholesale map overwrite
+- a legacy rename and a legacy move both PRESERVE labels, annotations and description
+- annotations take arbitrary text: `Q3 Review, café, ops/urgent, 日本語` round-tripped
+
+So a tag CAN be stored on a folder — it just has to be **an annotation, not a
+label**. k8s validation is enforced on labels: `tag.kubed.io/Q3 Review` → 422,
+`café` → 422, and a VALUE of `Q3 Review` → 422. Real tag text only survives in an
+annotation, which is lossless but not selectable (a `fieldSelector` on one returns
+400). So `nextcloud.kubed.io/tags` is the store, and the searchability labels would
+have offered is not available for tags specifically.
+
+What a folder does NOT have is a tags field of Grafana's own — nothing the Grafana
+UI displays as a tag, and nothing the legacy API surfaces. The folder tags column in
+the UI is fed by the search envelope and is permanently empty. So the annotation is
+not a second-best place to put a tag; it is the ONLY place, and the sync is a real
+sync into it rather than a note left in a drawer.
+
+### NEVER write "when a sync runs"
+
+An earlier cut of the inbound scenario said `When a sync from Grafana runs`. That is
+not a behaviour — it is a function call with a space in it. Nobody performs a sync as
+an act of intent; they change a tag, and the tag shows up.
+
+The correct shape is the one `dashboards/tags.feature` already uses:
+
+    Given the folder "Demo/Team" whose tags are "quarterly"
+    When the folder's tags are changed to "quarterly, ops" in Grafana
+    Then the folder's tags are "quarterly, ops" in Nextcloud
+
+Pre-state, the gesture, the end state. Whether that end state is reached by a
+scheduled pull, a manual sync or a webhook is a HOW, and a HOW never appears in a
+`When`. The same applies to any phrasing of the form "when X runs", "when the
+listener fires", or "when the reconciler notices".
+
+### Tagging the mapped folder is an example, not a feature file
+
+There is no `mapping/tags.feature`. Tagging the mapped folder itself and tagging a
+subfolder end in exactly the same place — a Nextcloud tag and an untouched Grafana
+— so the difference is a pre-state, which makes it an EXAMPLE ROW. A second file
+would restate one behaviour twice.
+
+The Team Folder question that prompted the idea turned out to be a dining-room
+detail, not a kitchen one: at the storage layer `ISystemTagObjectMapper` assigned
+and read back a tag on a Team Folder root exactly as it did on a plain folder, and
+`haveTag` answered true for both. What differs is what the Files app offers, which
+is not this app's behaviour to specify. Mappings now default to an admin-owned
+folder anyway, so the Background's mapped folders are plain ones.
+
+### If the engine is ever built, mind the event floor
+
+`TagAssignedEvent` / `TagUnassignedEvent` are `@since 32`; `info.xml` still says
+`min-version="31"`. The legacy `MapperEvent::EVENT_ASSIGN` / `EVENT_UNASSIGN`
+works on both, so the floor only has to move if the typed events are wanted.
+
 ## folders/rename
 
 `features/folders/rename.feature`
@@ -2754,6 +2930,30 @@ behaviour and the second is a fact about our queue. What is worth stating is
 that the file's own two surfaces still track each other with no remote system
 involved, which is a real behaviour and the reason a tag applied out here
 survives until the file is moved back into a mapping.
+
+### RETIRED — "and nothing else in the file changed"
+
+It sat on the `@in-grafana` scenario, and adding the `Modified` row is what exposed
+it. Two problems, either one fatal.
+
+**It had stopped being true.** A tag change in Grafana IS a save — `tags` is a
+top-level key in the dashboard spec — so `updated` moves and the file's Modified
+time moves with it. "Nothing else changed" and "the clock changed" cannot both be
+the last word on the same gesture. Strictly the line meant file CONTENT and the
+Modified time is metadata, but a reader hitting the two lines together has to
+untangle that, and a step that needs untangling is a step that misleads.
+
+**It was testing a negative with no edge.** What would it catch? It names nothing
+in particular, so it can only be satisfied by enumerating the whole body, and it
+would fail for a reason no scenario describes. The real fear underneath — a pull
+mangling the body it rewrites — is a genuine bug we HAVE had (empty JSON objects
+turned into arrays), and it belongs where that lives, not smuggled into a tag
+scenario as a catch-all.
+
+Same family as the vacuous `Grafana holds no folder named "Team copy"` retired
+from `folders/copy.feature`. The surviving form of that idea is
+`Grafana is not contacted` — a negative about ONE named thing, which is
+falsifiable. `nothing else` never is.
 
 ### tags.feature — WHAT WAS RETIRED, AND WHY
 

@@ -1811,6 +1811,136 @@ analogue here at all.
 
 ---
 
+### Back to the walk-in — what a Grafana FOLDER is actually made of
+
+Before writing a line of the tag engine we asked the folder half of the same
+question: *can a Grafana folder carry tags?* The plan was to mirror Nextcloud
+folder tags outward the way we will mirror dashboard tags. We went and looked.
+
+**A folder's spec is two fields.** From the live OpenAPI:
+
+    FolderSpec:
+      properties: [description, title]
+      required:   [title]
+
+That is the whole ingredient. No tags. And the `tags: []` that
+`/api/search?type=dash-folder` hands back for every folder is the shared
+search-result envelope, identical for dashboards and folders — always empty,
+never writable. A cook reading only that would swear folder tags worked.
+
+**But the folder is a Kubernetes object, and that is the real find.** The
+app-platform API (`folder.grafana.app/v1beta1`) gives every folder `metadata.labels`
+and `metadata.annotations`. We probed a scratch folder to exhaustion and took it
+back out again. What we EARNED:
+
+| ability | verified |
+|---|---|
+| custom labels + annotations persist, on create and on patch | yes |
+| `?labelSelector=` filters server-side on OUR keys | yes — hit on match, 0 on miss |
+| `merge-patch+json` adds one key, `null` removes one | yes — `grafana.app/*` untouched |
+| a legacy rename (`PUT /api/folders/:uid`) preserves all of it | yes |
+| a legacy move (`POST …/move`) preserves all of it | yes |
+| LIST returns labels + annotations for every folder | yes — one call, no N+1 |
+| annotations hold arbitrary text — spaces, unicode, commas | yes |
+
+And what the walk-in REFUSED us:
+
+| limit | evidence |
+|---|---|
+| label keys and values are k8s-validated | `tag.kubed.io/Q3 Review` → **422**; `café` → **422**; value `Q3 Review` → **422** |
+| annotations are not selectable | `fieldSelector` on an annotation → **400, "field label not supported"** |
+| none of it appears in the legacy folder API | `GET /api/folders/:uid` shows no labels, no annotations, not even `description` |
+| no UI anywhere sets or shows any of it | the folder tags column exists and is permanently empty |
+| a folder delete is final | after `DELETE`, the folder is a **404** — no trash, nothing to restore |
+
+**So the split is clean, and it is not the split we expected.** Labels are the
+indexed shelf: constrained charset, queryable. Annotations are the deep pantry:
+anything you like, findable only if you already know where you put it.
+
+THE RULING ON FOLDER TAGS: **they sync, both ways, in an annotation.** It took
+two corrections to get there, and both of mine failed the same way — I mistook
+the surface I could see for the whole surface.
+
+First I wrote that folder tags cannot travel at all, because no one in Grafana
+can see them. Dr K: *no one in the UI* is not *no one*. The API writes that
+annotation and so does the MCP, and a behaviour is not defined by which door
+someone came through.
+
+Then I conceded the inbound leg and held the outbound one back, reasoning that
+pushing a user's private filing into a shared Grafana would be a leak. It reads
+well and it argues against the whole restaurant. This is a bidirectional mirror.
+Carving one field out as inbound-only is a mirror with a blind spot, and the same
+sentence would have refused dashboard tags. A tag is a tag; it syncs.
+
+**And the store is an annotation, which is the easy port, not the consolation
+prize.** Labels were tempting because they are genuinely indexed — `labelSelector`
+really filters, we proved it. They are also unusable: k8s validation rejects
+`tag.kubed.io/Q3 Review` (422), `café` (422), and a VALUE of `Q3 Review` (422).
+Annotations took `Q3 Review, café, ops/urgent, 日本語` unchanged. So a Nextcloud
+tag becomes an annotation with no escaping, no normalisation and no reverse
+lookup — a straight copy. We give up Grafana-side search for it, and that is the
+right trade: an unsearchable tag that is still the user's actual tag beats a
+searchable `Q3-Review` that has quietly collided with a different tag.
+
+**And the clock does not tick for a tag.** We went back in to check whether
+tagging bumps a folder's `updated`, expecting a yes. It does not:
+
+| write | `generation` | `version` | `updated` |
+|---|---|---|---|
+| annotation (a TAG) | 1 | 1 | **unmoved** |
+| `spec.description` | 2 | 2 | **moves** |
+| `spec.title` | — | 2 | **moves** |
+
+Only a SPEC change is an update; tags live in metadata, so by Grafana's own
+reckoning tagging a folder never happened. Nextcloud agrees unprompted — a
+systemtag assignment left the folder mtime byte-identical. Both sides arrive at
+"nothing moved" on their own, which is the tidiest kind of agreement.
+
+It is the exact opposite of a dashboard, where `tags` sits in the spec body: there
+a tag change IS a save, `updated` moves, and the file must carry Grafana's new
+time. Same principle both times — Grafana owns the clock — landing on opposite
+answers because the ingredient sits in a different part of the object.
+
+The bill for the pull: a folder tag change cannot be found by comparing
+timestamps, because there is no timestamp change to find.
+
+THE PRIZE WE DID NOT GO LOOKING FOR: `nextcloud.kubed.io/folder-id: "12345"`.
+A Nextcloud folder id is digits — label-safe by luck — so it is **indexed**, it
+**survives rename and move**, and it comes back in the LIST for free. Today the
+pairing lives only on our side (`grafana_folder_uid` on the Nextcloud folder):
+given a folder here we can find the folder there, and the reverse needs a walk.
+One label makes the reverse a single query, which is the missing half of
+re-adopting a folder after a mapping is dropped — the thing `AGENTS.md` currently
+records as impossible. That is a course of its own, not a garnish on tags.
+
+**One correction to the brief.** We were told Team Folders cannot take tags and
+plain folders can. At the storage layer that is not so: `ISystemTagObjectMapper`
+assigned and read back a tag on a Team Folder root (`observe`, groupfolder 5)
+exactly as it did on a plain `Documents`. `haveTag` answered true for both. What
+the kitchen saw was the dining room — a Files-app display restriction, not a rule
+we have to encode. It changes nothing about the ruling above, and it means
+`mapping/tags.feature` has no behaviour of its own to describe: tagging the
+mapped folder and tagging a subfolder end the same way, so it is an EXAMPLE ROW
+in `folders/tags.feature`, not a second file.
+
+One more constraint for whoever cooks the engine: `TagAssignedEvent` and
+`TagUnassignedEvent` are `@since 32`, and `info.xml` still says `min-version="31"`.
+Either the floor moves to 32 or the engine rides the legacy
+`MapperEvent::EVENT_ASSIGN` / `EVENT_UNASSIGN`, which works on both.
+
+> **Dr K, wiping down the steel:** *"You went in for tags and came out with an
+> address book — that is what the walk-in is for. But twice on one ticket you
+> looked at a room, saw nobody holding a fork, and wrote 'this cannot be eaten.'
+> The service door is a door. Then you found a reason the food should only travel
+> one way, and it was a lovely reason, and it would have made you the only
+> restaurant in town that takes orders but won't send plates. You run a PASS. It
+> goes both directions or it isn't one. And the annotation isn't the cheap shelf —
+> it's the only shelf that takes the ingredient without cutting it to fit. One more
+> thing: I ever catch 'when the sync runs' on a ticket again, you're on garde
+> manger for a month. Nobody walks in and orders a sync."*
+
+---
+
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
 > they remember. Send it hot, send it whole, and don't let anything leave the pass
 > half-plated. The king's seated. Cook."*

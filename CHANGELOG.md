@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The groups a mapped folder is shared with are read from the folder, so sharing it anywhere shows up here.
 - A `link` mapping's folder is no longer read-only.
 - Internal: specified emptying the trash for a whole folder — the purge reaches every dashboard it held.
+- Internal: specified folder tags — a folder's tags are one set, changed from either side, stored on the Grafana folder as an annotation.
+- Internal: a dashboard file's modified time now specified to follow Grafana's on a tag change too; a folder tag moves no clock on either side.
 - Creating a dashboard in a subfolder now creates the matching folders in Grafana, parents included.
 - Syncing from Grafana now mirrors its folder tree: dashboards arrive in the matching Nextcloud subfolder instead of all landing in one folder.
 - Renaming a mirrored folder in Nextcloud renames it in Grafana too.

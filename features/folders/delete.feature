@@ -56,18 +56,6 @@ Feature: Deleting a folder
     # The same refusal a single link gets, for the same reason: under a link the
     # tree is Grafana's, and Nextcloud is a read-only mirror of it.
 
-    # ── RULE: one gesture, many dashboards — say so before and after ──────────
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: Trash a folder of many dashboards
-    Given the Grafana recycle bin is off
-    And the folder "Demo/Team" holding forty dashboards
-    When I move "Demo/Team" to the trash
-    Then I am warned that forty dashboards will be permanently deleted in Grafana
-
-    # Deleting one dashboard is a small decision; deleting forty is not, and with the
-    # bin off it is irreversible. The app knows the count before it acts.
-
     # ── RULE: a folder deleted in Grafana takes only what is Grafana's ────────
     # notes: ../AGENTS.md#when-a-folder-deleted-in-grafana-may-delete-the-nextcloud-folder
 
