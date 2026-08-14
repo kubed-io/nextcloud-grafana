@@ -44,7 +44,7 @@ Feature: Editing a dashboard
     # ── RULE: an edit made in Grafana reaches the mirror, dates and all ───────
     # notes: ../AGENTS.md#an-edit-in-grafana-reaches-the-mirrored-file
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Edit a dashboard in Grafana that a sync mirrors
     Given a dashboard file in "Demo"
     When someone edits the dashboard's panels in Grafana
@@ -57,7 +57,7 @@ Feature: Editing a dashboard
       | grafana_syncedHash | set                                        |
       | Modified           | when the dashboard last changed in Grafana |
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Edit a dashboard in Grafana that a link mirrors
     Given a dashboard file in "Pointers"
     When someone edits the dashboard's panels in Grafana

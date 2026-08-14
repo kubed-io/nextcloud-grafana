@@ -49,6 +49,7 @@ final class MappingService {
 	public function __construct(
 		private readonly IAppConfig $config,
 		private StorageService $storage,
+		private RecycleBin $recycleBin,
 	) {
 	}
 
@@ -102,6 +103,8 @@ final class MappingService {
 	public function add(Mapping $mapping, array|string $groups = []): Mapping {
 		$all = $this->list();
 		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, null);
+		$this->assertNcFolderUnique($all, $mapping->ncFolder, null);
+		$this->assertNotTheRecycleBin($mapping);
 		$this->assertIdUnique($all, $mapping->id);
 		// Provisioning is where the Nextcloud half of the pair becomes knowable, so
 		// bank the folder id here rather than leaving the first resolve to discover it.
@@ -338,6 +341,61 @@ final class MappingService {
 					'Another mapping already uses the Grafana folder "' . $uid . '". Each folder may map to only one location.',
 				);
 			}
+		}
+	}
+
+	/**
+	 * The other half of one-folder-one-mapping, and it was missing.
+	 *
+	 * Two mappings pointing at one NEXTCLOUD folder is the same defect read from the
+	 * other end: a file in that folder resolves to whichever mapping the resolver
+	 * happens to reach first, so its dashboard lands in one of two Grafana folders
+	 * with nothing choosing between them. Worse than arbitrary — it is *stable*
+	 * arbitrary, so it looks correct until the mapping list is reordered.
+	 *
+	 * Compared case-insensitively. A folder path is the one place this app cannot
+	 * treat case as meaningful: Nextcloud will not create `Demo` beside `demo`, so
+	 * two mappings differing only in case would both provision the SAME folder while
+	 * believing they had one each.
+	 *
+	 * @param list<Mapping> $all
+	 */
+	private function assertNcFolderUnique(array $all, string $ncFolder, ?string $exceptId): void {
+		$wanted = mb_strtolower(trim($ncFolder, '/'));
+		if ($wanted === '') {
+			return;
+		}
+		foreach ($all as $m) {
+			if ($m->id !== $exceptId && mb_strtolower(trim($m->ncFolder, '/')) === $wanted) {
+				throw new \InvalidArgumentException(
+					'Another mapping already uses the Nextcloud folder "' . $m->ncFolder . '". Each folder may hold only one mapping.',
+				);
+			}
+		}
+	}
+
+	/**
+	 * The recycle-bin folder is the app's own scratch space, so it may not be mapped.
+	 *
+	 * It holds parked dashboards AND dashboards Nextcloud has never managed, and no
+	 * operation may ever clear it wholesale. Mapping it would point a sync folder at
+	 * that pile: a user emptying their mapped folder would be deleting other people's
+	 * dashboards out of the bin, and a purge could not tell parked from foreign.
+	 *
+	 * Checked by TITLE because that is what the admin sets — the setting names a
+	 * folder by its human name, and the mapping picker offers the same names.
+	 */
+	private function assertNotTheRecycleBin(Mapping $mapping): void {
+		$bin = trim($this->recycleBin->folderTitle());
+		if ($bin === '') {
+			return; // no bin configured; nothing is reserved
+		}
+		$title = trim($mapping->grafanaFolderTitle);
+		if ($title !== '' && mb_strtolower($title) === mb_strtolower($bin)) {
+			throw new \InvalidArgumentException(
+				'The Grafana folder "' . $bin . '" is the recycle-bin folder and cannot be mapped. '
+				. 'It holds dashboards this app parks and dashboards it does not manage, so nothing may sync into it.',
+			);
 		}
 	}
 

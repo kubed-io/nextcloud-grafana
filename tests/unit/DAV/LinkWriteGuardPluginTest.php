@@ -14,6 +14,7 @@ use OCA\GrafanaSync\DAV\LinkWriteGuardPlugin;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
+use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\IUser;
 use OCP\IUserSession;
@@ -43,7 +44,7 @@ final class LinkWriteGuardPluginTest extends TestCase {
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
 
-		$this->plugin = new LinkWriteGuardPlugin($this->metadata, $this->notifier, $session, new NullLogger());
+		$this->plugin = new LinkWriteGuardPlugin($this->metadata, $this->createStub(MappingService::class), $this->notifier, $session, new NullLogger());
 	}
 
 	private function davFile(string $name, int $id = 7): DavFile {

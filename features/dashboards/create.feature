@@ -38,16 +38,15 @@ Feature: Creating a dashboard
     And "Scratch/CPU Load.grafana.json" holds no Grafana metadata at all
 
   # notes: ../AGENTS.md#a-link-mapping-authors-nothing
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Creating a dashboard file in a link-mapped folder is refused
     When I try to create "CPU Load.grafana.json" in "Pointers"
     Then the creation is refused with a message
     And no dashboard is created in Grafana
     And "Pointers" holds no file named "CPU Load.grafana.json"
 
-    # @unbuilt — THIS IS THE SPEC, AND THE APP DOES THE OPPOSITE TODAY: it accepts
-    # the file and leaves it unmanaged. A link folder is Grafana's to write, so a
-    # file authored into one can never become the dashboard it looks like.
+    # A link folder is Grafana's to write, so a file authored into one could never
+    # become the dashboard it looks like. Refused at the door rather than accepted.
 
     # ── RULE: a creation that cannot finish leaves a plain file ────────────────
 

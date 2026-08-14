@@ -23,7 +23,7 @@ Feature: Creating a folder
     # ── RULE: a folder is in Grafana when a dashboard is in it ────────────────
     # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Create a dashboard in a folder of a mapping
     Given the folder "Demo/Team/Drafts" holding no dashboards
     When I create "CPU Load.grafana.json" in "Demo/Team/Drafts"

@@ -80,7 +80,7 @@ Feature: Admin configures folder mappings
     # mappings mean the same thing and every dashboard in it would belong to both.
     # notes: ../AGENTS.md#a-grafana-folder-may-only-be-mapped-once
 
-  @admin @occ @ui @unbuilt
+  @admin @occ @ui @todo
   Scenario: Two mappings may not target the same Nextcloud folder
     Given a mapping with the following values:
       | grafana folder | observe |
@@ -119,7 +119,7 @@ Feature: Admin configures folder mappings
     # Two settings, and the panel lets you save one without the other — naming the
     # folder is not consent to start moving dashboards into it.
 
-  @recycle-bin @unbuilt
+  @recycle-bin @todo
   Scenario: The recycle-bin folder cannot also be a mapped folder
     Given the Grafana recycle-bin folder is named "nextcloud-trash"
     And the Grafana recycle bin is on
