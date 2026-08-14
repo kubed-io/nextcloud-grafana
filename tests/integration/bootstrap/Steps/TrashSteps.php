@@ -468,14 +468,31 @@ trait TrashSteps {
 		if ($parentUid === null) {
 			throw new \RuntimeException("Grafana has no folder titled '$parent'");
 		}
-		foreach ($this->grafanaListFolders() as $folder) {
-			if ((string)($folder['title'] ?? '') === $title
-				&& (string)($folder['parentUid'] ?? '') === $parentUid) {
+		// ASKED WITH parentUid, NOT FILTERED FROM THE FLAT LIST. Measured against a live
+		// Grafana: `GET /api/folders` returns TOP-LEVEL folders only — a nested folder is
+		// simply absent from it, so scanning that list for a child would report every
+		// subfolder as missing no matter what Grafana holds.
+		foreach ($this->grafanaChildFolders($parentUid) as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
 				$this->lastGrafanaFolderUid = (string)($folder['uid'] ?? '');
 				return;
 			}
 		}
 		throw new \RuntimeException("Grafana has no folder '$title' under '$parent' — emptying is not deleting");
+	}
+
+	/** The folders directly under one parent. @return list<array<string,mixed>> */
+	private function grafanaChildFolders(string $parentUid): array {
+		$res = $this->grafanaClient()->request('GET', 'folders', [
+			'query' => ['parentUid' => $parentUid, 'limit' => 1000],
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException(
+				"listing Grafana folders under '$parentUid' failed: HTTP " . $res->getStatusCode(),
+			);
+		}
+		$rows = json_decode((string)$res->getBody(), true);
+		return is_array($rows) ? array_values($rows) : [];
 	}
 
 	/** @Then it holds no dashboards */
