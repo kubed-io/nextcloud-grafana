@@ -177,15 +177,6 @@ final class FolderCascadeTest extends TestCase {
 		self::assertSame([20, 21], $cleared, 'the folder itself and every subfolder');
 	}
 
-	public function testCountingIsWhatTheWarningWillNeed(): void {
-		$folder = $this->tree(
-			['A.grafana.json' => 11, 'Notes.txt' => 12],
-			['Sub' => ['B.grafana.json' => 13]],
-		);
-
-		self::assertSame(2, $this->cascade()->countDashboardsIn($folder));
-	}
-
 	// ── purge ──────────────────────────────────────────────────────────────────
 
 	public function testPurgeHardDeletesEveryParkedDashboardInTheSubtree(): void {

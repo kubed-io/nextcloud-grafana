@@ -1291,12 +1291,33 @@ or it does not. The bin-ON case is still N upserts followed by one folder delete
 and a failure partway leaves some dashboards parked and some not — but the folder
 delete is last, so nothing is destroyed by a half-finished park.
 
+### RETIRED — warning that forty dashboards are about to be deleted
+
+`Scenario: Trash a folder of many dashboards` is gone, and so is the "one gesture,
+many dashboards — say so before and after" rule it was the only member of.
+
+**The trashbin already is the confirmation, and the purge is the second one.**
+Deleting in Nextcloud is always safe: it goes to the trash, whatever it held. The
+irreversible step is emptying the trash, and by then the user has performed two
+separate destructive gestures on the same thing — that is already "are you really,
+absolutely sure", expressed as a workflow rather than a dialog. Bolting a count
+warning onto the first, safest step adds friction where nothing is at stake.
+
+It is also **not Nextcloud behaviour**. Nextcloud does not warn you for deleting a
+folder of forty of anything, and an app inventing a confirmation the platform does
+not have makes this app feel unlike the rest of the Files experience.
+
+The only thing that would bring it back: Nextcloud growing such a rule itself, at
+which point the app would follow the platform rather than lead it.
+
+`FolderCascade::countDashboardsIn()` existed solely for this and was removed with
+it. Counting the subtree is one line if it is ever wanted again.
+
 ── STATUS ───────────────────────────────────────────────────────────────────────
 
 The Nextcloud-side gesture is built and unit-tested: trash (both bin modes), the
-link refusal, purge-from-trash, and restore. `@unbuilt` is now only what genuinely
-has no code — the count-and-warn confirmation, which needs the front end, and the
-two `@in-grafana` scenarios, which belong to the pull.
+link refusal, purge-from-trash, and restore. `@unbuilt` is now only the two
+`@in-grafana` scenarios, which belong to the pull.
 
 ### Trashing the mapped folder itself deletes its dashboards but keeps the mapping
 
