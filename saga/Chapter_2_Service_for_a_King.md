@@ -1878,6 +1878,28 @@ The seam we are accepting: a tag that came from Grafana and is then edited in
 Nextcloud does not go back, so the two can drift. Written down rather than
 smoothed over.
 
+**And the clock does not tick for a tag.** We went back in to check whether
+tagging bumps a folder's `updated`, expecting a yes. It does not:
+
+| write | `generation` | `version` | `updated` |
+|---|---|---|---|
+| annotation (a TAG) | 1 | 1 | **unmoved** |
+| `spec.description` | 2 | 2 | **moves** |
+| `spec.title` | — | 2 | **moves** |
+
+Only a SPEC change is an update; tags live in metadata, so by Grafana's own
+reckoning tagging a folder never happened. Nextcloud agrees unprompted — a
+systemtag assignment left the folder mtime byte-identical. Both sides arrive at
+"nothing moved" on their own, which is the tidiest kind of agreement.
+
+It is the exact opposite of a dashboard, where `tags` sits in the spec body: there
+a tag change IS a save, `updated` moves, and the file must carry Grafana's new
+time. Same principle both times — Grafana owns the clock — landing on opposite
+answers because the ingredient sits in a different part of the object.
+
+The bill for the pull: a folder tag change cannot be found by comparing
+timestamps, because there is no timestamp change to find.
+
 THE PRIZE WE DID NOT GO LOOKING FOR: `nextcloud.kubed.io/folder-id: "12345"`.
 A Nextcloud folder id is digits — label-safe by luck — so it is **indexed**, it
 **survives rename and move**, and it comes back in the LIST for free. Today the

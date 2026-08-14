@@ -26,6 +26,8 @@ Feature: Tagging a folder
     Given the folder "Demo/Team" whose tags are "<tags before>"
     When the folder's tags are changed to "<tags after>" in Grafana
     Then the folder's tags are "<tags after>" in Nextcloud
+    And the folder holds:
+      | Modified | when the folder last changed in Grafana |
 
     Examples: Grafana is the system of record, so its set wins outright
       | tags before    | tags after     |
@@ -34,6 +36,11 @@ Feature: Tagging a folder
       | quarterly      | archived       |
       | quarterly      |                |
       |                | quarterly      |
+
+    # Grafana owns the clock here exactly as it does for a dashboard — and by
+    # Grafana's own reckoning a tag is not a change, so the time does not move.
+    # Measured: tagging bumps only `resourceVersion`, never `updated`, and
+    # Nextcloud agrees — assigning a tag leaves the folder's mtime alone.
 
     # ── RULE: my own filing is mine, and stays here ───────────────────────────
     # notes: ../AGENTS.md#a-tag-i-put-on-a-folder-stays-in-nextcloud

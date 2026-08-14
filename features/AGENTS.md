@@ -2103,6 +2103,33 @@ the medium goes unmentioned unless the medium is the point.
 So the scenario is `@unbuilt`, not `@decision`. There is something on the far side
 to read; nobody has built the reading yet.
 
+### A folder tag does not move the clock, and that is measured
+
+Grafana owns a mirrored folder's modified time exactly as it owns a dashboard's.
+The surprise is what counts as a change. Measured on the live instance:
+
+| write | `resourceVersion` | `generation` | `version` | `updated` |
+|---|---|---|---|---|
+| create | set | 1 | 1 | = created |
+| annotation (i.e. a TAG) | advances | 1 | 1 | **unmoved** |
+| `spec.description` | advances | 2 | 2 | **moves** |
+| `spec.title` (legacy rename) | advances | — | 2 | **moves** |
+
+Only a SPEC change is an update. Tags live in `metadata.annotations`, so by
+Grafana's own reckoning tagging a folder is not a modification at all. Nextcloud
+agrees from the other side: assigning a systemtag left the folder's mtime
+identical (`1786735702` before and after).
+
+So the end state is "the time did not move", and both sides arrive there on their
+own. This is the OPPOSITE of a dashboard, where `tags` is a top-level key in the
+spec body — so a dashboard tag change IS a save, and its `updated` moves, which is
+why `dashboards/tags.feature` asserts the file carries Grafana's new time.
+
+**The consequence for whoever builds the pull:** a folder tag change cannot be
+detected by comparing timestamps, because there is no timestamp change to compare.
+The annotation value itself has to be compared, or `resourceVersion` tracked. Do
+not reach for the mtime here; it will always say nothing happened.
+
 ### A tag I put on a folder stays in Nextcloud
 
 The outbound direction is the one that does not travel, and the asymmetry is the
@@ -2886,6 +2913,30 @@ behaviour and the second is a fact about our queue. What is worth stating is
 that the file's own two surfaces still track each other with no remote system
 involved, which is a real behaviour and the reason a tag applied out here
 survives until the file is moved back into a mapping.
+
+### RETIRED — "and nothing else in the file changed"
+
+It sat on the `@in-grafana` scenario, and adding the `Modified` row is what exposed
+it. Two problems, either one fatal.
+
+**It had stopped being true.** A tag change in Grafana IS a save — `tags` is a
+top-level key in the dashboard spec — so `updated` moves and the file's Modified
+time moves with it. "Nothing else changed" and "the clock changed" cannot both be
+the last word on the same gesture. Strictly the line meant file CONTENT and the
+Modified time is metadata, but a reader hitting the two lines together has to
+untangle that, and a step that needs untangling is a step that misleads.
+
+**It was testing a negative with no edge.** What would it catch? It names nothing
+in particular, so it can only be satisfied by enumerating the whole body, and it
+would fail for a reason no scenario describes. The real fear underneath — a pull
+mangling the body it rewrites — is a genuine bug we HAVE had (empty JSON objects
+turned into arrays), and it belongs where that lives, not smuggled into a tag
+scenario as a catch-all.
+
+Same family as the vacuous `Grafana holds no folder named "Team copy"` retired
+from `folders/copy.feature`. The surviving form of that idea is
+`Grafana is not contacted` — a negative about ONE named thing, which is
+falsifiable. `nothing else` never is.
 
 ### tags.feature — WHAT WAS RETIRED, AND WHY
 
