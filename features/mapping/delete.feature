@@ -21,7 +21,7 @@ Feature: Removing a folder mapping
 
     # ── RULE: the files stay, and become nobody's ─────────────────────────────
 
-  @admin @in-nextcloud @occ @ui @unbuilt
+  @admin @in-nextcloud @occ @ui @todo
   Scenario: Remove a sync mapping
     Given a dashboard file in "Demo"
     When the admin removes the "Demo" mapping
@@ -38,7 +38,7 @@ Feature: Removing a folder mapping
 
     # ── RULE: a link has nothing of its own, so it goes with its mapping ──────
 
-  @admin @in-nextcloud @occ @ui @unbuilt
+  @admin @in-nextcloud @occ @ui @todo
   Scenario: Remove a link mapping
     Given a dashboard file in "Pointers"
     When the admin removes the "links" mapping

@@ -52,6 +52,21 @@ namespace Sabre\DAV\Exception {
 }
 
 namespace OCA\DAV\Connector\Sabre {
+	// The parent collection handed to `beforeCreateFile`. Only `getPath()` matters —
+	// it answers with the NODE path (`/<uid>/files/<relative>`), which is the shape
+	// MappingService::resolveForPath reads, and the reason the guard asks the parent
+	// rather than reshaping Sabre's request path by hand.
+	if (!class_exists(Directory::class, false)) {
+		class Directory implements \Sabre\DAV\INode {
+			public function getName(): string {
+				return '';
+			}
+
+			public function getPath(): string {
+				return '';
+			}
+		}
+	}
 	if (!class_exists(File::class, false)) {
 		class File implements \Sabre\DAV\INode {
 			public function getName(): string {

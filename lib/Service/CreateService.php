@@ -45,6 +45,7 @@ final class CreateService {
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
 		private FolderMirror $folderMirror,
+		private MirrorTimes $times,
 		private SyncGuard $guard,
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
@@ -80,6 +81,22 @@ final class CreateService {
 		// Use the ORIGINAL file bytes for the loop-guard hash: NodeWrittenListener
 		// computes sha1($node->getContent()) on the next save, so they must match.
 		$this->stampFile($node, $mapping, $uid, $version, $content);
+
+		// And give the new file the dashboard's clock. Same reasoning as the push
+		// ({@see PushService::stampGrafanaClock()}): Grafana sets meta.created and
+		// meta.updated itself and will not take ours, and the create ack does not
+		// return them — so the only way to agree with Grafana about when this
+		// dashboard came into being is to ask. Swallowed on failure: the dashboard
+		// exists and the file is stamped, so a cosmetic clock must not undo that.
+		try {
+			$read = $this->grafana->readDashboardSpec($uid);
+			$this->times->apply($node, $read?->updated, $read?->created);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: created, but could not read the dashboard back to stamp its clock', [
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+		}
 
 		return $uid;
 	}

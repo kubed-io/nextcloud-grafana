@@ -39,6 +39,7 @@ final class PushService {
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
 		private FolderMirror $folderMirror,
+		private MirrorTimes $times,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -96,7 +97,61 @@ final class PushService {
 			$update[DashboardMetadata::KEY_VERSION] = $version;
 		}
 		$this->metadata->write($node->getId(), $update);
+		$this->stampGrafanaClock($node, $managed->uid);
 		return true;
+	}
+
+	/**
+	 * Give the file the dashboard's clock, by asking Grafana what it just recorded.
+	 *
+	 * ## WHY A SECOND REQUEST, AND WHY THERE IS NO CHEAPER WAY
+	 *
+	 * **Grafana owns `meta.updated` and will not accept ours.** Measured against a
+	 * live 13.0.2: a dashboard pushed with `updated` set to `2001-01-01` came back
+	 * with `meta.updated` at the moment of the write. The body's `updated`/`created`
+	 * are stored verbatim and never interpreted — they are payload, not the clock.
+	 *
+	 * **And the upsert's own answer does not carry it.** `POST /api/dashboards/db`
+	 * replies `{folderUid, id, slug, status, uid, url, version}` — no timestamp. So
+	 * the only way to learn when Grafana says the dashboard changed is to read it
+	 * back, and that costs one GET per pushed dashboard.
+	 *
+	 * ## WHY IT IS WORTH IT
+	 *
+	 * Without this the file keeps the mtime Nextcloud set when the user saved, and
+	 * Grafana keeps the moment it processed the push. Those agree only when both land
+	 * in the same second, so `Modified` was right by luck — which is exactly how it
+	 * behaved, failing CI at random across `edit.feature` and `rename.feature`
+	 * depending on which side of a second boundary the request fell.
+	 *
+	 * The old design left this to "the next pull reconciles the two", which is true
+	 * and useless: until that pull runs — possibly a scheduled interval away — an
+	 * edited dashboard reports a modification time that belongs to nothing.
+	 *
+	 * ## WHAT IT DOES NOT DO
+	 *
+	 * It does not force. {@see MirrorTimes::apply()} writes only when the value
+	 * actually differs, so a push that happened to land in the same second touches
+	 * nothing — and `touch()` propagates a fresh etag to the PARENT FOLDER, which is
+	 * what sync clients poll. Stamping unconditionally would churn the folder on
+	 * every save forever.
+	 *
+	 * A failure here is logged and swallowed. The push SUCCEEDED; refusing to report
+	 * that because a follow-up read failed would turn a cosmetic clock into a failed
+	 * save, and the next pull still corrects it.
+	 */
+	private function stampGrafanaClock(File $node, string $uid): void {
+		try {
+			$read = $this->grafana->readDashboardSpec($uid);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: pushed, but could not read the dashboard back to stamp its clock', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return;
+		}
+		$this->times->apply($node, $read?->updated, $read?->created);
 	}
 
 	/**

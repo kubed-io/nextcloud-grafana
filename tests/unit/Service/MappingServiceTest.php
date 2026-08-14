@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\StorageService;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
@@ -54,7 +55,7 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	private function service(): MappingService {
-		return new MappingService($this->config(), $this->storage());
+		return new MappingService($this->config(), $this->storage(), $this->recycleBin());
 	}
 
 	/**
@@ -87,6 +88,17 @@ final class MappingServiceTest extends TestCase {
 		);
 
 		return $storage;
+	}
+
+	/**
+	 * A RecycleBin naming no folder, so the bin guard is inert unless a test opts in.
+	 * `$binFolder` is what the admin typed into the setting — the guard compares the
+	 * mapping's Grafana folder TITLE against it.
+	 */
+	private function recycleBin(string $binFolder = ''): RecycleBin {
+		$bin = $this->createStub(RecycleBin::class);
+		$bin->method('folderTitle')->willReturn($binFolder);
+		return $bin;
 	}
 
 	private function mapping(string $uid, string $ncFolder, string $mode = 'sync', string $format = 'json'): Mapping {
@@ -187,6 +199,87 @@ final class MappingServiceTest extends TestCase {
 		$all = $this->service()->list();
 		self::assertCount(1, $all);
 		self::assertSame('uid-a', $all[0]->grafanaFolderUid);
+	}
+
+	/**
+	 * ONE FOLDER, ONE MAPPING — the Nextcloud half, which was missing while the
+	 * Grafana half was guarded. Two mappings on one folder means a file in it
+	 * resolves to whichever the resolver reaches first, so its dashboard lands in one
+	 * of two Grafana folders with nothing choosing between them.
+	 */
+	public function testTwoMappingsMayNotTargetTheSameNextcloudFolder(): void {
+		$svc = $this->service();
+		$svc->add($this->mapping('uid-a', 'Demo'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessageMatches('/already uses the Nextcloud folder/');
+		$svc->add($this->mapping('uid-b', 'Demo'));
+	}
+
+	/**
+	 * Compared case-insensitively, because Nextcloud will not create `Demo` beside
+	 * `demo`. Two mappings differing only in case would both provision the SAME
+	 * folder while each believing it had one to itself.
+	 */
+	public function testTheNextcloudFolderClashIsCaseInsensitive(): void {
+		$svc = $this->service();
+		$svc->add($this->mapping('uid-a', 'Demo'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->add($this->mapping('uid-b', 'demo'));
+	}
+
+	public function testADifferentNextcloudFolderIsFine(): void {
+		$svc = $this->service();
+		$svc->add($this->mapping('uid-a', 'Demo'));
+		$svc->add($this->mapping('uid-b', 'Reports'));
+
+		self::assertCount(2, $svc->list());
+	}
+
+	/**
+	 * THE BIN IS THE APP'S OWN SCRATCH SPACE. It holds parked dashboards AND
+	 * dashboards Nextcloud has never managed, so mapping it would point a sync folder
+	 * at that pile — and emptying the mapped folder would delete other people's
+	 * dashboards out of the bin.
+	 */
+	public function testTheRecycleBinFolderCannotBeMapped(): void {
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessageMatches('/recycle-bin folder and cannot be mapped/');
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-bin',
+			'grafana_folder_title' => 'nextcloud-trash',
+			'nc_folder' => 'Trash',
+			'mode' => 'sync',
+		]));
+	}
+
+	public function testTheRecycleBinClashIsCaseInsensitive(): void {
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'));
+
+		$this->expectException(\InvalidArgumentException::class);
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-bin',
+			'grafana_folder_title' => 'Nextcloud-Trash',
+			'nc_folder' => 'Trash',
+			'mode' => 'sync',
+		]));
+	}
+
+	/** With no bin configured nothing is reserved, so an ordinary mapping still saves. */
+	public function testWithNoBinConfiguredNothingIsReserved(): void {
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(''));
+
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a',
+			'grafana_folder_title' => '',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+		]));
+
+		self::assertCount(1, $svc->list());
 	}
 
 	public function testResolveForPathPicksTheNearestEnclosingMapping(): void {
@@ -313,7 +406,7 @@ final class MappingServiceTest extends TestCase {
 			},
 		);
 
-		$service = new MappingService($config, $this->storage());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin());
 		$mapping = $service->add(
 			Mapping::fromArray(['id' => 'm1', 'grafana_folder_uid' => 'a', 'nc_folder' => 'a', 'mode' => 'sync']),
 			['design', 'admin'],
@@ -330,7 +423,7 @@ final class MappingServiceTest extends TestCase {
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 		$config->expects(self::never())->method('setValueString');
 
-		$service = new MappingService($config, $this->storage());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin());
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame(['design'], $this->appliedGroups['m1']);
 	}
@@ -340,7 +433,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin());
 		$service->updateGroups('m1', 'design,admin,sales');
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame([], $service->updateGroups('m1', ''));
@@ -351,7 +444,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin());
 		$service->updateGroups('m1', 'design');
 		$mapping = $service->getById('m1');
 		self::assertNotNull($mapping);
@@ -371,7 +464,7 @@ final class MappingServiceTest extends TestCase {
 			'[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync","nc_groups":["devs"]}]',
 		);
 
-		$mappings = (new MappingService($config, $this->storage()))->list();
+		$mappings = (new MappingService($config, $this->storage(), $this->recycleBin()))->list();
 		self::assertCount(1, $mappings);
 		self::assertArrayNotHasKey('nc_groups', $mappings[0]->toArray());
 	}

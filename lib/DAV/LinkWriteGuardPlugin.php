@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\DAV;
 
+use OCA\DAV\Connector\Sabre\Directory as DavDirectory;
 use OCA\DAV\Connector\Sabre\File as DavFile;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\Mapping;
+use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -47,6 +50,7 @@ use Sabre\DAV\ServerPlugin;
 final class LinkWriteGuardPlugin extends ServerPlugin {
 	public function __construct(
 		private DashboardMetadata $metadata,
+		private MappingService $mappings,
 		private SyncNotifier $notifier,
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
@@ -58,12 +62,72 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// Run early (low priority number = higher precedence) so we refuse before any
 		// bytes are streamed to the part file.
 		$server->on('beforeWriteContent', [$this, 'beforeWriteContent'], 10);
+		// The other half of the same door: refusing an OVERWRITE is no use if a link
+		// folder will happily accept a brand-new file beside the pointers.
+		$server->on('beforeCreateFile', [$this, 'beforeCreateFile'], 10);
 	}
 
 	/**
+	 * Refuses a NEW dashboard file authored into a `link`-mapped folder.
+	 *
+	 * A link mapping is a read-only projection of Grafana: the tree, the dashboards
+	 * and the shape of both belong over there, and Nextcloud mirrors them. A file
+	 * created here can never become the dashboard it looks like — the app will not
+	 * author into a link folder — so accepting it leaves a `.grafana.json` that looks
+	 * managed, is not, and never will be. Refusing at the door is the only honest
+	 * answer.
+	 *
+	 * NOT a blanket lock on the folder. Anything that is not a dashboard file is
+	 * waved through, because a link mapping's one concession is exactly that: other
+	 * file types may live alongside the mirrored dashboards.
+	 *
+	 * ## THE PARENT NODE IS ASKED WHERE IT IS, NOT THE DAV PATH
+	 *
+	 * `$path` here is Sabre's request path (`files/<uid>/<relative>`), which is NOT
+	 * the shape {@see MappingService::resolveForPath()} reads — that wants a node
+	 * path, `/<uid>/files/<relative>`. Building one by string-munging produced
+	 * `/files/files/<uid>/…`, which matched no mapping at all, so the guard was inert
+	 * and every link folder happily accepted new dashboard files.
+	 *
+	 * The parent collection knows its own node path, so we ask it. Anything that is
+	 * not a Nextcloud DAV directory is waved through — we cannot classify it, and a
+	 * guard that cannot classify must never block.
+	 *
 	 * @param mixed $data
+	 * @param mixed $parent
 	 * @param bool|null $modified
 	 */
+	public function beforeCreateFile(string $path, &$data, $parent, &$modified): bool {
+		$name = basename($path);
+		if (!FilenameCodec::isDashboardName($name)) {
+			return true; // a spreadsheet in a link folder is entirely welcome
+		}
+		if (!$parent instanceof DavDirectory) {
+			return true; // cannot classify → never block
+		}
+
+		try {
+			$mapping = $this->mappings->resolveForPath(rtrim($parent->getPath(), '/') . '/' . $name);
+		} catch (\Throwable) {
+			return true; // cannot classify → never block
+		}
+		if ($mapping === null || $mapping->mode !== Mapping::MODE_LINK) {
+			return true;
+		}
+
+		$this->logger->warning('grafana_sync: refused a new dashboard file in a link-mapped folder', [
+			'app' => Application::APP_ID,
+			'path' => $path,
+			'mapping' => $mapping->id,
+		]);
+
+		throw new Forbidden(
+			'“' . $name . '” cannot be created here: “' . $mapping->ncFolder . '” mirrors a Grafana folder in link mode, '
+			. 'so its dashboards are Grafana\'s to create. Make the dashboard in Grafana and it will appear here, '
+			. 'or switch the folder mapping to sync mode to author dashboards from Nextcloud.',
+		);
+	}
+
 	public function beforeWriteContent(string $path, INode $node, &$data, &$modified): bool {
 		if (!$node instanceof DavFile) {
 			return true; // not a file node we care about

@@ -14,6 +14,7 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
+use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use OCP\Files\IMimeTypeLoader;
@@ -50,7 +51,7 @@ final class CreateServiceTest extends TestCase {
 			static fn (Node $n, Mapping $m): ?string
 				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
 		);
-		$this->service = new CreateService($this->grafana, $this->metadata, $folderMirror, new SyncGuard(), $mimeLoader, new NullLogger());
+		$this->service = new CreateService($this->grafana, $this->metadata, $folderMirror, new MirrorTimes(new NullLogger()), new SyncGuard(), $mimeLoader, new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-demo', string $id = 'map-demo'): Mapping {

@@ -11,11 +11,13 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\PushService;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -54,7 +56,7 @@ final class PushServiceTest extends TestCase {
 			static fn (Node $n, Mapping $m): ?string
 				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
 		);
-		$this->service = new PushService($this->mappings, $this->grafana, $this->metadata, $this->folderMirror, new NullLogger());
+		$this->service = new PushService($this->mappings, $this->grafana, $this->metadata, $this->folderMirror, new MirrorTimes(new NullLogger()), new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-alpha', string $id = 'map-alpha'): Mapping {
@@ -213,5 +215,56 @@ final class PushServiceTest extends TestCase {
 
 		$this->expectException(\RuntimeException::class);
 		$this->service->push($this->file(1, '{"uid":"d1","title":"X"}'));
+	}
+
+	// ── the clock ─────────────────────────────────────────────────────────────
+
+	/**
+	 * A PUSH ENDS BY ASKING GRAFANA WHEN IT HAPPENED.
+	 *
+	 * Grafana owns `meta.updated` and refuses ours (measured on 13.0.2 — a body
+	 * carrying `updated: 2001-01-01` came back stamped with the moment of the write),
+	 * and the upsert ack carries no timestamp at all. So the file can only wear the
+	 * dashboard's clock by reading it back.
+	 *
+	 * Without this the file kept Nextcloud's write time and Grafana kept the moment
+	 * it processed the push — equal only when both fell in the same second. That is
+	 * exactly how it behaved: `Modified` passed or failed on a coin flip, taking
+	 * edit.feature and rename.feature down at random.
+	 */
+	public function testAPushStampsTheFileWithGrafanaClock(): void {
+		$this->mappings->method('getById')->willReturn($this->mapping());
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->grafana->method('upsertDashboard')->willReturn(['uid' => 'd1', 'version' => 3]);
+		$this->grafana->expects(self::once())
+			->method('readDashboardSpec')
+			->with('d1')
+			->willReturn(new DashboardSpec(new \stdClass(), 1_760_000_000, 1_750_000_000));
+
+		// A MOCK, not a stub: the assertion IS that touch() was called with Grafana's
+		// timestamp, and a stub cannot carry that expectation.
+		$node = $this->createMock(File::class);
+		$node->method('getId')->willReturn(9);
+		$node->method('getContent')->willReturn('{"title":"Board"}');
+		$node->method('getName')->willReturn('Board.grafana.json');
+		$node->method('getPath')->willReturn('/alpha/Board.grafana.json');
+		$node->method('getMTime')->willReturn(1); // differs, so the stamp is written
+		$node->expects(self::once())->method('touch')->with(1_760_000_000);
+
+		self::assertTrue($this->service->push($node));
+	}
+
+	/**
+	 * The push SUCCEEDED. Refusing to say so because a cosmetic follow-up read failed
+	 * would turn a working save into a reported failure, and the next pull corrects
+	 * the clock anyway.
+	 */
+	public function testAFailedClockReadDoesNotFailThePush(): void {
+		$this->mappings->method('getById')->willReturn($this->mapping());
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->grafana->method('upsertDashboard')->willReturn(['uid' => 'd1', 'version' => 3]);
+		$this->grafana->method('readDashboardSpec')->willThrowException(new \RuntimeException('boom'));
+
+		self::assertTrue($this->service->push($this->file(9, '{"title":"Board"}')));
 	}
 }
