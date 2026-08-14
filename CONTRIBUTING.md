@@ -347,6 +347,12 @@ repos/<owner>/<repo>/releases/latest` — the stale-major footgun is documented 
   the `[Unreleased]` section has new content on every PR — a PR with no changelog entry
   fails the check. Internal-only refactors should still add a one-liner under `Changed`.
 
+  **The escape hatch is the `no changelog` label.** Put it on a PR that genuinely
+  produces nothing a user would read about in release notes: spec-only work, test
+  coverage, CI plumbing, a dependency bump. Dependabot applies it to its own PRs.
+  It is a label rather than a path rule on purpose — "is this worth telling a user
+  about?" is a judgement, and answering it from the diff gets it wrong both ways.
+
   **The changelog is the release notes.** One line per entry — never a paragraph,
   nested bullet, or implementation detail. Write for an end user reading "what's
   new," not a maintainer reading git history. Entry length tracks user impact:

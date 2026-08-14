@@ -7,6 +7,10 @@
 #   one PR per package. Majors stay separate for deliberate review.
 # - Short cooldown so yanked releases get pulled before they reach us.
 # - Commit prefix is distinct per ecosystem so the merge queue reads cleanly.
+# - Every update carries `no changelog`, because the changelog is the RELEASE
+#   NOTES and a dependency bump is not something a user of this app reads about.
+#   Without it every Dependabot PR fails the changelog check and needs a human to
+#   label it by hand, which is exactly the toil Dependabot is supposed to remove.
 #
 # Docs: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 version: 2
@@ -23,6 +27,7 @@ updates:
   labels:
   - dependencies
   - github-actions
+  - no changelog
   commit-message:
     prefix: ci(deps)
   cooldown:
@@ -45,6 +50,7 @@ updates:
   labels:
   - dependencies
   - javascript
+  - no changelog
   commit-message:
     prefix: deps(js)
     prefix-development: deps-dev(js)
@@ -70,6 +76,7 @@ updates:
   labels:
   - dependencies
   - php
+  - no changelog
   commit-message:
     prefix: deps(php)
     prefix-development: deps-dev(php)
