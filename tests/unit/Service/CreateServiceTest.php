@@ -11,11 +11,13 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use OCP\Files\IMimeTypeLoader;
+use OCP\Files\Node;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -43,7 +45,12 @@ final class CreateServiceTest extends TestCase {
 		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
 		$mimeLoader->method('getId')->willReturn(1);
 		// A real SyncGuard: run() executes the callback (brackets it in enter/leave).
-		$this->service = new CreateService($this->grafana, $this->metadata, new SyncGuard(), $mimeLoader, new NullLogger());
+		$folderMirror = $this->createStub(FolderMirror::class);
+		$folderMirror->method('folderUidFor')->willReturnCallback(
+			static fn (Node $n, Mapping $m): ?string
+				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
+		);
+		$this->service = new CreateService($this->grafana, $this->metadata, $folderMirror, new SyncGuard(), $mimeLoader, new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-demo', string $id = 'map-demo'): Mapping {

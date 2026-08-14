@@ -44,6 +44,7 @@ final class CreateService {
 	public function __construct(
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
+		private FolderMirror $folderMirror,
 		private SyncGuard $guard,
 		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
@@ -60,8 +61,13 @@ final class CreateService {
 		$content = $node->getContent();
 		$spec = $this->parseFileBody($content);
 
-		// General / root ("/") = no folder; toUpsertBody omits folderUid for it.
-		$folderUid = $mapping->grafanaFolderUid === '/' ? null : $mapping->grafanaFolderUid;
+		// WHERE the dashboard lands: the Grafana folder mirroring the Nextcloud folder
+		// the file is actually in, not the mapping's root. Creating a dashboard in
+		// "Demo/Team/Drafts" is what brings "Team" and "Drafts" into existence over
+		// there — a folder is in Grafana when a dashboard is in it. A file sitting
+		// directly in the mapped folder resolves to the mapping without a round-trip,
+		// and a reserved-root ("/") mapping still yields null, which toUpsertBody omits.
+		$folderUid = $this->folderMirror->folderUidFor($node, $mapping);
 		$body = DashboardBody::toUpsertBody($spec, $folderUid, $node->getName());
 		$created = $this->grafana->upsertDashboard($body);
 

@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
@@ -18,6 +19,7 @@ use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\PushService;
 use OCP\Files\File;
 use OCP\Files\Folder;
+use OCP\Files\Node;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -37,13 +39,22 @@ final class PushServiceTest extends TestCase {
 	private MappingService $mappings;
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
+	private FolderMirror $folderMirror;
 	private PushService $service;
 
 	protected function setUp(): void {
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->service = new PushService($this->mappings, $this->grafana, $this->metadata, new NullLogger());
+		// A file sitting directly in its mapped folder: the mirror answers with the
+		// mapping's own Grafana folder and contacts nothing. The subfolder behaviour
+		// belongs to FolderMirrorTest.
+		$this->folderMirror = $this->createStub(FolderMirror::class);
+		$this->folderMirror->method('folderUidFor')->willReturnCallback(
+			static fn (Node $n, Mapping $m): ?string
+				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
+		);
+		$this->service = new PushService($this->mappings, $this->grafana, $this->metadata, $this->folderMirror, new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-alpha', string $id = 'map-alpha'): Mapping {

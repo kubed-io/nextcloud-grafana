@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The groups a mapped folder is shared with are read from the folder, so sharing it anywhere shows up here.
 - A `link` mapping's folder is no longer read-only.
 - Internal: specified emptying the trash for a whole folder — the purge reaches every dashboard it held.
-- Internal: the Grafana client can create, rename, move and delete folders; nothing calls it yet.
+- Creating a dashboard in a subfolder now creates the matching folders in Grafana, parents included.
 - Internal: subfolders become Grafana folders by holding a dashboard, replacing the unbuilt `grafana` opt-in tag.
 - **BREAKING:** the per-mapping "Sync subfolders" checkbox is gone; subfolders always mirror. Map a leaf folder if you want a flat mirror.
 - Renaming or moving a mapped folder no longer disconnects its dashboards.
