@@ -28,7 +28,7 @@
   "dependencies": {
     "@nextcloud/event-bus": "^3.3.0",
     "@nextcloud/files": "^4.0.0",
-    "@nextcloud/initial-state": "^2.2.0",
+    "@nextcloud/initial-state": "^3.0.0",
     "@nextcloud/l10n": "^3.2.0",
     "@nextcloud/router": "^3.0.1"
   }
