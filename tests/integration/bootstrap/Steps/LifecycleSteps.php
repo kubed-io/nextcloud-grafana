@@ -765,7 +765,6 @@ trait LifecycleSteps {
 	 */
 	public function theFolderHoldingOneDashboard(string $folder, string $title): void {
 		$this->davMkdir($folder);
-		$this->createdFolders[] = explode('/', $folder)[0];
 		$this->currentFolder = $folder;
 
 		$path = $folder . '/' . $title . '.grafana.json';

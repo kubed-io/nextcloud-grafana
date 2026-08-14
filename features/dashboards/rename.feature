@@ -98,7 +98,9 @@ Feature: Renaming a dashboard
     # The file that held the name keeps it; the arriving one takes the suffix.
 
   # notes: ../AGENTS.md#the-app-never-invents-a-substitute-name
-  @grafana @in-grafana @gesture @ui
+  # BLOCKED: Grafana refuses to store an empty title — "Dashboard title cannot be
+  # empty", measured. The behaviour stands; the state cannot be arranged from here.
+  @grafana @in-grafana @gesture @ui @blocked
   Scenario: Rename a dashboard to nothing in Grafana
     Given a dashboard file named "Old Name.grafana.json" in "Demo"
     When someone renames the dashboard to "" in Grafana

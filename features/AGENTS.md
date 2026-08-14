@@ -2071,6 +2071,20 @@ The mirror image: the title changes on the far side and the pull carries it back
 Mode-agnostic — a link's filename follows a title change exactly as a sync file's
 does, because in both cases the name is derived from Grafana, not pushed to it.
 
+### Grafana will not let a dashboard be nameless, so that scenario is @blocked
+
+"Rename a dashboard to nothing in Grafana" is tagged `@blocked` rather than left
+live, because the WHEN cannot be performed: Grafana's own API rejects it outright
+with `{"message":"Dashboard title cannot be empty","status":"empty-name"}`.
+
+The behaviour it describes is still right, and still worth keeping written down —
+a nameless dashboard can arrive by other roads (provisioning, an import, a record
+older than the validation), and when one does the file falls back to the uid. What
+is untestable is the arrange, not the rule.
+
+`@blocked` is the honest tag here rather than `@decision`: nothing has been decided
+against, the harness simply cannot reach the state.
+
 ### The app never invents a substitute name
 
 A dashboard with no usable title must not produce ".grafana.json" with an empty

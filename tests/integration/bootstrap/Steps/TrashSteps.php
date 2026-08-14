@@ -436,13 +436,19 @@ trait TrashSteps {
 	}
 
 	/**
-	 * @When I move :path to the trash
+	 * @When /^I move "([^"]*)" to the trash$/
 	 *
 	 * The NAMED twin of `I move it to the trash`, which follows the cursor. Both
 	 * earn their place: the cursor form keeps a scenario from restating a path the
 	 * app decided, and this one is for when the path IS the point — a specific file
-	 * inside a folder, or the folder itself. It takes either, because to Nextcloud a
-	 * delete is a delete, and `folders/delete.feature` needs exactly the same sentence.
+	 * inside a folder, or the folder itself. It takes either kind of node, because to
+	 * Nextcloud a delete is a delete, and `folders/delete.feature` says the same
+	 * sentence about a folder.
+	 *
+	 * A REGEX REQUIRING QUOTES, NOT `:path`. Behat's placeholder matches a quoted
+	 * string OR a bare token — so `:path` also matched the word **it**, shadowing the
+	 * cursor step and breaking three scenarios that had passed for months by trying to
+	 * delete a file named "it". The quotes are what make the two sentences distinct.
 	 */
 	public function iMoveToTheTrash(string $path): void {
 		$this->trashedFrom = $path;
@@ -520,11 +526,28 @@ trait TrashSteps {
 		}
 	}
 
-	/** A Grafana folder's dashboard uids, straight from Grafana. @return list<string> */
+	/**
+	 * A Grafana folder's dashboard uids, straight from Grafana.
+	 *
+	 * THE STATUS CHECK IS THE POINT. Without it a non-200 — a rejected token, a
+	 * transient 500 — decodes to null, answers an empty list, and every assertion
+	 * built on this passes: "it holds no dashboards" would be satisfied by a request
+	 * that never succeeded, and "the strangers are still there" by one that never
+	 * looked. Both are negative-ish assertions, which is exactly where a silent
+	 * empty answer is indistinguishable from the thing being true.
+	 *
+	 * @return list<string>
+	 */
 	private function grafanaDashboardsInFolder(string $folderUid): array {
 		$res = $this->grafanaClient()->request('GET', 'search', [
 			'query' => ['type' => 'dash-db', 'folderUIDs' => $folderUid, 'limit' => 500],
 		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException(
+				"searching Grafana folder '$folderUid' failed: HTTP " . $res->getStatusCode()
+				. "\n" . (string)$res->getBody(),
+			);
+		}
 		$rows = json_decode((string)$res->getBody(), true);
 		$uids = [];
 		foreach (is_array($rows) ? $rows : [] as $row) {

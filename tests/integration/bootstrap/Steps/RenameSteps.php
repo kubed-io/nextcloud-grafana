@@ -35,14 +35,61 @@ trait RenameSteps {
 	 * @Given a dashboard file named :filename in :folder
 	 */
 	public function aDashboardFileNamedIn(string $filename, string $folder): void {
+		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+
+		// A LINK MAPPING CANNOT BE WRITTEN INTO — that refusal is a shipped feature,
+		// not an obstacle to work around. So the mirror is seeded the only way a link
+		// mirror ever really appears: the dashboard is made in Grafana and pulled.
+		if (($this->mappingModes[$folder] ?? '') === 'link') {
+			$this->seedMirrorViaPull($folder, $stem);
+			return;
+		}
+
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
 		$this->putDashboardFile($folder, $stem);
 		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
 		if ($this->lastUid !== '') {
 			$this->createdDashboardUids[] = $this->lastUid;
 		}
+	}
+
+	/**
+	 * Put a dashboard in the mapping's Grafana folder and pull it down, leaving the
+	 * cursor on the mirror that arrived.
+	 *
+	 * Shared by every arrange that needs a file in a LINK folder. Kept here rather
+	 * than duplicated per feature: the reason it exists — you cannot write into a
+	 * link — is one rule, so it deserves one implementation.
+	 */
+	private function seedMirrorViaPull(string $folder, string $title): void {
+		$grafanaFolder = $this->grafanaFolderUidForMapping($folder);
+		$uid = 'nc-seed-' . bin2hex(random_bytes(3));
+		$this->grafanaCreateDashboard($uid, $title, $grafanaFolder);
+		$this->createdDashboardUids[] = $uid;
+		$this->theAdminPullsFromGrafana();
+
+		$this->lastUid = $uid;
+		$this->currentFolder = $folder;
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$path = $folder . '/' . $name;
+			if ($this->davReadMetadata($path, self::META_UID) === $uid) {
+				$this->currentFilePath = $path;
+				$this->originalPath = $path;
+				return;
+			}
+		}
+		throw new \RuntimeException("the pull did not mirror '$title' into the link folder '$folder'");
+	}
+
+	/** The Grafana folder uid a mapping points at, found by its Nextcloud folder. */
+	private function grafanaFolderUidForMapping(string $ncFolder): string {
+		foreach ($this->listMappingsForSync() as $mapping) {
+			if ((string)($mapping['nc_folder'] ?? '') === $ncFolder) {
+				return (string)($mapping['grafana_folder_uid'] ?? '');
+			}
+		}
+		throw new \RuntimeException("no mapping targets the Nextcloud folder '$ncFolder'");
 	}
 
 	/**

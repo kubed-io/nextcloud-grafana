@@ -133,6 +133,13 @@ trait MappingSteps {
 			$this->mappingsDeclared = true;
 		}
 		$form = $this->formValues($table);
+		// RECORD THE MODE. Without it no arrange can tell a link mapping from a sync
+		// one, and a link mirror cannot be seeded the way it really appears — through
+		// a pull — because writing into a link folder is refused by design.
+		$ncFolder = (string)($form['nc folder'] ?? '');
+		if ($ncFolder !== '') {
+			$this->mappingModes[$ncFolder] = (string)($form['mode'] ?? 'link');
+		}
 		$uid = $form['grafana folder'] ?? '';
 		unset($form['grafana folder']);
 		// The table names a Grafana folder by uid; make sure Grafana actually has one.
