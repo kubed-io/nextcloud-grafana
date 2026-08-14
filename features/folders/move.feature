@@ -27,7 +27,7 @@ Feature: Moving a folder
     # ── RULE: the folder's uid is what makes a move a move ────────────────────
     # notes: ../AGENTS.md#a-nextcloud-folder-carries-its-grafana-folder-uid
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Move a folder within its own mapping
     Given the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" into "Demo/Archive"
@@ -39,7 +39,7 @@ Feature: Moving a folder
     # Without the uid this reads as a folder disappearing and another appearing, and
     # three dashboards would be deleted and re-created under new ones.
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Move a folder into another mapping
     Given the folder "Demo/Team" holding three dashboards
     When I move "Demo/Team" into "Reports"
@@ -86,7 +86,7 @@ Feature: Moving a folder
     # ── RULE: a folder move is not a way around the link guard ────────────────
     # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario Outline: Move a folder between sync and link mappings
     Given the folder "<source>/Team" holding three dashboards
     When I try to move "<source>/Team" into "<destination>"
@@ -98,7 +98,7 @@ Feature: Moving a folder
       | Demo     | Pointers    |
       | Pointers | Demo        |
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Move a folder of links out of its mapping
     Given the folder "Pointers/Team" holding three dashboards
     When I try to move "Pointers/Team" into "Scratch"
