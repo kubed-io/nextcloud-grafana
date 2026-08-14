@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\GrafanaClient;
+use OCA\GrafanaSync\Service\TagSet;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -192,6 +193,55 @@ final class GrafanaClientTest extends TestCase {
 		$client->deleteFolder('abc');
 	}
 
+	// ── folder tags ────────────────────────────────────────────────────────────
+
+	/**
+	 * A 404 MUST NOT READ AS "NO TAGS". The caller writes what it gets back into
+	 * Nextcloud, and an empty set there means REMOVE EVERY TAG — so a stale uid or a
+	 * folder deleted in Grafana would silently wipe tags a user had applied. The
+	 * failure has to travel so the caller can log and leave the folder alone.
+	 */
+	public function testReadFolderTagsThrowsOnAMissingFolderRatherThanAnsweringEmpty(): void {
+		$client = $this->client($this->httpError(404), new \ArrayObject());
+
+		$this->expectException(GrafanaApiException::class);
+		$client->readFolderTags('gone');
+	}
+
+	/** A folder that EXISTS with no annotation is the real empty case, and is a 200. */
+	public function testAFolderWithNoAnnotationHasNoTags(): void {
+		$client = $this->client($this->response('{"metadata":{"annotations":{}},"spec":{"title":"Team"}}'), new \ArrayObject());
+
+		self::assertTrue($client->readFolderTags('gf-team')->isEmpty());
+	}
+
+	public function testReadFolderTagsParsesTheAnnotation(): void {
+		$body = '{"metadata":{"annotations":{"nextcloud.kubed.io/tags":"Q3 Review, café"}}}';
+		$client = $this->client($this->response($body), new \ArrayObject());
+
+		self::assertTrue(
+			$client->readFolderTags('gf-team')->equals(TagSet::of(['café', 'Q3 Review'])),
+		);
+	}
+
+	/**
+	 * A MERGE PATCH, and clearing sends null. The content type is the whole reason
+	 * this call works: the app-platform API rejects a plain application/json body,
+	 * and a PUT would carry the entire metadata map including `grafana.app/*`.
+	 */
+	public function testWritingFolderTagsIsAMergePatchThatDeletesWhenEmpty(): void {
+		$calls = new \ArrayObject();
+		$client = $this->client($this->response('{}'), $calls);
+
+		$client->writeFolderTags('gf-team', TagSet::empty());
+
+		self::assertSame('PATCH', $calls[0][0]);
+		self::assertStringContainsString('/apis/folder.grafana.app/v1beta1/', $calls[0][1]);
+		self::assertSame('application/merge-patch+json', $calls[0][2]['headers']['Content-Type']);
+		// JSON_UNESCAPED_SLASHES, so the key keeps its literal slash.
+		self::assertStringContainsString('"nextcloud.kubed.io/tags":null', $calls[0][2]['body']);
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	/**
@@ -216,7 +266,7 @@ final class GrafanaClientTest extends TestCase {
 		$crypto->method('decrypt')->willReturn('plain-token');
 
 		$http = $this->createStub(IClient::class);
-		foreach (['get', 'post', 'put', 'delete'] as $verb) {
+		foreach (['get', 'post', 'put', 'patch', 'delete'] as $verb) {
 			$http->method($verb)->willReturnCallback(
 				static function (string $uri, array $options = []) use ($verb, $calls, $result): IResponse {
 					$calls[] = [strtoupper($verb), $uri, $options];

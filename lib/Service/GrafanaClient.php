@@ -466,6 +466,76 @@ final class GrafanaClient {
 	}
 
 	/**
+	 * A folder's tags, read from its annotation on the **app-platform** API.
+	 *
+	 * ## WHY THIS IS THE ONLY CALL HERE ON A DIFFERENT API GENERATION
+	 *
+	 * Everything else in this client speaks the legacy `/api/folders` surface, which
+	 * is comprehensively blind to this: verified against a live instance, a folder's
+	 * legacy record carries no labels, no annotations, and not even the `description`
+	 * that is in its own schema. The two APIs are views over one store — a legacy
+	 * rename and a legacy move both preserve annotations written here, also verified —
+	 * so mixing them is safe, but tags are only reachable through `folder.grafana.app`.
+	 *
+	 * **A 404 THROWS, and does not answer an empty set.** An earlier cut did the
+	 * latter, reasoning that a folder which is gone has no tags. That is true and
+	 * useless: the caller writes what it gets back into Nextcloud, and an empty set
+	 * there does not mean "unknown" — it means REMOVE EVERY TAG. So a stale or
+	 * mistyped uid, or a folder deleted in Grafana, would silently wipe the tags a
+	 * user had put on the Nextcloud folder.
+	 *
+	 * The same rule {@see NextcloudTags} follows on its own reads: a failure has to
+	 * travel as a failure, because every "safe default" here is indistinguishable
+	 * from a legitimate instruction to delete. {@see TagSyncService::applyToFolder()}
+	 * already logs and skips, which leaves the folder exactly as it was.
+	 *
+	 * A folder that exists with no annotation is NOT this case — that is a 200 with
+	 * nothing in it, and an empty set is the correct answer.
+	 */
+	public function readFolderTags(string $uid): TagSet {
+		$body = $this->decode($this->request('GET', self::folderResource($uid)));
+		$annotations = $body['metadata']['annotations'] ?? [];
+		$raw = is_array($annotations) ? ($annotations[TagSet::FOLDER_ANNOTATION] ?? null) : null;
+		return TagSet::fromAnnotation(is_string($raw) ? $raw : null);
+	}
+
+	/**
+	 * Make a folder carry exactly these tags.
+	 *
+	 * A **merge patch**, not a PUT, and that is the whole reason this is safe. A PUT
+	 * would carry the entire metadata map, so it would take `grafana.app/*` — the
+	 * internal ids and audit fields Grafana maintains — along for the ride, and any
+	 * key this app did not know to send would be dropped. The merge patch names one
+	 * annotation and touches nothing else; verified live that `grafana.app/*` survives
+	 * it untouched.
+	 *
+	 * Clearing every tag sends `null` for the key, which is a merge-patch DELETE. An
+	 * empty string would leave the annotation present and empty, and the next read
+	 * would answer "no tags" either way — but the folder would carry a meaningless
+	 * key forever, and a reader in Grafana would see this app had been there and left
+	 * nothing behind.
+	 */
+	public function writeFolderTags(string $uid, TagSet $tags): void {
+		$this->request(
+			'PATCH',
+			self::folderResource($uid),
+			[],
+			['metadata' => ['annotations' => [
+				TagSet::FOLDER_ANNOTATION => $tags->isEmpty() ? null : $tags->toAnnotation(),
+			]]],
+			'application/merge-patch+json',
+		);
+	}
+
+	/**
+	 * The app-platform path for one folder. `default` is the single-org namespace a
+	 * homelab Grafana runs in — the same one the UI's own requests use.
+	 */
+	private static function folderResource(string $uid): string {
+		return '/apis/folder.grafana.app/v1beta1/namespaces/default/folders/' . rawurlencode($uid);
+	}
+
+	/**
 	 * Build the browser deep-link to a live dashboard: `<base>/d/<uid>/<slug>`.
 	 * The uid is the stable thread, so the slug is cosmetic — Grafana redirects to
 	 * the canonical slug regardless. When the search/meta `url` is already known
@@ -552,10 +622,19 @@ final class GrafanaClient {
 	 * to label (no URL, no token, decrypt fail, local-address blocked) and lets
 	 * transport errors bubble up otherwise so the caller can format them.
 	 *
+	 * `$contentType` exists for the app-platform folder API, whose PATCH demands
+	 * `application/merge-patch+json` and rejects a plain `application/json` body.
+	 *
 	 * @param array<string,mixed> $query
 	 * @param array<string,mixed>|list<array<string,mixed>>|null $jsonBody
 	 */
-	private function request(string $method, string $path, array $query = [], ?array $jsonBody = null): IResponse {
+	private function request(
+		string $method,
+		string $path,
+		array $query = [],
+		?array $jsonBody = null,
+		string $contentType = 'application/json',
+	): IResponse {
 		$base = rtrim($this->config->getValueString(Application::APP_ID, 'grafana_url', ''), '/');
 		$enc = $this->config->getValueString(Application::APP_ID, 'grafana_token', '');
 		if ($base === '') {
@@ -584,7 +663,7 @@ final class GrafanaClient {
 			'nextcloud' => ['allow_local_address' => true],
 		];
 		if ($jsonBody !== null) {
-			$opts['headers']['Content-Type'] = 'application/json';
+			$opts['headers']['Content-Type'] = $contentType;
 			$opts['body'] = json_encode($jsonBody, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 		}
 
@@ -626,10 +705,17 @@ final class GrafanaClient {
 		return new GrafanaApiException($e->getMessage(), 0, $e);
 	}
 
+	/**
+	 * PATCH is here for the app-platform folder API, the only surgical way to set one
+	 * annotation without carrying the whole metadata map. It was missing, so every
+	 * folder-tag write threw "Unsupported HTTP method" — invisible until the client
+	 * got a test of its own.
+	 */
 	private function dispatch(IClient $client, string $method, string $url, array $opts): IResponse {
 		switch (strtoupper($method)) {
 			case 'GET':    return $client->get($url, $opts);
 			case 'PUT':    return $client->put($url, $opts);
+			case 'PATCH':  return $client->patch($url, $opts);
 			case 'POST':   return $client->post($url, $opts);
 			case 'DELETE': return $client->delete($url, $opts);
 			default:

@@ -19,6 +19,7 @@ use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\PushService;
+use OCA\GrafanaSync\Service\TagSyncService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
@@ -56,7 +57,16 @@ final class PushServiceTest extends TestCase {
 			static fn (Node $n, Mapping $m): ?string
 				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
 		);
-		$this->service = new PushService($this->mappings, $this->grafana, $this->metadata, $this->folderMirror, new MirrorTimes(new NullLogger()), new NullLogger());
+		// Tag mirroring is asserted in TagSyncServiceTest; here it only has to not fire.
+		$this->service = new PushService(
+			$this->mappings,
+			$this->grafana,
+			$this->metadata,
+			$this->folderMirror,
+			new MirrorTimes(new NullLogger()),
+			$this->createStub(TagSyncService::class),
+			new NullLogger(),
+		);
 	}
 
 	private function mapping(string $folderUid = 'gf-alpha', string $id = 'map-alpha'): Mapping {

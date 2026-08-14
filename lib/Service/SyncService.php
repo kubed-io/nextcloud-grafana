@@ -60,6 +60,7 @@ final class SyncService {
 		private IMimeTypeLoader $mimeLoader,
 		private MirrorTimes $times,
 		private FolderTreeMirror $tree,
+		private TagSyncService $tagSync,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -294,6 +295,15 @@ final class SyncService {
 			// placing anything, so every dashboard has a folder to land in. The map it
 			// returns is grafana folder uid → the Nextcloud folder mirroring it.
 			$placed = $this->tree->sync($targetFolder, $mapping);
+
+			// The folders themselves wear Grafana's tags too, mapped root included —
+			// a first pull that dressed the dashboards and left the folders bare would
+			// be a half-imported mirror. The root is not in $placed (it is the mapping's
+			// own folder, which nothing stamps) so it is done by mapping uid.
+			$this->tagSync->applyToFolder($targetFolder, $mapping->grafanaFolderUid);
+			foreach ($placed as $folderUid => $folder) {
+				$this->tagSync->applyToFolder($folder, $folderUid);
+			}
 
 			$processed = 0;
 			$succeeded = 0;
@@ -584,6 +594,7 @@ final class SyncService {
 			}
 			$this->metadata->stampSynced($fileId, $uid, $mapping->mode, $version, $body, $mapping->id);
 			$this->times->apply($existing, $read?->updated, $read?->created, $differs);
+			$this->tagSync->applyToDashboard($existing, self::tagsIn($body));
 			return !$differs;
 		}
 
@@ -604,7 +615,26 @@ final class SyncService {
 		$file = $folder->newFile($candidate, $body);
 		$this->metadata->stampSynced($file->getId(), $uid, $mapping->mode, $version, $body, $mapping->id);
 		$this->times->apply($file, $read?->updated, $read?->created, true);
+		$this->tagSync->applyToDashboard($file, self::tagsIn($body));
 		return false; // a brand-new mirror is always a write
+	}
+
+	/**
+	 * The tags in a mirror body, as the pull just wrote it.
+	 *
+	 * Taken from the BODY rather than from a second read of Grafana, because the body
+	 * is what landed on disk — so the file and its Nextcloud tags cannot disagree even
+	 * if the dashboard changed again between the two calls. A `link` pointer carries
+	 * the dashboard's tags by name for exactly this reason, so both modes work here.
+	 */
+	private static function tagsIn(string $body): TagSet {
+		try {
+			$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			return TagSet::empty();
+		}
+		$tags = is_array($decoded) ? ($decoded['tags'] ?? null) : null;
+		return TagSet::of(is_array($tags) ? $tags : []);
 	}
 
 	/**

@@ -18,6 +18,7 @@ use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MirrorSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\RenameSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\SyncSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\TagSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\TrashSteps;
 use OCA\GrafanaSync\Tests\Integration\Support\GrafanaApiTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\OccTrait;
@@ -57,6 +58,7 @@ final class FeatureContext implements Context {
 	use TrashSteps;
 	use RenameSteps;
 	use MirrorSteps;
+	use TagSteps;
 
 	private const APP_ID = 'grafana_sync';
 
@@ -96,6 +98,8 @@ final class FeatureContext implements Context {
 
 	/** State carried between steps within a scenario. */
 	private string $currentFolder = '';
+	/** The Grafana folder uid a tag scenario is acting on. */
+	private string $currentGrafanaFolder = '';
 	private string $currentFilePath = '';
 
 	/**

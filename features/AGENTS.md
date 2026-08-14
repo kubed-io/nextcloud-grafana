@@ -3025,7 +3025,7 @@ other, resolved by the reconcile's direction of truth — has no user gesture th
 distinguishes a pull from a push, so it is a note here rather than a scenario,
 and it belongs to whatever unit tests the merge when it is built.
 
-### A sync leaves the mirror wearing the dashboard's tags
+### A sync leaves the mirror wearing Grafana's tags
 
 Lives in `connection/sync-now.feature`, not here, and the distinction is the
 whole point of the makeover: NOBODY CHANGED A TAG. This is what a first sync
@@ -3033,8 +3033,13 @@ leaves behind, so it is asserted where the sync is, in the same shape as the
 other end states that file already pins (the mirror's name, its uid, its mode,
 its dates).
 
-The seeded Grafana folder carries an ordinary tag on purpose. With only an
-untagged dashboard the assertion would pass on a mirror that imported no tags
+**The FOLDER is tagged too, in the same scenario.** A first pull has to bring both
+halves or the mirror arrives half-dressed, and they are one behaviour — the mirror
+wears what Grafana says — so they are one scenario rather than two. Splitting them
+would restate "a sync imports tags" twice with a different noun.
+
+The seeded Grafana folder carries an ordinary dashboard tag on purpose. With only
+an untagged dashboard the assertion would pass on a mirror that imported no tags
 whatsoever, which is exactly the regression it exists to catch.
 
 ## uninstall

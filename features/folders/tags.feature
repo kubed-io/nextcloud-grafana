@@ -21,7 +21,7 @@ Feature: Tagging a folder
     # ── RULE: a folder's tags are one set, changed from either side ───────────
     # notes: ../AGENTS.md#a-folders-tags-are-one-set-on-both-sides
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario Outline: Tag a folder in Nextcloud
     Given the folder "<folder>" whose tags are "<tags before>"
     When I change the Nextcloud tags to "<tags after>"
@@ -38,7 +38,7 @@ Feature: Tagging a folder
       | Demo/Team | quarterly      | archived       |
       | Demo/Team | quarterly      |                |
 
-  @grafana @in-grafana @unbuilt
+  @grafana @in-grafana @todo
   Scenario Outline: Tag a folder in Grafana
     Given the folder "<folder>" whose tags are "<tags before>"
     When the folder's tags are changed to "<tags after>" in Grafana
@@ -58,7 +58,7 @@ Feature: Tagging a folder
     # ── RULE: a change only travels where the mode lets it ────────────────────
 
   # notes: ../AGENTS.md#tagging-a-folder-in-a-link-mapping-does-not-reach-grafana
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Tag a folder in a link mapping
     Given the folder "Pointers/Team" whose tags are "quarterly"
     When I change the Nextcloud tags to "quarterly, mine"

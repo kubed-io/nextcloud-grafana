@@ -84,6 +84,13 @@ jobs:
     - name: Notes breadcrumbs resolve, and the comment budget holds
       run: bash tests/integration/bin/check-notes-anchors.sh
 
+    # A listener with no `@implements IEventListener<TheEvent>` has an untyped
+    # $event, and Psalm rejects it — correctly, but only after a full install and
+    # analysis run. The same one-line omission has landed in three separate PRs, so
+    # it gets a grep that fails in a second instead.
+    - name: Listener conventions
+      run: bash tests/integration/bin/check-listener-conventions.sh
+
     - name: Coding standard (php-cs-fixer)
       run: composer run cs:check
 

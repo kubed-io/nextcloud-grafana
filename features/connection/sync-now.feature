@@ -34,17 +34,19 @@ Feature: Syncing every mapping
 
     # notes: ../AGENTS.md#carries-its-grafana-dates
 
-  # notes: ../AGENTS.md#a-sync-leaves-the-mirror-wearing-the-dashboards-tags
-  @admin @occ @ui @unbuilt
-  Scenario: A sync leaves the mirror wearing the dashboard's tags
+  # notes: ../AGENTS.md#a-sync-leaves-the-mirror-wearing-grafanas-tags
+  @admin @occ @ui
+  Scenario: A sync leaves the mirror wearing Grafana's tags
     Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "tagged"
+    And the Grafana folder "nc-alpha" is tagged "quarterly"
     And the Grafana folder "nc-alpha" already contains:
       | dashboard  | uid           | tags       |
       | Alpha Demo | nc-alpha-demo | dns, linux |
     When the admin syncs every mapping
-    Then the dashboard's tags are "dns, linux" in Nextcloud
-    And the dashboard's tags are "dns, linux" in the file
-    And the file can be found by a Nextcloud tag search for "linux"
+    Then the folder "tagged" is tagged "quarterly" in Nextcloud
+    And the tags on "tagged/Alpha Demo.grafana.json" are "dns, linux" in Nextcloud
+    And the tags in the file "tagged/Alpha Demo.grafana.json" are "dns, linux"
+    And the file "tagged/Alpha Demo.grafana.json" can be found by a Nextcloud tag search for "linux"
 
   # ── what a first sync does with a folder that already holds mirrors ────────
 
