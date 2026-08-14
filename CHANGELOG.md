@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `link` mapping's folder is no longer read-only.
 - Internal: specified emptying the trash for a whole folder — the purge reaches every dashboard it held.
 - Creating a dashboard in a subfolder now creates the matching folders in Grafana, parents included.
+- A dashboard file now shows the time Grafana recorded the change, not the moment Nextcloud saved it.
 - A folder can hold only one mapping, and the Grafana recycle-bin folder can no longer be mapped at all.
 - Creating a dashboard file in a link-mapped folder is now refused instead of leaving an unmanaged file behind.
 - Internal: subfolders become Grafana folders by holding a dashboard, replacing the unbuilt `grafana` opt-in tag.
