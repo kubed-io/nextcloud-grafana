@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\DAV;
 
+use OCA\DAV\Connector\Sabre\Directory as DavDirectory;
 use OCA\DAV\Connector\Sabre\File as DavFile;
 use OCA\GrafanaSync\DAV\LinkWriteGuardPlugin;
 use OCA\GrafanaSync\Service\DashboardMetadata;
@@ -33,18 +34,41 @@ use Sabre\DAV\INode;
 final class LinkWriteGuardPluginTest extends TestCase {
 	private DashboardMetadata $metadata;
 	private SyncNotifier $notifier;
+	private MappingService $mappings;
 	private LinkWriteGuardPlugin $plugin;
+
+	/** @var array<string,string> node path prefix → mapping mode */
+	private array $mappedFolders = [];
 
 	protected function setUp(): void {
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->notifier = $this->createMock(SyncNotifier::class);
+
+		// Resolves a node path to a mapping using $mappedFolders, so a test says only
+		// which folders are mapped and in what mode.
+		$this->mappings = $this->createStub(MappingService::class);
+		$this->mappings->method('resolveForPath')->willReturnCallback(
+			function (string $path): ?Mapping {
+				foreach ($this->mappedFolders as $folder => $mode) {
+					if (str_contains($path, '/files/' . $folder . '/')) {
+						return Mapping::fromArray([
+							'id' => 'm-' . $folder,
+							'grafana_folder_uid' => 'gf-' . $folder,
+							'nc_folder' => $folder,
+							'mode' => $mode,
+						]);
+					}
+				}
+				return null;
+			},
+		);
 
 		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
 
-		$this->plugin = new LinkWriteGuardPlugin($this->metadata, $this->createStub(MappingService::class), $this->notifier, $session, new NullLogger());
+		$this->plugin = new LinkWriteGuardPlugin($this->metadata, $this->mappings, $this->notifier, $session, new NullLogger());
 	}
 
 	private function davFile(string $name, int $id = 7): DavFile {
@@ -96,5 +120,78 @@ final class LinkWriteGuardPluginTest extends TestCase {
 
 		$this->expectException(Forbidden::class);
 		$this->invoke($this->davFile('Board.grafana.json'));
+	}
+
+	// ── beforeCreateFile: authoring into a link folder ─────────────────────────
+
+	/**
+	 * THE GUARD'S REASON TO EXIST. A link folder is Grafana's to write, so a file
+	 * created there could never become the dashboard it looks like — it would sit
+	 * forever looking managed and being unmanaged.
+	 */
+	public function testANewDashboardFileInALinkFolderIsRefused(): void {
+		$this->mappedFolders = ['Pointers' => Mapping::MODE_LINK];
+
+		$this->expectException(Forbidden::class);
+		$this->expectExceptionMessageMatches('/link mode/');
+		$this->createIn('Pointers', 'CPU Load.grafana.json');
+	}
+
+	public function testANewDashboardFileInASyncFolderIsAllowed(): void {
+		$this->mappedFolders = ['Demo' => Mapping::MODE_SYNC];
+
+		self::assertTrue($this->createIn('Demo', 'CPU Load.grafana.json'));
+	}
+
+	public function testANewDashboardFileOutsideEveryMappingIsAllowed(): void {
+		$this->mappedFolders = [];
+
+		self::assertTrue($this->createIn('Scratch', 'CPU Load.grafana.json'));
+	}
+
+	/**
+	 * A link mapping's ONE concession: other file types may live alongside the
+	 * mirrored dashboards. Blocking the whole folder would take that away.
+	 */
+	public function testANonDashboardFileInALinkFolderIsAllowed(): void {
+		$this->mappedFolders = ['Pointers' => Mapping::MODE_LINK];
+
+		self::assertTrue($this->createIn('Pointers', 'Budget.xlsx'));
+	}
+
+	/**
+	 * FAIL OPEN. A parent that is not a Nextcloud DAV directory cannot be classified,
+	 * and a guard that cannot classify must never block.
+	 */
+	public function testAnUnrecognisedParentIsAllowed(): void {
+		$this->mappedFolders = ['Pointers' => Mapping::MODE_LINK];
+		$data = null;
+		$modified = false;
+
+		self::assertTrue($this->plugin->beforeCreateFile(
+			'files/alice/Pointers/CPU Load.grafana.json',
+			$data,
+			$this->createStub(INode::class),
+			$modified,
+		));
+	}
+
+	/**
+	 * Drive the hook the way Sabre does: the request path is `files/<uid>/<rel>`, and
+	 * the PARENT is what knows the node path. Getting that wrong is what made the
+	 * first cut of this guard inert — it reshaped the request path by hand and
+	 * produced something that matched no mapping at all.
+	 */
+	private function createIn(string $folder, string $name): bool {
+		$parent = $this->createStub(DavDirectory::class);
+		$parent->method('getPath')->willReturn('/alice/files/' . $folder);
+		$data = null;
+		$modified = false;
+		return $this->plugin->beforeCreateFile(
+			'files/alice/' . $folder . '/' . $name,
+			$data,
+			$parent,
+			$modified,
+		);
 	}
 }

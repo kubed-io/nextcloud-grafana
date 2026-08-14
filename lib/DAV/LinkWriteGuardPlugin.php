@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\DAV;
 
+use OCA\DAV\Connector\Sabre\Directory as DavDirectory;
 use OCA\DAV\Connector\Sabre\File as DavFile;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\DashboardMetadata;
@@ -19,7 +20,6 @@ use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\Forbidden;
-use Sabre\DAV\ICollection;
 use Sabre\DAV\INode;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -81,17 +81,33 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	 * waved through, because a link mapping's one concession is exactly that: other
 	 * file types may live alongside the mirrored dashboards.
 	 *
+	 * ## THE PARENT NODE IS ASKED WHERE IT IS, NOT THE DAV PATH
+	 *
+	 * `$path` here is Sabre's request path (`files/<uid>/<relative>`), which is NOT
+	 * the shape {@see MappingService::resolveForPath()} reads — that wants a node
+	 * path, `/<uid>/files/<relative>`. Building one by string-munging produced
+	 * `/files/files/<uid>/…`, which matched no mapping at all, so the guard was inert
+	 * and every link folder happily accepted new dashboard files.
+	 *
+	 * The parent collection knows its own node path, so we ask it. Anything that is
+	 * not a Nextcloud DAV directory is waved through — we cannot classify it, and a
+	 * guard that cannot classify must never block.
+	 *
 	 * @param mixed $data
+	 * @param mixed $parent
 	 * @param bool|null $modified
 	 */
-	public function beforeCreateFile(string $path, &$data, ICollection $parent, &$modified): bool {
+	public function beforeCreateFile(string $path, &$data, $parent, &$modified): bool {
 		$name = basename($path);
 		if (!FilenameCodec::isDashboardName($name)) {
 			return true; // a spreadsheet in a link folder is entirely welcome
 		}
+		if (!$parent instanceof DavDirectory) {
+			return true; // cannot classify → never block
+		}
 
 		try {
-			$mapping = $this->mappings->resolveForPath('/files/' . ltrim($path, '/'));
+			$mapping = $this->mappings->resolveForPath(rtrim($parent->getPath(), '/') . '/' . $name);
 		} catch (\Throwable) {
 			return true; // cannot classify → never block
 		}
@@ -112,10 +128,6 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		);
 	}
 
-	/**
-	 * @param mixed $data
-	 * @param bool|null $modified
-	 */
 	public function beforeWriteContent(string $path, INode $node, &$data, &$modified): bool {
 		if (!$node instanceof DavFile) {
 			return true; // not a file node we care about

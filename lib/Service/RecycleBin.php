@@ -91,6 +91,32 @@ final class RecycleBin {
 	 *
 	 * @throws \RuntimeException when enabled but the folder is unusable
 	 */
+	/**
+	 * The uid of the CONFIGURED bin folder, whether or not the feature is switched on,
+	 * or null if it cannot be resolved.
+	 *
+	 * Distinct from {@see activeFolderUid()}, which answers null when the bin is off
+	 * and throws when it is misconfigured — right for the delete path, wrong for a
+	 * guard. A folder named as the bin is reserved from the moment it is named: an
+	 * admin who has typed a bin folder but not enabled it yet must still not be able
+	 * to map it, or enabling the bin later would point it at a mapped folder.
+	 *
+	 * Swallows every failure and answers null. A bin that cannot be resolved is its
+	 * own problem, reported where the bin is used; it must not turn into a confusing
+	 * refusal to save an unrelated mapping.
+	 */
+	public function configuredFolderUid(): ?string {
+		$title = $this->folderTitle();
+		if ($title === '') {
+			return null;
+		}
+		try {
+			return $this->grafana->resolveFolderUidByTitle($title);
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
 	public function activeFolderUid(): ?string {
 		if ($this->memoed) {
 			return $this->memoUid;
