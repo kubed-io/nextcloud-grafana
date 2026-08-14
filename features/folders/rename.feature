@@ -18,7 +18,7 @@ Feature: Renaming a subfolder
     # ── RULE: the uid is what makes a rename a rename ─────────────────────────
     # notes: ../AGENTS.md#a-nextcloud-folder-carries-its-grafana-folder-uid
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Rename a subfolder in Nextcloud
     Given the folder "Demo/Team A" holding a dashboard
     When I rename "Demo/Team A" to "Demo/Team B"
@@ -31,7 +31,7 @@ Feature: Renaming a subfolder
     # The uid is why this is a rename and not a delete plus a create: the folder that
     # holds it is the same folder, whatever it is called.
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Rename a subfolder in Grafana
     Given the folder "Demo/Team A" holding a dashboard
     When someone renames the "Team A" Grafana folder to "Team B"
@@ -48,7 +48,7 @@ Feature: Renaming a subfolder
     # ── RULE: a rename Grafana will not take leaves the local one standing ────
 
   # notes: ../AGENTS.md#a-failed-subfolder-rename-leaves-the-local-rename-standing
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui @todo
   Scenario: Rename a subfolder while Grafana is unreachable
     Given the folder "Demo/Team A" holding a dashboard
     And Grafana is unreachable

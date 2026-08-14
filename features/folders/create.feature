@@ -49,7 +49,7 @@ Feature: Creating a folder
     # ── RULE: a folder made in Grafana arrives as a folder ────────────────────
     # notes: ../AGENTS.md#a-folder-the-user-made-for-something-else-stays-theirs
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario Outline: Create a folder in Grafana under a mapped folder
     Given the folder "<folder>/Holiday Photos" holding no dashboards
     When someone creates the folder "Bubbles" under the "<grafana folder>" Grafana folder
