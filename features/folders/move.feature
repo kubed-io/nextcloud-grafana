@@ -108,7 +108,7 @@ Feature: Moving a folder
     # ── RULE: a folder moved in Grafana moves in Nextcloud ────────────────────
     # notes: ../AGENTS.md#a-folder-moved-in-grafana-is-recognised-by-its-uid
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Move a folder in Grafana
     Given the folder "Demo/Team" holding three dashboards
     And the folder "Demo/Archive" holding no dashboards
@@ -122,7 +122,7 @@ Feature: Moving a folder
     # it is one folder with a new parent.
 
   # notes: ../AGENTS.md#a-move-and-a-rename-at-once-is-just-a-move
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui @todo
   Scenario: Move and rename a folder in Grafana at once
     Given the folder "Demo/Team" holding three dashboards
     And the folder "Demo/Archive" holding no dashboards
