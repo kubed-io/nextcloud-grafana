@@ -2,8 +2,8 @@
 
 Feature: Tagging a folder
   As a Grafana admin browsing folders in Nextcloud
-  I want a folder tagged in Grafana to be tagged in Nextcloud
-  So that automation can file my folders for me without my own filing leaking back
+  I want a folder's tags to be one set however I reach them
+  So that I can re-tag a folder from whichever side I happen to be on
 
   Background:
     Given the app is connected to Grafana
@@ -18,49 +18,49 @@ Feature: Tagging a folder
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
-    # ── RULE: a folder tagged in Grafana is tagged in Nextcloud ───────────────
-    # notes: ../AGENTS.md#a-folder-tagged-in-grafana-is-tagged-in-nextcloud
+    # ── RULE: a folder's tags are one set, changed from either side ───────────
+    # notes: ../AGENTS.md#a-folders-tags-are-one-set-on-both-sides
+
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario Outline: Tag a folder in Nextcloud
+    Given the folder "<folder>" whose tags are "<tags before>"
+    When I change the Nextcloud tags to "<tags after>"
+    Then the folder's tags are "<tags after>" in Nextcloud
+    And the folder's tags are "<tags after>" in Grafana
+    And the folder holds:
+      | Modified | when the folder last changed in Grafana |
+
+    Examples: the mapped folder and a subfolder under it are the same gesture
+      | folder    | tags before    | tags after     |
+      | Demo      | quarterly      | quarterly, ops |
+      | Demo      |                | quarterly      |
+      | Demo/Team | quarterly, ops | quarterly      |
+      | Demo/Team | quarterly      | archived       |
+      | Demo/Team | quarterly      |                |
 
   @grafana @in-grafana @unbuilt
   Scenario Outline: Tag a folder in Grafana
-    Given the folder "Demo/Team" whose tags are "<tags before>"
+    Given the folder "<folder>" whose tags are "<tags before>"
     When the folder's tags are changed to "<tags after>" in Grafana
     Then the folder's tags are "<tags after>" in Nextcloud
+    And the folder's tags are "<tags after>" in Grafana
     And the folder holds:
       | Modified | when the folder last changed in Grafana |
 
     Examples: Grafana is the system of record, so its set wins outright
-      | tags before    | tags after     |
-      | quarterly      | quarterly, ops |
-      | quarterly, ops | quarterly      |
-      | quarterly      | archived       |
-      | quarterly      |                |
-      |                | quarterly      |
+      | folder    | tags before    | tags after     |
+      | Demo      | quarterly      | quarterly, ops |
+      | Demo/Team | quarterly, ops | quarterly      |
+      | Demo/Team | quarterly      | archived       |
+      | Demo/Team | quarterly      |                |
+      | Demo/Team |                | quarterly      |
 
-    # Grafana owns the clock here exactly as it does for a dashboard — and by
-    # Grafana's own reckoning a tag is not a change, so the time does not move.
-    # Measured: tagging bumps only `resourceVersion`, never `updated`, and
-    # Nextcloud agrees — assigning a tag leaves the folder's mtime alone.
+    # ── RULE: a change only travels where the mode lets it ────────────────────
 
-    # ── RULE: my own filing is mine, and stays here ───────────────────────────
-    # notes: ../AGENTS.md#a-tag-i-put-on-a-folder-stays-in-nextcloud
-
-  @user @in-nextcloud @gesture @ui @decision
-  Scenario Outline: Tag a folder in Nextcloud
-    Given the folder "<folder>" holding three dashboards
-    When I tag "<folder>" with "mine"
-    Then the folder's tags are "mine" in Nextcloud
-    And the folder's tags are unchanged in Grafana
-
-    Examples: which folder it is changes nothing — none of them reach Grafana
-      | folder        |
-      | Demo          |
-      | Demo/Team     |
-      | Pointers/Team |
-
-    # The two directions are deliberately not symmetric. A folder's tags live in
-    # Grafana on a field only a deliberate API call writes, so a tag arriving from
-    # there is always someone meaning it. A tag I apply in Nextcloud is usually me
-    # filing my own folders, and pushing every one of those outward would fill
-    # Grafana with somebody's private organisation. The dashboards inside are the
-    # ones that carry tags both ways.
+  # notes: ../AGENTS.md#tagging-a-folder-in-a-link-mapping-does-not-reach-grafana
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Tag a folder in a link mapping
+    Given the folder "Pointers/Team" whose tags are "quarterly"
+    When I change the Nextcloud tags to "quarterly, mine"
+    Then the folder's tags are still "quarterly" in Grafana
+    And the folder's tags settle back to "quarterly" in Nextcloud

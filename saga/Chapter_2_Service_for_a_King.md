@@ -1857,26 +1857,30 @@ And what the walk-in REFUSED us:
 indexed shelf: constrained charset, queryable. Annotations are the deep pantry:
 anything you like, findable only if you already know where you put it.
 
-THE RULING ON FOLDER TAGS: **inbound yes, outbound no** — and the asymmetry is
-the dish, not a compromise.
+THE RULING ON FOLDER TAGS: **they sync, both ways, in an annotation.** It took
+two corrections to get there, and both of mine failed the same way — I mistook
+the surface I could see for the whole surface.
 
-The first draft of this said folder tags do not travel at all, on the grounds
-that no one in Grafana can see them. Dr K sent it back: *no one in the UI* is not
-*no one*. The API writes that annotation, the MCP writes that annotation, and a
-behaviour is not defined by which door someone came through. Everywhere else in
-this spec the medium goes unmentioned unless the medium IS the point.
+First I wrote that folder tags cannot travel at all, because no one in Grafana
+can see them. Dr K: *no one in the UI* is not *no one*. The API writes that
+annotation and so does the MCP, and a behaviour is not defined by which door
+someone came through.
 
-So the field is real and readable, and a folder tagged in Grafana shows its tags
-in Nextcloud. What we still refuse is the return leg. Nobody sets
-`nextcloud.kubed.io/tags` by accident, so an inbound tag is always deliberate; a
-tag applied in Nextcloud is usually somebody filing their own folders, and
-pushing every one of those outward would fill a shared Grafana with one person's
-private organisation — written where no Grafana screen could show them, so they
-could not find it to remove it. That is not a mirror, it is a leak.
+Then I conceded the inbound leg and held the outbound one back, reasoning that
+pushing a user's private filing into a shared Grafana would be a leak. It reads
+well and it argues against the whole restaurant. This is a bidirectional mirror.
+Carving one field out as inbound-only is a mirror with a blind spot, and the same
+sentence would have refused dashboard tags. A tag is a tag; it syncs.
 
-The seam we are accepting: a tag that came from Grafana and is then edited in
-Nextcloud does not go back, so the two can drift. Written down rather than
-smoothed over.
+**And the store is an annotation, which is the easy port, not the consolation
+prize.** Labels were tempting because they are genuinely indexed — `labelSelector`
+really filters, we proved it. They are also unusable: k8s validation rejects
+`tag.kubed.io/Q3 Review` (422), `café` (422), and a VALUE of `Q3 Review` (422).
+Annotations took `Q3 Review, café, ops/urgent, 日本語` unchanged. So a Nextcloud
+tag becomes an annotation with no escaping, no normalisation and no reverse
+lookup — a straight copy. We give up Grafana-side search for it, and that is the
+right trade: an unsearchable tag that is still the user's actual tag beats a
+searchable `Q3-Review` that has quietly collided with a different tag.
 
 **And the clock does not tick for a tag.** We went back in to check whether
 tagging bumps a folder's `updated`, expecting a yes. It does not:
@@ -1925,14 +1929,15 @@ Either the floor moves to 32 or the engine rides the legacy
 `MapperEvent::EVENT_ASSIGN` / `EVENT_UNASSIGN`, which works on both.
 
 > **Dr K, wiping down the steel:** *"You went in for tags and came out with an
-> address book. Good — that is what the walk-in is for. But you did the thing
-> again: you looked at the dining room, saw no one holding a fork, and wrote 'this
-> dish cannot be eaten.' The service door is a door. Someone comes through it with
-> an order and you cook it. What you were RIGHT about is the other leg — sending
-> every guest's private notes out to a room where they can't read them back. Take
-> the order in. Don't post the mail out. And one more thing: I ever catch 'when
-> the sync runs' on a ticket again, you're on garde manger for a month. Nobody
-> walks in and orders a sync."*
+> address book — that is what the walk-in is for. But twice on one ticket you
+> looked at a room, saw nobody holding a fork, and wrote 'this cannot be eaten.'
+> The service door is a door. Then you found a reason the food should only travel
+> one way, and it was a lovely reason, and it would have made you the only
+> restaurant in town that takes orders but won't send plates. You run a PASS. It
+> goes both directions or it isn't one. And the annotation isn't the cheap shelf —
+> it's the only shelf that takes the ingredient without cutting it to fit. One more
+> thing: I ever catch 'when the sync runs' on a ticket again, you're on garde
+> manger for a month. Nobody walks in and orders a sync."*
 
 ---
 
