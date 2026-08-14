@@ -13,6 +13,7 @@ use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderTreeMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
@@ -54,6 +55,9 @@ final class SyncServiceTest extends TestCase {
 	private StorageService $storage;
 	private PushService $push;
 	private MirrorTimes $times;
+	private FolderTreeMirror $tree;
+	private SyncGuard $guard;
+	private IMimeTypeLoader $mimeLoader;
 	private SyncService $service;
 
 	protected function setUp(): void {
@@ -76,15 +80,35 @@ final class SyncServiceTest extends TestCase {
 		// covered on its own in MirrorTimesTest — the reconciler only owes the mapping.
 		$this->times = $this->createMock(MirrorTimes::class);
 
+		// A tree with no mirrored subfolders: every dashboard lands in the mapping's
+		// root, which is what these tests are about. The tree's own behaviour is
+		// covered in FolderTreeMirrorTest.
+		$this->tree = $this->createStub(FolderTreeMirror::class);
+		$this->tree->method('sync')->willReturn([]);
+
+		$this->guard = $guard;
+		$this->mimeLoader = $mimeLoader;
+		$this->rebuildService();
+	}
+
+	/**
+	 * Rebuild the service from the current collaborators.
+	 *
+	 * A test that swaps the tree stub has to rebuild, because the service takes it by
+	 * constructor — and swapping after construction would leave the old one wired in
+	 * while the test believed otherwise.
+	 */
+	private function rebuildService(): void {
 		$this->service = new SyncService(
 			$this->mappings,
 			$this->grafana,
 			$this->metadata,
 			$this->storage,
-			$guard,
+			$this->guard,
 			$this->push,
-			$mimeLoader,
+			$this->mimeLoader,
 			$this->times,
+			$this->tree,
 			new NullLogger(),
 		);
 	}
@@ -146,7 +170,7 @@ final class SyncServiceTest extends TestCase {
 		$folder->method('nodeExists')->willReturn(false);
 		$folder->expects(self::once())
 			->method('newFile')
-			->with('Board.grafana.json', self::isType('string'))
+			->with('Board.grafana.json', self::isString())
 			->willReturn($this->file(100, 'Board.grafana.json'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
@@ -159,7 +183,7 @@ final class SyncServiceTest extends TestCase {
 		// The core contract: uid + mode + version stamped, and the sync pill applied.
 		$this->metadata->expects(self::once())
 			->method('stampSynced')
-			->with(100, 'd1', Mapping::MODE_SYNC, '5', self::isType('string'), 'map-alpha');
+			->with(100, 'd1', Mapping::MODE_SYNC, '5', self::isString(), 'map-alpha');
 
 		$res = $this->service->pullOne($this->mapping());
 
@@ -297,7 +321,7 @@ final class SyncServiceTest extends TestCase {
 		// The stamp still advances to the new version — only the BODY is skipped.
 		$this->metadata->expects(self::once())
 			->method('stampSynced')
-			->with(10, 'd1', Mapping::MODE_SYNC, '41', self::isType('string'), 'map-alpha');
+			->with(10, 'd1', Mapping::MODE_SYNC, '41', self::isString(), 'map-alpha');
 
 		self::assertSame(1, $this->pullWith($existing, $fromGrafana)['unchanged']);
 	}
@@ -607,5 +631,71 @@ final class SyncServiceTest extends TestCase {
 		$this->mappings->method('getById')->willReturn(null);
 		$this->expectException(\OutOfBoundsException::class);
 		$this->service->runInline(SyncService::DIR_PUSH, 'no-such-id');
+	}
+
+	// ── the folder tree ───────────────────────────────────────────────────────
+
+	/**
+	 * A DASHBOARD LANDS IN THE FOLDER THAT MIRRORS ITS GRAFANA FOLDER, not flat in the
+	 * mapping's root. This is what makes the two trees the same shape.
+	 */
+	public function testADashboardIsWrittenIntoTheFolderMirroringItsGrafanaFolder(): void {
+		$root = $this->createMock(Folder::class);
+		$root->method('getDirectoryListing')->willReturn([]);
+		$root->method('nodeExists')->willReturn(false);
+		$root->expects(self::never())->method('newFile');
+
+		$team = $this->createMock(Folder::class);
+		$team->method('getDirectoryListing')->willReturn([]);
+		$team->method('nodeExists')->willReturn(false);
+		$team->expects(self::once())
+			->method('newFile')
+			->with('Board.grafana.json', self::isString())
+			->willReturn($this->file(100, 'Board.grafana.json'));
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($root);
+		$this->tree = $this->createStub(FolderTreeMirror::class);
+		$this->tree->method('sync')->willReturn(['gf-team' => $team]);
+		$this->rebuildService();
+
+		// The mapping's own folder holds nothing; the dashboard is in the subfolder.
+		$this->grafana->method('listDashboards')->willReturnCallback(
+			fn (?string $scope = null): array => $scope === 'gf-team'
+				? [['uid' => 'd1', 'title' => 'Board', 'folderUid' => 'gf-team', 'url' => '/d/d1/x', 'tags' => []]]
+				: [],
+		);
+		$this->grafana->method('readDashboardSpec')->with('d1')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 5], null, null));
+
+		$res = $this->service->pullOne($this->mapping());
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(1, $res['succeeded']);
+	}
+
+	/**
+	 * A dashboard in a Grafana folder we do not mirror still lands somewhere — the
+	 * mapping's root, which is where every dashboard used to go. Losing it would be
+	 * worse than putting it in the obvious place.
+	 */
+	public function testADashboardInAnUnmirroredFolderFallsBackToTheMappingRoot(): void {
+		$root = $this->createMock(Folder::class);
+		$root->method('getDirectoryListing')->willReturn([]);
+		$root->method('nodeExists')->willReturn(false);
+		$root->expects(self::once())
+			->method('newFile')
+			->willReturn($this->file(100, 'Board.grafana.json'));
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($root);
+
+		$this->grafana->method('listDashboards')->willReturn([
+			['uid' => 'd1', 'title' => 'Board', 'folderUid' => 'gf-unknown', 'url' => '/d/d1/x', 'tags' => []],
+		]);
+		$this->grafana->method('readDashboardSpec')->with('d1')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 5], null, null));
+
+		self::assertSame(1, $this->service->pullOne($this->mapping())['succeeded']);
 	}
 }
