@@ -1857,14 +1857,26 @@ And what the walk-in REFUSED us:
 indexed shelf: constrained charset, queryable. Annotations are the deep pantry:
 anything you like, findable only if you already know where you put it.
 
-THE RULING ON FOLDER TAGS: **they do not travel.** Not because we lack a place to
-put them — annotations would hold `Q3 Review, café, 日本語` losslessly, and we
-proved it — but because a tag written there is a tag **no one in Grafana can see,
-search, set, or remove**. Every other mirror in this app is a conversation
-between two surfaces. This one would be a note posted into a room with no door.
-A Nextcloud folder tag is a Nextcloud fact, and `folders/tags.feature` says so
-outright rather than leaving a reader to assume it behaves like the dashboard
-tags one file over.
+THE RULING ON FOLDER TAGS: **inbound yes, outbound no** — and the asymmetry is
+the dish, not a compromise.
+
+The first draft of this said folder tags do not travel at all, on the grounds
+that no one in Grafana can see them. Dr K sent it back: *no one in the UI* is not
+*no one*. The API writes that annotation, the MCP writes that annotation, and a
+behaviour is not defined by which door someone came through. Everywhere else in
+this spec the medium goes unmentioned unless the medium IS the point.
+
+So the field is real and readable, and a folder tagged in Grafana shows its tags
+in Nextcloud. What we still refuse is the return leg. Nobody sets
+`nextcloud.kubed.io/tags` by accident, so an inbound tag is always deliberate; a
+tag applied in Nextcloud is usually somebody filing their own folders, and
+pushing every one of those outward would fill a shared Grafana with one person's
+private organisation — written where no Grafana screen could show them, so they
+could not find it to remove it. That is not a mirror, it is a leak.
+
+The seam we are accepting: a tag that came from Grafana and is then edited in
+Nextcloud does not go back, so the two can drift. Written down rather than
+smoothed over.
 
 THE PRIZE WE DID NOT GO LOOKING FOR: `nextcloud.kubed.io/folder-id: "12345"`.
 A Nextcloud folder id is digits — label-safe by luck — so it is **indexed**, it
@@ -1891,11 +1903,14 @@ Either the floor moves to 32 or the engine rides the legacy
 `MapperEvent::EVENT_ASSIGN` / `EVENT_UNASSIGN`, which works on both.
 
 > **Dr K, wiping down the steel:** *"You went in for tags and came out with an
-> address book. Good — that is what the walk-in is for. Now be honest about the
-> one you didn't get: you CAN write that folder label, and it would look like
-> progress in your logs, and not one guest would ever taste it. A garnish nobody
-> can see isn't a garnish, it's a lie you tell the ticket. Leave it off the plate
-> and write down why, so the next cook doesn't 'discover' it again in March."*
+> address book. Good — that is what the walk-in is for. But you did the thing
+> again: you looked at the dining room, saw no one holding a fork, and wrote 'this
+> dish cannot be eaten.' The service door is a door. Someone comes through it with
+> an order and you cook it. What you were RIGHT about is the other leg — sending
+> every guest's private notes out to a room where they can't read them back. Take
+> the order in. Don't post the mail out. And one more thing: I ever catch 'when
+> the sync runs' on a ticket again, you're on garde manger for a month. Nobody
+> walks in and orders a sync."*
 
 ---
 

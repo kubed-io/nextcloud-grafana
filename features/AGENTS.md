@@ -2091,7 +2091,38 @@ refusing, and nothing tells the user.
 TAGGING A FOLDER — the folder half of `dashboards/tags.feature`, and the answer is
 that there isn't one.
 
-### A Grafana folder has nowhere to put a tag
+### A folder tagged in Grafana is tagged in Nextcloud
+
+The inbound direction is real, and an earlier cut of this file denied it. The claim
+was "a folder's tags never arrive from Grafana", which confused **the UI having no
+control** with **the thing being impossible**. Grafana's own folder screen offers no
+way to set labels or annotations, but the API does, and so does the MCP — and a
+behaviour is not defined by which surface reached it. Everywhere else in this spec
+the medium goes unmentioned unless the medium is the point.
+
+So the scenario is `@unbuilt`, not `@decision`. There is something on the far side
+to read; nobody has built the reading yet.
+
+### A tag I put on a folder stays in Nextcloud
+
+The outbound direction is the one that does not travel, and the asymmetry is the
+point rather than an oversight.
+
+A tag arriving FROM Grafana lands on a field only a deliberate API call can write.
+Nobody sets `nextcloud.kubed.io/tags` on a folder by accident, so an inbound tag is
+always someone meaning it.
+
+A tag applied IN Nextcloud is usually a user filing their own folders. Pushing every
+one of those outward would fill a shared Grafana with one person's private
+organisation, written into a field no Grafana screen can show them so they could not
+even find it to remove it. That is not a mirror, it is a leak.
+
+**The known seam:** a tag that arrived from Grafana and is then edited in Nextcloud
+does not travel back, so the two sides can drift. That is accepted for now — the
+alternative is the leak above — but it is the first thing to revisit if folder tags
+turn out to be edited from Nextcloud in practice.
+
+### A Grafana folder has nowhere to put a tag OF ITS OWN
 
 Measured against the live instance, not assumed. A folder's entire spec is:
 
@@ -2114,27 +2145,35 @@ convincing decoy: anything reading it would look like folder tags worked.
 - a legacy rename and a legacy move both PRESERVE labels, annotations and description
 - annotations take arbitrary text: `Q3 Review, café, ops/urgent, 日本語` round-tripped
 
-So the tag COULD be stored. It is not, for two reasons:
+So a tag CAN be stored on a folder — it just has to be **an annotation, not a
+label**. k8s validation is enforced on labels: `tag.kubed.io/Q3 Review` → 422,
+`café` → 422, and a VALUE of `Q3 Review` → 422. Real tag text only survives in an
+annotation, which is lossless but not selectable (a `fieldSelector` on one returns
+400). So `nextcloud.kubed.io/tags` is the store, and the searchability labels would
+have offered is not available for tags specifically.
 
-1. **Nothing in Grafana can see it.** There is no UI to read or write labels or
-   annotations on a folder, the folder tags column is permanently empty, and the
-   legacy API does not surface any of it. A tag written there is a note posted into
-   a room with no door — a mirror with one surface, unlike every other mirror here.
-2. **Labels cannot hold a real tag anyway.** k8s validation is enforced:
-   `tag.kubed.io/Q3 Review` → 422, `café` → 422, and a VALUE of `Q3 Review` → 422.
-   Only annotations are lossless, and annotations are not selectable (a
-   `fieldSelector` on one returns 400), so the searchability that made labels
-   attractive is exactly what we would lose.
+What a folder does NOT have is a tags field of Grafana's own — nothing the Grafana
+UI displays as a tag, and nothing the legacy API surfaces. The folder tags column in
+the UI is fed by the search envelope and is permanently empty. That is why the
+outbound direction is refused and the inbound one is not: there is a field to read,
+but no audience for what we would write.
 
-The dashboards inside a folder carry tags both ways. The folder does not.
+### NEVER write "when a sync runs"
 
-### Nothing in Grafana can start a folder tag change
+An earlier cut of the inbound scenario said `When a sync from Grafana runs`. That is
+not a behaviour — it is a function call with a space in it. Nobody performs a sync as
+an act of intent; they change a tag, and the tag shows up.
 
-The `@in-grafana` scenario is a `@decision` rather than an `@unbuilt`, because the
-absence is permanent and one-sided: the pull does not decline to look for folder
-tags, there is nothing on the far side to look at. Stated as its own scenario so a
-folder tag is known to SURVIVE a sync — the mirror never reaches in to reconcile a
-field Grafana has no opinion about.
+The correct shape is the one `dashboards/tags.feature` already uses:
+
+    Given the folder "Demo/Team" whose tags are "quarterly"
+    When the folder's tags are changed to "quarterly, ops" in Grafana
+    Then the folder's tags are "quarterly, ops" in Nextcloud
+
+Pre-state, the gesture, the end state. Whether that end state is reached by a
+scheduled pull, a manual sync or a webhook is a HOW, and a HOW never appears in a
+`When`. The same applies to any phrasing of the form "when X runs", "when the
+listener fires", or "when the reconciler notices".
 
 ### Tagging the mapped folder is an example, not a feature file
 
