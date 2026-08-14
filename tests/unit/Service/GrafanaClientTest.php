@@ -193,6 +193,35 @@ final class GrafanaClientTest extends TestCase {
 		$client->deleteFolder('abc');
 	}
 
+	// ── the folder list ────────────────────────────────────────────────────────
+
+	/**
+	 * THE WHOLE FOREST, FROM THE APP-PLATFORM LIST. `GET /api/folders` returns
+	 * top-level folders only (measured live: a child created with a parentUid never
+	 * appears in it), which is how the tree mirror shipped without ever mirroring a
+	 * single subfolder. This pins the replacement: every folder, one request, the
+	 * parent read from the grafana.app/folder annotation.
+	 */
+	public function testListFoldersReadsTheAppPlatformListNestedFoldersIncluded(): void {
+		$body = json_encode(['items' => [
+			['metadata' => ['name' => 'gf-top'], 'spec' => ['title' => 'Top']],
+			['metadata' => [
+				'name' => 'gf-child',
+				'annotations' => ['grafana.app/folder' => 'gf-top'],
+			], 'spec' => ['title' => 'Child']],
+		]], JSON_THROW_ON_ERROR);
+		$calls = new \ArrayObject();
+		$client = $this->client($this->response($body), $calls);
+
+		$folders = $client->listFolders();
+
+		self::assertStringContainsString('/apis/folder.grafana.app/v1beta1/', $calls[0][1]);
+		self::assertSame([
+			['uid' => 'gf-top', 'title' => 'Top', 'parentUid' => ''],
+			['uid' => 'gf-child', 'title' => 'Child', 'parentUid' => 'gf-top'],
+		], $folders);
+	}
+
 	// ── folder tags ────────────────────────────────────────────────────────────
 
 	/**

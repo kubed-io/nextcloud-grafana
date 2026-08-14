@@ -782,5 +782,12 @@ trait LifecycleSteps {
 		}
 		$this->lastUid = (string)$uid;
 		$this->createdDashboardUids[] = $this->lastUid;
+
+		// The dashboard landing is what stamped the FOLDER — capture that uid now, so
+		// "the uid it had before the delete" has a before to compare with.
+		$this->lastFolderUid = (string)$this->davReadMetadata($folder, 'grafana_folder_uid');
+		if ($this->lastFolderUid === '') {
+			throw new \RuntimeException("'$folder' was never stamped with a Grafana folder uid — the arrange is broken");
+		}
 	}
 }

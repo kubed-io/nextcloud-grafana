@@ -112,6 +112,36 @@ trait MirrorSteps {
 	}
 
 	/**
+	 * @Given the folder :folder holding no dashboards
+	 *
+	 * A plain Nextcloud folder. THE POINT IS WHAT IT LACKS: nothing lands in it, so
+	 * nothing may stamp it — it is the control the pull must leave untouched while
+	 * claiming the folders it does mirror.
+	 */
+	public function theFolderHoldingNoDashboards(string $folder): void {
+		$this->davMkdir($folder);
+	}
+
+	/**
+	 * @When someone creates the folder :title under the :parentUid Grafana folder
+	 *
+	 * Straight through Grafana's own API — Grafana mints the uid, and the minted uid
+	 * is what the vocabulary's "the uid of the ... Grafana folder" later compares
+	 * against, so the assertion can never agree with itself by construction.
+	 */
+	public function someoneCreatesTheFolderUnderTheGrafanaFolder(string $title, string $parentUid): void {
+		$this->createdGrafanaFolders[$title] = $this->grafanaCreateFolder($title, $parentUid);
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/** @Then /^"([^"]*)" exists in Nextcloud$/ */
+	public function existsInNextcloud(string $path): void {
+		if (!$this->davExists($path)) {
+			throw new \RuntimeException("'$path' does not exist in Nextcloud");
+		}
+	}
+
+	/**
 	 * @Then the file arrives in :folder, holding:
 	 *
 	 * ONE SENTENCE BECAUSE IT IS ONE IDEA — the file landed HERE, and it is still the
@@ -236,6 +266,28 @@ trait MirrorSteps {
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */
 	private function checkMetadataRow(string $path, string $property, string $expected, ?string $actual): ?string {
+		// "the uid of the "Bubbles" Grafana folder" — compared against the uid GRAFANA
+		// MINTED when the scenario's When created it, so the assertion cannot agree
+		// with itself: the only way to know that uid is to have really created the
+		// folder, and the only way to match it is for the pull to have really read it.
+		if (preg_match('/^the uid of the "([^"]+)" Grafana folder$/', $expected, $m) === 1) {
+			$want = $this->createdGrafanaFolders[$m[1]] ?? '';
+			if ($want === '') {
+				throw new \RuntimeException("no Grafana folder named '{$m[1]}' was created by this scenario");
+			}
+			return $actual === $want ? null : "expected the uid Grafana minted ({$want}), found '{$actual}'";
+		}
+		// The FOLDER twin of the uid-survival cases below: grafana_folder_uid was
+		// captured by the arrange, and the claim is that the gesture did not touch it.
+		if ($expected === 'the uid it had before the delete') {
+			if ($this->lastFolderUid === '') {
+				throw new \RuntimeException('the arrange captured no folder uid to compare against');
+			}
+			return $actual === $this->lastFolderUid
+				? null
+				: "expected the folder uid it already had ({$this->lastFolderUid}), found '{$actual}'";
+		}
+
 		// `link` is stored as `reference` — the literal string "link" is
 		// is_callable(), which crashes core's PROPFIND. A table reads in the
 		// vocabulary the admin chose; the wire value is view.feature's to explain.

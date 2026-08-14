@@ -49,7 +49,7 @@ Feature: Creating a folder
     # ── RULE: a folder made in Grafana arrives as a folder ────────────────────
     # notes: ../AGENTS.md#a-folder-the-user-made-for-something-else-stays-theirs
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a folder in Grafana under a mapped folder
     Given the folder "<folder>/Holiday Photos" holding no dashboards
     When someone creates the folder "Bubbles" under the "<grafana folder>" Grafana folder
@@ -61,7 +61,7 @@ Feature: Creating a folder
 
     Examples: Grafana owns the tree in both modes — a link mirrors it too
       | folder   | grafana folder |
-      | Demo     | demo           |
+      | Demo     | Demo           |
       | Pointers | links          |
 
     # The pull claims the folders it mirrors and no others, which is the same

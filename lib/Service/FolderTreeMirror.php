@@ -123,23 +123,12 @@ final class FolderTreeMirror {
 	/**
 	 * Grafana's folders beneath `$rootUid`, outermost first.
 	 *
-	 * **THIS DOCBLOCK USED TO BE WRONG, AND THE BUG IT DESCRIBES IS STILL OPEN.** It
-	 * said `/api/folders` returns the whole flat list. Measured against a live
-	 * Grafana 13.0.2, it returns TOP-LEVEL FOLDERS ONLY: a folder created with a
-	 * `parentUid` is absent from it entirely, and reachable only via
-	 * `/api/folders?parentUid=<uid>` or the app-platform list.
-	 *
-	 * So `$byParent` never contains a nested row, the walk below finds no children,
-	 * and NO GRAFANA SUBFOLDER IS EVER MIRRORED INTO NEXTCLOUD. The unit tests pass
-	 * because they hand `listFolders()` a flat list containing nested rows, and no
-	 * integration scenario covers a nested pull — every `features/folders/*` scenario
-	 * is still @todo or @unbuilt.
-	 *
-	 * The fix is `listFolders()`, not this method: the app-platform list
-	 * (`/apis/folder.grafana.app/v1beta1/.../folders`) returns every folder in one
-	 * request with its parent in `metadata.annotations["grafana.app/folder"]` —
-	 * exactly the shape this walk already wants. It is left for its own PR because it
-	 * changes the mapping picker and the recycle-bin resolution too.
+	 * {@see GrafanaClient::listFolders()} returns the whole forest in one request —
+	 * nested folders included — so the tree is assembled here rather than walked over
+	 * the wire. That sentence used to be false: the legacy `/api/folders` this relied
+	 * on returns TOP-LEVEL folders only (measured), so this walk found no children and
+	 * no Grafana subfolder was ever mirrored. The history lives on listFolders(),
+	 * which is where the contract is now enforced and tested.
 	 *
 	 * @return array<string, array{title:string, parentUid:string}>
 	 */
