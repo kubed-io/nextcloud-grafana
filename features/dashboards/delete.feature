@@ -64,11 +64,12 @@ Feature: Trashing a dashboard file
     # ── RULE: a Grafana folder outlives its last dashboard ────────────────────
     # notes: ../AGENTS.md#a-grafana-folder-outlives-its-last-dashboard
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Trash the only dashboard in a folder
     Given the folder "Demo/Team" holding one dashboard "CPU Load"
     When I move "Demo/Team/CPU Load.grafana.json" to the trash
-    Then the Grafana folder "Team" is still under "Demo", holding no dashboards
+    Then the Grafana folder "Team" is still under "Demo"
+    And it holds no dashboards
     And "Demo/Team" holds:
       | grafana_folder_uid | the uid it had before the delete |
 

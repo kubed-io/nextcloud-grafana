@@ -35,14 +35,61 @@ trait RenameSteps {
 	 * @Given a dashboard file named :filename in :folder
 	 */
 	public function aDashboardFileNamedIn(string $filename, string $folder): void {
+		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+
+		// A LINK MAPPING CANNOT BE WRITTEN INTO — that refusal is a shipped feature,
+		// not an obstacle to work around. So the mirror is seeded the only way a link
+		// mirror ever really appears: the dashboard is made in Grafana and pulled.
+		if (($this->mappingModes[$folder] ?? '') === 'link') {
+			$this->seedMirrorViaPull($folder, $stem);
+			return;
+		}
+
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
 		$this->putDashboardFile($folder, $stem);
 		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
 		if ($this->lastUid !== '') {
 			$this->createdDashboardUids[] = $this->lastUid;
 		}
+	}
+
+	/**
+	 * Put a dashboard in the mapping's Grafana folder and pull it down, leaving the
+	 * cursor on the mirror that arrived.
+	 *
+	 * Shared by every arrange that needs a file in a LINK folder. Kept here rather
+	 * than duplicated per feature: the reason it exists — you cannot write into a
+	 * link — is one rule, so it deserves one implementation.
+	 */
+	private function seedMirrorViaPull(string $folder, string $title): void {
+		$grafanaFolder = $this->grafanaFolderUidForMapping($folder);
+		$uid = 'nc-seed-' . bin2hex(random_bytes(3));
+		$this->grafanaCreateDashboard($uid, $title, $grafanaFolder);
+		$this->createdDashboardUids[] = $uid;
+		$this->theAdminPullsFromGrafana();
+
+		$this->lastUid = $uid;
+		$this->currentFolder = $folder;
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$path = $folder . '/' . $name;
+			if ($this->davReadMetadata($path, self::META_UID) === $uid) {
+				$this->currentFilePath = $path;
+				$this->originalPath = $path;
+				return;
+			}
+		}
+		throw new \RuntimeException("the pull did not mirror '$title' into the link folder '$folder'");
+	}
+
+	/** The Grafana folder uid a mapping points at, found by its Nextcloud folder. */
+	private function grafanaFolderUidForMapping(string $ncFolder): string {
+		foreach ($this->listMappingsForSync() as $mapping) {
+			if ((string)($mapping['nc_folder'] ?? '') === $ncFolder) {
+				return (string)($mapping['grafana_folder_uid'] ?? '');
+			}
+		}
+		throw new \RuntimeException("no mapping targets the Nextcloud folder '$ncFolder'");
 	}
 
 	/**
@@ -170,5 +217,56 @@ trait RenameSteps {
 	private function settleRename(): void {
 		$this->drainJobs(self::JOB_PUSH);
 		$this->drainJobs(self::JOB_RENAME);
+	}
+
+	/**
+	 * @When someone renames the dashboard to :title in Grafana
+	 *
+	 * An empty title is a real case, not a guard to skip: `rename.feature` asserts the
+	 * file falls back to the uid rather than inventing "Untitled", which would collide
+	 * the moment a second nameless dashboard appeared.
+	 */
+	public function someoneRenamesTheDashboardToInGrafana(string $title): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' does not exist in Grafana");
+		}
+		$spec = $record['dashboard'] ?? [];
+		$spec['title'] = $title;
+		$body = json_encode([
+			'dashboard' => $spec,
+			'folderUid' => (string)($record['meta']['folderUid'] ?? ''),
+			'overwrite' => true,
+			'message' => 'integration rename-in-grafana',
+		], JSON_THROW_ON_ERROR);
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => $body,
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException('renaming in Grafana failed: ' . (string)$res->getBody());
+		}
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
+	 * @Then the file is named after the dashboard's uid
+	 *
+	 * The honest fallback for a nameless dashboard — reversible, and it cannot collide.
+	 */
+	public function theFileIsNamedAfterTheDashboardsUid(): void {
+		$folder = $this->currentFolder !== '' ? $this->currentFolder : dirname($this->currentFilePath);
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			if ($this->davReadMetadata($folder . '/' . $name, self::META_UID) === $this->lastUid) {
+				if ($name !== $this->lastUid . '.grafana.json') {
+					throw new \RuntimeException(
+						"expected the file to be named '{$this->lastUid}.grafana.json', found '$name'",
+					);
+				}
+				$this->currentFilePath = $folder . '/' . $name;
+				return;
+			}
+		}
+		throw new \RuntimeException("no file in '$folder' carries dashboard '{$this->lastUid}'");
 	}
 }

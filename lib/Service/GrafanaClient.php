@@ -58,6 +58,12 @@ final class GrafanaClient {
 	 */
 	public const FOLDER_GENERAL = 'general';
 
+	/**
+	 * The app-platform folder collection. `default` is the single-org namespace a
+	 * homelab Grafana runs in — the same one the UI's own requests use.
+	 */
+	private const FOLDERS_RESOURCE = '/apis/folder.grafana.app/v1beta1/namespaces/default/folders';
+
 	/** `/api/search` row type for a dashboard (vs `dash-folder`). */
 	private const TYPE_DASHBOARD = 'dash-db';
 
@@ -101,35 +107,59 @@ final class GrafanaClient {
 	}
 
 	/**
-	 * List the Grafana folders the token can see, normalised to the small shape the
-	 * folder-mapping picker needs: `{uid, title, parentUid}`. `parentUid` is present
-	 * on nested folders (Grafana ≥ 11) and empty for top-level ones, so the admin
-	 * panel can render the tree later without a schema change here.
+	 * EVERY Grafana folder the token can see — nested ones included — normalised to
+	 * `{uid, title, parentUid}`.
 	 *
-	 * This is the read half of the mapping model — the mapping stores a folder uid,
-	 * and this is where the panel discovers which uids exist. Writes
-	 * (create/upsert/delete a dashboard) land in the sync chapter on this same
-	 * request() chokepoint.
+	 * ## WHY THIS IS THE APP-PLATFORM LIST AND NOT `GET /api/folders`
+	 *
+	 * The legacy list returns **top-level folders only**. Measured on a live 13.0.2:
+	 * creating a folder with a `parentUid` left `/api/folders` unchanged at the same
+	 * count — the child is absent from it entirely, reachable only through
+	 * `?parentUid=<uid>` or this API. Nothing in the response says so; the flat list
+	 * simply looks complete.
+	 *
+	 * Every caller here needs the whole forest. {@see FolderTreeMirror} walks it to
+	 * mirror subfolders (against the legacy list it found no children, ever — no
+	 * Grafana subfolder was mirrored at all), and {@see resolveFolderUidByTitle}
+	 * resolves the recycle-bin folder (against the legacy list a NESTED bin folder
+	 * was unresolvable, which aborted every delete in bin mode).
+	 *
+	 * One request for the whole tree: the parent travels in
+	 * `metadata.annotations["grafana.app/folder"]`, absent on a top-level folder.
+	 * Paged by the k8s-style `continue` token, bounded by {@see self::MAX_PAGES}.
+	 * A side effect worth knowing: the "Shared with me" pseudo-folder
+	 * (`sharedwithme`, id -1) is not a real folder and is absent from this list —
+	 * which is right, since it never belonged in a mapping picker.
 	 *
 	 * @return list<array{uid:string, title:string, parentUid:string}>
 	 */
 	public function listFolders(): array {
-		$res = $this->request('GET', '/api/folders', ['limit' => 1000]);
-		$body = $this->decode($res);
 		$out = [];
-		foreach ($body as $entry) {
-			if (!is_array($entry)) {
-				continue;
+		$continue = '';
+		for ($page = 0; $page < self::MAX_PAGES; $page++) {
+			$query = ['limit' => self::SEARCH_PAGE_SIZE];
+			if ($continue !== '') {
+				$query['continue'] = $continue;
 			}
-			$uid = (string)($entry['uid'] ?? '');
-			if ($uid === '') {
-				continue;
+			$body = $this->decode($this->request('GET', self::FOLDERS_RESOURCE, $query));
+			foreach ((array)($body['items'] ?? []) as $item) {
+				if (!is_array($item)) {
+					continue;
+				}
+				$uid = (string)($item['metadata']['name'] ?? '');
+				if ($uid === '') {
+					continue;
+				}
+				$out[] = [
+					'uid' => $uid,
+					'title' => (string)($item['spec']['title'] ?? $uid),
+					'parentUid' => (string)($item['metadata']['annotations']['grafana.app/folder'] ?? ''),
+				];
 			}
-			$out[] = [
-				'uid' => $uid,
-				'title' => (string)($entry['title'] ?? $uid),
-				'parentUid' => (string)($entry['parentUid'] ?? ''),
-			];
+			$continue = (string)($body['metadata']['continue'] ?? '');
+			if ($continue === '') {
+				break;
+			}
 		}
 		return $out;
 	}
@@ -532,7 +562,7 @@ final class GrafanaClient {
 	 * homelab Grafana runs in — the same one the UI's own requests use.
 	 */
 	private static function folderResource(string $uid): string {
-		return '/apis/folder.grafana.app/v1beta1/namespaces/default/folders/' . rawurlencode($uid);
+		return self::FOLDERS_RESOURCE . '/' . rawurlencode($uid);
 	}
 
 	/**

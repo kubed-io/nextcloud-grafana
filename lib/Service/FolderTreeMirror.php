@@ -123,9 +123,12 @@ final class FolderTreeMirror {
 	/**
 	 * Grafana's folders beneath `$rootUid`, outermost first.
 	 *
-	 * `/api/folders` returns the whole flat list with each folder's `parentUid`, so
-	 * the tree is assembled here rather than walked over the wire — one request
-	 * instead of one per level.
+	 * {@see GrafanaClient::listFolders()} returns the whole forest in one request —
+	 * nested folders included — so the tree is assembled here rather than walked over
+	 * the wire. That sentence used to be false: the legacy `/api/folders` this relied
+	 * on returns TOP-LEVEL folders only (measured), so this walk found no children and
+	 * no Grafana subfolder was ever mirrored. The history lives on listFolders(),
+	 * which is where the contract is now enforced and tested.
 	 *
 	 * @return array<string, array{title:string, parentUid:string}>
 	 */

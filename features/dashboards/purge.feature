@@ -31,7 +31,7 @@ Feature: Emptying the trash
 
     # The dashboard went when the file was trashed, so there is nothing left to do.
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash with the recycle bin on
     Given the Grafana recycle bin is on
     And a dashboard file in "Demo"
@@ -44,7 +44,7 @@ Feature: Emptying the trash
     # ── RULE: a purge reaches exactly one dashboard — the purged file's ───────
 
   # notes: ../AGENTS.md#a-purge-never-clears-the-bin-folder-wholesale
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash for one file while others are parked
     Given the Grafana recycle bin is on
     And a dashboard file in "Demo"

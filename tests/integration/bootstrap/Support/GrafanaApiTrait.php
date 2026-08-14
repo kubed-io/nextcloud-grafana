@@ -123,9 +123,15 @@ trait GrafanaApiTrait {
 		$res = $this->grafanaClient()->request('GET', $this->folderResourcePath($uid), [
 			'http_errors' => false,
 		]);
-		if ($res->getStatusCode() === 404) {
-			return [];
-		}
+		// A 404 IS A BROKEN ARRANGE, NOT AN ANSWER. Returning an empty set here would
+		// satisfy any "the tags are X" assertion whose X happens to be empty, on a
+		// folder that does not exist — the same trap the app's own readFolderTags was
+		// changed to avoid, and it belongs on the assertion side too.
+		Assert::assertNotSame(
+			404,
+			$res->getStatusCode(),
+			"Grafana has no folder '$uid' — the scenario's arrange did not create what it asserts on",
+		);
 		Assert::assertSame(200, $res->getStatusCode(), "GET Grafana folder $uid failed: " . (string)$res->getBody());
 		$decoded = json_decode((string)$res->getBody(), true);
 		$raw = $decoded['metadata']['annotations']['nextcloud.kubed.io/tags'] ?? '';
@@ -180,7 +186,28 @@ trait GrafanaApiTrait {
 		return $out;
 	}
 
-	/** Delete a Grafana dashboard by uid. 200 = gone; 404 = already gone. */
+	/**
+	 * Create a Grafana folder under a parent, as a person in Grafana would. Returns
+	 * the uid Grafana minted — a folder cannot be created with a chosen one.
+	 */
+	private function grafanaCreateFolder(string $title, string $parentUid): string {
+		$res = $this->grafanaClient()->request('POST', 'folders', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode(['title' => $title, 'parentUid' => $parentUid], JSON_THROW_ON_ERROR),
+		]);
+		Assert::assertSame(200, $res->getStatusCode(), "create Grafana folder '$title' failed: " . (string)$res->getBody());
+		$decoded = json_decode((string)$res->getBody(), true);
+		$uid = is_array($decoded) ? (string)($decoded['uid'] ?? '') : '';
+		Assert::assertNotSame('', $uid, "Grafana returned no uid for folder '$title'");
+		return $uid;
+	}
+
+	/** Delete a Grafana folder by uid. 200 = gone; 404 = already gone. Best-effort teardown. */
+	private function grafanaDeleteFolder(string $uid): void {
+		$this->grafanaClient()->request('DELETE', 'folders/' . rawurlencode($uid), ['http_errors' => false]);
+	}
+
+	/** Delete a Grafana dashboard by uid. 200 = gone; 404 = already gone. */	/** Delete a Grafana dashboard by uid. 200 = gone; 404 = already gone. */
 	private function grafanaDeleteDashboard(string $uid): void {
 		$res = $this->grafanaClient()->request('DELETE', 'dashboards/uid/' . rawurlencode($uid));
 		Assert::assertContains(

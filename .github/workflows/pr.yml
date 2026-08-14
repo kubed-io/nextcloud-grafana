@@ -30,6 +30,17 @@ jobs:
     # Fail the PR if CHANGELOG.md has no new entry under [Unreleased] — the
     # release workflow consumes that section as the release notes, so every PR
     # has to contribute something to it.
+    #
+    # THE ESCAPE HATCH IS THE `no changelog` LABEL, which is the action's own
+    # default and so is not repeated here. Put it on a PR that genuinely produces
+    # nothing a user would read about in release notes: spec-only work, test
+    # coverage, CI plumbing, a dependency bump. Dependabot applies it itself via
+    # .github/dependabot.yml.
+    #
+    # It is deliberately a LABEL rather than a path filter. "Is this worth telling
+    # a user about?" is a judgement, and a rule that answers it from the diff gets
+    # it wrong in both directions — a one-line lib/ change can be invisible, and a
+    # spec change can be the most important thing in a release.
     - name: Make sure Changelog is updated
       uses: tarides/changelog-check-action@v3
       with:

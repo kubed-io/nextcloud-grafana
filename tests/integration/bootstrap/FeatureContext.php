@@ -100,6 +100,14 @@ final class FeatureContext implements Context {
 	private string $currentFolder = '';
 	/** The Grafana folder uid a tag scenario is acting on. */
 	private string $currentGrafanaFolder = '';
+	/** The Grafana folder a `still under` assertion just located, for the clause after it. */
+	private string $lastGrafanaFolderUid = '';
+	/** @var list<string> uids this scenario put in the bin that the app does not manage */
+	private array $unmanagedInBin = [];
+	/** @var array<string,string> Grafana folders this scenario created: title → uid */
+	private array $createdGrafanaFolders = [];
+	/** The folder uid the arrange captured, for "the uid it had before the delete". */
+	private string $lastFolderUid = '';
 	private string $currentFilePath = '';
 
 	/**
@@ -179,6 +187,16 @@ final class FeatureContext implements Context {
 				// best-effort cleanup
 			}
 		}
+		// Grafana folders this scenario minted would be re-mirrored into every LATER
+		// scenario that maps the same parent and pulls — so they go too, best-effort.
+		foreach ($this->createdGrafanaFolders as $uid) {
+			try {
+				$this->grafanaDeleteFolder($uid);
+			} catch (\Throwable) {
+				// best-effort cleanup
+			}
+		}
+		$this->createdGrafanaFolders = [];
 		// Reset the mapping list so the next scenario starts from zero mappings.
 		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
 		$this->createdFolders = [];

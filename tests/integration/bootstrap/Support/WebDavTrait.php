@@ -52,11 +52,42 @@ trait WebDavTrait {
 	}
 
 	/** Create a top-level folder in the admin's files root (idempotent). */
+	/**
+	 * Make a folder, and every ancestor it needs.
+	 *
+	 * ## TWO BUGS THAT WERE LATENT UNTIL A NESTED PATH ARRIVED
+	 *
+	 * It used to `rawurlencode()` the WHOLE path, so `Demo/Team` became `Demo%2FTeam`
+	 * — one top-level folder whose name contains a slash, not a subfolder. Every
+	 * caller happened to pass a single segment, so nothing noticed until a scenario
+	 * needed a subfolder and its `davPut` (which encodes per segment, correctly) then
+	 * targeted a parent that did not exist.
+	 *
+	 * And MKCOL does not create intermediate collections — that is WebDAV, not a
+	 * limitation here — so a nested path needs each level made in turn.
+	 *
+	 * ## TEARDOWN TRACKS THE TOP LEVEL ONLY
+	 *
+	 * Deleting `Demo` takes `Demo/Team` with it, and the teardown's own DELETE has the
+	 * same whole-path encoding, so handing it a nested path would leave the tree
+	 * behind for the next scenario to trip over.
+	 */
 	private function davMkdir(string $folder): void {
-		// 201 created, 405 already exists — both are fine for our purposes.
-		$this->assertStatus($this->davClient()->request('MKCOL', rawurlencode($folder)), [201, 405], "MKCOL $folder");
-		if (!in_array($folder, $this->createdFolders, true)) {
-			$this->createdFolders[] = $folder;
+		$segments = array_values(array_filter(explode('/', trim($folder, '/')), static fn (string $s): bool => $s !== ''));
+		$sofar = '';
+		foreach ($segments as $segment) {
+			$sofar = $sofar === '' ? $segment : $sofar . '/' . $segment;
+			// 201 created, 405 already exists — both are fine for our purposes.
+			$this->assertStatus(
+				$this->davClient()->request('MKCOL', $this->davEncode($sofar)),
+				[201, 405],
+				"MKCOL $sofar",
+			);
+		}
+
+		$root = $segments[0] ?? '';
+		if ($root !== '' && !in_array($root, $this->createdFolders, true)) {
+			$this->createdFolders[] = $root;
 		}
 	}
 

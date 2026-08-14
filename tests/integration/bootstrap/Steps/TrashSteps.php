@@ -435,6 +435,156 @@ trait TrashSteps {
 		}
 	}
 
+	/**
+	 * @When /^I move "([^"]*)" to the trash$/
+	 *
+	 * The NAMED twin of `I move it to the trash`, which follows the cursor. Both
+	 * earn their place: the cursor form keeps a scenario from restating a path the
+	 * app decided, and this one is for when the path IS the point — a specific file
+	 * inside a folder, or the folder itself. It takes either kind of node, because to
+	 * Nextcloud a delete is a delete, and `folders/delete.feature` says the same
+	 * sentence about a folder.
+	 *
+	 * A REGEX REQUIRING QUOTES, NOT `:path`. Behat's placeholder matches a quoted
+	 * string OR a bare token — so `:path` also matched the word **it**, shadowing the
+	 * cursor step and breaking three scenarios that had passed for months by trying to
+	 * delete a file named "it". The quotes are what make the two sentences distinct.
+	 */
+	public function iMoveToTheTrash(string $path): void {
+		$this->trashedFrom = $path;
+		$this->currentFilePath = $path;
+		$this->davDelete($path);
+	}
+
+	/**
+	 * @Then the Grafana folder :title is still under :parent
+	 *
+	 * Shared verbatim with `folders/delete.feature`. A folder outliving whatever left
+	 * it is the same end state whether a dashboard was trashed or the last one moved
+	 * out, so it is one sentence rather than two that differ by a clause.
+	 */
+	public function theGrafanaFolderIsStillUnder(string $title, string $parent): void {
+		$parentUid = $this->grafanaFolderUidByTitle($parent);
+		if ($parentUid === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$parent'");
+		}
+		// ASKED WITH parentUid, NOT FILTERED FROM THE FLAT LIST. Measured against a live
+		// Grafana: `GET /api/folders` returns TOP-LEVEL folders only — a nested folder is
+		// simply absent from it, so scanning that list for a child would report every
+		// subfolder as missing no matter what Grafana holds.
+		foreach ($this->grafanaChildFolders($parentUid) as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				$this->lastGrafanaFolderUid = (string)($folder['uid'] ?? '');
+				return;
+			}
+		}
+		throw new \RuntimeException("Grafana has no folder '$title' under '$parent' — emptying is not deleting");
+	}
+
+	/** The folders directly under one parent. @return list<array<string,mixed>> */
+	private function grafanaChildFolders(string $parentUid): array {
+		$res = $this->grafanaClient()->request('GET', 'folders', [
+			'query' => ['parentUid' => $parentUid, 'limit' => 1000],
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException(
+				"listing Grafana folders under '$parentUid' failed: HTTP " . $res->getStatusCode(),
+			);
+		}
+		$rows = json_decode((string)$res->getBody(), true);
+		return is_array($rows) ? array_values($rows) : [];
+	}
+
+	/** @Then it holds no dashboards */
+	public function itHoldsNoDashboards(): void {
+		if ($this->lastGrafanaFolderUid === '') {
+			throw new \RuntimeException('no Grafana folder in play — a previous Then must name one');
+		}
+		$found = $this->grafanaDashboardsInFolder($this->lastGrafanaFolderUid);
+		if ($found !== []) {
+			throw new \RuntimeException(
+				'the Grafana folder still holds: ' . implode(', ', $found),
+			);
+		}
+	}
+
+	/**
+	 * @Given :folder also holds dashboards Nextcloud never managed
+	 *
+	 * The bin is an ORDINARY Grafana folder anyone can put things in, which is the
+	 * whole reason a purge must not clear it wholesale.
+	 */
+	public function alsoHoldsDashboardsNextcloudNeverManaged(string $folder): void {
+		$uid = $this->grafanaFolderUidByTitle($folder);
+		if ($uid === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$folder'");
+		}
+		$this->unmanagedInBin = [];
+		foreach (['Stranger One', 'Stranger Two'] as $title) {
+			$dashUid = 'nc-stranger-' . bin2hex(random_bytes(3));
+			$this->grafanaCreateDashboard($dashUid, $title, $uid);
+			$this->unmanagedInBin[] = $dashUid;
+			$this->createdDashboardUids[] = $dashUid;
+		}
+	}
+
+	/** @Then the dashboards Nextcloud never managed are still in :folder */
+	public function theDashboardsNextcloudNeverManagedAreStillIn(string $folder): void {
+		if ($this->unmanagedInBin === []) {
+			throw new \RuntimeException('no unmanaged dashboards were arranged for this scenario');
+		}
+		$uid = $this->grafanaFolderUidByTitle($folder);
+		$present = $uid === null ? [] : $this->grafanaDashboardsInFolder($uid);
+		$missing = array_values(array_diff($this->unmanagedInBin, $present));
+		if ($missing !== []) {
+			throw new \RuntimeException(
+				'the purge took dashboards it did not put there: ' . implode(', ', $missing),
+			);
+		}
+	}
+
+	/**
+	 * A Grafana folder's dashboard uids, straight from Grafana.
+	 *
+	 * THE STATUS CHECK IS THE POINT. Without it a non-200 — a rejected token, a
+	 * transient 500 — decodes to null, answers an empty list, and every assertion
+	 * built on this passes: "it holds no dashboards" would be satisfied by a request
+	 * that never succeeded, and "the strangers are still there" by one that never
+	 * looked. Both are negative-ish assertions, which is exactly where a silent
+	 * empty answer is indistinguishable from the thing being true.
+	 *
+	 * @return list<string>
+	 */
+	private function grafanaDashboardsInFolder(string $folderUid): array {
+		$res = $this->grafanaClient()->request('GET', 'search', [
+			'query' => ['type' => 'dash-db', 'folderUIDs' => $folderUid, 'limit' => 500],
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException(
+				"searching Grafana folder '$folderUid' failed: HTTP " . $res->getStatusCode()
+				. "\n" . (string)$res->getBody(),
+			);
+		}
+		$rows = json_decode((string)$res->getBody(), true);
+		$uids = [];
+		foreach (is_array($rows) ? $rows : [] as $row) {
+			$uid = (string)($row['uid'] ?? '');
+			if ($uid !== '') {
+				$uids[] = $uid;
+			}
+		}
+		return $uids;
+	}
+
+	private function grafanaFolderUidByTitle(string $title): ?string {
+		foreach ($this->grafanaListFolders() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				return (string)($folder['uid'] ?? '');
+			}
+		}
+		return null;
+	}
+
 	/** @Then the file is gone from :folder */
 	public function theFileIsGoneFrom(string $folder): void {
 		$name = basename($this->currentFilePath);
