@@ -112,6 +112,76 @@ trait MirrorSteps {
 	}
 
 	/**
+	 * @Then the file arrives in :folder, holding:
+	 *
+	 * ONE SENTENCE BECAUSE IT IS ONE IDEA — the file landed HERE, and it is still the
+	 * same managed mirror. Split across two steps, a scenario could pass with the file
+	 * in the right place and its identity stripped, which is the failure the
+	 * in-Grafana move scenarios exist to catch.
+	 *
+	 * Delegates to {@see theMirrorHolds()} for the table, so the vocabulary stays in
+	 * one place.
+	 */
+	public function theFileArrivesInHolding(string $folder, TableNode $table): void {
+		$name = basename($this->currentFilePath);
+		if (!in_array($name, $this->davListDashboardFiles($folder), true)) {
+			throw new \RuntimeException("'$name' did not arrive in '$folder'");
+		}
+		$this->currentFilePath = $folder . '/' . $name;
+		$this->theMirrorHolds($this->currentFilePath, $table);
+	}
+
+	/**
+	 * @Then there is exactly one file for that dashboard
+	 *
+	 * Shared by `rename.feature` and `restore.feature` — three uses, one definition.
+	 * Both are asking the same thing for the same reason: a gesture that re-creates
+	 * rather than updates leaves the old mirror behind, and the giveaway is two files
+	 * carrying one uid.
+	 *
+	 * Searches every folder the scenario has touched, because the whole point is to
+	 * find a stray the scenario did not expect — looking only where the file should
+	 * be would miss exactly the duplicate being hunted.
+	 */
+	public function thereIsExactlyOneFileForThatDashboard(): void {
+		$found = [];
+		foreach ($this->searchableFolders() as $folder) {
+			foreach ($this->davListDashboardFiles($folder) as $name) {
+				$path = $folder . '/' . $name;
+				if ($this->davReadMetadata($path, self::META_UID) === $this->lastUid) {
+					$found[] = $path;
+				}
+			}
+		}
+		if (count($found) !== 1) {
+			throw new \RuntimeException(
+				"expected exactly one file for dashboard '{$this->lastUid}', found "
+				. count($found) . ($found === [] ? '' : ":\n  " . implode("\n  ", $found)),
+			);
+		}
+	}
+
+	/**
+	 * Every folder this scenario could plausibly have left a mirror in.
+	 *
+	 * @return list<string>
+	 */
+	private function searchableFolders(): array {
+		$folders = array_values($this->mappedFolders);
+		foreach ([$this->currentFolder, $this->unmappedFolder] as $extra) {
+			if ($extra !== '' && !in_array($extra, $folders, true)) {
+				$folders[] = $extra;
+			}
+		}
+		foreach ($this->createdFolders as $extra) {
+			if (!in_array($extra, $folders, true)) {
+				$folders[] = $extra;
+			}
+		}
+		return $folders;
+	}
+
+	/**
 	 * A mirror's metadata, as the end state of whatever just happened.
 	 *
 	 * @Then /^"([^"]*)" holds:$/

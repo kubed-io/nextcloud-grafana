@@ -100,6 +100,10 @@ final class FeatureContext implements Context {
 	private string $currentFolder = '';
 	/** The Grafana folder uid a tag scenario is acting on. */
 	private string $currentGrafanaFolder = '';
+	/** The Grafana folder a `still under` assertion just located, for the clause after it. */
+	private string $lastGrafanaFolderUid = '';
+	/** @var list<string> uids this scenario put in the bin that the app does not manage */
+	private array $unmanagedInBin = [];
 	private string $currentFilePath = '';
 
 	/**

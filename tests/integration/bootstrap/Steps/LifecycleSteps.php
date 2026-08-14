@@ -755,4 +755,33 @@ trait LifecycleSteps {
 		Assert::assertNotEmpty($names, 'no mapping was arranged in this scenario');
 		return $names[0];
 	}
+
+	/**
+	 * @Given the folder :folder holding one dashboard :title
+	 *
+	 * A SUBFOLDER with a dashboard in it, which is the only way a subfolder gets
+	 * stamped with a Grafana uid — the folder mirror is presence-driven, so a folder
+	 * is a plain folder until something lands in it.
+	 */
+	public function theFolderHoldingOneDashboard(string $folder, string $title): void {
+		$this->davMkdir($folder);
+		$this->createdFolders[] = explode('/', $folder)[0];
+		$this->currentFolder = $folder;
+
+		$path = $folder . '/' . $title . '.grafana.json';
+		$this->davPut($path, json_encode([
+			'title' => $title,
+			'schemaVersion' => 39,
+			'panels' => [],
+		], JSON_THROW_ON_ERROR));
+
+		$this->originalPath = $path;
+		$this->currentFilePath = $path;
+		$uid = $this->davReadMetadata($path, self::META_UID);
+		if ((string)$uid === '') {
+			throw new \RuntimeException("creating '$path' did not make a dashboard in Grafana");
+		}
+		$this->lastUid = (string)$uid;
+		$this->createdDashboardUids[] = $this->lastUid;
+	}
 }

@@ -106,7 +106,7 @@ Feature: Moving a dashboard file
       | grafana_mapping | the mapping's id   |
       | grafana_mode    | the mapping's mode |
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Move a dashboard from one mapping to another
     Given a dashboard file in "Demo"
     When I move the file into "Reports"
@@ -144,7 +144,7 @@ Feature: Moving a dashboard file
     # ── RULE: a dashboard moved in Grafana takes its file with it ──────────────
 
   # notes: ../AGENTS.md#a-dashboard-moved-to-another-mapped-folder-in-grafana-relocates-its-mirror
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Move a dashboard to another mapped folder in Grafana
     Given a dashboard file in "Demo"
     When someone moves the dashboard into the "Reports" Grafana folder
@@ -154,7 +154,7 @@ Feature: Moving a dashboard file
       | grafana_mapping | the mapping's id    |
       | grafana_mode    | the mapping's mode  |
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Move a dashboard to an unmapped folder in Grafana
     Given a dashboard file in "Demo"
     When someone moves the dashboard into the "Archive" Grafana folder

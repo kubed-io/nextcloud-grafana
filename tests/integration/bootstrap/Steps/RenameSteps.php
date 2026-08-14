@@ -171,4 +171,55 @@ trait RenameSteps {
 		$this->drainJobs(self::JOB_PUSH);
 		$this->drainJobs(self::JOB_RENAME);
 	}
+
+	/**
+	 * @When someone renames the dashboard to :title in Grafana
+	 *
+	 * An empty title is a real case, not a guard to skip: `rename.feature` asserts the
+	 * file falls back to the uid rather than inventing "Untitled", which would collide
+	 * the moment a second nameless dashboard appeared.
+	 */
+	public function someoneRenamesTheDashboardToInGrafana(string $title): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' does not exist in Grafana");
+		}
+		$spec = $record['dashboard'] ?? [];
+		$spec['title'] = $title;
+		$body = json_encode([
+			'dashboard' => $spec,
+			'folderUid' => (string)($record['meta']['folderUid'] ?? ''),
+			'overwrite' => true,
+			'message' => 'integration rename-in-grafana',
+		], JSON_THROW_ON_ERROR);
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => $body,
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException('renaming in Grafana failed: ' . (string)$res->getBody());
+		}
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
+	 * @Then the file is named after the dashboard's uid
+	 *
+	 * The honest fallback for a nameless dashboard — reversible, and it cannot collide.
+	 */
+	public function theFileIsNamedAfterTheDashboardsUid(): void {
+		$folder = $this->currentFolder !== '' ? $this->currentFolder : dirname($this->currentFilePath);
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			if ($this->davReadMetadata($folder . '/' . $name, self::META_UID) === $this->lastUid) {
+				if ($name !== $this->lastUid . '.grafana.json') {
+					throw new \RuntimeException(
+						"expected the file to be named '{$this->lastUid}.grafana.json', found '$name'",
+					);
+				}
+				$this->currentFilePath = $folder . '/' . $name;
+				return;
+			}
+		}
+		throw new \RuntimeException("no file in '$folder' carries dashboard '{$this->lastUid}'");
+	}
 }

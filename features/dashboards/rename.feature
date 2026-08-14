@@ -46,7 +46,7 @@ Feature: Renaming a dashboard
       | Modified        | when the dashboard last changed in Grafana |
 
   # notes: ../AGENTS.md#renaming-a-dashboard-in-grafana-renames-the-mirrored-file
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario Outline: Rename the dashboard in Grafana
     Given a dashboard file named "Old Name.grafana.json" in "<folder>"
     When someone renames the dashboard to "New Name" in Grafana
@@ -98,7 +98,7 @@ Feature: Renaming a dashboard
     # The file that held the name keeps it; the arriving one takes the suffix.
 
   # notes: ../AGENTS.md#the-app-never-invents-a-substitute-name
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Rename a dashboard to nothing in Grafana
     Given a dashboard file named "Old Name.grafana.json" in "Demo"
     When someone renames the dashboard to "" in Grafana
