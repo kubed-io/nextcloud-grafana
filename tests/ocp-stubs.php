@@ -110,10 +110,15 @@ namespace OCP\Files {
 			// FolderTreeMirror creates a Nextcloud folder for each Grafana folder it
 			// finds, so the pull can place dashboards in the folder that mirrors theirs.
 			public function newFolder(string $path): Folder;
+
+			// StorageService turns a mapping's stored folder id back into a path, and
+			// TagChangeListener turns the bare file id a tag event carries into a node.
+			public function getFirstNodeById(int $id): ?Node;
 		}
 	}
 	// The storage root — declared after Folder, which it extends. TrashPurgeHook asks it
-	// for a user's home so it can step up into /files_trashbin.
+	// for a user's home so it can step up into /files_trashbin; TagChangeListener asks it
+	// to turn the bare file id a tag event carries back into a node.
 	if (!interface_exists(IRootFolder::class, false)) {
 		interface IRootFolder extends Folder {
 			public function getUserFolder(string $userId): Folder;
@@ -429,6 +434,80 @@ namespace OCP\Http\Client {
 	// GrafanaClient catches it BY TYPE, so it must be a distinct class here.
 	if (!class_exists(LocalServerException::class, false)) {
 		class LocalServerException extends \Exception {
+		}
+	}
+}
+
+namespace OCP\SystemTag {
+	// The systemtag surface the tag engine speaks to. nextcloud/ocp ships no bodies,
+	// and the unit suite drives NextcloudTags directly against these — the catalog
+	// (ISystemTagManager) and the assignment table (ISystemTagObjectMapper) are two
+	// separate things in Nextcloud, which is the whole reason that class exists.
+	if (!interface_exists(ISystemTag::class, false)) {
+		interface ISystemTag {
+			public function getId(): string;
+
+			public function getName(): string;
+		}
+	}
+	if (!class_exists(TagNotFoundException::class, false)) {
+		class TagNotFoundException extends \Exception {
+		}
+	}
+	if (!interface_exists(ISystemTagManager::class, false)) {
+		interface ISystemTagManager {
+			/** @param list<string> $tagIds @return list<ISystemTag> */
+			public function getTagsByIds($tagIds, ?\OCP\IUser $user = null): array;
+
+			public function getTag(string $tagName, bool $userVisible, bool $userAssignable): ISystemTag;
+
+			public function createTag(string $tagName, bool $userVisible, bool $userAssignable): ISystemTag;
+		}
+	}
+	if (!interface_exists(ISystemTagObjectMapper::class, false)) {
+		interface ISystemTagObjectMapper {
+			/** @param list<string> $objIds @return array<string,list<int|string>> */
+			public function getTagIdsForObjects($objIds, string $objectType): array;
+
+			/** @param list<string> $tagIds */
+			public function assignTags(string $objId, string $objectType, $tagIds);
+
+			/** @param list<string> $tagIds */
+			public function unassignTags(string $objId, string $objectType, $tagIds);
+		}
+	}
+	// Dispatched by the mapper under its STRING event names, not dispatchTyped — which
+	// is why TagChangeListener registers on the constants rather than the class.
+	if (!class_exists(MapperEvent::class, false)) {
+		class MapperEvent extends \OCP\EventDispatcher\Event {
+			public const EVENT_ASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::assignTags';
+			public const EVENT_UNASSIGN = 'OCP\SystemTag\ISystemTagObjectMapper::unassignTags';
+
+			/** @param list<int> $tags */
+			public function __construct(
+				private string $event,
+				private string $objectType,
+				private string $objectId,
+				private array $tags = [],
+			) {
+			}
+
+			public function getEvent(): string {
+				return $this->event;
+			}
+
+			public function getObjectType(): string {
+				return $this->objectType;
+			}
+
+			public function getObjectId(): string {
+				return $this->objectId;
+			}
+
+			/** @return list<int> */
+			public function getTags(): array {
+				return $this->tags;
+			}
 		}
 	}
 }

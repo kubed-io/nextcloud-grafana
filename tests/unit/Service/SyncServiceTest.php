@@ -23,6 +23,7 @@ use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\StorageService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncService;
+use OCA\GrafanaSync\Service\TagSyncService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IMimeTypeLoader;
@@ -56,6 +57,7 @@ final class SyncServiceTest extends TestCase {
 	private PushService $push;
 	private MirrorTimes $times;
 	private FolderTreeMirror $tree;
+	private TagSyncService $tagSync;
 	private SyncGuard $guard;
 	private IMimeTypeLoader $mimeLoader;
 	private SyncService $service;
@@ -86,6 +88,9 @@ final class SyncServiceTest extends TestCase {
 		$this->tree = $this->createStub(FolderTreeMirror::class);
 		$this->tree->method('sync')->willReturn([]);
 
+		// Tag import is asserted in TagSyncServiceTest; here it only has to not fire.
+		$this->tagSync = $this->createStub(TagSyncService::class);
+
 		$this->guard = $guard;
 		$this->mimeLoader = $mimeLoader;
 		$this->rebuildService();
@@ -109,6 +114,7 @@ final class SyncServiceTest extends TestCase {
 			$this->mimeLoader,
 			$this->times,
 			$this->tree,
+			$this->tagSync,
 			new NullLogger(),
 		);
 	}

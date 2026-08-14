@@ -26,6 +26,7 @@ use OCA\GrafanaSync\Listener\NameSyncListener;
 use OCA\GrafanaSync\Listener\NodeWrittenListener;
 use OCA\GrafanaSync\Listener\RegisterDavPluginsListener;
 use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
+use OCA\GrafanaSync\Listener\TagChangeListener;
 use OCA\GrafanaSync\Listener\TrashPurgeHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
@@ -42,6 +43,7 @@ use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
+use OCP\SystemTag\MapperEvent;
 
 /**
  * App bootstrap.
@@ -137,6 +139,14 @@ final class Application extends App implements IBootstrap {
 		// one event fires, for the folder, and none for anything inside it. Everything
 		// under a trashed folder is reached by walking it — see FolderCascade.
 		$context->registerEventListener(BeforeNodeDeletedEvent::class, FolderDeleteListener::class);
+
+		// Tags, on a dashboard file or a folder. Registered by the legacy MapperEvent's
+		// STRING names on purpose: the mapper sends it through dispatch($name, $event)
+		// rather than dispatchTyped(), so a MapperEvent::class registration never fires.
+		// The typed TagAssignedEvent/TagUnassignedEvent pair would be nicer and is
+		// @since 32, while info.xml still declares min-version 31.
+		$context->registerEventListener(MapperEvent::EVENT_ASSIGN, TagChangeListener::class);
+		$context->registerEventListener(MapperEvent::EVENT_UNASSIGN, TagChangeListener::class);
 
 		// Files-app openers (Course 5): load the frontend bundle that adds the "Open in
 		// Grafana" / "Open with text editor" row actions and the "Grafana dashboard" New-menu

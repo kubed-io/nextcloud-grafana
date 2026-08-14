@@ -62,7 +62,15 @@ trait MirrorSteps {
 		foreach ($table->getHash() as $row) {
 			$title = $row['dashboard'];
 			$uid = $row['uid'];
-			$this->grafanaCreateDashboard($uid, $title, $folderUid);
+			// A `tags` column seeds the dashboard WITH those tags. Without this branch
+			// the column would be silently ignored, and a tag-import assertion would
+			// pass against a dashboard that never carried a tag.
+			$tags = trim((string)($row['tags'] ?? ''));
+			if ($tags !== '') {
+				$this->grafanaCreateTaggedDashboard($uid, $title, $folderUid, $this->parseTags($tags));
+			} else {
+				$this->grafanaCreateDashboard($uid, $title, $folderUid);
+			}
 			$this->seededDashboards[$title] = $uid;
 		}
 	}

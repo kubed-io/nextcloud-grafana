@@ -40,6 +40,7 @@ final class PushService {
 		private DashboardMetadata $metadata,
 		private FolderMirror $folderMirror,
 		private MirrorTimes $times,
+		private TagSyncService $tagSync,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -98,6 +99,13 @@ final class PushService {
 		}
 		$this->metadata->write($node->getId(), $update);
 		$this->stampGrafanaClock($node, $managed->uid);
+
+		// THE THIRD SURFACE. Tags are a top-level key in the spec, so editing the JSON
+		// by hand is a way to change them — and Grafana has just accepted that change.
+		// Without this the file and Grafana would agree while the Nextcloud tags said
+		// something else, until a pull happened to correct it.
+		$tags = TagSet::of(is_array($spec->tags ?? null) ? $spec->tags : []);
+		$this->tagSync->applyToDashboard($node, $tags);
 		return true;
 	}
 
