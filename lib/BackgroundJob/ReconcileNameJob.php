@@ -36,12 +36,14 @@ use Psr\Log\LoggerInterface;
  * - `filename_from_title` (the JSON `title` was edited + saved): rename the file to match (the
  *   original save already pushed the title to Grafana via the writeback).
  *
- * Both actions first put the file into OUR spelling of a collision — see
- * {@see canonicaliseSpelling()}. That has to happen here rather than at the gesture for the
- * same reason the rest of this job does: a copy's own hook holds locks on the file it made.
+ * NEITHER ACTION RENAMES A COPY ANY MORE. Under the old `.grafana.json` extension a copy was
+ * born `Board.grafana (1).json` — Nextcloud counts before the LAST extension — so this job
+ * also had to move the file into a spelling the app could read. With `.grafana` the counter
+ * already lands where {@see FilenameCodec::format()} puts it, so the copy arrives correctly
+ * named and only its title needs settling.
  *
  * The stem this job reads is the filename's `display` name — the counter INCLUDED. A file
- * called `Board (1).grafana.json` is a dashboard called `Board (1)` when Nextcloud is the one
+ * called `Board (1).grafana` is a dashboard called `Board (1)` when Nextcloud is the one
  * that named it, and taking the counter-stripped `name` instead is what let a copy reach
  * Grafana wearing the original's title.
  *
@@ -84,8 +86,6 @@ final class ReconcileNameJob extends QueuedJob {
 			}
 			$dashUid = $managed->uid;
 
-			$this->canonicaliseSpelling($node);
-
 			$stem = FilenameCodec::displayName($node->getName());
 			$spec = json_decode($node->getContent(), false);
 			if (!$spec instanceof \stdClass) {
@@ -121,46 +121,6 @@ final class ReconcileNameJob extends QueuedJob {
 				'exception' => $e,
 			]);
 		}
-	}
-
-	/**
-	 * Put the file into OUR spelling of a collision counter, if it is wearing
-	 * Nextcloud's.
-	 *
-	 * Nextcloud names a colliding copy `Board.grafana (1).json`, counting before the
-	 * last extension because to Nextcloud our file is a `.json` called `Board.grafana`.
-	 * Ours is `Board (1).grafana.json`, with the counter on the dashboard's name.
-	 * {@see FilenameCodec::canonicalise()} reads both, which is what keeps the app
-	 * WORKING; this is what stops the user having to look at a name that puts a counter
-	 * inside a file extension.
-	 *
-	 * THIS IS THE ONLY THING THAT RENAMES A COPIED FILE, and it deliberately runs late.
-	 * Rewriting the COPY's `Destination` header from a Sabre plugin gets the name right
-	 * before the file exists — and breaks the Files app, which stats the path IT chose
-	 * the moment the copy returns, and does so only when the copy landed in the folder it
-	 * came from, which is exactly the case that collides. Measured live: intercepting
-	 * gives COPY 201 then STAT 404 and an error dialog; deferring gives COPY 201, STAT
-	 * 207, and the right name a tick later. See CopyService for the whole story.
-	 *
-	 * **EXACTLY THE CANONICAL NAME, OR NOTHING.** This must not go through
-	 * {@see renameTo()}, which steps the counter until it finds a free name: with
-	 * `Fleet Health (1).grafana.json` already taken, a client copy landing at
-	 * `Fleet Health.grafana (1).json` would be renamed to `Fleet Health (1) (1).grafana.json` —
-	 * a name nobody chose, in place of one that was working. The plugin's rule is that
-	 * the client's name wins when ours is occupied, and the backstop has to agree with
-	 * it or the two disagree about the same gesture depending on how it arrived.
-	 */
-	private function canonicaliseSpelling(File $node): void {
-		$current = $node->getName();
-		if (!FilenameCodec::isNextcloudSpelling($current)) {
-			return;
-		}
-		$wanted = FilenameCodec::canonicalise($current);
-		$parent = $node->getParent();
-		if ($parent->nodeExists($wanted)) {
-			return; // ours is taken; the client's name is the one that works
-		}
-		$node->move($parent->getPath() . '/' . $wanted);
 	}
 
 	/**

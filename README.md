@@ -12,7 +12,7 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A58.1-777bb4?logo=php&logoColor=white)](composer.json)
 
 > **Status: active development.** The sync engine is live: mapped folders provision and
-> fill with dashboards as `.grafana.json` files (**pull**), editing a synced file pushes
+> fill with dashboards as `.grafana` files (**pull**), editing a synced file pushes
 > the dashboard back to Grafana on save (**writeback**), and the full file lifecycle works
 > — **create** a dashboard by making a file, **copy** it to fork a new one, **move** it
 > between mapped folders to re-parent it in Grafana (uid kept) or out to delete it, and
@@ -32,12 +32,12 @@ manage your dashboards right inside the Files app, with folder-to-folder mapping
 ## How it works (the design)
 
 Grafana Sync maps a Grafana **folder** to a Nextcloud folder. Every dashboard inside a
-mapped Grafana folder appears in the corresponding Nextcloud folder as a `.grafana.json`
+mapped Grafana folder appears in the corresponding Nextcloud folder as a `.grafana`
 file. Depending on the mode you choose, changes you make in Nextcloud push back to
 Grafana, and changes made in Grafana pull back into Nextcloud on a schedule.
 
 ```
-Grafana (folder of dashboards) ⟺ Nextcloud (mapped folder of .grafana.json files)
+Grafana (folder of dashboards) ⟺ Nextcloud (mapped folder of .grafana files)
 ```
 
 Because **Grafana has real folders**, the mapping is a plain folder-to-folder mirror —
@@ -91,7 +91,8 @@ Grafana serves a dashboard two ways, and the mapping records which one a folder 
 - **Classic JSON** (`dashboard.grafana.app/v1beta1` / the `/api/dashboards` model) — the
   familiar dashboard JSON. The default, and what every existing dashboard already is.
 - **The v2 schema as YAML** (`dashboard.grafana.app/v2`, the App Platform's k8s-style
-  resource) — the modern, GitOps-friendly cut, serialized as YAML (`.grafana.yaml`).
+  resource) — the modern, GitOps-friendly cut, serialized as YAML inside the same
+  `.grafana` file.
 
 Classic JSON ships first; the v2/YAML cut is an opt-in per mapping.
 
@@ -106,7 +107,7 @@ the exact behaviour in plain language and drives the integration tests — and t
 
 ### Create a dashboard from Nextcloud
 
-Make a `.grafana.json` file in a mapped **sync** folder (new file, upload, or move-in) and
+Make a `.grafana` file in a mapped **sync** folder (new file, upload, or move-in) and
 the app registers it as a real Grafana dashboard — placed in the mapped folder and stamped
 with its new uid. Author in your editor of choice; it goes live in Grafana without opening
 the Grafana UI. A file created **outside** any mapped folder stays a plain, untracked
@@ -138,7 +139,7 @@ folder tree.
   is a fast-follow.)
 - **Out of every mapping** (sync): the file already holds the full JSON, so Nextcloud keeps
   the only copy — the dashboard is **deleted** in Grafana and the file's identity stripped,
-  leaving a plain, untracked `.grafana.json`. Move it back into a mapping and it rides
+  leaving a plain, untracked `.grafana`. Move it back into a mapping and it rides
   create-on-land: a brand-new dashboard (new uid). *(Recycle-bin-preserving move-out — park
   the dashboard instead of deleting it, uid kept — is a fast-follow.)*
 - **A link** cannot be moved out of its mapping (ejecting a pointer with no local JSON is
@@ -156,7 +157,7 @@ carries the original's Grafana identity — its metadata is stripped the moment 
 
 - **Copy within a mapped sync folder** → the copy becomes a **new** dashboard in Grafana
   (new uid, its own name).
-- **Copy to outside any mapping** → a plain, untracked `.grafana.json`.
+- **Copy to outside any mapping** → a plain, untracked `.grafana`.
 
 So duplicating a dashboard is as simple as copying its file, and a copy never silently
 hijacks the original's dashboard.
@@ -175,7 +176,7 @@ locked mid-rename.)
 
 ### Writeback: edit a file, update the dashboard
 
-Edit a synced `.grafana.json` in the Files app (or over WebDAV / the desktop client) and on
+Edit a synced `.grafana` in the Files app (or over WebDAV / the desktop client) and on
 **Save** the dashboard updates in Grafana on its stable uid — same dashboard, same folder,
 never a duplicate. It runs automatically (background by default, honouring the push-timing
 setting), on the **Sync to Grafana** button, or via `occ grafana_sync:sync push`. A
@@ -212,7 +213,7 @@ Nextcloud trash on our side, plus a Grafana action that turns on one optional se
   cleared (never a wholesale bin-clear; the bin may hold dashboards Nextcloud doesn't manage).
 
 A **link** file is a pointer, so trashing it only severs the tie — its dashboard is never deleted.
-An untracked `.grafana.json` is never touched. And whichever step issues the real Grafana delete,
+An untracked `.grafana` is never touched. And whichever step issues the real Grafana delete,
 if Grafana can't confirm it the trash is **aborted** so the file stays recoverable — deleting can
 never silently desync the two systems or lose a dashboard's content.
 
@@ -262,7 +263,7 @@ Driven by the file's **mode**. Two row actions in the Files app:
   **link** (a pointer — nothing to edit). For unmapped/ignored files there's no live dashboard, so the
   text editor is the default click.
 
-There's also a **Grafana dashboard** entry in the **+ New** menu — drop the new `.grafana.json`
+There's also a **Grafana dashboard** entry in the **+ New** menu — drop the new `.grafana`
 into a mapped sync folder and create-on-land makes it real in Grafana.
 
 📋 spec: [`features/dashboards/open-with.feature`](features/dashboards/open-with.feature) · 🛠 [`src/files.js`](src/files.js), [`lib/Listener/LoadFilesScriptListener.php`](lib/Listener/LoadFilesScriptListener.php)
@@ -324,7 +325,7 @@ appear.
 | **Grafana folder** | The Grafana folder to mirror (picked from the folders your token can see). Bound by its stable **uid**, so a rename in Grafana never breaks the mapping. Each folder maps to exactly one location. |
 | **Nextcloud folder** | The Nextcloud folder the dashboards appear in. May be nested (`dashboards/observe`); the nearest enclosing mapping wins. |
 | **Mode** | `sync` (full dashboard body, edits push back) or `link` (a read-only pointer that opens the dashboard in Grafana). See [Modes](#modes). |
-| **Format** | `json` (the classic dashboard model, `.grafana.json`) or `yaml` (the newer k8s-style schema, `.grafana.yaml`). |
+| **Format** | `json` (the classic dashboard model) or `yaml` (the newer k8s-style schema). Both are written as `.grafana` files — the extension names the app, the format names what is inside. |
 | **Team Folder** | On = an ownerless Team Folder (requires the groupfolders app). Off = a folder in the admin account shared to the groups. |
 | **Groups** | The Nextcloud groups the folder is shared with. |
 

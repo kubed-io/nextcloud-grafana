@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A copy is named once: the filename, the JSON title and the Grafana title all say `Fleet Health (1)`.
 - Dashboards in one Grafana folder may share a title; their files take a numbered suffix and keep it.
-- Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's uid still inside it. Nextcloud names that copy differently to us, and the app now reads its spelling too.
+- Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's uid still inside it. The copy now lands correctly named and becomes its own dashboard.
 - Moving a dashboard into a folder now creates that folder in Grafana, the same as creating one there does. It was the only one of the two gestures that did nothing.
 - The scheduled-sync and recycle-bin toggles can be turned on at last. They reverted to off on every save, silently.
 - Tags sync both ways: change them in Nextcloud, in the file, or in Grafana, and every surface agrees.
@@ -40,11 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removing a folder mapping trashes its connected files and leaves standalone files alone.
 - A link file cannot be overwritten over WebDAV.
 - Sync to and from Grafana, from the admin panel or `occ grafana_sync:sync`.
-- `.grafana.json` files show a Grafana icon, and managed files carry a pill matching their mode.
+- `.grafana` files show a Grafana icon, and managed files carry a pill matching their mode.
 - Admin panels for the connection, folder mappings, sync settings and sync actions.
 - Headless setup with `occ`: the token, the connection test, and mappings.
 
 ### Changed
+
+- **BREAKING:** dashboard files are named `.grafana`, not `.grafana.json`; existing files are renamed when the app upgrades. Nextcloud only ever reads one file extension, so the compound one meant every save wrote the wrong file type for the app to correct afterwards, and a copy made beside its source was named something the app could not recognise at all. Outside Nextcloud a `.grafana` file needs telling once which editor opens it.
 
 - Supports Nextcloud **34**, and every major in the supported range is now actually executed by the integration suite — after two patch releases of Nextcloud turned out to disagree about behaviour the app relies on.
 

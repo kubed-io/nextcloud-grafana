@@ -16,15 +16,15 @@ Feature: Syncing one mapping from its card
       | Alpha Demo | nc-alpha-demo |
     When the admin syncs one mapping
     Then the mapped folder "one-mapping" holds:
-      | file                    |
-      | Alpha Demo.grafana.json |
-    And "one-mapping/Alpha Demo.grafana.json" holds:
+      | file               |
+      | Alpha Demo.grafana |
+    And "one-mapping/Alpha Demo.grafana" holds:
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | set                 |
       | grafana_mode       | "sync"              |
       | grafana_version    | set                 |
       | grafana_syncedHash | set                 |
-    And the file "one-mapping/Alpha Demo.grafana.json" carries its Grafana dates
+    And the file "one-mapping/Alpha Demo.grafana" carries its Grafana dates
     # notes: ../AGENTS.md#syncing-one-mapping-fills-its-folder
 
   # ── the whole-instance mirror, which is still one mapping ──────────────────
@@ -36,5 +36,5 @@ Feature: Syncing one mapping from its card
     And Grafana has dashboards at the root and inside nested folders
     When the admin syncs one mapping
     Then every Grafana folder that holds dashboards appears as a nested Nextcloud subfolder
-    And every dashboard appears as a ".grafana.json" file in the matching subfolder
+    And every dashboard appears as a ".grafana" file in the matching subfolder
     And the Nextcloud tree is a one-to-one mirror of the Grafana folder structure

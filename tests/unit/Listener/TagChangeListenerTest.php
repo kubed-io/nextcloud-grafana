@@ -45,7 +45,7 @@ final class TagChangeListenerTest extends TestCase {
 	}
 
 	public function testTaggingADashboardFileReachesTheDashboardPath(): void {
-		$this->resolved = $this->file('Alpha.grafana.json');
+		$this->resolved = $this->file('Alpha.grafana');
 		$this->tagSync->expects(self::once())->method('pushDashboard')->with(
 			self::anything(),
 			self::callback(fn (TagSet $t): bool => $t->equals(TagSet::of(['dns', 'prod']))),
@@ -65,7 +65,7 @@ final class TagChangeListenerTest extends TestCase {
 
 	/** An unassign is the same question with a different answer — the whole set, re-read. */
 	public function testAnUnassignIsHandledTheSameWay(): void {
-		$this->resolved = $this->file('Alpha.grafana.json');
+		$this->resolved = $this->file('Alpha.grafana');
 		$this->tagSync->expects(self::once())->method('pushDashboard');
 
 		$this->listener()->handle(new MapperEvent(MapperEvent::EVENT_UNASSIGN, 'files', '11', [3]));
@@ -82,7 +82,7 @@ final class TagChangeListenerTest extends TestCase {
 
 	/** Tags exist on other object types (comments, contacts); only files are ours. */
 	public function testAnotherObjectTypeIsIgnored(): void {
-		$this->resolved = $this->file('Alpha.grafana.json');
+		$this->resolved = $this->file('Alpha.grafana');
 		$this->tagSync->expects(self::never())->method('pushDashboard');
 
 		$this->listener()->handle(new MapperEvent(MapperEvent::EVENT_ASSIGN, 'comments', '11', [3]));
@@ -90,7 +90,7 @@ final class TagChangeListenerTest extends TestCase {
 
 	/** The pull assigns tags as it imports them; without this they bounce straight back. */
 	public function testTheAppsOwnImportIsNotSentBack(): void {
-		$this->resolved = $this->file('Alpha.grafana.json');
+		$this->resolved = $this->file('Alpha.grafana');
 		$this->tagSync->expects(self::never())->method('pushDashboard');
 
 		$this->guard->enter();
@@ -111,7 +111,7 @@ final class TagChangeListenerTest extends TestCase {
 
 	/** A tag click must never fail; the far side catches up on the next sync. */
 	public function testAFailureDoesNotEscape(): void {
-		$this->resolved = $this->file('Alpha.grafana.json');
+		$this->resolved = $this->file('Alpha.grafana');
 		$this->tagSync->method('pushDashboard')->willThrowException(new \RuntimeException('unreachable'));
 
 		$this->listener()->handle($this->assigned(11));

@@ -259,7 +259,7 @@ final class TagSyncServiceTest extends TestCase {
 	private function file(string $content): File {
 		$file = $this->createStub(File::class);
 		$file->method('getId')->willReturn(11);
-		$file->method('getName')->willReturn('Alpha.grafana.json');
+		$file->method('getName')->willReturn('Alpha.grafana');
 		$file->method('getContent')->willReturn($content);
 		$file->method('putContent')->willReturnCallback(
 			function ($data): void {

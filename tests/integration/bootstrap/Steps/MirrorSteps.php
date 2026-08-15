@@ -19,7 +19,7 @@ use PHPUnit\Framework\Assert;
  * ## WHY
  *
  * A sync scenario used to name a magic filename and a count: *"a file named
- * Alpha Demo.grafana.json appears"* and *"holds exactly 1 dashboard file"*. Where
+ * Alpha Demo.grafana appears"* and *"holds exactly 1 dashboard file"*. Where
  * "Alpha Demo" came from was invisible — it is written by `preload-grafana.sh`,
  * which a reader of the spec has no reason to know exists. And a count is the
  * weakest possible statement about a tree: it passes whatever the file is called
@@ -471,7 +471,7 @@ trait MirrorSteps {
 				// declares its dashboards up front and the uid is knowable by title; a
 				// create scenario has no title to look up, because the dashboard did not
 				// exist until the gesture — there the uid the app stamped is the answer.
-				$title = preg_replace('/\.grafana\.json$/', '', basename($path)) ?? '';
+				$title = preg_replace('/\.grafana$/', '', basename($path)) ?? '';
 				$want = $this->seededDashboards[$title] ?? $this->lastUid;
 				if ($want === '') {
 					throw new \RuntimeException("no dashboard called '{$title}' was declared or created by this scenario");

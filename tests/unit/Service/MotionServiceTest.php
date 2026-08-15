@@ -31,9 +31,9 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(MotionService::class)]
 final class MotionServiceTest extends TestCase {
-	private const SRC_PATH = '/alice/files/src/Dash.grafana.json';
-	private const DST_PATH = '/alice/files/dst/Dash.grafana.json';
-	private const UNMAPPED_PATH = '/alice/files/loose/Dash.grafana.json';
+	private const SRC_PATH = '/alice/files/src/Dash.grafana';
+	private const DST_PATH = '/alice/files/dst/Dash.grafana';
+	private const UNMAPPED_PATH = '/alice/files/loose/Dash.grafana';
 
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
@@ -76,7 +76,7 @@ final class MotionServiceTest extends TestCase {
 	private function file(string $path, string $content = '{"title":"Dash","uid":"stale","panels":[]}'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn(42);
-		$node->method('getName')->willReturn('Dash.grafana.json');
+		$node->method('getName')->willReturn('Dash.grafana');
 		$node->method('getPath')->willReturn($path);
 		$node->method('getContent')->willReturn($content);
 		return $node;
@@ -114,7 +114,7 @@ final class MotionServiceTest extends TestCase {
 				return ['uid' => 'dash-1', 'version' => 2];
 			});
 
-		$this->service->onMove($this->file('/a/sub/Dash.grafana.json'), '/a/Dash.grafana.json');
+		$this->service->onMove($this->file('/a/sub/Dash.grafana'), '/a/Dash.grafana');
 
 		self::assertSame('gf-subfolder', $captured['folderUid'] ?? null);
 		self::assertSame('dash-1', $captured['dashboard']->uid ?? null, 'the identity survives the move');
@@ -133,7 +133,7 @@ final class MotionServiceTest extends TestCase {
 		$this->mappings->method('resolveForPath')->willReturn($same);
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 
-		$this->service->onMove($this->file('/a/sub/New.grafana.json'), '/a/sub/Old.grafana.json');
+		$this->service->onMove($this->file('/a/sub/New.grafana'), '/a/sub/Old.grafana');
 	}
 
 	/** A link is a pointer; nothing about it moves in Grafana. */
@@ -143,7 +143,7 @@ final class MotionServiceTest extends TestCase {
 		$this->mappings->method('resolveForPath')->willReturn($same);
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 
-		$this->service->onMove($this->file('/a/sub/Dash.grafana.json'), '/a/Dash.grafana.json');
+		$this->service->onMove($this->file('/a/sub/Dash.grafana'), '/a/Dash.grafana');
 	}
 
 	public function testASyncMoveIntoADifferentMappingReparentsKeepingTheUid(): void {
@@ -243,7 +243,7 @@ final class MotionServiceTest extends TestCase {
 		// a special mount like a Team Folder's /__groupfolders/<id>/ path) resolves to null —
 		// but that is NOT proof the file left every mapping, so we must never read it as a
 		// move-out and delete the dashboard. Defence in depth: never delete on that doubt.
-		$groupfolderPath = '/__groupfolders/5/Dash.grafana.json';
+		$groupfolderPath = '/__groupfolders/5/Dash.grafana';
 		$from = $this->mapping('m-src', 'gf-src', 'src');
 		$this->metadata->method('read')->willReturn($this->managed('dash-safe', Mapping::MODE_SYNC));
 		$this->mappings->method('resolveForPath')->willReturnMap([

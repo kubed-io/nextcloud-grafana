@@ -11,7 +11,7 @@
   <description><![CDATA[
 Grafana Sync surfaces your Grafana dashboards as native Nextcloud files. Map a
 Grafana **folder** to a Nextcloud folder and every dashboard inside it shows up as
-a `.grafana.json` file — with a real file icon, deep links back to Grafana, and a
+a `.grafana` file — with a real file icon, deep links back to Grafana, and a
 per-folder sync mode.
 
 - **Sync** — full two-way ownership. Edit a dashboard in the Files app, over
@@ -110,6 +110,11 @@ Grafana Labs, used here only to identify the service this app integrates with.
            `grafana` FOLDER tag, which is a different thing and stays. Idempotent;
            see lib/Migration/RemoveModePills.php. -->
       <step>OCA\GrafanaSync\Migration\RemoveModePills</step>
+      <!-- Renames already-synced `*.grafana.json` files to `*.grafana`. Runs AFTER
+           RegisterMimetype so the renamed files land on a mimetype that exists.
+           Without it an upgraded instance's dashboards go unrecognised; see
+           lib/Migration/MigrateFileExtension.php. -->
+      <step>OCA\GrafanaSync\Migration\MigrateFileExtension</step>
     </post-migration>
     <uninstall>
       <!-- Mirror image of RegisterMimetype: reverts the core-tree mimetype/icon

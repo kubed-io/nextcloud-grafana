@@ -21,7 +21,6 @@ use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\Files\IMimeTypeLoader;
 use OCP\IAppConfig;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -34,7 +33,7 @@ use Psr\Log\LoggerInterface;
  * so it survives renames/moves and needs no path/mapping lookup. We push only when
  * **all** hold:
  *   - guard not active (i.e. not our own pull/push write),
- *   - name ends in `.grafana.json` (cheap bail for everything else),
+ *   - name ends in `.grafana` (cheap bail for everything else),
  *   - the file is ours (`grafana_uid` set) and its mode is `sync` (link/unmapped/
  *     ignored never push),
  *   - the content actually changed since the last sync (sha1 ≠ `grafana_syncedHash`) —
@@ -54,7 +53,6 @@ final class NodeWrittenListener implements IEventListener {
 		private SyncGuard $guard,
 		private IUserSession $userSession,
 		private SyncNotifier $notifier,
-		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -69,15 +67,12 @@ final class NodeWrittenListener implements IEventListener {
 			return;
 		}
 
-		// Re-stamp BEFORE the SyncGuard short-circuit: every NodeWrittenEvent implies
-		// NC's scanner re-detected mime off the path's last extension (`.json` →
-		// application/json), clobbering our application/grafana+json row icon. This
-		// affects external writes (WebDAV PUT, editor, desktop client) AND our own
-		// writes inside SyncGuard, so it must run on every write. The UPDATE only
-		// touches the mimetype column and does not refire NodeWrittenEvent.
-		$this->restampMimetype();
-
-		// Everything below is the writeback push, which IS the loop we guard against.
+		// NO MIMETYPE RE-STAMP HERE ANY MORE. Under the old `.grafana.json` extension this
+		// listener re-ran a table-wide filecache UPDATE on every single write, because NC's
+		// scanner re-detected the mime off the path's last extension (`.json` →
+		// application/json) and clobbered our row each time. `.grafana` is the last
+		// extension, so core's own detector returns application/grafana+json and there is
+		// nothing left to correct. The registration in RegisterMimetype is the whole story.
 		if ($this->guard->active()) {
 			return;
 		}
@@ -125,18 +120,6 @@ final class NodeWrittenListener implements IEventListener {
 			// Curate the toast the same way the rest of the app does: a 401/403 reads as
 			// "token rejected", not Grafana's raw text.
 			$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
-		}
-	}
-
-	/** Re-apply application/grafana+json to all *.grafana.json filecache rows (one UPDATE). */
-	private function restampMimetype(): void {
-		try {
-			$this->mimeLoader->updateFilecache('grafana.json', $this->mimeLoader->getId('application/grafana+json'));
-		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync: mimetype re-stamp failed', [
-				'app' => Application::APP_ID,
-				'exception' => $e,
-			]);
 		}
 	}
 }

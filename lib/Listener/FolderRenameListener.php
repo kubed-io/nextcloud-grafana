@@ -25,7 +25,7 @@ use Psr\Log\LoggerInterface;
  * Carries a mirrored folder's new name to Grafana.
  *
  * The first listener in this app that looks at a FOLDER at all. Every other one
- * filters to `.grafana.json` files on its first line, so a folder gesture has until
+ * filters to `.grafana` files on its first line, so a folder gesture has until
  * now fired events nothing acted on — which is why `renameFolder()` sat in the
  * client with no caller.
  *

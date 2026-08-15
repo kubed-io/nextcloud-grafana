@@ -24,7 +24,7 @@ Feature: Copying a dashboard
   # notes: ../AGENTS.md#the-copy-belongs-to-where-it-lands
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Copy a dashboard into a mapped folder
-    Given a dashboard file named "Fleet Health.grafana.json" in "<source>"
+    Given a dashboard file named "Fleet Health.grafana" in "<source>"
     When I copy the file into "Demo"
     Then the copy holds:
       | filename          | "<copy>"                                  |
@@ -42,9 +42,9 @@ Feature: Copying a dashboard
   # notes: ../AGENTS.md#the-modified-clock-a-copy-cannot-keep-until-the-next-sync
 
     Examples: a copy landing beside its source is named by Nextcloud, and that is its name everywhere
-      | source  | copy                          | named            |
-      | Demo    | Fleet Health (1).grafana.json | Fleet Health (1) |
-      | Scratch | Fleet Health.grafana.json     | Fleet Health     |
+      | source  | copy                     | named            |
+      | Demo    | Fleet Health (1).grafana | Fleet Health (1) |
+      | Scratch | Fleet Health.grafana     | Fleet Health     |
 
     # notes: ../AGENTS.md#a-copy-made-in-nextcloud-is-named-by-nextcloud
 
@@ -86,16 +86,16 @@ Feature: Copying a dashboard
   # notes: ../AGENTS.md#a-dashboard-copied-in-grafana-arrives-as-its-own-file
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Copy a dashboard in Grafana
-    Given a dashboard file named "Fleet Health.grafana.json" in "<folder>"
+    Given a dashboard file named "Fleet Health.grafana" in "<folder>"
     When someone copies its dashboard in Grafana, keeping the title
     Then the copy arrives as its own file in "<folder>"
     And that file holds:
-      | filename          | "Fleet Health (1).grafana.json" |
-      | title in the file | "Fleet Health"                  |
-      | title in Grafana  | "Fleet Health"                  |
-      | grafana_uid       | its own, not the original's     |
-      | grafana_mapping   | the mapping's id                |
-      | grafana_mode      | the mapping's mode              |
+      | filename          | "Fleet Health (1).grafana"  |
+      | title in the file | "Fleet Health"              |
+      | title in Grafana  | "Fleet Health"              |
+      | grafana_uid       | its own, not the original's |
+      | grafana_mapping   | the mapping's id            |
+      | grafana_mode      | the mapping's mode          |
     And the original file and its dashboard are unchanged
 
     Examples: the mapping it lands in decides the mode, not the file it came from
@@ -107,13 +107,13 @@ Feature: Copying a dashboard
 
   @grafana @in-grafana @gesture @ui
   Scenario: Three dashboards in Grafana wearing one title
-    Given a dashboard file named "Fleet Health.grafana.json" in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone copies its dashboard in Grafana, keeping the title
     And someone copies its dashboard in Grafana, keeping the title
     Then "Demo" holds one file per dashboard, named:
-      | Fleet Health.grafana.json     |
-      | Fleet Health (1).grafana.json |
-      | Fleet Health (2).grafana.json |
+      | Fleet Health.grafana     |
+      | Fleet Health (1).grafana |
+      | Fleet Health (2).grafana |
     And all three dashboards are still titled "Fleet Health" in Grafana
 
   # notes: ../AGENTS.md#the-second-suffix-and-the-pull-that-used-to-fight-it

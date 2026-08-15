@@ -48,7 +48,7 @@ the CLI (the same operations the Settings panel performs).
 n8n app binds a *tag* to a Nextcloud folder because n8n has no folder concept at
 all, a Grafana mapping binds a Grafana **folder** (by uid) to a Nextcloud folder —
 a plain folder-to-folder mirror with no tagging scheme to maintain. The dashboards
-inside that Grafana folder become the `.grafana.json` files in the Nextcloud
+inside that Grafana folder become the `.grafana` files in the Nextcloud
 folder.
 
 A mapping stores a folder **uid**, which in real Grafana is opaque. This feature
@@ -398,29 +398,11 @@ A link is a pointer body, so a copy of one holds a pointer and no dashboard JSON
 It must not inherit the pointer's identity, and it cannot become a sync file by
 accident — there are no bytes to create a dashboard from.
 
-### Nextcloud names the copy, and it does not spell it the way we do
+### Nextcloud names the copy, and the extension decides whether that hurts
 
 A copy landing beside its source collides, and NEXTCLOUD picks the new name. It
-counts before the LAST extension, because to Nextcloud our file is a `.json`
-called `Board.grafana`:
-
-    Board.grafana (1).json          <- Nextcloud's spelling
-    Board (1).grafana.json          <- ours
-
-Only ours was ever read, so a copy made beside its source did not end in
-`.grafana.json` and every predicate in the app answered "not ours". Measured on
-the live instance: no metadata, no dashboard in Grafana, clicking it did nothing —
-and the file still carried the ORIGINAL's uid in its body, which is the most
-dangerous shape a stray copy can take, because it looks like a dashboard and
-points at somebody else's underneath.
-
-We do not get to choose that name. `FilenameCodec::canonicalise()` folds it into
-our spelling at the door, so every caller downstream is unchanged.
-
-Reading it is what makes the app WORK, and it is load-bearing rather than a
-courtesy: the file really does exist under that name for a moment, every time.
-
-### The copy cannot be renamed before the client has looked at it
+counts before the LAST extension — which is the entire reason the app's file
+extension is now one segment.
 
 **Nextcloud's server does not name a copy at all.** WebDAV COPY means "copy to
 exactly this path"; if something is already there and `Overwrite: F`, the answer is
@@ -431,30 +413,42 @@ The name is chosen in the BROWSER, by `getUniqueName()` from `@nextcloud/files`:
 ```ts
 let i = 1
 while (otherNames.includes(newName)) {
-  const ext = extname(name)         // ".json" — the LAST extension only
-  const base = basename(name, ext)  // "Board.grafana"
+  const ext = extname(name)         // the LAST extension only
+  const base = basename(name, ext)
   newName = `${base} ${opts.suffix(i++)}${ext}`
 }
 ```
 
-Hence `Board.grafana (1).json`, counting from one. There is a `suffix` option and no
-way for an app to pass one — the Files app calls `getUniqueName()` internally. **The
-rule cannot be changed.**
+There is a `suffix` option and no way for an app to pass one — the Files app calls
+`getUniqueName()` internally. **The rule cannot be changed.** So the app agrees with
+it instead: `FilenameCodec::format()` puts the counter in exactly that position, and
+a copy is therefore born with the name the codec would itself have chosen.
 
-**It can be got ahead of, and that turned out to be the wrong thing to do.** The
-chosen name arrives as the COPY's `Destination` header, and Sabre fires
-`beforeMethod:COPY` while that header is still a string. A plugin rewriting it there
-really does make the file be born as `Board (1).grafana.json`. It shipped, and the
-Files app answered:
+    Fleet Health (1).grafana        <- what the client picks, and what we want
 
-    The file does not exist anymore
+#### What it cost when the two disagreed
 
-Its copy action is the reason:
+Under the retired `.grafana.json`, `extname()` answered `.json` and the basename was
+`Fleet Health.grafana`, so the client produced:
+
+    Fleet Health.grafana (1).json   <- does not end in the app's extension
+
+Every predicate in the app answered "not ours". Measured on the live instance: no
+metadata, no dashboard in Grafana, clicking it did nothing — and the file still
+carried the ORIGINAL's uid in its body, which is the most dangerous shape a stray
+copy can take, because it looks like a dashboard and points at somebody else's
+underneath. Reading it took a `canonicalise()` fold in front of every predicate, and
+un-writing it took a rename in `ReconcileNameJob`, one cron tick later.
+
+**And the rename could not be pulled forward.** The chosen name arrives as the COPY's
+`Destination` header and Sabre fires `beforeMethod:COPY` while it is still a string,
+so a plugin rewriting it there really does make the file be born correctly named. It
+shipped, and the Files app answered *"The file does not exist anymore"*:
 
 ```js
 await client.copyFile(source, destination)
-if (node.dirname === target.path) {            // copying into the SAME folder
-    const { data } = await client.stat(destination)   // the path IT chose
+if (node.dirname === target.path) {                 // copying into the SAME folder
+    const { data } = await client.stat(destination) // the path IT chose
     emit('files:node:created', ...)
 }
 ...
@@ -462,30 +456,27 @@ if (404 === e.response?.status) throw new Error('The file does not exist anymore
 ```
 
 The client stats the destination it picked, and **only when the copy landed in the
-folder it came from** — which is precisely and only the case that collides, so the
-plugin fired exactly when the stat would notice. Measured both ways on a live
-instance:
+folder it came from** — precisely and only the case that collides, so the plugin
+fired exactly when the stat would notice. Measured both ways on a live instance:
 
     intercepting   COPY 201 → STAT 404 → error dialog, no file until a refresh
     deferring      COPY 201 → STAT 207 → correct name one tick later
 
-So the rename waits for `ReconcileNameJob`, and the file wears Nextcloud's spelling
-for up to one cron tick. **That is not a tolerance that has to be widened per
-counter** — the worry the interception was built to answer. `canonicalise()` reads
-`(1)`, `(2)` and `(17)` with one `\d+`, and every predicate in the app goes through
-it, so `(N)` costs a regex rather than a case.
+Neither branch of that trade-off exists now. Nothing intercepts the copy and nothing
+renames it afterwards, because the client's name is already right.
 
-**Grafana is right immediately either way**, which is what makes deferring cheap:
-`CreateService` reads the display name off the filename before the upsert, and it
-reads Nextcloud's spelling perfectly well. Only the name on disk lags.
+#### The same one segment is what gives the file its icon
 
-Worth knowing for whoever finds this again: **the compound extension is not what gives
-these files their icon.** Nextcloud's detector reads only the last extension, so
-`detectPath('Board.grafana.json')` answers `application/json` and always has. The
-custom type comes from `updateFilecache('grafana.json')`, a `LIKE '%.grafana.json'`,
-and a copy inherits its source's filecache row — so a wrongly-named copy KEEPS its
-type. The single-extension sibling (penpot) never has the problem at all; the
-compound-extension ones (grafana, n8n) do.
+Nextcloud's detector reads only the last extension (`Detection::detectPath()`,
+`strrchr`). `detectPath('Fleet Health.grafana.json')` answered `application/json`
+and always did — the custom type came from `updateFilecache('grafana.json')`, a
+table-wide `LIKE '%.grafana.json'` UPDATE that had to re-run on **every write**,
+from `NodeWrittenListener`, the pull, and the create. `detectPath('Fleet Health.grafana')`
+answers `application/grafana+json`, so the registration in `RegisterMimetype` is the
+whole story and those three call sites are gone.
+
+The single-extension sibling (penpot) never had either problem; the compound-extension
+ones (grafana, and n8n until it follows) had both.
 
 ### A copy's clocks are its own
 
@@ -566,12 +557,12 @@ otherwise collide with the file they came from — and that name is then the cop
 real name in all three places: the filename, the JSON `title`, and the dashboard in
 Grafana.
 
-Left to itself, none of that happened. Copying `Fleet Health.grafana.json` beside
+Left to itself, none of that happened. Copying `Fleet Health.grafana` beside
 itself produced, on the live instance:
 
-    file    Fleet Health.grafana (1).json     <- Nextcloud's spelling, never rewritten
-    JSON    "title": "Fleet Health"           <- the ORIGINAL's name, copied verbatim
-    Grafana  Fleet Health                     <- a second dashboard, same title
+    file    Fleet Health (1).grafana   <- the only place the copy's name appeared
+    JSON    "title": "Fleet Health"    <- the ORIGINAL's name, copied verbatim
+    Grafana  Fleet Health              <- a second dashboard, same title
 
 Three places, two answers, and a Grafana folder holding two dashboards nothing could
 tell apart. The body cannot be blamed for it: a copy's bytes ARE the original's, so
@@ -580,11 +571,10 @@ happened is the file's name.
 
 So the filename is the authority, for exactly the reason it is on a rename: it is
 the thing that just changed. `CreateService` reads the display name off the filename
-— through `canonicalise()`, so Nextcloud's spelling reads the same as ours — and puts
-it on the spec before the upsert, so Grafana is right inside the request. The file's
-own JSON `title` and its spelling on disk both lag by a tick, fixed by
-`ReconcileNameJob`, because the copy hook cannot write the file it is holding locks
-on (saga §2, round 6) and because the Files app has to see its own file first.
+and puts it on the spec before the upsert, so Grafana is right inside the request.
+Only the file's own JSON `title` lags, by a tick, fixed by `ReconcileNameJob` —
+the copy hook cannot write the file it is holding locks on (saga §2, round 6). The
+NAME on disk does not lag at all any more; see the extension note above.
 
 **The name it reads is `display`, not `name`.** `FilenameCodec::parse()` returns
 both, and they differ by exactly the collision counter. Taking the counter-stripped
@@ -603,8 +593,8 @@ one of them is Nextcloud's business. So the counter goes on the FILENAME and sto
 there — the JSON `title` and the Grafana dashboard keep saying the duplicated name,
 because that is what their owner called them.
 
-    Fleet Health.grafana.json      title "Fleet Health"   Grafana: Fleet Health
-    Fleet Health (1).grafana.json  title "Fleet Health"   Grafana: Fleet Health
+    Fleet Health.grafana      title "Fleet Health"   Grafana: Fleet Health
+    Fleet Health (1).grafana  title "Fleet Health"   Grafana: Fleet Health
 
 Same filename shape as a Nextcloud-side copy, deliberately: Nextcloud's constraint
 is satisfied identically either way. What differs is whether the counter is allowed
@@ -816,7 +806,7 @@ every pull would mint duplicate dashboards.
 `features/dashboards/create.feature`
 
 Creating dashboards from Nextcloud. These scenarios are the human-readable spec
-for the "author in NC, live in Grafana" flow: a .grafana.json written over WebDAV
+for the "author in NC, live in Grafana" flow: a .grafana written over WebDAV
 into a mapped folder fires NodeWrittenEvent → the create listener → the dashboard
 appears in Grafana. The Grafana side is asserted over its REST API; the NC stamp over
 DAV PROPFIND of nc:metadata-grafana_uid.
@@ -852,7 +842,7 @@ The sibling n8n app hit this first and was fixed the same way.
 
 A link folder is a read-only projection of Grafana. A file appearing in one is a
 local file, and it can never become the dashboard it looks like — so the app
-should refuse the write rather than leave a `.grafana.json` sitting there looking
+should refuse the write rather than leave a `.grafana` sitting there looking
 managed. Creating the dashboard in Grafana is how a link folder gains a file.
 
 The scenario is @unbuilt: today the app accepts the file and leaves it unmanaged,
@@ -1769,7 +1759,7 @@ the file lands and on ONE optional setting:
        • BIN OFF (default, aggressive): the content is already safe in the Nextcloud
          file, so we **DELETE the dashboard in Grafana** and **strip the file's Grafana
          identity** (uid/mapping/folderUid/version/hash). The file becomes a plain,
-         untracked .grafana.json that still holds the full JSON. Moving it back into a
+         untracked .grafana that still holds the full JSON. Moving it back into a
          mapping is then just **create-on-land** — a brand-new dashboard, same content,
          a **NEW uid** (the old one is gone forever). "It just works", id not preserved.
        • BIN ON: we **MOVE the Grafana dashboard into the designated recycle-bin folder**
@@ -1903,7 +1893,7 @@ made once, in writing, rather than discovered.
 
 "Open with" — the openers offered for a managed dashboard file, and which one is
 the default click. RELATED to the file type (file-type.feature: it's *because*
-`.grafana.json` is a first-class type that we get custom openers) but a distinct
+`.grafana` is a first-class type that we get custom openers) but a distinct
 concern, because the opener set + default depend on the file's MODE, not its type.
 
 Two openers:
@@ -1950,7 +1940,7 @@ whose dashboard is still live + tagged in Grafana — across all mappings, and:
 It deliberately KEEPS files a "Sync from Grafana" could not bring back, so purge can
 never cost you data: `unmapped` files (moved out of a mapping — a standalone copy /
 template you kept, whose full JSON lives in the file), `ignored` files, and untracked
-`.grafana.json` (a plain document the app never created).
+`.grafana` (a plain document the app never created).
 
 Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Command\Purge}).
 Two intended flows: purge → "Sync from Grafana" (everything reappears), and
@@ -2049,7 +2039,7 @@ scenario is the *situation*, not the repetition: a first sync over a tree that
 already has files in it. A restored backup, a re-mapped folder, a re-enabled app.
 
 The uid is what identifies a dashboard, not the filename, so the sync fills the
-existing file rather than leaving an `Alpha Demo (2).grafana.json` beside it. Kept
+existing file rather than leaving an `Alpha Demo (2).grafana` beside it. Kept
 out of the outline above because it asks a different question, and folding it in
 would prove the same thing three times, once per actor, for no extra information.
 
@@ -2227,7 +2217,7 @@ THE CONTRACT (resolved with Dr K) — trash the connected, leave the rest, lose 
       - recycle-bin ON  → the connected dashboard is MOVED into the bin folder, uid
         kept (restore moves it back, same uid).
   • Files that are NOT connected are LEFT ALONE, untouched: an `unmapped`/`untracked`
-    standalone `.grafana.json` only ever existed in Nextcloud, so removing a mapping
+    standalone `.grafana` only ever existed in Nextcloud, so removing a mapping
     it was never part of must never move or delete it — no data loss.
   • The Nextcloud trash is the safety net: we don't surgically decide what to keep —
     we trash exactly the connected files, and the trash is fully recoverable. Fully
@@ -2357,7 +2347,7 @@ app always knows from metadata, and that is a signature change across every call
 
 ### The app never invents a substitute name
 
-A dashboard with no usable title must not produce ".grafana.json" with an empty
+A dashboard with no usable title must not produce ".grafana" with an empty
 stem. FilenameCodec falls back to the uid — an ugly name is recoverable, a file
 the app cannot round-trip is not.
 
@@ -3336,9 +3326,9 @@ app is removed, and that a reinstall reconnects cleanly.
   - SYSTEM: removing the app runs the <uninstall> repair step (UnregisterMimetype),
     which REVERTS the custom-mimetype registration the install wrote into the
     Nextcloud core tree (config/mimetype*.json, core/img/filetypes/Grafana.svg,
-    core/js/mimetypelist.js) and re-stamps the .grafana.json filecache rows back to
+    core/js/mimetypelist.js) and re-stamps the .grafana filecache rows back to
     application/json. The store's clean-uninstall rule is about this shared state.
-  - DATA: the app ORPHANS the user's data — it never deletes the .grafana.json files,
+  - DATA: the app ORPHANS the user's data — it never deletes the .grafana files,
     never clears their Files-Metadata, never deletes Team Folders, never touches
     Grafana. A sync folder is a full backup, so deleting it would be data loss. To wipe
     the Nextcloud side deliberately, an admin uses Purge first (see purge.feature).

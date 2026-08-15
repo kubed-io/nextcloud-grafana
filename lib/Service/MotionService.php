@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
  *    re-stamps `grafana_mapping`. A `link` file just re-homes its pointer (Grafana untouched).
  *  - **mapped → out of every mapping** → the file's content is already safe in Nextcloud, so
  *    (recycle-bin OFF, the default) we **delete** the dashboard in Grafana and **strip the
- *    file's identity** — it becomes a plain, untracked `.grafana.json`. Moving it back into a
+ *    file's identity** — it becomes a plain, untracked `.grafana`. Moving it back into a
  *    mapping then rides create-on-land ({@see CreateService}) — a fresh dashboard, new uid.
  *    (The recycle-bin ON path — park in the bin folder, keep the uid — is a fast-follow;
  *    move.feature marks it @todo.)

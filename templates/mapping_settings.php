@@ -37,7 +37,7 @@ $desc = [
 	'folder' => $l->t('The Grafana folder to mirror. Its dashboards become the files in the Nextcloud folder. Bound by uid, so a rename in Grafana never breaks the mapping.'),
 	'nc' => $l->t('Name of the Nextcloud folder the dashboards appear in.'),
 	'mode' => $l->t('Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
-	'format' => $l->t('JSON: the classic Grafana dashboard model (.grafana.json). YAML: the newer k8s-style dashboard schema (.grafana.yaml).'),
+	'format' => $l->t('JSON: the classic Grafana dashboard model. YAML: the newer k8s-style dashboard schema. Both are written as .grafana files.'),
 	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 	'groups' => $l->t('Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 ];

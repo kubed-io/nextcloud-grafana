@@ -26,31 +26,41 @@ use PHPUnit\Framework\TestCase;
 final class FilenameCodecTest extends TestCase {
 	public function testFormatCleanShapeOmitsUid(): void {
 		$name = FilenameCodec::format('My Dashboard', 'af397c9y8enswf', false);
-		self::assertSame('My Dashboard.grafana.json', $name);
+		self::assertSame('My Dashboard.grafana', $name);
 	}
 
 	public function testFormatUidSuffixedShapeEmbedsUid(): void {
 		$name = FilenameCodec::format('My Dashboard', 'af397c9y8enswf', true);
-		self::assertSame('My Dashboard.af397c9y8enswf.grafana.json', $name);
+		self::assertSame('My Dashboard.af397c9y8enswf.grafana', $name);
 	}
 
 	public function testFormatAddsCollisionSuffix(): void {
 		$name = FilenameCodec::format('My Dashboard', 'af397c9y8enswf', false, 2);
-		self::assertSame('My Dashboard (2).grafana.json', $name);
+		self::assertSame('My Dashboard (2).grafana', $name);
+	}
+
+	/**
+	 * The counter goes LAST, after the uid — immediately before the extension, which is
+	 * the only place Nextcloud ever puts one. Pinned as a literal because it is the rule
+	 * the rest of this file's collision tests are derived from.
+	 */
+	public function testFormatPutsTheCollisionSuffixAfterTheUid(): void {
+		$name = FilenameCodec::format('My Dashboard', 'af397c9y8enswf', true, 2);
+		self::assertSame('My Dashboard.af397c9y8enswf (2).grafana', $name);
 	}
 
 	public function testFormatFallsBackToUidWhenNameSanitisesToEmpty(): void {
 		// A name made entirely of control characters sanitises to "" (they are
-		// stripped, not substituted) — we must never produce a bare ".grafana.json",
+		// stripped, not substituted) — we must never produce a bare ".grafana",
 		// so the uid is used as the stem. (Banned path characters like "/" become "_"
 		// and would NOT trigger this fallback.)
 		$name = FilenameCodec::format("\x00\x01\x1f", 'af397c9y8enswf', false);
-		self::assertSame('af397c9y8enswf.grafana.json', $name);
+		self::assertSame('af397c9y8enswf.grafana', $name);
 	}
 
 	public function testFormatSanitisesUnsafeCharacters(): void {
 		$name = FilenameCodec::format('a/b:c?d', 'af397c9y8enswf', false);
-		self::assertSame('a_b_c_d.grafana.json', $name);
+		self::assertSame('a_b_c_d.grafana', $name);
 	}
 
 	/**
@@ -77,7 +87,7 @@ final class FilenameCodecTest extends TestCase {
 	}
 
 	public function testParseCleanShapeHasNullUid(): void {
-		$parsed = FilenameCodec::parse('My Dashboard.grafana.json');
+		$parsed = FilenameCodec::parse('My Dashboard.grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame('My Dashboard', $parsed['name']);
@@ -86,7 +96,7 @@ final class FilenameCodecTest extends TestCase {
 	}
 
 	public function testParseExtractsCollisionSuffix(): void {
-		$parsed = FilenameCodec::parse('My Dashboard (3).grafana.json');
+		$parsed = FilenameCodec::parse('My Dashboard (3).grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame('My Dashboard', $parsed['name']);
@@ -94,7 +104,7 @@ final class FilenameCodecTest extends TestCase {
 	}
 
 	public function testParseIgnoresLeadingPath(): void {
-		$parsed = FilenameCodec::parse('/dashboards/observe/Daily Report.af397c9y8enswf.grafana.json');
+		$parsed = FilenameCodec::parse('/dashboards/observe/Daily Report.af397c9y8enswf.grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame('Daily Report', $parsed['name']);
@@ -110,8 +120,8 @@ final class FilenameCodecTest extends TestCase {
 	public static function nonMatchingBasenames(): iterable {
 		yield 'plain json' => ['notes.json'];
 		yield 'wrong extension' => ['dashboard.grafana.txt'];
-		yield 'bare extension only' => ['.grafana.json'];
-		yield 'yaml cut (course 6, not this codec)' => ['board.grafana.yaml'];
+		yield 'bare extension only' => ['.grafana'];
+		yield 'the retired compound extension' => ['board.grafana.json'];
 		yield 'empty' => [''];
 	}
 
@@ -122,20 +132,20 @@ final class FilenameCodecTest extends TestCase {
 
 	/** @return iterable<string, array{string, bool}> */
 	public static function dashboardNameCases(): iterable {
-		yield 'clean shape' => ['My Dashboard.grafana.json', true];
-		yield 'uid-suffixed shape' => ['My Dashboard.af397c9y8enswf.grafana.json', true];
-		yield 'collision suffix' => ['My Dashboard (2).grafana.json', true];
-		yield 'bare extension (empty stem)' => ['.grafana.json', false]; // agrees with parse(), which rejects an empty stem
+		yield 'clean shape' => ['My Dashboard.grafana', true];
+		yield 'uid-suffixed shape' => ['My Dashboard.af397c9y8enswf.grafana', true];
+		yield 'collision suffix' => ['My Dashboard (2).grafana', true];
+		yield 'bare extension (empty stem)' => ['.grafana', false]; // agrees with parse(), which rejects an empty stem
 		yield 'plain json' => ['notes.json', false];
 		yield 'wrong extension' => ['dashboard.grafana.txt', false];
-		yield 'yaml cut' => ['board.grafana.yaml', false];
+		yield 'the retired compound extension' => ['board.grafana.json', false];
 		yield 'no extension' => ['dashboard', false];
 		yield 'empty' => ['', false];
 	}
 
 	public function testIsDashboardFileTrueForManagedFile(): void {
 		$file = $this->createMock(File::class);
-		$file->method('getName')->willReturn('Daily Report.grafana.json');
+		$file->method('getName')->willReturn('Daily Report.grafana');
 		self::assertTrue(FilenameCodec::isDashboardFile($file));
 	}
 
@@ -149,7 +159,7 @@ final class FilenameCodecTest extends TestCase {
 		// A Folder is a Node but not a File — the predicate rejects it even if the name
 		// happens to end in the extension (a folder named like a dashboard).
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getName')->willReturn('weird.grafana.json');
+		$folder->method('getName')->willReturn('weird.grafana');
 		self::assertFalse(FilenameCodec::isDashboardFile($folder));
 	}
 
@@ -157,49 +167,86 @@ final class FilenameCodecTest extends TestCase {
 		self::assertFalse(FilenameCodec::isDashboardFile(null));
 	}
 
-	// ── Nextcloud's own collision spelling ─────────────────────────────────────
+	// ── one collision spelling, shared with Nextcloud ──────────────────────────
 
 	/**
-	 * THE BUG THIS CLASS COULD NOT SEE. Copying a dashboard beside its source makes
-	 * NEXTCLOUD pick the name, and it counts before the last extension — so the file
-	 * did not end in `.grafana.json` and every predicate answered "not ours". Measured
-	 * live: no metadata, no dashboard in Grafana, and a body still carrying the
-	 * ORIGINAL's uid, which is the most dangerous shape a stray copy can take.
+	 * How Nextcloud names a file whose name is taken: `getUniqueName()` inserts the
+	 * counter immediately before the LAST extension, counting from one. Modelled here
+	 * rather than asserted against literals so the claim below is about the RULE — the
+	 * tests are worthless if they only agree with names somebody typed out by hand.
 	 */
-	public function testNextcloudsCollisionNameIsStillOneOfOurs(): void {
-		self::assertTrue(FilenameCodec::isDashboardName('ZZ-Smoke-Move.grafana (1).json'));
-	}
-
-	/** And it parses to the same logical name our own spelling would. */
-	public function testBothCollisionSpellingsParseTheSame(): void {
-		$theirs = FilenameCodec::parse('Board.grafana (2).json');
-		$ours = FilenameCodec::parse('Board (2).grafana.json');
-
-		self::assertNotNull($theirs);
-		self::assertSame($ours, $theirs);
+	private static function asNextcloudWouldName(string $taken, int $n): string {
+		$dot = strrpos($taken, '.');
+		self::assertNotFalse($dot, "'$taken' has no extension for a counter to go before");
+		return substr($taken, 0, $dot) . ' (' . $n . ')' . substr($taken, $dot);
 	}
 
 	/**
-	 * THE UID-SUFFIXED SHAPE SURVIVES IT. `format()` composes that shape as
-	 * `<name> (N).<uid>.grafana.json` — counter on the name, uid last, which is where
-	 * `parse()` looks. Appending the counter blindly gives `Board.<uid> (1).grafana.json`,
-	 * whose uid segment reads as `<uid> (1)`, matches nothing, and drops the identity on
-	 * the very gesture most likely to need it.
+	 * THE WHOLE POINT OF THE SINGLE-SEGMENT EXTENSION: a copy is born with the name this
+	 * codec would have chosen, so there is nothing to read around and nothing to rename.
+	 *
+	 * Under the compound `.grafana.json` the two disagreed — Nextcloud produced
+	 * `Board.grafana (1).json`, which does not end in the extension, so every predicate
+	 * here answered "not ours". Measured live: a copy with no metadata, no dashboard in
+	 * Grafana, and a body still carrying the ORIGINAL's uid, which is the most dangerous
+	 * shape a stray copy can take.
+	 */
+	#[DataProvider('collidingNames')]
+	public function testNextcloudNamesACopyExactlyAsThisCodecWould(string $name, string $uid, bool $uidInFilename): void {
+		$first = FilenameCodec::format($name, $uid, $uidInFilename);
+
+		self::assertSame(
+			FilenameCodec::format($name, $uid, $uidInFilename, 1),
+			self::asNextcloudWouldName($first, 1),
+			'the client and the codec must spell a collision the same way',
+		);
+	}
+
+	/** @return iterable<string, array{string, string, bool}> */
+	public static function collidingNames(): iterable {
+		yield 'clean shape' => ['Fleet Health', 'af397c9y8enswf', false];
+		yield 'uid-suffixed shape' => ['Board', 'af397c9y8enswf', true];
+		yield 'a name containing a dot' => ['v1.2 board', 'kel4vkt', false];
+	}
+
+	/** And the name the client picked is one of ours, with the counter read off it. */
+	public function testACopyTheClientNamedParsesStraightBack(): void {
+		$copy = self::asNextcloudWouldName(FilenameCodec::format('Fleet Health', 'kel4vkt', false), 1);
+
+		self::assertTrue(FilenameCodec::isDashboardName($copy));
+		$parsed = FilenameCodec::parse($copy);
+		self::assertNotNull($parsed);
+		self::assertSame('Fleet Health', $parsed['name'], 'the logical name a pull matches on');
+		self::assertSame('Fleet Health (1)', $parsed['display'], 'the name the user reads');
+		self::assertSame(1, $parsed['suffix']);
+	}
+
+	/**
+	 * THE UID-SUFFIXED SHAPE SURVIVES IT, and only because the counter is read off
+	 * FIRST. The client appends it after the uid — there is nowhere else for it to go —
+	 * so a parse that looked for the uid first would see `af397c9y8enswf (1)`, match
+	 * nothing, and drop the identity on the very gesture most likely to need it.
 	 */
 	public function testACopiedUidSuffixedNameKeepsItsUid(): void {
-		$parsed = FilenameCodec::parse('Board.af397c9y8enswf.grafana (1).json');
+		$copy = self::asNextcloudWouldName(FilenameCodec::format('Board', 'af397c9y8enswf', true), 1);
 
+		$parsed = FilenameCodec::parse($copy);
 		self::assertNotNull($parsed);
 		self::assertSame('af397c9y8enswf', $parsed['uid']);
 		self::assertSame('Board', $parsed['name']);
+		self::assertSame('Board (1)', $parsed['display']);
 	}
 
-	/** And it lands on exactly the name our own spelling would have produced. */
-	public function testBothSpellingsAgreeOnTheUidSuffixedShapeToo(): void {
-		self::assertSame(
-			FilenameCodec::parse(FilenameCodec::format('Board', 'af397c9y8enswf', true, 1)),
-			FilenameCodec::parse('Board.af397c9y8enswf.grafana (1).json'),
-		);
+	/**
+	 * THE RETIRED COMPOUND EXTENSION IS NOT OURS ANY MORE, and that is deliberate: it is
+	 * exactly why {@see \OCA\GrafanaSync\Migration\MigrateFileExtension} has to run. An
+	 * upgraded instance whose files were never renamed would keep every dashboard on disk
+	 * and never act on one again.
+	 */
+	public function testTheRetiredCompoundExtensionIsNoLongerRecognised(): void {
+		self::assertFalse(FilenameCodec::isDashboardName('Fleet Health.grafana.json'));
+		self::assertNull(FilenameCodec::parse('Fleet Health.grafana.json'));
+		self::assertFalse(FilenameCodec::isDashboardName('Fleet Health.grafana (1).json'));
 	}
 
 	/**
@@ -260,7 +307,7 @@ final class FilenameCodecTest extends TestCase {
 
 	/** A name that merely contains a bracketed number is not a collision name. */
 	public function testAParenthesisedNumberInTheNameIsNotACounter(): void {
-		$parsed = FilenameCodec::parse('Cluster (eu-west-1).grafana.json');
+		$parsed = FilenameCodec::parse('Cluster (eu-west-1).grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame('Cluster (eu-west-1)', $parsed['name']);
@@ -274,7 +321,7 @@ final class FilenameCodecTest extends TestCase {
 	 * recognised next time, while anything showing the user a name wants it as written.
 	 */
 	public function testASuffixedFileHasBothALogicalNameAndADisplayedOne(): void {
-		$parsed = FilenameCodec::parse('Fleet Health (1).grafana.json');
+		$parsed = FilenameCodec::parse('Fleet Health (1).grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame('Fleet Health', $parsed['name'], 'the logical name a pull matches on');
@@ -284,7 +331,7 @@ final class FilenameCodecTest extends TestCase {
 
 	/** With no counter the two are the same string, so callers can use either safely. */
 	public function testAnUnsuffixedFilesTwoNamesAreTheSame(): void {
-		$parsed = FilenameCodec::parse('Fleet Health.grafana.json');
+		$parsed = FilenameCodec::parse('Fleet Health.grafana');
 
 		self::assertNotNull($parsed);
 		self::assertSame($parsed['name'], $parsed['display']);
@@ -295,13 +342,10 @@ final class FilenameCodecTest extends TestCase {
 	 * is how a dashboard copied in Nextcloud reached Grafana still wearing the
 	 * ORIGINAL's title — the counter, which was the entire difference between the two
 	 * names, had been stripped on the way past.
-	 *
-	 * Nextcloud's own spelling included, because that is the shape a real copy has.
 	 */
-	public function testDisplayNameKeepsTheCounterInEitherSpelling(): void {
-		self::assertSame('Fleet Health (1)', FilenameCodec::displayName('Fleet Health (1).grafana.json'));
-		self::assertSame('Fleet Health (1)', FilenameCodec::displayName('Fleet Health.grafana (1).json'));
-		self::assertSame('Fleet Health', FilenameCodec::displayName('Fleet Health.grafana.json'));
+	public function testDisplayNameKeepsTheCounter(): void {
+		self::assertSame('Fleet Health (1)', FilenameCodec::displayName('Fleet Health (1).grafana'));
+		self::assertSame('Fleet Health', FilenameCodec::displayName('Fleet Health.grafana'));
 	}
 
 	/** Not one of ours — no name to display, and no exception either. */
@@ -309,22 +353,9 @@ final class FilenameCodecTest extends TestCase {
 		self::assertSame('', FilenameCodec::displayName('Budget.xlsx'));
 	}
 
-	/**
-	 * The write-side question, kept apart from the read-side one. `canonicalise()` is
-	 * what makes the app WORK on Nextcloud's spelling; this is what decides whether the
-	 * file on disk should be renamed out of it, so the counter ends up on the
-	 * dashboard's name instead of inside its extension.
-	 */
-	public function testNextcloudsSpellingIsRecognisedAsSomethingToRename(): void {
-		self::assertTrue(FilenameCodec::isNextcloudSpelling('Fleet Health.grafana (1).json'));
-		self::assertFalse(FilenameCodec::isNextcloudSpelling('Fleet Health (1).grafana.json'), 'already ours');
-		self::assertFalse(FilenameCodec::isNextcloudSpelling('Fleet Health.grafana.json'), 'no counter at all');
-		self::assertFalse(FilenameCodec::isNextcloudSpelling('Budget.xlsx'), 'not ours to rename');
-	}
-
 	/** Not ours at all — the counter is there but the type is not. */
 	public function testAnUnrelatedFileWithACounterIsNotOurs(): void {
-		self::assertFalse(FilenameCodec::isDashboardName('Budget.xlsx (1).json'));
+		self::assertFalse(FilenameCodec::isDashboardName('Budget (1).xlsx'));
 		self::assertFalse(FilenameCodec::isDashboardName('notes (1).json'));
 	}
 }

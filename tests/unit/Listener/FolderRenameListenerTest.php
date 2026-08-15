@@ -88,9 +88,9 @@ final class FolderRenameListenerTest extends TestCase {
 		$this->grafana->expects(self::never())->method('renameFolder');
 
 		$source = $this->createStub(File::class);
-		$source->method('getPath')->willReturn('/alice/files/Demo/Old.grafana.json');
+		$source->method('getPath')->willReturn('/alice/files/Demo/Old.grafana');
 		$target = $this->createStub(File::class);
-		$target->method('getPath')->willReturn('/alice/files/Demo/New.grafana.json');
+		$target->method('getPath')->willReturn('/alice/files/Demo/New.grafana');
 
 		$this->listener()->handle($this->event($source, $target));
 	}

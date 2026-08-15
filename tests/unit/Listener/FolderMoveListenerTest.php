@@ -106,9 +106,9 @@ final class FolderMoveListenerTest extends TestCase {
 		$this->grafana->expects(self::never())->method('moveFolder');
 
 		$source = $this->createStub(File::class);
-		$source->method('getPath')->willReturn('/alice/files/Demo/A.grafana.json');
+		$source->method('getPath')->willReturn('/alice/files/Demo/A.grafana');
 		$target = $this->createStub(File::class);
-		$target->method('getPath')->willReturn('/alice/files/Reports/A.grafana.json');
+		$target->method('getPath')->willReturn('/alice/files/Reports/A.grafana');
 
 		$this->listener()->handle($this->event($source, $target));
 	}

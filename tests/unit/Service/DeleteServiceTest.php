@@ -73,8 +73,8 @@ final class DeleteServiceTest extends TestCase {
 	private function file(int $id = 5, string $content = '{"title":"Board","panels":[]}'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
-		$node->method('getName')->willReturn('Board.grafana.json');
-		$node->method('getPath')->willReturn('/alice/files/alpha/Board.grafana.json');
+		$node->method('getName')->willReturn('Board.grafana');
+		$node->method('getPath')->willReturn('/alice/files/alpha/Board.grafana');
 		$node->method('getContent')->willReturn($content);
 		return $node;
 	}

@@ -35,7 +35,7 @@ trait RenameSteps {
 	 * @Given a dashboard file named :filename in :folder
 	 */
 	public function aDashboardFileNamedIn(string $filename, string $folder): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 
 		// A LINK MAPPING CANNOT BE WRITTEN INTO — that refusal is a shipped feature,
 		// not an obstacle to work around. So the mirror is seeded the only way a link
@@ -139,13 +139,13 @@ trait RenameSteps {
 
 	/** @When I rename the file */
 	public function iRenameTheFile(): void {
-		$this->iRenameTheFileTo('Renamed ' . bin2hex(random_bytes(3)) . '.grafana.json');
+		$this->iRenameTheFileTo('Renamed ' . bin2hex(random_bytes(3)) . '.grafana');
 	}
 
 	/** @When the file is renamed by any of the above means */
 	public function theFileIsRenamedByAnyMeans(): void {
 		// Exercise the filename→everywhere leg, the simpler of the two.
-		$this->iRenameTheFileTo('Link Check ' . bin2hex(random_bytes(3)) . '.grafana.json');
+		$this->iRenameTheFileTo('Link Check ' . bin2hex(random_bytes(3)) . '.grafana');
 	}
 
 	/**
@@ -162,7 +162,7 @@ trait RenameSteps {
 		$this->davPut($this->currentFilePath, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 		$this->settleRename();
 		// After a filename-from-title reconcile the file moved; follow it.
-		$expected = dirname($this->currentFilePath) . '/' . $value . '.grafana.json';
+		$expected = dirname($this->currentFilePath) . '/' . $value . '.grafana';
 		if ($this->davExists($expected)) {
 			$this->currentFilePath = $expected;
 		}
@@ -259,9 +259,9 @@ trait RenameSteps {
 		$folder = $this->currentFolder !== '' ? $this->currentFolder : dirname($this->currentFilePath);
 		foreach ($this->davListDashboardFiles($folder) as $name) {
 			if ($this->davReadMetadata($folder . '/' . $name, self::META_UID) === $this->lastUid) {
-				if ($name !== $this->lastUid . '.grafana.json') {
+				if ($name !== $this->lastUid . '.grafana') {
 					throw new \RuntimeException(
-						"expected the file to be named '{$this->lastUid}.grafana.json', found '$name'",
+						"expected the file to be named '{$this->lastUid}.grafana', found '$name'",
 					);
 				}
 				$this->currentFilePath = $folder . '/' . $name;

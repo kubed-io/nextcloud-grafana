@@ -73,7 +73,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	 * A link mapping is a read-only projection of Grafana: the tree, the dashboards
 	 * and the shape of both belong over there, and Nextcloud mirrors them. A file
 	 * created here can never become the dashboard it looks like — the app will not
-	 * author into a link folder — so accepting it leaves a `.grafana.json` that looks
+	 * author into a link folder — so accepting it leaves a `.grafana` that looks
 	 * managed, is not, and never will be. Refusing at the door is the only honest
 	 * answer.
 	 *

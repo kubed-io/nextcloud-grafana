@@ -130,7 +130,7 @@ final class DashboardBodyTest extends TestCase {
 
 	public function testToUpsertBodyTitleFallsBackToFilenameStem(): void {
 		$dash = (object)['uid' => 'u1']; // no title
-		$body = DashboardBody::toUpsertBody($dash, null, 'My Board (2).grafana.json');
+		$body = DashboardBody::toUpsertBody($dash, null, 'My Board (2).grafana');
 		self::assertSame('My Board', $body['dashboard']->title, 'title derived from filename, collision suffix stripped');
 	}
 }

@@ -39,7 +39,7 @@ final class FolderMirrorTest extends TestCase {
 	private array $created = [];
 
 	public function testAFileInTheMappedFolderResolvesWithoutTouchingGrafana(): void {
-		$this->paths = [10 => 'Demo', 11 => 'Demo/CPU.grafana.json'];
+		$this->paths = [10 => 'Demo', 11 => 'Demo/CPU.grafana'];
 
 		$uid = $this->mirror()->folderUidFor($this->node(11), $this->mapping());
 
@@ -57,7 +57,7 @@ final class FolderMirrorTest extends TestCase {
 			10 => 'Demo',
 			20 => 'Demo/Team',
 			30 => 'Demo/Team/Drafts',
-			31 => 'Demo/Team/Drafts/CPU.grafana.json',
+			31 => 'Demo/Team/Drafts/CPU.grafana',
 		];
 
 		$uid = $this->mirror()->folderUidFor($this->node(31), $this->mapping());
@@ -69,7 +69,7 @@ final class FolderMirrorTest extends TestCase {
 	}
 
 	public function testAFolderThatIsAlreadyMirroredIsNotCreatedAgain(): void {
-		$this->paths = [10 => 'Demo', 20 => 'Demo/Team', 21 => 'Demo/Team/CPU.grafana.json'];
+		$this->paths = [10 => 'Demo', 20 => 'Demo/Team', 21 => 'Demo/Team/CPU.grafana'];
 		$this->stamped = [20 => 'gf-team-existing'];
 
 		$uid = $this->mirror()->folderUidFor($this->node(21), $this->mapping());
@@ -84,7 +84,7 @@ final class FolderMirrorTest extends TestCase {
 			10 => 'Demo',
 			20 => 'Demo/Team',
 			30 => 'Demo/Team/Drafts',
-			31 => 'Demo/Team/Drafts/CPU.grafana.json',
+			31 => 'Demo/Team/Drafts/CPU.grafana',
 		];
 		$this->stamped = [20 => 'gf-team-existing'];
 
@@ -99,7 +99,7 @@ final class FolderMirrorTest extends TestCase {
 	 * file sitting directly in it must stay that way — `null`, not the string '/'.
 	 */
 	public function testAReservedRootMappingResolvesToNoFolder(): void {
-		$this->paths = [10 => 'Everything', 11 => 'Everything/CPU.grafana.json'];
+		$this->paths = [10 => 'Everything', 11 => 'Everything/CPU.grafana'];
 
 		$uid = $this->mirror()->folderUidFor($this->node(11), $this->mapping('/'));
 
@@ -109,7 +109,7 @@ final class FolderMirrorTest extends TestCase {
 
 	/** Under a reserved-root mapping a subfolder still mirrors — at the Grafana root. */
 	public function testASubfolderUnderAReservedRootMappingIsCreatedAtTheRoot(): void {
-		$this->paths = [10 => 'Everything', 20 => 'Everything/Team', 21 => 'Everything/Team/CPU.grafana.json'];
+		$this->paths = [10 => 'Everything', 20 => 'Everything/Team', 21 => 'Everything/Team/CPU.grafana'];
 
 		$uid = $this->mirror()->folderUidFor($this->node(21), $this->mapping('/'));
 
@@ -125,7 +125,7 @@ final class FolderMirrorTest extends TestCase {
 	 */
 	public function testTheWalkStopsRatherThanClimbingOutOfTheMapping(): void {
 		// The file claims to live somewhere the mapped folder does not enclose.
-		$this->paths = [10 => 'Demo', 40 => 'Elsewhere', 41 => 'Elsewhere/CPU.grafana.json'];
+		$this->paths = [10 => 'Demo', 40 => 'Elsewhere', 41 => 'Elsewhere/CPU.grafana'];
 
 		$uid = $this->mirror()->folderUidFor($this->node(41), $this->mapping());
 
@@ -140,7 +140,7 @@ final class FolderMirrorTest extends TestCase {
 	 * litter in Grafana that nothing points at.
 	 */
 	public function testAMissingMappedFolderCreatesNothing(): void {
-		$this->paths = [31 => 'Demo/Team/Drafts/CPU.grafana.json']; // id 10 absent
+		$this->paths = [31 => 'Demo/Team/Drafts/CPU.grafana']; // id 10 absent
 
 		$uid = $this->mirror()->folderUidFor($this->node(31), $this->mapping());
 

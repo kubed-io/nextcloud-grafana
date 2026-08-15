@@ -78,8 +78,14 @@ trait AppLifecycleSteps {
 	 * file this app has never touched, with nothing but the extension going for
 	 * it, comes back typed as the app's own mimetype — which is exactly what
 	 * registration means and the only part of it a client can observe. (The
-	 * repair step writes `grafana.json` -> `application/grafana+json` into
+	 * repair step writes `grafana` -> `application/grafana+json` into
 	 * config/mimetypemapping.json, with an alias to `grafana` for the icon.)
+	 *
+	 * AND IT NOW PROVES CORE'S OWN DETECTION, which is the whole return on the
+	 * single-segment extension. `Detection::detectPath()` reads the last extension
+	 * only, so this probe is typed by Nextcloud at write time. Under the retired
+	 * `.grafana.json` it was typed `application/json` and this assertion passed only
+	 * because a listener re-stamped the filecache after every write.
 	 */
 	public function filesAreRegisteredAsTheirOwnFileType(string $extension): void {
 		$ext = ltrim(trim($extension), '.');

@@ -20,14 +20,14 @@ use Psr\Log\LoggerInterface;
  * Reverses {@see RegisterMimetype} on app removal (the `<uninstall>` repair step),
  * so removing the app leaves the Nextcloud core tree as it found it — the store's
  * clean-uninstall rule (uninstall.feature). The mirror image of install:
- *   1. Drop our `grafana.json` / `application/grafana+json` keys from the live config
+ *   1. Drop our `grafana` / `application/grafana+json` keys from the live config
  *      files (`config/mimetypemapping.json`, `config/mimetypealiases.json`).
  *   2. Delete the icon we copied to `core/img/filetypes/grafana.svg`.
- *   3. Re-stamp every `*.grafana.json` filecache row back to `application/json`, so the
- *      files become plain JSON again (and any that the user keeps still open).
+ *   3. Re-stamp every `*.grafana` filecache row back to {@see FALLBACK_MIMETYPE}, so the
+ *      files stay openable (and any that the user keeps still open).
  *   4. Regenerate `core/js/mimetypelist.js` without our alias.
  *
- * It touches **only** the system registration — never the user's `.grafana.json`
+ * It touches **only** the system registration — never the user's `.grafana`
  * files, their metadata, the mappings, or Grafana. Idempotent and fail-soft (a
  * half-present registration reverts cleanly).
  */
@@ -35,7 +35,16 @@ final class UnregisterMimetype implements IRepairStep {
 	private const APP_MIMETYPE = 'application/grafana+json';
 	private const APP_ALIAS_KEY = self::APP_MIMETYPE;
 	private const APP_ICON_NAME = 'grafana';
-	private const FILE_EXT = 'grafana.json';
+	private const FILE_EXT = 'grafana';
+
+	/**
+	 * What a `.grafana` file is once we stop claiming it. Core's detector has no opinion
+	 * on the extension any more (`application/octet-stream`), which would make the files
+	 * undownloadable-looking and unopenable — so we say what they actually are. The bytes
+	 * are a dashboard spec in JSON, and leaving them as JSON keeps the Text editor able
+	 * to open the files this app is about to stop managing.
+	 */
+	private const FALLBACK_MIMETYPE = 'application/json';
 
 	public function __construct(
 		private IMimeTypeDetector $detector,
@@ -72,9 +81,13 @@ final class UnregisterMimetype implements IRepairStep {
 		// now-removed mimetype id. The detector cache is rebuilt because we just
 		// edited the on-disk config files.
 		$this->detector->getAllMappings(); // primes lazy load (no public reset)
-		$jsonId = $this->loader->getId('application/json');
+		$jsonId = $this->loader->getId(self::FALLBACK_MIMETYPE);
 		$touched = $this->loader->updateFilecache(self::FILE_EXT, $jsonId);
-		$output->info(sprintf('grafana_sync: %d filecache row(s) reverted to application/json', $touched));
+		$output->info(sprintf(
+			'grafana_sync: %d filecache row(s) reverted to %s',
+			$touched,
+			self::FALLBACK_MIMETYPE,
+		));
 
 		// Regenerate core/js/mimetypelist.js without our alias.
 		try {

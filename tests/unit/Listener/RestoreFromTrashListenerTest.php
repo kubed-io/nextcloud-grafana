@@ -155,8 +155,8 @@ final class RestoreFromTrashListenerTest extends TestCase {
 	private function file(int $id): File {
 		$file = $this->createStub(File::class);
 		$file->method('getId')->willReturn($id);
-		$file->method('getName')->willReturn('D' . $id . '.grafana.json');
-		$file->method('getPath')->willReturn('/alice/files/Demo/Team/D' . $id . '.grafana.json');
+		$file->method('getName')->willReturn('D' . $id . '.grafana');
+		$file->method('getPath')->willReturn('/alice/files/Demo/Team/D' . $id . '.grafana');
 		return $file;
 	}
 }

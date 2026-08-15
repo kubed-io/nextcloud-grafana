@@ -61,7 +61,9 @@ use JsonSerializable;
  * not the app, so one folder can be classic JSON and another the YAML cut. `format`
  * is `json` (the safe default — every existing dashboard already is this) or `yaml`
  * (opt-in). The sync chapter reads it to pick the serializer + file extension
- * (`.grafana.json` vs `.grafana.yaml`); it is inert config until then.
+ * (JSON vs the k8s-style YAML schema — both written as `.grafana`, since the
+ * extension names the app and the format names what is inside); it is inert config
+ * until then.
  *
  * Storage model (mirrors the n8n master's Mapping, so the two reduce cleanly into a
  * shared base later): `useTeamFolder` picks the backend — an ownerless Team Folder

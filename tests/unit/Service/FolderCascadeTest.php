@@ -57,7 +57,7 @@ final class FolderCascadeTest extends TestCase {
 
 	public function testBinOffDeletesTheFolderOnceAndLetsTheCascadeTakeTheDashboards(): void {
 		$this->binUid = null;
-		$folder = $this->tree(['A.grafana.json' => 11, 'B.grafana.json' => 12]);
+		$folder = $this->tree(['A.grafana' => 11, 'B.grafana' => 12]);
 
 		// One request, not one per dashboard — the cascade is the whole point.
 		$this->grafana->expects(self::once())->method('deleteFolder')->with('gf-team');
@@ -74,7 +74,7 @@ final class FolderCascadeTest extends TestCase {
 	 */
 	public function testBinOffDoesNotStripAnyFileWhenGrafanaRefuses(): void {
 		$this->binUid = null;
-		$folder = $this->tree(['A.grafana.json' => 11]);
+		$folder = $this->tree(['A.grafana' => 11]);
 		$this->grafana->method('deleteFolder')->willThrowException(new \RuntimeException('unreachable'));
 		$this->metadata->expects(self::never())->method('clear');
 
@@ -88,7 +88,7 @@ final class FolderCascadeTest extends TestCase {
 	 */
 	public function testBinOnParksEveryDashboardBeforeDeletingTheFolder(): void {
 		$this->binUid = 'gf-bin';
-		$folder = $this->tree(['A.grafana.json' => 11, 'B.grafana.json' => 12]);
+		$folder = $this->tree(['A.grafana' => 11, 'B.grafana' => 12]);
 
 		$this->deleteService->method('softDelete')->willReturnCallback(
 			function (File $file, ManagedFile $m, ?string $bin): void {
@@ -110,7 +110,7 @@ final class FolderCascadeTest extends TestCase {
 	/** The folder goes either way — the bin decides what happens to the DASHBOARDS. */
 	public function testTheGrafanaFolderIsDeletedWithTheBinOnToo(): void {
 		$this->binUid = 'gf-bin';
-		$folder = $this->tree(['A.grafana.json' => 11]);
+		$folder = $this->tree(['A.grafana' => 11]);
 		$this->grafana->expects(self::once())->method('deleteFolder')->with('gf-team');
 
 		$this->cascade()->trash($folder, 'gf-team');
@@ -120,8 +120,8 @@ final class FolderCascadeTest extends TestCase {
 	public function testDashboardsNestedDeeperAreReached(): void {
 		$this->binUid = 'gf-bin';
 		$folder = $this->tree(
-			['A.grafana.json' => 11],
-			['Sub' => ['B.grafana.json' => 12, 'Deeper' => ['C.grafana.json' => 13]]],
+			['A.grafana' => 11],
+			['Sub' => ['B.grafana' => 12, 'Deeper' => ['C.grafana' => 13]]],
 		);
 		$this->deleteService->expects(self::exactly(3))->method('softDelete');
 
@@ -131,7 +131,7 @@ final class FolderCascadeTest extends TestCase {
 	/** A user's spreadsheet in a mirrored folder is not the app's to delete or strip. */
 	public function testFilesThatAreNotDashboardsAreLeftAlone(): void {
 		$this->binUid = null;
-		$folder = $this->tree(['A.grafana.json' => 11, 'Budget.xlsx' => 12]);
+		$folder = $this->tree(['A.grafana' => 11, 'Budget.xlsx' => 12]);
 		$this->metadata->expects(self::once())->method('clear')->with(11);
 
 		$this->cascade()->trash($folder, 'gf-team');
@@ -140,7 +140,7 @@ final class FolderCascadeTest extends TestCase {
 	/** A link never owned its dashboard, so there is nothing of its to park or delete. */
 	public function testLinkFilesAreNotParked(): void {
 		$this->binUid = 'gf-bin';
-		$folder = $this->tree(['A.grafana.json' => 11]);
+		$folder = $this->tree(['A.grafana' => 11]);
 		$this->managed[11] = new ManagedFile('d11', Mapping::MODE_LINK, '', '', 'm-demo', '', '');
 		$this->deleteService->expects(self::never())->method('softDelete');
 
@@ -150,7 +150,7 @@ final class FolderCascadeTest extends TestCase {
 	/** Already stripped, or never ours — either way there is no dashboard behind it. */
 	public function testUnmanagedDashboardFilesAreSkipped(): void {
 		$this->binUid = 'gf-bin';
-		$folder = $this->tree(['A.grafana.json' => 11]);
+		$folder = $this->tree(['A.grafana' => 11]);
 		$this->managed[11] = null;
 		$this->deleteService->expects(self::never())->method('softDelete');
 
@@ -180,7 +180,7 @@ final class FolderCascadeTest extends TestCase {
 	// ── purge ──────────────────────────────────────────────────────────────────
 
 	public function testPurgeHardDeletesEveryParkedDashboardInTheSubtree(): void {
-		$folder = $this->tree(['A.grafana.json' => 11], ['Sub' => ['B.grafana.json' => 12]]);
+		$folder = $this->tree(['A.grafana' => 11], ['Sub' => ['B.grafana' => 12]]);
 		$this->deleteService->expects(self::exactly(2))->method('hardDelete');
 
 		$this->cascade()->purge($folder);
@@ -191,7 +191,7 @@ final class FolderCascadeTest extends TestCase {
 	 * anyway, so stopping early would only leave MORE behind.
 	 */
 	public function testPurgeKeepsGoingAfterOneDashboardFails(): void {
-		$folder = $this->tree(['A.grafana.json' => 11, 'B.grafana.json' => 12]);
+		$folder = $this->tree(['A.grafana' => 11, 'B.grafana' => 12]);
 		$seen = [];
 		$this->deleteService->method('hardDelete')->willReturnCallback(
 			function (ManagedFile $m) use (&$seen): void {

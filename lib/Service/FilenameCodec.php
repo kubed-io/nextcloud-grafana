@@ -14,12 +14,12 @@ use OCP\Files\Node;
 
 /**
  * Filename codec for Grafana dashboard files — the master's {@see
- * \OCA\N8nSync\Service\FilenameCodec}, re-cut for our compound extension.
+ * \OCA\N8nSync\Service\FilenameCodec}, re-cut for our own extension.
  *
  * Two on-disk shapes are supported:
  *
- *   1. Clean (default)         <name>.grafana.json
- *   2. Uid-suffixed (opt-in)   <name>.<uid>.grafana.json
+ *   1. Clean (default)         <name>.grafana
+ *   2. Uid-suffixed (opt-in)   <name>.<uid>.grafana
  *
  * The clean shape is the default user-facing layout. The uid-suffixed shape is an
  * admin opt-in (`uid_in_filename` AppConfig flag) for environments where the Files
@@ -27,17 +27,31 @@ use OCP\Files\Node;
  * link resolvable purely from the filename. Both carry the same metadata server-side
  * via the Files Metadata API — the filename is only a redundant carrier.
  *
- * The compound `.grafana.json` extension is a locked decision (AGENTS.md): the real
- * `.json` tail means the OS opens the file in a JSON editor outside Nextcloud, while
- * the `.grafana.` segment is the hook NC keys the custom mimetype / icon / actions
- * off inside the UI. (The v2/YAML cut adds `.grafana.yaml` in Course 6; this codec is
- * the classic JSON cut for now.)
+ * ## ONE SEGMENT, BECAUSE NEXTCLOUD ONLY EVER READS ONE
  *
- * Collision policy: when two dashboards in the same Grafana folder share a `title`
- * (Grafana permits this), the first file gets the plain name and the ones after it get
- * an NC-style ` (1)`, ` (2)`, … suffix — Nextcloud's own counter, which starts at one.
- * The chosen filename is what gets stored in metadata, so subsequent pulls are stable
- * and won't oscillate.
+ * This was `.grafana.json` for the app's first two chapters, on the reasoning that the
+ * real `.json` tail made the file open in a JSON editor off-Nextcloud. It cost more
+ * than it bought, and the bill came due on `copy`:
+ *
+ *   - `IMimeTypeDetector::detectPath()` takes the LAST extension and nothing else
+ *     (`strrchr`, verified in core). `Name.grafana.json` is `application/json` to
+ *     Nextcloud, forever — so every file we wrote landed with the wrong mimetype and
+ *     had to be corrected afterwards by a table-wide UPDATE, on **every write**.
+ *   - Nextcloud's collision counter goes before the LAST extension, so a copy landing
+ *     beside its source was named `Name.grafana (1).json` — a name that ends in
+ *     `.json`, matches none of our predicates, and made the copy invisible to the app.
+ *     Reading it back took a `canonicalise()` pass in front of every predicate here,
+ *     and un-writing it took a deferred rename in a background job.
+ *
+ * With a single segment both problems stop existing rather than getting handled:
+ * `Name.grafana` is detected as `application/grafana+json` by core's own detector, and
+ * a colliding copy is born `Name (1).grafana` — already our spelling, because it is
+ * Nextcloud's. The counter sits immediately before the extension, and {@see format()}
+ * puts it in exactly the same place, so the two conventions are one convention.
+ *
+ * The `.json` tail is not free to give up: off-Nextcloud, a `.grafana` file needs a
+ * one-time editor association to open as JSON. That is a per-machine setting made once,
+ * weighed against a mimetype correction on every save and a copy the app could not see.
  *
  * ## TWO NAMES, AND THE DIFFERENCE MATTERS
  *
@@ -61,64 +75,27 @@ use OCP\Files\Node;
  *     ONLY and `name` is what still matches the dashboard. This is the single exception
  *     to *a name is one value living in three places*.
  *
+ * Collision policy: when two dashboards in the same Grafana folder share a `title`
+ * (Grafana permits this), the first file gets the plain name and the ones after it get
+ * an NC-style ` (1)`, ` (2)`, … suffix — Nextcloud's own counter, which starts at one.
+ * The chosen filename is what gets stored in metadata, so subsequent pulls are stable
+ * and won't oscillate.
+ *
  * This class is **pure logic**: no filesystem access, no DI dependencies, trivial to
  * unit test.
  */
 final class FilenameCodec {
-	/** Trailing extension of the classic JSON cut. */
-	public const EXT = '.grafana.json';
+	/** Trailing extension of a dashboard file. */
+	public const EXT = '.grafana';
 
 	/**
 	 * True when $name is a managed Grafana dashboard filename (ends in {@see EXT}).
 	 * Pure string test — the single source of truth for "is this one of ours?".
 	 */
 	public static function isDashboardName(string $name): bool {
-		$name = self::canonicalise($name);
 		// Require a non-empty stem so this agrees with parse() (which rejects a bare
-		// ".grafana.json") — the two predicates must never disagree on "is this ours?".
+		// ".grafana") — the two predicates must never disagree on "is this ours?".
 		return strlen($name) > strlen(self::EXT) && str_ends_with($name, self::EXT);
-	}
-
-	/**
-	 * Fold NEXTCLOUD'S collision spelling into ours.
-	 *
-	 * There are two conventions for "that name is taken", and only one was ever read.
-	 * Ours puts the counter on the logical name — `Board (1).grafana.json` — and
-	 * {@see parse()} strips it. Nextcloud puts it before the LAST extension, because
-	 * to Nextcloud the extension is `.json` and the basename is `Board.grafana`:
-	 *
-	 *     Board.grafana (1).json
-	 *
-	 * That does not end in `.grafana.json`, so every predicate in this app answered
-	 * "not ours" — measured on the live instance, where copying a dashboard into a
-	 * folder that already held it produced exactly that name, no metadata, no
-	 * dashboard in Grafana, and a file still carrying the ORIGINAL's uid in its body.
-	 * A copy the app cannot see is the most dangerous shape it can take: it looks like
-	 * a dashboard to the user and points at somebody else's dashboard underneath.
-	 *
-	 * We do not get to choose this name — Nextcloud picks it, on our files, whenever a
-	 * copy lands beside its source. So it has to be read. Rewriting it to our own
-	 * spelling here means every caller downstream keeps working unchanged, and
-	 * {@see parse()} then strips the counter exactly as it does for our own form.
-	 */
-	public static function canonicalise(string $name): string {
-		if (preg_match('/^(.+)\.grafana \((\d+)\)\.json$/', $name, $m) !== 1) {
-			return $name;
-		}
-		$stem = $m[1];
-		$counter = ' (' . $m[2] . ')';
-
-		// THE UID SEGMENT STAYS LAST. {@see format()} composes the opt-in shape as
-		// `<name> (N).<uid>.grafana.json` — counter on the NAME, uid immediately before
-		// the extension — and {@see parse()} looks for the uid at the last dot. Appending
-		// the counter blindly would produce `Board.<uid> (1).grafana.json`, where the uid
-		// segment reads as `<uid> (1)`, matches nothing, and the identity is silently
-		// lost on exactly the gesture most likely to need it.
-		$lastDot = strrpos($stem, '.');
-		if ($lastDot !== false && preg_match(self::UID_RE, substr($stem, $lastDot + 1)) === 1) {
-			return substr($stem, 0, $lastDot) . $counter . substr($stem, $lastDot) . self::EXT;
-		}
-		return $stem . $counter . self::EXT;
 	}
 
 	/**
@@ -144,6 +121,9 @@ final class FilenameCodec {
 	 */
 	private const UID_RE = '/^[A-Za-z0-9_-]{6,40}$/';
 
+	/** A trailing Nextcloud collision counter, e.g. the ` (2)` of `Fleet Health (2)`. */
+	private const COUNTER_RE = '/^(?<base>.+) \((?<n>\d+)\)$/';
+
 	/**
 	 * Parse a basename (or full path; we ignore everything before the last slash) into
 	 * its components. Returns null if the basename does not end in {@see EXT}.
@@ -158,7 +138,6 @@ final class FilenameCodec {
 		if ($slash !== false) {
 			$basename = substr($basename, $slash + 1);
 		}
-		$basename = self::canonicalise($basename);
 		if (!str_ends_with($basename, self::EXT)) {
 			return null;
 		}
@@ -167,9 +146,20 @@ final class FilenameCodec {
 			return null;
 		}
 
-		// Try uid-suffixed shape first: `<name>.<uid>` where `<uid>` matches UID_RE.
-		// Walk from the rightmost dot so a name containing dots (e.g. "v1.2 board")
-		// still parses.
+		// THE COUNTER COMES OFF FIRST, because it is the last thing on the stem — that is
+		// where Nextcloud puts it and where {@see format()} puts it. Reading it before the
+		// uid keeps the uid segment intact on a duplicated file: `Board.abc123 (1).grafana`
+		// is a uid-suffixed `Board` wearing a counter, not a file whose uid is `abc123 (1)`.
+		$suffix = 0;
+		$counter = '';
+		if (preg_match(self::COUNTER_RE, $stem, $m) === 1) {
+			$suffix = (int)$m['n'];
+			$counter = ' (' . $m['n'] . ')';
+			$stem = $m['base'];
+		}
+
+		// Then the uid-suffixed shape: `<name>.<uid>` where `<uid>` matches UID_RE. Walk
+		// from the rightmost dot so a name containing dots (e.g. "v1.2 board") still parses.
 		$uid = null;
 		$name = $stem;
 		$lastDot = strrpos($stem, '.');
@@ -180,20 +170,15 @@ final class FilenameCodec {
 				$name = substr($stem, 0, $lastDot);
 			}
 		}
-
-		// Strip an optional " (N)" collision suffix off the *end* of the resolved name
-		// so subsequent pulls can detect they're updating the same logical file. The
-		// unstripped form is kept as `display`, because a counter Nextcloud put there is
-		// part of the name the user sees — see this class's docblock for which of the
-		// two a caller wants.
-		$display = $name;
-		$suffix = 0;
-		if (preg_match('/^(?<base>.+) \((?<n>\d+)\)$/', $name, $m)) {
-			$suffix = (int)$m['n'];
-			$name = $m['base'];
+		if ($name === '') {
+			return null;
 		}
 
-		return ['name' => $name, 'uid' => $uid, 'suffix' => $suffix, 'display' => $display];
+		// `name` is the logical name, so later pulls detect they're updating the same file;
+		// `display` is what the user sees. See this class's docblock for which one a caller
+		// wants — taking the wrong one is what let a copy reach Grafana under the
+		// ORIGINAL's title.
+		return ['name' => $name, 'uid' => $uid, 'suffix' => $suffix, 'display' => $name . $counter];
 	}
 
 	/**
@@ -213,21 +198,12 @@ final class FilenameCodec {
 	}
 
 	/**
-	 * True when $name is one of ours but spelled NEXTCLOUD'S way — `Board.grafana (1).json`
-	 * rather than `Board (1).grafana.json`.
-	 *
-	 * {@see canonicalise()} folds that spelling on the way IN so every predicate reads
-	 * it. This is the write-side question: should the file on disk be renamed? Reading
-	 * the name is enough to make the app work; renaming it is what makes the counter
-	 * land where a user of this app expects to see it, on the dashboard's name rather
-	 * than inside its extension.
-	 */
-	public static function isNextcloudSpelling(string $name): bool {
-		return self::canonicalise($name) !== $name;
-	}
-
-	/**
 	 * Build a filename for a dashboard.
+	 *
+	 * The counter goes LAST, immediately before the extension — the same place
+	 * Nextcloud's own `getUniqueName()` puts it. That is the point of the single-segment
+	 * extension: our spelling of a collision and Nextcloud's are the same spelling, so a
+	 * copy the client names needs no correcting and a name we choose needs no defending.
 	 *
 	 * @param string $name Dashboard title from Grafana.
 	 * @param string $uid Dashboard uid from Grafana.
@@ -237,15 +213,15 @@ final class FilenameCodec {
 	public static function format(string $name, string $uid, bool $uidInFilename, int $collisionIndex = 0): string {
 		$safe = self::sanitiseName($name);
 		if ($safe === '') {
-			// Fall back to uid so we never produce just ".grafana.json".
+			// Fall back to uid so we never produce just ".grafana".
 			$safe = $uid;
 		}
 		$stem = $safe;
-		if ($collisionIndex > 0) {
-			$stem .= ' (' . $collisionIndex . ')';
-		}
 		if ($uidInFilename) {
 			$stem .= '.' . $uid;
+		}
+		if ($collisionIndex > 0) {
+			$stem .= ' (' . $collisionIndex . ')';
 		}
 		return $stem . self::EXT;
 	}

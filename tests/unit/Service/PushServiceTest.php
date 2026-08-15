@@ -82,8 +82,8 @@ final class PushServiceTest extends TestCase {
 		return new ManagedFile($uid, $mode, '', '', $mappingId, $folderUid, '');
 	}
 
-	/** A sync `.grafana.json` File with the given id + JSON content. */
-	private function file(int $id, string $content, string $name = 'Board.grafana.json'): File {
+	/** A sync `.grafana` File with the given id + JSON content. */
+	private function file(int $id, string $content, string $name = 'Board.grafana'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
 		$node->method('getContent')->willReturn($content);
@@ -265,8 +265,8 @@ final class PushServiceTest extends TestCase {
 		$node = $this->createMock(File::class);
 		$node->method('getId')->willReturn(9);
 		$node->method('getContent')->willReturn('{"title":"Board"}');
-		$node->method('getName')->willReturn('Board.grafana.json');
-		$node->method('getPath')->willReturn('/alpha/Board.grafana.json');
+		$node->method('getName')->willReturn('Board.grafana');
+		$node->method('getPath')->willReturn('/alpha/Board.grafana');
 		$node->method('getMTime')->willReturn(1); // differs, so the stamp is written
 		$node->expects(self::once())->method('touch')->with(1_760_000_000);
 

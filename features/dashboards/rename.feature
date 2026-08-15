@@ -23,9 +23,9 @@ Feature: Renaming a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Rename the file in nextcloud
-    Given a dashboard file named "Old Name.grafana.json" in "Demo"
-    When I rename the file to "<new name>.grafana.json"
-    Then the file is named "<new name>.grafana.json"
+    Given a dashboard file named "Old Name.grafana" in "Demo"
+    When I rename the file to "<new name>.grafana"
+    Then the file is named "<new name>.grafana"
     And the JSON title is "<new name>"
     And the dashboard is named "<new name>" in Grafana
     And the file holds:
@@ -46,9 +46,9 @@ Feature: Renaming a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario: Rename the dashboard inside the file
-    Given a dashboard file named "Old Name.grafana.json" in "Demo"
+    Given a dashboard file named "Old Name.grafana" in "Demo"
     When I change the JSON "title" field to "New Name"
-    Then the file is named "New Name.grafana.json"
+    Then the file is named "New Name.grafana"
     And the JSON title is "New Name"
     And the dashboard is named "New Name" in Grafana
     And the file holds:
@@ -59,9 +59,9 @@ Feature: Renaming a dashboard
   # notes: ../AGENTS.md#renaming-a-dashboard-in-grafana-renames-the-mirrored-file
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Rename the dashboard in Grafana
-    Given a dashboard file named "Old Name.grafana.json" in "<folder>"
+    Given a dashboard file named "Old Name.grafana" in "<folder>"
     When someone renames the dashboard to "New Name" in Grafana
-    Then the file is named "New Name.grafana.json"
+    Then the file is named "New Name.grafana"
     And the JSON title is "New Name"
     And the dashboard is named "New Name" in Grafana
     And the file holds:
@@ -80,10 +80,10 @@ Feature: Renaming a dashboard
   # notes: ../AGENTS.md#renaming-a-link-never-renames-the-dashboard
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Rename a link in Nextcloud
-    Given a dashboard file named "Old Name.grafana.json" in "Pointers"
-    When I try to rename the file to "New Name.grafana.json"
+    Given a dashboard file named "Old Name.grafana" in "Pointers"
+    When I try to rename the file to "New Name.grafana"
     Then the rename is refused with a message
-    And the file is named "Old Name.grafana.json"
+    And the file is named "Old Name.grafana"
     And the JSON title is "Old Name"
     And the dashboard is named "Old Name" in Grafana
 
@@ -96,12 +96,12 @@ Feature: Renaming a dashboard
 
   @grafana @in-grafana @gesture @ui @unbuilt
   Scenario: Rename a dashboard in Grafana to a title another one already has
-    Given a dashboard file named "Alpha.grafana.json" in "Demo"
-    And a dashboard file named "Beta.grafana.json" in "Demo"
+    Given a dashboard file named "Alpha.grafana" in "Demo"
+    And a dashboard file named "Beta.grafana" in "Demo"
     When someone renames the "Beta" dashboard to "Alpha" in Grafana
-    Then "Demo/Alpha.grafana.json" holds:
+    Then "Demo/Alpha.grafana" holds:
       | grafana_uid | the uid it had before the rename |
-    And "Demo/Alpha (2).grafana.json" holds:
+    And "Demo/Alpha (2).grafana" holds:
       | grafana_uid | the uid of the renamed dashboard |
     And the JSON title of both files is "Alpha"
     And both dashboards are titled "Alpha" in Grafana
@@ -113,7 +113,7 @@ Feature: Renaming a dashboard
   # empty", measured. The behaviour stands; the state cannot be arranged from here.
   @grafana @in-grafana @gesture @ui @blocked
   Scenario: Rename a dashboard to nothing in Grafana
-    Given a dashboard file named "Old Name.grafana.json" in "Demo"
+    Given a dashboard file named "Old Name.grafana" in "Demo"
     When someone renames the dashboard to "" in Grafana
     Then the file is named after the dashboard's uid
 
@@ -124,9 +124,9 @@ Feature: Renaming a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario: Rename an unmapped dashboard file
-    Given a dashboard file named "Old Name.grafana.json" in "Scratch"
-    When I rename the file to "New Name.grafana.json"
-    Then the file is named "New Name.grafana.json"
+    Given a dashboard file named "Old Name.grafana" in "Scratch"
+    When I rename the file to "New Name.grafana"
+    Then the file is named "New Name.grafana"
     And the file holds no Grafana metadata at all
 
     # ── RULE: a rename we cannot propagate still stands locally ───────────────
@@ -134,10 +134,10 @@ Feature: Renaming a dashboard
   # notes: ../AGENTS.md#a-failed-propagation-never-reverts-the-local-rename
   @user @in-nextcloud @gesture @ui @blocked
   Scenario: Rename a file while Grafana is unreachable
-    Given a dashboard file named "Old Name.grafana.json" in "Demo"
+    Given a dashboard file named "Old Name.grafana" in "Demo"
     And Grafana is unreachable
-    When I rename the file to "New Name.grafana.json"
-    Then the file is named "New Name.grafana.json"
+    When I rename the file to "New Name.grafana"
+    Then the file is named "New Name.grafana"
     And the failure is reported to the user
     And the file holds:
       | grafana_uid | the dashboard's uid |

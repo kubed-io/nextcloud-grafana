@@ -12,7 +12,6 @@ namespace OCA\GrafanaSync\Service;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Files\File;
 use OCP\Files\Folder;
-use OCP\Files\IMimeTypeLoader;
 use OCP\Files\Node;
 use Psr\Log\LoggerInterface;
 
@@ -22,7 +21,7 @@ use Psr\Log\LoggerInterface;
  * For each mapping it provisions the target folder ({@see StorageService}), walks the
  * dashboards Grafana holds in the mapped folder, and reconciles them into files:
  *
- *  - **sync** mode — the full dashboard spec is read and written as `<title>.grafana.json`
+ *  - **sync** mode — the full dashboard spec is read and written as `<title>.grafana`
  *    (volatile `id`/`version` stripped by {@see DashboardBody::encodeSync()}); a later
  *    course pushes edits back. The file doubles as a restorable backup.
  *  - **link** mode — a tiny `grafana.reference/v1` pointer body ({@see DashboardBody::encodeReference()})
@@ -57,7 +56,6 @@ final class SyncService {
 		private StorageService $storage,
 		private SyncGuard $guard,
 		private PushService $push,
-		private IMimeTypeLoader $mimeLoader,
 		private MirrorTimes $times,
 		private FolderTreeMirror $tree,
 		private TagSyncService $tagSync,
@@ -340,7 +338,6 @@ final class SyncService {
 
 			$pruned = $this->pruneStale($existingByUid, $seenUids, $mapping);
 
-			$this->fixupFilecacheMimetype();
 			return [
 				'processed' => $processed,
 				'succeeded' => $succeeded,
@@ -390,26 +387,6 @@ final class SyncService {
 		return $mapping->grafanaFolderUid === '/'
 			? GrafanaClient::FOLDER_GENERAL
 			: $mapping->grafanaFolderUid;
-	}
-
-	/**
-	 * One SQL UPDATE that rewrites every `*.grafana.json` filecache row to the
-	 * application/grafana+json mimetype. NC's Detection layer only consults the last
-	 * extension segment ('.json' → application/json), so newly-written files carry the
-	 * wrong mimetype until this runs. Idempotent (the WHERE clause skips rows already on
-	 * the right id) — identical to what {@see \OCA\GrafanaSync\Migration\RegisterMimetype}
-	 * runs on install/upgrade.
-	 */
-	private function fixupFilecacheMimetype(): void {
-		try {
-			$id = $this->mimeLoader->getId('application/grafana+json');
-			$this->mimeLoader->updateFilecache('grafana.json', $id);
-		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync: filecache mimetype fixup skipped', [
-				'app' => Application::APP_ID,
-				'exception' => $e,
-			]);
-		}
 	}
 
 	/**
