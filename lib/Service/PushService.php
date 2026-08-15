@@ -160,7 +160,7 @@ final class PushService {
 			]);
 			return;
 		}
-		$this->times->apply($node, $read?->updated, $read?->created);
+		$this->times->apply($node, $read?->lastChanged(), $read?->created);
 	}
 
 	/**

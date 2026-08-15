@@ -593,7 +593,7 @@ final class SyncService {
 				$existing->putContent($body);
 			}
 			$this->metadata->stampSynced($fileId, $uid, $mapping->mode, $version, $body, $mapping->id);
-			$this->times->apply($existing, $read?->updated, $read?->created, $differs);
+			$this->times->apply($existing, $read?->lastChanged(), $read?->created, $differs);
 			$this->tagSync->applyToDashboard($existing, self::tagsIn($body));
 			return !$differs;
 		}
@@ -614,7 +614,7 @@ final class SyncService {
 
 		$file = $folder->newFile($candidate, $body);
 		$this->metadata->stampSynced($file->getId(), $uid, $mapping->mode, $version, $body, $mapping->id);
-		$this->times->apply($file, $read?->updated, $read?->created, true);
+		$this->times->apply($file, $read?->lastChanged(), $read?->created, true);
 		$this->tagSync->applyToDashboard($file, self::tagsIn($body));
 		return false; // a brand-new mirror is always a write
 	}

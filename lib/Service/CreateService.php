@@ -90,7 +90,7 @@ final class CreateService {
 		// exists and the file is stamped, so a cosmetic clock must not undo that.
 		try {
 			$read = $this->grafana->readDashboardSpec($uid);
-			$this->times->apply($node, $read?->updated, $read?->created);
+			$this->times->apply($node, $read?->lastChanged(), $read?->created);
 		} catch (\Throwable $e) {
 			$this->logger->warning('grafana_sync: created, but could not read the dashboard back to stamp its clock', [
 				'uid' => $uid,

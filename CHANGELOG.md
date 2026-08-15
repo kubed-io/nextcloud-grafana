@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A dashboard created from Nextcloud got the wrong modified date. In the instant after a create Grafana reports no modification time at all, which the app read as "leave the file's date alone" — so the file kept whatever date it arrived with, and a copy arrives wearing the original's.
 - Internal: a Background could only ever declare one folder mapping — a second one silently replaced the first (no behaviour change; test harness only).
 - The Sync Settings checkboxes could never be saved. The recycle-bin one is the serious half: it silently reverting meant every trashed dashboard was permanently deleted in Grafana, which has no undo.
 - Syncing never brought Grafana subfolders across: the folder list Grafana answers with only holds top-level folders, so the tree walk found no children — nested folders and the dashboards in them now arrive.

@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
@@ -139,5 +140,46 @@ final class CreateServiceTest extends TestCase {
 
 		$this->expectException(\RuntimeException::class);
 		$this->service->createForFile($this->file(1, '{"title":"X"}'), $this->mapping());
+	}
+
+	/**
+	 * THE WINDOW THE COPY SCENARIOS FOUND. Read a dashboard back the instant after
+	 * creating it and Grafana answers with `meta.created` and no `meta.updated` — so
+	 * the file was given a creation date and kept whatever mtime it arrived with.
+	 *
+	 * On a new file that is merely untidy. On a COPY it is wrong and looks right: the
+	 * copy inherits the source file's mtime, a real timestamp belonging to a different
+	 * dashboard.
+	 */
+	public function testACreatedDashboardIsDatedByItsCreationWhenGrafanaHasNoUpdateYet(): void {
+		$this->grafana->method('upsertDashboard')->willReturn(['uid' => 'new-uid', 'version' => 1]);
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'new-uid'], null, 1771000000));
+
+		$node = $this->fileExpectingTouch(1771000000);
+		$this->service->createForFile($node, $this->mapping());
+	}
+
+	public function testAnUpdateTimeWinsOverTheCreationTimeWhenGrafanaHasBoth(): void {
+		$this->grafana->method('upsertDashboard')->willReturn(['uid' => 'new-uid', 'version' => 1]);
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'new-uid'], 1771000900, 1771000000));
+
+		$node = $this->fileExpectingTouch(1771000900);
+		$this->service->createForFile($node, $this->mapping());
+	}
+
+	/**
+	 * A file that asserts which second it is stamped with. The real {@see MirrorTimes}
+	 * is wired into the service under test, so this reaches all the way through it.
+	 */
+	private function fileExpectingTouch(int $expected): File {
+		$node = $this->createMock(File::class);
+		$node->method('getId')->willReturn(1);
+		$node->method('getContent')->willReturn('{"title":"X"}');
+		$node->method('getName')->willReturn('X.grafana.json');
+		$node->method('getMTime')->willReturn(0);
+		$node->expects(self::once())->method('touch')->with($expected);
+		return $node;
 	}
 }

@@ -425,6 +425,25 @@ original's dates would date the copy before it existed, and the app already make
 a point of a mirror wearing the dashboard's clock rather than the sync's — so the
 copy has to wear its OWN.
 
+Adding those two rows caught a real defect, and not the one anyone was looking
+for. **Grafana has no `meta.updated` to give in the instant after a create.** Read
+the dashboard straight back from `POST /api/dashboards/db` and the answer carries
+`meta.created` and an EMPTY `meta.updated`; a second later the same read carries
+`updated`, equal to `created`. `MirrorTimes` reads an absent clock as "leave that
+one alone" — correctly — so the file was given a creation date and kept whatever
+mtime it already had.
+
+That is why it survived every other feature file. On a NEW file the leftover mtime
+is roughly right. On a COPY the file arrives wearing the SOURCE file's mtime: a
+real, plausible timestamp belonging to a different dashboard. Nothing looks wrong
+unless you compare the two sides, which is what the table now does.
+
+Worth keeping for the next clock bug: the failure message prints Grafana's own
+version history (`grafanaDashboardWrites()`), because "the file and the dashboard
+disagree" has two causes that read identically — the stamp never happened, or it
+happened and a second write moved the clock afterwards. One line of version
+history separates them, and a CI run is gone by the time you could ask Grafana.
+
 ### The copy belongs to where it lands
 
 A copy is never the original's identity — that is the whole feature. What decides

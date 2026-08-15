@@ -43,17 +43,46 @@ final class DashboardSpec {
 	}
 
 	/**
+	 * When the dashboard last changed — the clock a mirror wears.
+	 *
+	 * `meta.updated` whenever Grafana has one, **and `meta.created` when it does not**,
+	 * because a dashboard with no update recorded has not changed since it was made.
+	 *
+	 * THAT SECOND HALF IS NOT DEFENSIVE PADDING; IT IS THE ONLY CORRECT ANSWER IN A
+	 * WINDOW WE LIVE IN. Measured in CI: read a dashboard back immediately after
+	 * `POST /api/dashboards/db` and Grafana answers with `meta.created` set and
+	 * `meta.updated` empty — the row the update clock is read from is not visible yet.
+	 * A second later the same read carries `updated`, equal to `created`.
+	 *
+	 * Reading `updated` alone in that window means null, which {@see MirrorTimes}
+	 * correctly treats as "leave that clock alone" — so the file kept whatever mtime it
+	 * arrived with while the creation clock was stamped from the same read. A copy is
+	 * where that shows: it inherits the SOURCE file's mtime, which is a real timestamp
+	 * from a different dashboard, so nothing looks broken. The copy scenarios found it.
+	 */
+	public function lastChanged(): ?int {
+		return $this->updated ?? $this->created;
+	}
+
+	/**
 	 * An ISO-8601 timestamp from Grafana (`2026-02-14T06:03:53Z`) as a Unix second.
 	 *
 	 * Null for anything absent, empty, or unparseable — so a schema change on Grafana's
 	 * side degrades to "keep Nextcloud's own clock", which is merely the old behaviour,
 	 * rather than to a mirror dated 1970.
+	 *
+	 * A NON-POSITIVE RESULT IS ALSO NULL, and that is Grafana-specific rather than
+	 * tidiness: Grafana serialises an unset time as Go's zero value,
+	 * `0001-01-01T00:00:00Z` (its `meta.expires` carries one on every dashboard).
+	 * `strtotime` parses that perfectly well into year 1, so without this an unset
+	 * clock would not degrade to "leave it alone" — it would stamp the mirror with a
+	 * date two thousand years in the past.
 	 */
 	public static function parseTime(mixed $value): ?int {
 		if (!is_string($value) || $value === '') {
 			return null;
 		}
 		$ts = strtotime($value);
-		return $ts === false ? null : $ts;
+		return ($ts === false || $ts <= 0) ? null : $ts;
 	}
 }
