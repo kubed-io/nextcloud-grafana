@@ -76,10 +76,15 @@ final class MotionService {
 			// never created. That is the opposite of the rule the spec states: a folder
 			// is in Grafana when a dashboard is in it, however the dashboard got there.
 			//
-			// A rename inside one folder still costs nothing: re-parenting to the folder
-			// the file is already in resolves to the same uid and Grafana stores what it
-			// already had.
-			if ($to !== null && !$managed->isLink()) {
+			// ONLY WHEN THE PARENT ACTUALLY CHANGED. Nextcloud fires one event for a
+			// rename and a move alike, and an upsert is not free: it bumps Grafana's
+			// version and its `updated`, which this app surfaces as the file's Modified
+			// time — so a local rename would move a clock that records when the
+			// DASHBOARD changed. {@see NameSyncListener} already owns the rename, and
+			// pushing here too would send the same dashboard twice for one gesture.
+			if ($to !== null
+				&& !$managed->isLink()
+				&& dirname($fromPath) !== dirname($node->getPath())) {
 				$this->reparentWithinMapping($node, $managed, $to);
 			}
 			return;

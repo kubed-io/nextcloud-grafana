@@ -120,6 +120,22 @@ final class MotionServiceTest extends TestCase {
 		self::assertSame('dash-1', $captured['dashboard']->uid ?? null, 'the identity survives the move');
 	}
 
+	/**
+	 * A RENAME IS NOT A MOVE, though Nextcloud fires one event for both. An upsert
+	 * bumps Grafana's version and `updated`, and this app shows `updated` as the
+	 * file's Modified time — so pushing here would move a clock that records when the
+	 * DASHBOARD changed, for a gesture that only renamed a file. NameSyncListener
+	 * already owns the rename.
+	 */
+	public function testARenameInsideOneFolderIsNotPushed(): void {
+		$same = $this->mapping('m-a', 'gf-a', 'a');
+		$this->metadata->method('read')->willReturn($this->managed('dash-1'));
+		$this->mappings->method('resolveForPath')->willReturn($same);
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->service->onMove($this->file('/a/sub/New.grafana.json'), '/a/sub/Old.grafana.json');
+	}
+
 	/** A link is a pointer; nothing about it moves in Grafana. */
 	public function testALinkMovedWithinItsMappingIsNotReparented(): void {
 		$same = $this->mapping('m-a', 'gf-a', 'a');
