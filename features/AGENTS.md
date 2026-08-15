@@ -417,11 +417,10 @@ points at somebody else's underneath.
 We do not get to choose that name. `FilenameCodec::canonicalise()` folds it into
 our spelling at the door, so every caller downstream is unchanged.
 
-Reading it is what makes the app WORK; it is not the whole answer. The file on
-disk still said `Board.grafana (1).json`, with a counter sitting inside a file
-extension, and only this app knew that was a name at all.
+Reading it is what makes the app WORK, and it is load-bearing rather than a
+courtesy: the file really does exist under that name for a moment, every time.
 
-### The copy is named before it exists, not renamed afterwards
+### The copy cannot be renamed before the client has looked at it
 
 **Nextcloud's server does not name a copy at all.** WebDAV COPY means "copy to
 exactly this path"; if something is already there and `Overwrite: F`, the answer is
@@ -438,36 +437,55 @@ while (otherNames.includes(newName)) {
 }
 ```
 
-Hence `Board.grafana (1).json`, counting from one. There is a `suffix` option, and
-no way for an app to pass one — the Files app calls `getUniqueName()` internally.
-**The rule cannot be changed.**
+Hence `Board.grafana (1).json`, counting from one. There is a `suffix` option and no
+way for an app to pass one — the Files app calls `getUniqueName()` internally. **The
+rule cannot be changed.**
 
-It can be got AHEAD of, and there is exactly one place: the chosen name arrives as
-the COPY request's `Destination` header, and Sabre fires `beforeMethod:COPY` while
-that header is still a string. `CopyNamePlugin` rewrites it, so the file is BORN as
-`Board (1).grafana.json`.
+**It can be got ahead of, and that turned out to be the wrong thing to do.** The
+chosen name arrives as the COPY's `Destination` header, and Sabre fires
+`beforeMethod:COPY` while that header is still a string. A plugin rewriting it there
+really does make the file be born as `Board (1).grafana.json`. It shipped, and the
+Files app answered:
 
-**Why that beats renaming it afterwards.** The first cut let the file land wrong and
-fixed it from a background job, which leaves a window — up to a cron tick — where a
-real file on disk is called something only this app can read. That does not scale:
-the window has to be tolerated for `(1)`, `(2)` and every `(N)` after them, in every
-predicate that ever looks at a filename. One rule applied once at the door replaces
-all of it. Verified live, deliberately with `(2)` rather than `(1)`, so the claim is
-about the general counter and not one lucky case.
+    The file does not exist anymore
 
-`canonicalise()` still reads the other spelling and `ReconcileNameJob` still repairs
-it — for copies that never touch WebDAV (an internal `File::copy()`, a file restored
-from an old backup). Belt and braces, with the plugin as the belt.
+Its copy action is the reason:
 
-**Also worth knowing: the compound extension is not what gives these files their
-icon.** Nextcloud's own detector reads only the last extension, so
+```js
+await client.copyFile(source, destination)
+if (node.dirname === target.path) {            // copying into the SAME folder
+    const { data } = await client.stat(destination)   // the path IT chose
+    emit('files:node:created', ...)
+}
+...
+if (404 === e.response?.status) throw new Error('The file does not exist anymore')
+```
+
+The client stats the destination it picked, and **only when the copy landed in the
+folder it came from** — which is precisely and only the case that collides, so the
+plugin fired exactly when the stat would notice. Measured both ways on a live
+instance:
+
+    intercepting   COPY 201 → STAT 404 → error dialog, no file until a refresh
+    deferring      COPY 201 → STAT 207 → correct name one tick later
+
+So the rename waits for `ReconcileNameJob`, and the file wears Nextcloud's spelling
+for up to one cron tick. **That is not a tolerance that has to be widened per
+counter** — the worry the interception was built to answer. `canonicalise()` reads
+`(1)`, `(2)` and `(17)` with one `\d+`, and every predicate in the app goes through
+it, so `(N)` costs a regex rather than a case.
+
+**Grafana is right immediately either way**, which is what makes deferring cheap:
+`CreateService` reads the display name off the filename before the upsert, and it
+reads Nextcloud's spelling perfectly well. Only the name on disk lags.
+
+Worth knowing for whoever finds this again: **the compound extension is not what gives
+these files their icon.** Nextcloud's detector reads only the last extension, so
 `detectPath('Board.grafana.json')` answers `application/json` and always has. The
-custom type comes from the app's filecache re-stamp, `updateFilecache('grafana.json')`,
-which is a `LIKE '%.grafana.json'`. A copy inherits its source's filecache row, so a
-wrongly-named copy KEPT its type — measured — but the re-stamp could never match that
-file again, so any later re-detect would have quietly dropped it. The single-extension
-sibling (penpot) is immune to the whole problem; the compound-extension ones (grafana,
-n8n) are not.
+custom type comes from `updateFilecache('grafana.json')`, a `LIKE '%.grafana.json'`,
+and a copy inherits its source's filecache row — so a wrongly-named copy KEEPS its
+type. The single-extension sibling (penpot) never has the problem at all; the
+compound-extension ones (grafana, n8n) do.
 
 ### A copy's clocks are its own
 
@@ -561,12 +579,12 @@ of course its `title` says the original's name. The only party that knows a copy
 happened is the file's name.
 
 So the filename is the authority, for exactly the reason it is on a rename: it is
-the thing that just changed. By the time `CreateService` runs, the file already
-carries the right name — `CopyNamePlugin` saw to that before the copy happened — so
-it reads the display name off the filename and puts it on the spec before the
-upsert, and Grafana is right inside the request. Only the file's own JSON `title`
-lags, fixed a tick later by `ReconcileNameJob`, because the copy hook cannot write
-the file it is holding locks on (saga §2, round 6).
+the thing that just changed. `CreateService` reads the display name off the filename
+— through `canonicalise()`, so Nextcloud's spelling reads the same as ours — and puts
+it on the spec before the upsert, so Grafana is right inside the request. The file's
+own JSON `title` and its spelling on disk both lag by a tick, fixed by
+`ReconcileNameJob`, because the copy hook cannot write the file it is holding locks
+on (saga §2, round 6) and because the Files app has to see its own file first.
 
 **The name it reads is `display`, not `name`.** `FilenameCodec::parse()` returns
 both, and they differ by exactly the collision counter. Taking the counter-stripped
