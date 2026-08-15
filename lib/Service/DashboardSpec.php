@@ -45,23 +45,30 @@ final class DashboardSpec {
 	/**
 	 * When the dashboard last changed — the clock a mirror wears.
 	 *
-	 * `meta.updated` whenever Grafana has one, **and `meta.created` when it does not**,
-	 * because a dashboard with no update recorded has not changed since it was made.
+	 * **A DASHBOARD CANNOT HAVE CHANGED BEFORE IT EXISTED**, so this is the LATER of the
+	 * two clocks, and `created` alone when there is no `updated` at all.
 	 *
-	 * THAT SECOND HALF IS NOT DEFENSIVE PADDING; IT IS THE ONLY CORRECT ANSWER IN A
-	 * WINDOW WE LIVE IN. Measured in CI: read a dashboard back immediately after
-	 * `POST /api/dashboards/db` and Grafana answers with `meta.created` set and
-	 * `meta.updated` empty — the row the update clock is read from is not visible yet.
-	 * A second later the same read carries `updated`, equal to `created`.
+	 * That reads like defensive padding and is not. Read a dashboard back in the moment
+	 * after `POST /api/dashboards/db` and Grafana's two clocks — which are one instant on
+	 * any dashboard nobody has edited — can come back a second apart, `updated` BEHIND
+	 * `created`. They are two separate reads of "now" taken either side of a second
+	 * boundary; a moment later the same request reports both as the same second, which is
+	 * what makes it look impossible from the outside.
 	 *
-	 * Reading `updated` alone in that window means null, which {@see MirrorTimes}
-	 * correctly treats as "leave that clock alone" — so the file kept whatever mtime it
-	 * arrived with while the creation clock was stamped from the same read. A copy is
-	 * where that shows: it inherits the SOURCE file's mtime, which is a real timestamp
-	 * from a different dashboard, so nothing looks broken. The copy scenarios found it.
+	 * Taking `updated` at face value there dates the mirror one second before the
+	 * dashboard, forever — until some later pull happens to correct it. And it only
+	 * misses when a write straddles a second, so it fails perhaps half the time, which is
+	 * how it survived: it reads as flakiness in the test rather than a bug in the app.
+	 *
+	 * The copy scenarios are what caught it, because a copy is the one gesture where the
+	 * mirror's own arrival time is ALSO a plausible-looking timestamp — it inherits the
+	 * source file's, which belongs to a different dashboard entirely.
 	 */
 	public function lastChanged(): ?int {
-		return $this->updated ?? $this->created;
+		if ($this->updated === null || $this->created === null) {
+			return $this->updated ?? $this->created;
+		}
+		return max($this->updated, $this->created);
 	}
 
 	/**

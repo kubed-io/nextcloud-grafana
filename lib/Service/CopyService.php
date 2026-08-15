@@ -80,7 +80,6 @@ final class CopyService {
 			return; // outside a mapping, or a link folder → a plain, untracked file
 		}
 
-
 		// Identity was just wiped, so this mints a brand-new uid — never the source's.
 		// Logged + swallowed here (honouring this service's contract): the NC copy already
 		// happened, so a failed registration is just an untracked .grafana.json to re-save.
@@ -106,5 +105,4 @@ final class CopyService {
 			$this->metadata->clear($node->getId());
 		});
 	}
-
 }

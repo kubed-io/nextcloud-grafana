@@ -43,6 +43,16 @@ final class DashboardSpecTest extends TestCase {
 		self::assertSame(1771000000, $this->spec(null, 1771000000)->lastChanged());
 	}
 
+	/**
+	 * The two clocks are one instant on a dashboard nobody has edited, but a read taken
+	 * in the moment after a create can catch them either side of a second boundary, with
+	 * `updated` BEHIND `created`. Believing it dates the mirror before the dashboard
+	 * existed — and only when a write straddles a second, so it reads as flakiness.
+	 */
+	public function testAnUpdateTimeBeforeTheCreationTimeIsNotBelieved(): void {
+		self::assertSame(1771000001, $this->spec(1771000000, 1771000001)->lastChanged());
+	}
+
 	public function testWithNeitherClockThereIsNothingToStamp(): void {
 		self::assertNull($this->spec(null, null)->lastChanged());
 	}
