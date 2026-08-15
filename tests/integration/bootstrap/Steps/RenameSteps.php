@@ -35,7 +35,7 @@ trait RenameSteps {
 	 * @Given a dashboard file named :filename in :folder
 	 */
 	public function aDashboardFileNamedIn(string $filename, string $folder): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 
 		// A LINK MAPPING CANNOT BE WRITTEN INTO — that refusal is a shipped feature,
 		// not an obstacle to work around. So the mirror is seeded the only way a link

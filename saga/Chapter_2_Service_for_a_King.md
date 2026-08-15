@@ -2031,11 +2031,14 @@ the fault was on the near side the whole time.
 
 ---
 
-## The two-segment extension — a decision worth reopening *(open question)*
+## Round 7 — one extension, because Nextcloud only reads one
 
 > Round 6 shipped, and then bit again the next day. Not with a new bug — with the
-> same one wearing a different coat. That is the shape of a root cause, and it is
-> worth naming before we build anything else on top of it.
+> same one wearing a different coat. That is the shape of a root cause, and this
+> round is the decision to pull it out rather than build on top of it again.
+
+**Outcome: `.grafana.json` is retired. Dashboard files are `.grafana`.** The
+analysis below is what the decision was made on; the last section is what shipped.
 
 ### The tally
 
@@ -2147,17 +2150,42 @@ for every filename problem — only for the ones we invented.
 - **The setting shape** would be per-mapping and immutable, like `sync`/`link` — though
   the section above argues the honest answer may be no setting at all.
 
-### Why this is written down rather than decided
+### What shipped
 
-The copy bug ran into a second day. Every fault in it was downstream of this one
-choice, and none of them was individually hard — they were hard to SEE, because each
-looked like its own local problem. That is the signature of a root cause still in
-place, and the next feature that touches filenames will meet it again.
+`FilenameCodec::EXT` is `.grafana`, and the counter now goes **last**, immediately
+before the extension — the same position `getUniqueName()` puts it. That single
+alignment is the whole cut: our spelling of a collision and Nextcloud's are one
+spelling, so there is nothing to fold on the way in and nothing to rename on the way
+out. `canonicalise()`, `isNextcloudSpelling()` and `ReconcileNameJob`'s
+`canonicaliseSpelling()` are gone, and so are all three hot-path `updateFilecache()`
+calls — the listener's, the create's, and the pull's. `RegisterMimetype` merges
+`"grafana"` into `mimetypemapping.json` and core's own detector does the rest, for
+good.
 
-**Not decided here.** The migration story for existing files is the unanswered half,
-and it is the expensive half. But the next time something in this area is surprising,
-this is the first thing to check, and "add another workaround" should have to argue
-against this section.
+The uid-suffixed shape needed one thought. `Board.<uid>.grafana` collides into
+`Board.<uid> (1).grafana`, so `parse()` takes the counter off **before** it looks for
+the uid — the other order reads the uid as `<uid> (1)` and drops the identity on the
+one gesture most likely to need it. The test derives the colliding name from a model
+of `getUniqueName()` rather than a literal, so it is the rule under test rather than a
+string somebody typed.
+
+`MigrateFileExtension` is the one-time repair step, and the only thing here that
+touches a user's files. It walks the mapped folders (not the whole filecache — a
+hand-made `.grafana.json` outside a mapping is nobody's business), renames both legacy
+shapes, and runs inside the `SyncGuard` so an upgrade does not become a write storm of
+name reconciles against the user's Grafana.
+
+**Cost, paid knowingly:** off-Nextcloud a `.grafana` file needs telling once which
+editor opens it. Per machine, rather than a mimetype correction per save.
+
+**And one workaround survives, as predicted:** the trash still appends `.dNNNN`, so a
+trashed file's name ends in neither extension. This app has not hit it yet; the n8n
+sibling has. A single segment cures the problems we invented, not every filename
+problem.
+
+The Gherkin came out the way the argument said it would: **not one new scenario, not
+one new Examples column.** Every feature file changed by exactly the length of a
+string.
 
 ---
 

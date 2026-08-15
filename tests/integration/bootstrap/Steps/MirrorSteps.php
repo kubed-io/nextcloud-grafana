@@ -471,7 +471,7 @@ trait MirrorSteps {
 				// declares its dashboards up front and the uid is knowable by title; a
 				// create scenario has no title to look up, because the dashboard did not
 				// exist until the gesture — there the uid the app stamped is the answer.
-				$title = preg_replace('/\.grafana\.json$/', '', basename($path)) ?? '';
+				$title = preg_replace('/\.grafana$/', '', basename($path)) ?? '';
 				$want = $this->seededDashboards[$title] ?? $this->lastUid;
 				if ($want === '') {
 					throw new \RuntimeException("no dashboard called '{$title}' was declared or created by this scenario");

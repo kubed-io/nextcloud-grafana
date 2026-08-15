@@ -95,7 +95,7 @@ trait LifecycleSteps {
 
 	/** @Given a managed :mode dashboard file named :filename */
 	public function aManagedDashboardFileNamed(string $mode, string $filename): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 		$this->makeManagedFile($this->soleMappingName(), $stem);
 	}
 
@@ -155,7 +155,7 @@ trait LifecycleSteps {
 	 * @When I create :filename in :folder
 	 */
 	public function iCreateTheFileIn(string $filename, string $folder): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 		$this->currentFolder = $folder;
 		$this->putDashboardFile($folder, $stem);
 
@@ -219,7 +219,7 @@ trait LifecycleSteps {
 
 	/** @When I create :filename in that folder */
 	public function iCreateNamedFileInThatFolder(string $filename): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 		$this->putDashboardFile($this->currentFolder, $stem);
 	}
 
@@ -352,10 +352,11 @@ trait LifecycleSteps {
 	 * because the server does not compute one: WebDAV COPY onto an existing path is a
 	 * 412, full stop. It is the FILES CLIENT that picks a free name and then copies to
 	 * it — `getUniqueName()` from `@nextcloud/files`, which counts from 1 and inserts
-	 * the counter before the LAST extension, since to it our file is a `.json` called
-	 * `Fleet Health.grafana`. That is why the name it produces is
-	 * `Fleet Health.grafana (1).json` and not ours. Confirmed against the live
-	 * instance, which is where the shape in these scenarios came from.
+	 * the counter before the LAST extension. With a single-segment extension that is
+	 * `Fleet Health (1).grafana`, the same name `FilenameCodec::format()` builds. It
+	 * was `Fleet Health.grafana (1).json` under the retired compound extension, which
+	 * is what the app had to read around. Confirmed against the live instance, which
+	 * is where the shape in these scenarios came from.
 	 *
 	 * So the suite plays the client. Emulating it is not a shortcut around the real
 	 * behaviour — it IS the real behaviour, and the app's job starts the moment that
@@ -373,11 +374,12 @@ trait LifecycleSteps {
 	/**
 	 * The single dashboard file that appeared in $folder, given what was there before.
 	 *
-	 * FOUND AFTERWARDS, NOT ASSUMED. The app renames a copy out of Nextcloud's collision
-	 * spelling into ours, so the path the COPY was made at is not the path it ends up
-	 * at — holding on to the destination would leave every later step PROPFINDing a file
-	 * that has moved. Diffing the folder finds it wherever it landed, without the step
-	 * having to know the naming rule the scenario is there to check.
+	 * FOUND AFTERWARDS, NOT ASSUMED. Diffing the folder finds the copy wherever it
+	 * landed, so the step never has to know the naming rule the scenario is there to
+	 * check — which is the point: an assertion that computes the name it expects from
+	 * the same rule the app used cannot fail when the rule is wrong. It was also load-
+	 * bearing under the compound extension, where the app renamed a copy after the fact
+	 * and the path the COPY was made at was not the path it ended up at.
 	 *
 	 * Insisting on EXACTLY ONE is the point: a copy that somehow produced two files, or
 	 * none, fails here with what the folder actually holds rather than further down as a
@@ -621,7 +623,7 @@ trait LifecycleSteps {
 
 	/** @Then the dashboard is named after the file, in the :folder Grafana folder */
 	public function theDashboardIsNamedAfterTheFileIn(string $folder): void {
-		$stem = preg_replace('/\.grafana\.json$/', '', basename($this->currentFilePath)) ?? '';
+		$stem = preg_replace('/\.grafana$/', '', basename($this->currentFilePath)) ?? '';
 		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
 		$this->theDashboardIsNamedInTheGrafanaFolder($stem, $folder);
 	}

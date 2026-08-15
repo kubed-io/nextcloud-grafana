@@ -50,7 +50,7 @@ final class MigrateFileExtensionTest extends TestCase {
 	}
 
 	public function testTheRetiredExtensionIsRenamedToTheNewOne(): void {
-		$this->run(['Fleet Health.grafana.json']);
+		$this->migrate(['Fleet Health.grafana.json']);
 
 		self::assertSame(
 			['Fleet Health.grafana.json -> /alice/files/Demo/Fleet Health.grafana'],
@@ -65,7 +65,7 @@ final class MigrateFileExtensionTest extends TestCase {
 	 * would have produced, not as a file with a counter buried in its middle.
 	 */
 	public function testNextcloudsOldCollisionSpellingBecomesATrailingCounter(): void {
-		$this->run(['Fleet Health.grafana (1).json']);
+		$this->migrate(['Fleet Health.grafana (1).json']);
 
 		self::assertSame(
 			['Fleet Health.grafana (1).json -> /alice/files/Demo/Fleet Health (1).grafana'],
@@ -75,7 +75,7 @@ final class MigrateFileExtensionTest extends TestCase {
 
 	/** The uid-suffixed shape keeps its uid, with the counter moving to the end. */
 	public function testTheUidSuffixedShapeSurvivesWithItsCounterMoved(): void {
-		$this->run(['Board.af397c9y8enswf.grafana (2).json']);
+		$this->migrate(['Board.af397c9y8enswf.grafana (2).json']);
 
 		self::assertSame(
 			['Board.af397c9y8enswf.grafana (2).json -> /alice/files/Demo/Board.af397c9y8enswf (2).grafana'],
@@ -85,14 +85,14 @@ final class MigrateFileExtensionTest extends TestCase {
 
 	/** Idempotent: run it twice and the second pass has nothing to do. */
 	public function testAFileAlreadyOnTheNewExtensionIsLeftAlone(): void {
-		$this->run(['Fleet Health.grafana', 'Fleet Health (1).grafana']);
+		$this->migrate(['Fleet Health.grafana', 'Fleet Health (1).grafana']);
 
 		self::assertSame([], $this->moves);
 	}
 
 	/** Somebody else's file with the same tail is none of our business. */
 	public function testAnUnrelatedFileIsNeverTouched(): void {
-		$this->run(['Budget.xlsx', 'notes.json', 'board.grafana.yaml']);
+		$this->migrate(['Budget.xlsx', 'notes.json', 'board.grafana.yaml']);
 
 		self::assertSame([], $this->moves);
 	}
@@ -105,7 +105,7 @@ final class MigrateFileExtensionTest extends TestCase {
 	 */
 	public function testASecondFileWantingTheSameNameStepsAside(): void {
 		$this->occupied = ['Fleet Health (1).grafana'];
-		$this->run(['Fleet Health.grafana (1).json']);
+		$this->migrate(['Fleet Health.grafana (1).json']);
 
 		self::assertSame(
 			['Fleet Health.grafana (1).json -> /alice/files/Demo/Fleet Health (1) (1).grafana'],
@@ -115,7 +115,7 @@ final class MigrateFileExtensionTest extends TestCase {
 
 	/** Subfolders are mirrored into Grafana too, so their files migrate as well. */
 	public function testItRecursesIntoSubfolders(): void {
-		$this->run(['Top.grafana.json'], ['Nested' => ['Deep.grafana.json']]);
+		$this->migrate(['Top.grafana.json'], ['Nested' => ['Deep.grafana.json']]);
 
 		self::assertSame(
 			[
@@ -131,7 +131,7 @@ final class MigrateFileExtensionTest extends TestCase {
 	 * half-migrated folder that reported success is the worst outcome available.
 	 */
 	public function testAFailedRenameDoesNotStopTheRest(): void {
-		$this->run(['Broken.grafana.json', 'Fine.grafana.json'], [], 'Broken.grafana.json');
+		$this->migrate(['Broken.grafana.json', 'Fine.grafana.json'], [], 'Broken.grafana.json');
 
 		self::assertSame(['Fine.grafana.json -> /alice/files/Demo/Fine.grafana'], $this->moves);
 	}
@@ -143,7 +143,7 @@ final class MigrateFileExtensionTest extends TestCase {
 	 * @param array<string, list<string>> $subfolders name → the files inside it
 	 * @param string $throwsOn a filename whose move() blows up
 	 */
-	private function run(array $files, array $subfolders = [], string $throwsOn = ''): void {
+	private function migrate(array $files, array $subfolders = [], string $throwsOn = ''): void {
 		$folder = $this->folderNode('/alice/files/Demo', $files, $subfolders, $throwsOn);
 
 		$mappings = $this->createStub(MappingService::class);
