@@ -124,4 +124,63 @@ final class NameSyncListenerTest extends TestCase {
 		$this->metadata->expects(self::never())->method('read');
 		$this->listener->handle(new NodeWrittenEvent($this->file('notes.txt', $this->json('x'))));
 	}
+
+	// ── the collision counter travels one way and not the other ────────────────
+
+	/**
+	 * A RENAME IS A STATEMENT ABOUT THE WHOLE FILENAME. Renaming a file to carry a
+	 * counter means the user wants a dashboard called `Fleet Health (1)`, and the title
+	 * has to follow.
+	 *
+	 * Compared against the counter-STRIPPED stem — which is what this listener used to
+	 * do — the two read as equal, nothing was enqueued, and the rename silently did
+	 * nothing at all. The whole point of the filename being authoritative on a rename is
+	 * that it is authoritative about every character of it.
+	 */
+	public function testRenamingAFileToCarryACounterPropagatesIt(): void {
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->expectEnqueue('title_from_filename');
+
+		$before = $this->file('Fleet Health.grafana.json', $this->json('Fleet Health'));
+		$after = $this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health'));
+		$this->listener->handle(new NodeRenamedEvent($before, $after));
+	}
+
+	/** And once it has followed, the same rename asks for nothing more. */
+	public function testARenamedFileAlreadyTitledWithItsCounterEnqueuesNothing(): void {
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->jobList->expects(self::never())->method('add');
+
+		$file = $this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health (1)'));
+		$this->listener->handle(new NodeRenamedEvent($file, $file));
+	}
+
+	/**
+	 * THE ONE PLACE A FILENAME AND A TITLE ARE MEANT TO DISAGREE. Grafana permits two
+	 * dashboards in a folder to share a title and Nextcloud permits no two files to share
+	 * a name, so a mirror of the second one legitimately sits at `Fleet Health (1).grafana.json`
+	 * holding the title `Fleet Health`.
+	 *
+	 * Saving that file must enqueue NOTHING. Comparing a write against the counter-bearing
+	 * name would queue a reconcile on every single save of every duplicate mirror — each
+	 * one reaching the job only to discover the name it wants is the name it has.
+	 */
+	public function testSavingADuplicatesMirrorLeavesItsSuffixAlone(): void {
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->jobList->expects(self::never())->method('add');
+
+		$this->listener->handle(new NodeWrittenEvent(
+			$this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health')),
+		));
+	}
+
+	/** A real title edit on that same suffixed mirror is still a rename request. */
+	public function testEditingTheTitleOfASuffixedMirrorStillEnqueues(): void {
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->expectEnqueue('filename_from_title');
+
+		$this->listener->handle(new NodeWrittenEvent(
+			$this->file('Fleet Health (1).grafana.json', $this->json('Capacity')),
+		));
+	}
 }

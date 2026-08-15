@@ -84,7 +84,7 @@ final class ReconcileNameJob extends QueuedJob {
 			}
 			$dashUid = $managed->uid;
 
-			$this->canonicaliseSpelling($node, $dashUid);
+			$this->canonicaliseSpelling($node);
 
 			$stem = FilenameCodec::displayName($node->getName());
 			$spec = json_decode($node->getContent(), false);
@@ -135,13 +135,28 @@ final class ReconcileNameJob extends QueuedJob {
 	 * inside a file extension.
 	 *
 	 * Deliberately silent when there is nothing to do — which is almost always, because
-	 * only a copy landing beside its source produces the other spelling at all.
+	 * {@see \OCA\GrafanaSync\DAV\CopyNamePlugin} already named the file correctly before
+	 * it existed. This is the backstop for the copies that never touch WebDAV.
+	 *
+	 * **EXACTLY THE CANONICAL NAME, OR NOTHING.** This must not go through
+	 * {@see renameTo()}, which steps the counter until it finds a free name: with
+	 * `Fleet Health (1).grafana.json` already taken, a client copy landing at
+	 * `Fleet Health.grafana (1).json` would be renamed to `Fleet Health (1) (1).grafana.json` —
+	 * a name nobody chose, in place of one that was working. The plugin's rule is that
+	 * the client's name wins when ours is occupied, and the backstop has to agree with
+	 * it or the two disagree about the same gesture depending on how it arrived.
 	 */
-	private function canonicaliseSpelling(File $node, string $dashUid): void {
-		if (!FilenameCodec::isNextcloudSpelling($node->getName())) {
+	private function canonicaliseSpelling(File $node): void {
+		$current = $node->getName();
+		if (!FilenameCodec::isNextcloudSpelling($current)) {
 			return;
 		}
-		$this->renameTo($node, FilenameCodec::displayName($node->getName()), $dashUid);
+		$wanted = FilenameCodec::canonicalise($current);
+		$parent = $node->getParent();
+		if ($parent->nodeExists($wanted)) {
+			return; // ours is taken; the client's name is the one that works
+		}
+		$node->move($parent->getPath() . '/' . $wanted);
 	}
 
 	/**
