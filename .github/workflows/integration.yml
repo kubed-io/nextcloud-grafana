@@ -51,9 +51,45 @@ env:
 
 jobs:
 
-  integration:
-    name: Integration ${{ matrix.suite }}
+  # WHICH NEXTCLOUDS THIS RUN COVERS, decided by what triggered it.
+  #
+  # A PR runs the CEILING ONLY. That is where the work is aimed and where a real
+  # break shows up, and it keeps review cheap: three legs, not nine. `main` runs
+  # every major in info.xml's range — floor, middle and ceiling — so the whole claim
+  # is executed on every merge instead of once per push to every branch.
+  #
+  # The bet, stated plainly so it can be revisited: a change that works on the newest
+  # Nextcloud and breaks an older one is RARE, and when it happens it is a bug found
+  # after merge rather than a regression shipped — `main` is the gate before a
+  # release, not the PR. If that stops being true (say two floor breaks in a row),
+  # move the range back onto the PR and pay the legs.
+  #
+  # Computed here rather than with an `if` on the matrix, because a matrix cannot be
+  # conditioned in place — a job has to hand it over as JSON.
+  versions:
+    name: Which Nextclouds
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+    - name: Pick the server versions for this trigger
+      id: pick
+      env:
+        # Bound, not interpolated into the script — see the env: note at the top.
+        EVENT: ${{ github.event_name }}
+      run: |
+        if [ "$EVENT" = "pull_request" ]; then
+          matrix='["stable34"]'
+        else
+          matrix='["stable32", "stable33", "stable34"]'
+        fi
+        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        echo "Nextcloud versions for this $EVENT run: $matrix" >> "$GITHUB_STEP_SUMMARY"
+
+  integration:
+    name: Integration ${{ matrix.suite }} (${{ matrix.server-versions }})
+    runs-on: ubuntu-latest
+    needs: versions
 
     # ── THE SUITE AXIS DIVIDES THE SCENARIOS ─────────────────────────────────
     # Three legs each run a slice of features/, in parallel. The split is by
@@ -79,11 +115,23 @@ jobs:
     #
     # fail-fast: false is load-bearing. With it on, one flaky leg cancels the
     # others and you lose the signal from the legs that were fine.
+    # ── AND THE SERVER AXIS RUNS THEM AGAINST THE NEXTCLOUDS WE CLAIM ────────
+    # The second axis, and this session is what paid for it: a copy's modified
+    # time is reverted by Nextcloud on 33.0.8.2 and kept on 33.0.4.1. Two PATCH
+    # releases of one major disagreed about whether a stamped clock survives the
+    # request, which cost hours precisely because the live instance and CI were on
+    # different ones and only one of them could reproduce it.
+    #
+    # A version we advertise support for and never execute is a claim, not a fact.
+    # WHICH versions run is decided by the `versions` job above — the ceiling on a
+    # PR, the full range on main — and the ceiling is the one that matters most,
+    # because a new major disables the app outright rather than failing a scenario.
     strategy:
       fail-fast: false
       matrix:
-        # NC 33 is the app's max-version; SQLite is the fast integration path.
-        server-versions: ['stable33']
+        # Handed over by the `versions` job above: the ceiling on a PR, the whole
+        # declared range on main. SQLite is the fast integration path.
+        server-versions: ${{ fromJSON(needs.versions.outputs.matrix) }}
         suite: [admin, dashboard, core]
 
     services:
@@ -254,8 +302,10 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        # Unique per leg: artifacts with the same name collide.
-        name: junit-${{ matrix.suite }}
+        # Unique per leg: artifacts with the same name collide. The server version
+        # is in the name because the suite name alone stopped being unique the
+        # moment a second axis landed — see the publish job's guard.
+        name: junit-${{ matrix.server-versions }}-${{ matrix.suite }}
         path: apps/${{ env.APP_ID }}/tests/integration/junit/*.xml
         retention-days: 7
         if-no-files-found: error

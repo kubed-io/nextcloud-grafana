@@ -82,7 +82,7 @@ Grafana Labs, used here only to identify the service this app integrates with.
          and the write of a bool (see that class's docblock). This app has two, and one
          of them (bin_enabled) decides whether a delete is recoverable. Nextcloud 30
          reached end of life in 2025, so nothing supported is lost. -->
-    <nextcloud min-version="31" max-version="33"/>
+    <nextcloud min-version="32" max-version="34"/>
   </dependencies>
   <settings>
     <!-- Section order (by priority): Instance (5, base URL + token in one card —
