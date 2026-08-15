@@ -124,6 +124,8 @@ final class FeatureContext implements Context {
 	private string $lastUid = '';
 	private string $newUid = '';
 	private string $copyTarget = '';
+	/** The uid Grafana minted when a scenario copied a dashboard there. */
+	private string $grafanaCopyUid = '';
 	/**
 	 * THE FILE THE SCENARIO CALLS "the original" — which is NOT $currentFilePath.
 	 *

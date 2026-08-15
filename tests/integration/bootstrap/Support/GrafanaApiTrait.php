@@ -63,6 +63,43 @@ trait GrafanaApiTrait {
 	}
 
 	/**
+	 * Every write Grafana recorded for a dashboard, oldest first, as
+	 * `v1 at 04:08:19 "Initial save"`.
+	 *
+	 * DIAGNOSTIC ONLY — never assert on it. A clock disagreement ("the file is dated
+	 * X, the dashboard changed at Y") has two causes that look identical in the
+	 * message and want opposite fixes: the app never stamped the file, or it stamped
+	 * it and then wrote to Grafana a SECOND time, moving the clock out from under a
+	 * correct stamp. The version list separates them in one glance — and a CI run is
+	 * gone by the time anyone could go and ask Grafana themselves.
+	 *
+	 * @return list<string>
+	 */
+	private function grafanaDashboardWrites(string $uid): array {
+		$res = $this->grafanaClient()->request('GET', 'dashboards/uid/' . rawurlencode($uid) . '/versions');
+		if ($res->getStatusCode() !== 200) {
+			return [];
+		}
+		$decoded = json_decode((string)$res->getBody(), true);
+		// Grafana 11+ answers {versions: [...]}, older ones a bare list.
+		$rows = is_array($decoded['versions'] ?? null) ? $decoded['versions'] : $decoded;
+		if (!is_array($rows)) {
+			return [];
+		}
+		$writes = [];
+		foreach (array_reverse(array_values($rows)) as $row) {
+			if (!is_array($row)) {
+				continue;
+			}
+			$at = strtotime((string)($row['created'] ?? ''));
+			$writes[] = 'v' . (string)($row['version'] ?? '?')
+				. ' at ' . (is_int($at) ? gmdate('H:i:s', $at) : '?')
+				. ' "' . (string)($row['message'] ?? '') . '"';
+		}
+		return $writes;
+	}
+
+	/**
 	 * Create (or overwrite) a minimal Grafana dashboard by uid in a folder — the
 	 * control-case setup a prune scenario needs (a throwaway dashboard the app then
 	 * sees leave). Straight through Grafana's own API, not the app under test.

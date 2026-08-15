@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's uid still inside it. Nextcloud names that copy differently to us, and the app now reads its spelling too.
 - Moving a dashboard into a folder now creates that folder in Grafana, the same as creating one there does. It was the only one of the two gestures that did nothing.
 - The scheduled-sync and recycle-bin toggles can be turned on at last. They reverted to off on every save, silently.
 - Tags sync both ways: change them in Nextcloud, in the file, or in Grafana, and every surface agrees.
@@ -74,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Copying a dashboard file overwrote the dashboard it was copied from, instead of making a new one. The copy's contents landed on the original as a new version, and no second dashboard was ever created.
+- A dashboard file could be dated a second before its dashboard existed: Grafana's created and modified clocks can come back either side of a second boundary right after a write, and the app believed the earlier one.
 - Internal: a Background could only ever declare one folder mapping — a second one silently replaced the first (no behaviour change; test harness only).
 - The Sync Settings checkboxes could never be saved. The recycle-bin one is the serious half: it silently reverting meant every trashed dashboard was permanently deleted in Grafana, which has no undo.
 - Syncing never brought Grafana subfolders across: the folder list Grafana answers with only holds top-level folders, so the tree walk found no children — nested folders and the dashboards in them now arrive.

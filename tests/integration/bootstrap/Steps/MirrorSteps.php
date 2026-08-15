@@ -263,6 +263,17 @@ trait MirrorSteps {
 			// is state the file carries, read in the same glance as the rest. The times
 			// are GRAFANA'S — a mirror wears the dashboard's clock, not the sync's — so
 			// a rename that reaches Grafana must move it.
+			// `Created` is the COPY'S OWN BIRTH. It belongs in this table for the same
+			// reason `Modified` does — state the file carries, read in one glance — and
+			// it earns its place on a copy especially: inheriting the original's date
+			// would put the new dashboard's creation before it existed.
+			if ($property === 'Created') {
+				$problem = $this->checkCreatedRow($path, $expected);
+				if ($problem !== null) {
+					$failures[] = "  {$property}: {$problem}";
+				}
+				continue;
+			}
 			if ($property === 'Modified') {
 				$problem = $this->checkModifiedRow($path, $expected);
 				if ($problem !== null) {
@@ -282,6 +293,30 @@ trait MirrorSteps {
 	}
 
 	/** The `Modified` row: the file's mtime against the dashboard's meta.updated. */
+	/** The `Created` row: the file's creation time against the dashboard's meta.created. */
+	private function checkCreatedRow(string $path, string $expected): ?string {
+		if ($expected !== 'when the dashboard was created in Grafana') {
+			return "unknown expectation '{$expected}'";
+		}
+		$uid = (string)$this->davReadMetadata($path, self::META_UID);
+		if ($uid === '') {
+			return 'the file carries no uid, so there is no dashboard to date it by';
+		}
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			return "dashboard '{$uid}' is gone from Grafana";
+		}
+		$created = strtotime((string)($record['meta']['created'] ?? ''));
+		if (!is_int($created)) {
+			return 'Grafana reported no meta.created to compare against';
+		}
+		$actual = $this->davReadTime($path, 'creationdate');
+		return $actual === $created
+			? null
+			: 'the file was created ' . gmdate('c', (int)$actual) . ', the dashboard at ' . gmdate('c', $created)
+				. $this->whenGrafanaWroteIt($uid);
+	}
+
 	private function checkModifiedRow(string $path, string $expected): ?string {
 		if ($expected !== 'when the dashboard last changed in Grafana') {
 			return "unknown expectation '{$expected}'";
@@ -301,7 +336,29 @@ trait MirrorSteps {
 		$mtime = $this->davReadTime($path, 'getlastmodified');
 		return $mtime === $updated
 			? null
-			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated);
+			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated)
+				. $this->whenGrafanaWroteIt($uid);
+	}
+
+	/**
+	 * Everything Grafana knows about when a dashboard happened, as a trailing clause.
+	 *
+	 * BOTH of its clocks, not just the one being asserted: they are supposed to be the
+	 * same instant on a dashboard nobody has edited, and a gap between them is itself
+	 * the finding. Then the write history, because "the file and the dashboard
+	 * disagree" has two causes that read identically — the stamp never happened, or a
+	 * second write moved the clock after a correct stamp.
+	 */
+	private function whenGrafanaWroteIt(string $uid): string {
+		$record = $this->grafanaGetDashboard($uid);
+		$clock = static function (string $key) use ($record): string {
+			$raw = (string)($record['meta'][$key] ?? '');
+			$at = strtotime($raw);
+			return $raw === '' ? 'none' : (is_int($at) ? gmdate('H:i:s', $at) : $raw);
+		};
+		$out = ' — Grafana says created ' . $clock('created') . ', updated ' . $clock('updated');
+		$writes = $this->grafanaDashboardWrites($uid);
+		return $writes === [] ? $out : $out . '; wrote it: ' . implode('; ', $writes);
 	}
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */

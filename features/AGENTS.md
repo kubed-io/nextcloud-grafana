@@ -398,6 +398,78 @@ A link is a pointer body, so a copy of one holds a pointer and no dashboard JSON
 It must not inherit the pointer's identity, and it cannot become a sync file by
 accident — there are no bytes to create a dashboard from.
 
+### Nextcloud names the copy, and it does not spell it the way we do
+
+A copy landing beside its source collides, and NEXTCLOUD picks the new name. It
+counts before the LAST extension, because to Nextcloud our file is a `.json`
+called `Board.grafana`:
+
+    Board.grafana (1).json          <- Nextcloud's spelling
+    Board (1).grafana.json          <- ours
+
+Only ours was ever read, so a copy made beside its source did not end in
+`.grafana.json` and every predicate in the app answered "not ours". Measured on
+the live instance: no metadata, no dashboard in Grafana, clicking it did nothing —
+and the file still carried the ORIGINAL's uid in its body, which is the most
+dangerous shape a stray copy can take, because it looks like a dashboard and
+points at somebody else's underneath.
+
+We do not get to choose that name. `FilenameCodec::canonicalise()` folds it into
+our spelling at the door, so every caller downstream is unchanged.
+
+### A copy's clocks are its own
+
+`copy.feature` pins `Created` and `Modified` in the post-state because a copy is a
+BIRTH: a new dashboard exists in Grafana that did not before. Inheriting the
+original's dates would date the copy before it existed, and the app already makes
+a point of a mirror wearing the dashboard's clock rather than the sync's — so the
+copy has to wear its OWN.
+
+Adding those two rows caught a real defect, and not the one anyone was looking
+for. **Grafana has no `meta.updated` to give in the instant after a create.** Read
+the dashboard straight back from `POST /api/dashboards/db` and the answer carries
+`meta.created` and an EMPTY `meta.updated`; a second later the same read carries
+`updated`, equal to `created`. `MirrorTimes` reads an absent clock as "leave that
+one alone" — correctly — so the file was given a creation date and kept whatever
+mtime it already had.
+
+That is why it survived every other feature file. On a NEW file the leftover mtime
+is roughly right. On a COPY the file arrives wearing the SOURCE file's mtime: a
+real, plausible timestamp belonging to a different dashboard. Nothing looks wrong
+unless you compare the two sides, which is what the table now does.
+
+Worth keeping for the next clock bug: the failure message prints Grafana's own
+version history (`grafanaDashboardWrites()`), because "the file and the dashboard
+disagree" has two causes that read identically — the stamp never happened, or it
+happened and a second write moved the clock afterwards. One line of version
+history separates them, and a CI run is gone by the time you could ask Grafana.
+
+### The modified clock a copy cannot keep until the next sync
+
+`Created` is asserted on a copy and `Modified` is not, and the asymmetry is
+Nextcloud's rather than ours.
+
+Both are written by one call, from one read, and the app gets it right — probed
+inside a failing CI run:
+
+    apply    wantMtime=1786771450  currentMtime=1786771449
+    touched  to=1786771450         mtimeNow=1786771450
+
+The stamp lands. Nextcloud then puts the modification time back to 1786771449
+before the copy request ends, which is what a PROPFIND a moment later reports.
+The creation time, written straight to the filecache, survives the same request.
+
+So the file wears its dashboard's modified date only from the next sync onward,
+and asserting it in the moment after the gesture is asserting something the
+platform will not hold. Version-dependent, too: it reproduces on NC 33.0.8.2 and
+does not on 33.0.4.1, so the row would be a coin flip across supported versions
+even if it were worth keeping.
+
+Worth revisiting when the cause is known — it is somewhere in the post-copy hook
+chain, after `NodeCopiedEvent` and before the request ends. A deferred re-stamp
+(the shape {@see ReconcileNameJob} already uses for the same class of problem)
+would hold it, at the cost of a job per copy.
+
 ### The copy belongs to where it lands
 
 A copy is never the original's identity — that is the whole feature. What decides
@@ -2097,6 +2169,33 @@ is untestable is the arrange, not the rule.
 
 `@blocked` is the honest tag here rather than `@decision`: nothing has been decided
 against, the harness simply cannot reach the state.
+
+### Three titles the filename grammar cannot read back
+
+Found by adding awkward names to the rename outline, which is exactly what that
+outline is for. The filename is the only carrier of a dashboard's title, and three
+shapes are indistinguishable from the grammar's own markers:
+
+| title | reads back as | why |
+|---|---|---|
+| `Board.af397c9y8enswf` | `Board` | the last segment matches `UID_RE` |
+| `Report (1)` | `Report` | that is how a collision is spelled |
+| `Board.grafana` | `Board` | `grafana` is 7 alphanumerics, so it matches `UID_RE` too |
+
+**It is not cosmetic.** `NameSyncListener` keeps the filename, the JSON title and the
+Grafana title in agreement, so a title that parses back short reads as a rename
+nobody made — and the app renames the user's dashboard in Grafana to the truncated
+form.
+
+Not fixed here, and deliberately not papered over. `FilenameCodecTest` asserts the
+WRONG values on purpose, under a name that says so, so the limit is documented and
+the assertions flip the moment somebody fixes it. `rename.feature`'s Examples carry
+only the shapes that do round-trip; adding these three would assert behaviour the
+app does not have.
+
+The fix is not a tighter regex — no regex separates a title ending in an id-shaped
+word from an id. It needs the parse to be told the uid it is looking for, which the
+app always knows from metadata, and that is a signature change across every caller.
 
 ### The app never invents a substitute name
 

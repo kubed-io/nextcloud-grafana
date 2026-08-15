@@ -57,10 +57,25 @@ final class CreateService {
 	 * and stamp the file with full sync metadata. Returns the new dashboard uid.
 	 *
 	 * Throws on any unrecoverable failure; the listener turns that into a notification.
+	 *
+	 * @param bool $asNewDashboard the caller KNOWS this must be a brand-new dashboard,
+	 *                             so any uid in the body is the wrong dashboard's and is
+	 *                             dropped. Re-adoption (the default) is the create-on-land
+	 *                             behaviour described above; a copy is its exact opposite.
 	 */
-	public function createForFile(File $node, Mapping $mapping): string {
+	public function createForFile(File $node, Mapping $mapping, bool $asNewDashboard = false): string {
 		$content = $node->getContent();
 		$spec = $this->parseFileBody($content);
+
+		// A COPY IS ALWAYS A BIRTH, and the body it was copied from names its own
+		// dashboard — every mirror a sync writes carries `uid` in the JSON. Left in, the
+		// upsert below keys on it and writes the copy OVER the dashboard being copied
+		// (measured live: the source gained a v2 and no second dashboard existed).
+		// Dropped from the spec rather than from the file, because the copy's hook holds
+		// locks and cannot rewrite it — see CopyService for the whole story.
+		if ($asNewDashboard) {
+			unset($spec->uid);
+		}
 
 		// WHERE the dashboard lands: the Grafana folder mirroring the Nextcloud folder
 		// the file is actually in, not the mapping's root. Creating a dashboard in
@@ -90,7 +105,7 @@ final class CreateService {
 		// exists and the file is stamped, so a cosmetic clock must not undo that.
 		try {
 			$read = $this->grafana->readDashboardSpec($uid);
-			$this->times->apply($node, $read?->updated, $read?->created);
+			$this->times->apply($node, $read?->lastChanged(), $read?->created);
 		} catch (\Throwable $e) {
 			$this->logger->warning('grafana_sync: created, but could not read the dashboard back to stamp its clock', [
 				'uid' => $uid,

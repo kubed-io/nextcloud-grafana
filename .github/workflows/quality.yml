@@ -91,6 +91,14 @@ jobs:
     - name: Listener conventions
       run: bash tests/integration/bin/check-listener-conventions.sh
 
+    # A @todo whose steps ALL exist is not a @todo — it is a scenario somebody
+    # declined to run. CONTRIBUTING and AGENTS both already say a scenario goes live
+    # in the PR that lands its code; leaving the tag on was free, so it kept
+    # happening, and it cost a real bug (an unrun copy scenario hid a copy the app
+    # could not see). This makes the deferral fail instead of costing nothing.
+    - name: A @todo is not a choice
+      run: bash tests/integration/bin/check-todo-is-not-a-choice.sh
+
     - name: Coding standard (php-cs-fixer)
       run: composer run cs:check
 
