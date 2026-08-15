@@ -44,7 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Supports Nextcloud **34**. The integration suite now runs against both ends of the supported range instead of one version, after two patch releases of Nextcloud turned out to disagree about behaviour the app relies on.
+- Supports Nextcloud **34**, and every major in the supported range is now actually executed by the integration suite — after two patch releases of Nextcloud turned out to disagree about behaviour the app relies on.
+
+- **BREAKING:** requires Nextcloud **32** (was 31). Nextcloud 31 was never once run by the test suite, so supporting it was a claim rather than a fact; 32 is the oldest version the suite now proves.
 
 - **BREAKING:** the `grafana:sync` / `grafana:link` / `grafana:unmapped` pills are gone. The mapping already decides a file's mode and the file still carries it as metadata, so the pills were a second copy nobody could edit. They are deleted on upgrade, which also removes them from the tag picker.
 
