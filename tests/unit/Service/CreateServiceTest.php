@@ -170,6 +170,37 @@ final class CreateServiceTest extends TestCase {
 	}
 
 	/**
+	 * A COPY NEVER RE-ADOPTS. Create-on-land deliberately upserts on a uid the file
+	 * carries — that is how a file re-attaches to its dashboard. For a copy that same
+	 * behaviour writes the copy over the dashboard it was copied FROM, because a synced
+	 * mirror's body always names its own uid. Measured live: the source gained a v2 and
+	 * no second dashboard existed.
+	 */
+	public function testACopyDropsTheBodysUidSoGrafanaMintsAFreshOne(): void {
+		$captured = null;
+		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['uid' => 'minted-uid', 'version' => 1];
+		});
+
+		$this->service->createForFile($this->file(1, '{"title":"Board","uid":"original-uid"}'), $this->mapping(), true);
+
+		self::assertFalse(isset($captured['dashboard']->uid), 'the original uid never reaches Grafana');
+	}
+
+	public function testCreateOnLandStillReAdoptsTheUidTheFileCarries(): void {
+		$captured = null;
+		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['uid' => 'original-uid', 'version' => 2];
+		});
+
+		$this->service->createForFile($this->file(1, '{"title":"Board","uid":"original-uid"}'), $this->mapping());
+
+		self::assertSame('original-uid', $captured['dashboard']->uid ?? null, 're-adoption is the default and stays');
+	}
+
+	/**
 	 * A file that asserts which second it is stamped with. The real {@see MirrorTimes}
 	 * is wired into the service under test, so this reaches all the way through it.
 	 */

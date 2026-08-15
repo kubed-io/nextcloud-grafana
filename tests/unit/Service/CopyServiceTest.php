@@ -44,10 +44,11 @@ final class CopyServiceTest extends TestCase {
 		return Mapping::fromArray(['grafana_folder_uid' => 'gf-demo', 'nc_folder' => 'demo', 'mode' => $mode]);
 	}
 
-	private function file(int $id = 1): File {
+	private function file(int $id = 1, string $body = '{"title":"Copy"}'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
 		$node->method('getPath')->willReturn('/demo/Copy.grafana.json');
+		$node->method('getContent')->willReturn($body);
 		return $node;
 	}
 
@@ -73,9 +74,50 @@ final class CopyServiceTest extends TestCase {
 		$mapping = $this->mapping(Mapping::MODE_SYNC);
 		$this->mappings->method('resolveForPath')->willReturn($mapping);
 		$this->metadata->expects(self::once())->method('clear')->with(1);
-		// Identity is wiped first, so the created dashboard gets a brand-new uid.
-		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping);
+		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping, true);
 
 		$this->service->onCopy($this->file(1));
+	}
+
+	/**
+	 * THE HIJACK. A dashboard spec carries its own `uid`, so every file a sync has ever
+	 * written has one inside it — and an upsert keys on the body's uid. Left there, the
+	 * copy is not a new dashboard at all: it is a new VERSION of the original, written
+	 * over the top of it.
+	 *
+	 * Measured on a live instance before this was fixed: the source dashboard gained a
+	 * `v2 "Updated by Nextcloud"` and no second dashboard ever existed.
+	 *
+	 * The claim here is narrow on purpose — the copy asks for a NEW dashboard rather
+	 * than trusting the body to be innocent. What that flag then does to the spec is
+	 * {@see CreateServiceTest}'s to pin, next to the upsert it shapes.
+	 */
+	public function testACopyAsksForANewDashboardRatherThanTrustingTheBody(): void {
+		$mapping = $this->mapping(Mapping::MODE_SYNC);
+		$this->mappings->method('resolveForPath')->willReturn($mapping);
+		$this->create->expects(self::once())->method('createForFile')
+			->with(self::isInstanceOf(File::class), $mapping, true);
+
+		$this->service->onCopy($this->file(1, '{"title":"Board","uid":"original-uid"}'));
+	}
+
+	/**
+	 * THE COPY'S OWN HOOK CANNOT WRITE THE FILE. Nextcloud still holds locks on the
+	 * target while the copy events run, so a `putContent` here throws
+	 * `LockedException: 2 shared locks` — measured live, and the same trap
+	 * {@see \OCA\GrafanaSync\Listener\NameSyncListener} defers to a job to avoid.
+	 * That is why the uid is dropped from the spec on its way to Grafana and the file
+	 * is left exactly as the copy made it.
+	 */
+	public function testTheCopiedFileIsNeverRewritten(): void {
+		$this->mappings->method('resolveForPath')->willReturn($this->mapping(Mapping::MODE_SYNC));
+
+		$node = $this->createMock(File::class);
+		$node->method('getId')->willReturn(1);
+		$node->method('getPath')->willReturn('/demo/Copy.grafana.json');
+		$node->method('getContent')->willReturn('{"title":"Board","uid":"original-uid"}');
+		$node->expects(self::never())->method('putContent');
+
+		$this->service->onCopy($node);
 	}
 }

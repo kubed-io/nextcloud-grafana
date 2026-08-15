@@ -301,13 +301,23 @@ trait LifecycleSteps {
 
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
-		$path = $this->putDashboardFile($folder, 'Source ' . bin2hex(random_bytes(3)));
+		$title = 'Source ' . bin2hex(random_bytes(3));
+		$path = $this->putDashboardFile($folder, $title);
 		$this->originalPath = $path;
-		$this->originalBody = $this->davGet($path);
 		// Managed only if it landed in a mapping; outside one there is no uid, and
 		// that is the arrange for half these scenarios rather than a failure.
 		$uid = $this->davReadMetadata($path, self::META_UID);
 		$this->lastUid = (string)$uid;
+		// A REAL MIRROR CARRIES ITS UID INSIDE THE FILE, and this arrange used to leave
+		// a hand-written body that never did. A dashboard spec has a `uid` key, so the
+		// moment a sync writes the file, the uid is in there — and an upsert keys on the
+		// body's uid. Seeding the tidier fixture meant a copy could only ever be tested
+		// against a body that could not hijack anything, and the hijack it was meant to
+		// catch shipped. Bring the file to the state a sync leaves it in.
+		if ($this->lastUid !== '') {
+			$this->davPut($path, $this->dashboardBody($title, $this->lastUid));
+		}
+		$this->originalBody = $this->davGet($path);
 		$this->grafanaBefore = ['folder' => '', 'title' => ''];
 		if ($this->lastUid !== '') {
 			$this->createdDashboardUids[] = $this->lastUid;
