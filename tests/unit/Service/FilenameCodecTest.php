@@ -238,10 +238,10 @@ final class FilenameCodecTest extends TestCase {
 	}
 
 	/**
-	 * THE RETIRED COMPOUND EXTENSION IS NOT OURS ANY MORE, and that is deliberate: it is
-	 * exactly why {@see \OCA\GrafanaSync\Migration\MigrateFileExtension} has to run. An
-	 * upgraded instance whose files were never renamed would keep every dashboard on disk
-	 * and never act on one again.
+	 * THE RETIRED COMPOUND EXTENSION IS NOT OURS ANY MORE, and that is deliberate — but it
+	 * is also the sharpest edge here, so it is pinned rather than left implied. A file
+	 * still wearing the old extension is not half-managed: it is invisible, and the
+	 * dashboard behind it is unreachable through this app forever.
 	 */
 	public function testTheRetiredCompoundExtensionIsNoLongerRecognised(): void {
 		self::assertFalse(FilenameCodec::isDashboardName('Fleet Health.grafana.json'));

@@ -110,11 +110,6 @@ Grafana Labs, used here only to identify the service this app integrates with.
            `grafana` FOLDER tag, which is a different thing and stays. Idempotent;
            see lib/Migration/RemoveModePills.php. -->
       <step>OCA\GrafanaSync\Migration\RemoveModePills</step>
-      <!-- Renames already-synced `*.grafana.json` files to `*.grafana`. Runs AFTER
-           RegisterMimetype so the renamed files land on a mimetype that exists.
-           Without it an upgraded instance's dashboards go unrecognised; see
-           lib/Migration/MigrateFileExtension.php. -->
-      <step>OCA\GrafanaSync\Migration\MigrateFileExtension</step>
     </post-migration>
     <uninstall>
       <!-- Mirror image of RegisterMimetype: reverts the core-tree mimetype/icon

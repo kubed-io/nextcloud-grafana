@@ -2169,11 +2169,20 @@ one gesture most likely to need it. The test derives the colliding name from a m
 of `getUniqueName()` rather than a literal, so it is the rule under test rather than a
 string somebody typed.
 
-`MigrateFileExtension` is the one-time repair step, and the only thing here that
-touches a user's files. It walks the mapped folders (not the whole filecache — a
-hand-made `.grafana.json` outside a mapping is nobody's business), renames both legacy
-shapes, and runs inside the `SyncGuard` so an upgrade does not become a write storm of
+`MigrateFileExtension` was the one-time repair step, and the only thing here that
+touched a user's files. It walked the mapped folders (not the whole filecache — a
+hand-made `.grafana.json` outside a mapping is nobody's business), renamed both legacy
+shapes, and ran inside the `SyncGuard` so an upgrade did not become a write storm of
 name reconciles against the user's Grafana.
+
+**And then it was deleted, one PR later.** It ran once, on the only instance there is —
+11 files, 0 failures, verified in `oc_filecache` rather than from its own log — and this
+app is not on the App Store, so there is no second population to migrate. Keeping it
+would have been the more expensive half of the whole cut: 86 NCLOC and 17 decision
+points, against the 39 NCLOC and 5 decision points the extension change removed. A
+migration that has finished migrating is not a safety net, it is the largest single
+piece of dead code in the app. The n8n sibling keeps its own for a version or two,
+because it IS published and its population is not ours to count.
 
 **Cost, paid knowingly:** off-Nextcloud a `.grafana` file needs telling once which
 editor opens it. Per machine, rather than a mimetype correction per save.
