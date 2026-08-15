@@ -23,7 +23,7 @@ Feature: Creating a folder
     # ── RULE: a folder is in Grafana when a dashboard is in it ────────────────
     # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Create a dashboard in a folder of a mapping
     Given the folder "Demo/Team/Drafts" holding no dashboards
     When I create "CPU Load.grafana.json" in "Demo/Team/Drafts"
@@ -35,6 +35,20 @@ Feature: Creating a folder
       | grafana_folder_uid | the uid of the "Drafts" Grafana folder |
 
     # The parents come with it: a dashboard three folders deep needs all three.
+
+  # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
+  @user @in-nextcloud @gesture @ui
+  Scenario: Move a dashboard into a folder of a mapping
+    Given a dashboard file in "Demo"
+    And the folder "Demo/Team/Drafts" holding no dashboards
+    When I move the file into "Demo/Team/Drafts"
+    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
+    And the dashboard is in the "Drafts" Grafana folder
+    And "Demo/Team/Drafts" holds:
+      | grafana_folder_uid | the uid of the "Drafts" Grafana folder |
+
+    # The second of exactly two ways a Grafana folder is born from Nextcloud, which
+    # is why it lives here and not with the other move gestures.
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Create a folder holding no dashboards

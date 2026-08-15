@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
@@ -37,16 +38,23 @@ final class MotionServiceTest extends TestCase {
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
 	private GrafanaClient $grafana;
+	private FolderMirror $folderMirror;
 	private MotionService $service;
 
 	protected function setUp(): void {
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->grafana = $this->createMock(GrafanaClient::class);
+		// A tree that always answers with the destination subfolder's uid — the folder
+		// creation it does on the way is FolderMirror's own business, covered there.
+		$this->folderMirror = $this->createStub(FolderMirror::class);
+		$this->folderMirror->method('folderUidFor')->willReturn('gf-subfolder');
+
 		$this->service = new MotionService(
 			$this->mappings,
 			$this->metadata,
 			$this->grafana,
+			$this->folderMirror,
 			new SyncGuard(),
 			new NullLogger(),
 		);
@@ -84,16 +92,42 @@ final class MotionServiceTest extends TestCase {
 		$this->service->onMove($this->file(self::DST_PATH), self::SRC_PATH);
 	}
 
-	public function testAMoveWithinTheSameMappingDoesNothing(): void {
+	/**
+	 * INVERTED ON PURPOSE — it used to assert that this did NOTHING.
+	 *
+	 * Staying inside one mapping does not mean staying in one FOLDER, and returning
+	 * early made a drag into a subfolder a purely local act: the subfolder was never
+	 * created in Grafana and the dashboard sat where the pull had left it. That is the
+	 * opposite of the rule `folders/create.feature` states — a folder is in Grafana
+	 * when a dashboard is in it, however the dashboard got there.
+	 */
+	public function testAMoveIntoASubfolderOfTheSameMappingReparentsIt(): void {
 		$same = $this->mapping('m-a', 'gf-a', 'a');
 		$this->metadata->method('read')->willReturn($this->managed('dash-1'));
 		$this->mappings->method('resolveForPath')->willReturn($same); // both from + to resolve here
-		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->grafana->expects(self::never())->method('deleteDashboard');
-		$this->metadata->expects(self::never())->method('write');
-		$this->metadata->expects(self::never())->method('clear');
 
-		$this->service->onMove($this->file('/a/Dash.grafana.json'), '/a/sub/Dash.grafana.json');
+		$captured = null;
+		$this->grafana->expects(self::once())->method('upsertDashboard')
+			->willReturnCallback(function (array $body) use (&$captured): array {
+				$captured = $body;
+				return ['uid' => 'dash-1', 'version' => 2];
+			});
+
+		$this->service->onMove($this->file('/a/sub/Dash.grafana.json'), '/a/Dash.grafana.json');
+
+		self::assertSame('gf-subfolder', $captured['folderUid'] ?? null);
+		self::assertSame('dash-1', $captured['dashboard']->uid ?? null, 'the identity survives the move');
+	}
+
+	/** A link is a pointer; nothing about it moves in Grafana. */
+	public function testALinkMovedWithinItsMappingIsNotReparented(): void {
+		$same = $this->mapping('m-a', 'gf-a', 'a');
+		$this->metadata->method('read')->willReturn($this->managed('dash-1', Mapping::MODE_LINK));
+		$this->mappings->method('resolveForPath')->willReturn($same);
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->service->onMove($this->file('/a/sub/Dash.grafana.json'), '/a/Dash.grafana.json');
 	}
 
 	public function testASyncMoveIntoADifferentMappingReparentsKeepingTheUid(): void {
@@ -111,16 +145,22 @@ final class MotionServiceTest extends TestCase {
 			->method('upsertDashboard')
 			->with(self::callback(function (array $body): bool {
 				return $body['dashboard']->uid === 'dash-keep'
-					&& ($body['folderUid'] ?? null) === 'gf-dst';
+					// THE SUBFOLDER THE FILE LANDED IN, not the destination mapping's
+					// root — FolderMirror resolves the path, so a file dragged into
+					// another mapping's subfolder arrives there rather than at its top.
+					&& ($body['folderUid'] ?? null) === 'gf-subfolder';
 			}))
 			->willReturn(['version' => 9]);
 		$this->grafana->expects(self::never())->method('deleteDashboard');
 
-		// Re-stamps the mapping + the fresh version; never clears (uid kept).
+		// Re-stamps the mapping, the folder it actually landed in, and the fresh
+		// version; never clears (uid kept). The FOLDER is re-stamped because a move is
+		// exactly what makes the banked value stale.
 		$this->metadata->expects(self::once())
 			->method('write')
 			->with(42, [
 				DashboardMetadata::KEY_MAPPING => 'm-dst',
+				DashboardMetadata::KEY_FOLDER_UID => 'gf-subfolder',
 				DashboardMetadata::KEY_VERSION => '9',
 			]);
 		$this->metadata->expects(self::never())->method('clear');

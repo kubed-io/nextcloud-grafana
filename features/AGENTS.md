@@ -1063,6 +1063,19 @@ obvious, intentional, and impossible to read as a typo.
 The rule to keep: if two names in a scenario differ, the difference must MEAN
 something. Case is not a meaning.
 
+### Both ways a Grafana folder is born from Nextcloud live in folders/create
+
+There are exactly two: CREATE a dashboard in a new subfolder, or MOVE one into it.
+They are the same rule — a folder is in Grafana when a dashboard is in it — reached
+by two gestures, so they sit together in `folders/create.feature` rather than being
+split by the verb that happened to trigger them.
+
+The move one used to live in `dashboards/move.feature`. Filed by verb it read as a
+move rule, which is the wrong emphasis: nothing about the DASHBOARD is interesting
+there (it keeps its uid, its mapping and its mode), and the whole point is what
+happens to the FOLDER. `dashboards/move.feature` keeps the gestures where the
+dashboard is the subject — leaving a mapping, crossing between them, the bin.
+
 ### A subfolder is in Grafana when a dashboard is in it
 
 **The `grafana` tag on subfolders is retired.** A folder under a mapping exists in

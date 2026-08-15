@@ -123,6 +123,46 @@ trait MirrorSteps {
 	}
 
 	/**
+	 * @Then /^Grafana holds "([^"]*)" under "([^"]*)", and "([^"]*)" under "([^"]*)"$/
+	 *
+	 * THE CHAIN, NOT JUST THE LEAF. A dashboard three folders deep needs all three, and
+	 * asserting only the innermost would pass on a Grafana that had flattened the tree
+	 * and put "Drafts" at the top.
+	 *
+	 * Each uid found is recorded, so the `holds:` tables that follow can compare a
+	 * folder's `grafana_folder_uid` against the uid GRAFANA actually minted — the app
+	 * created these, so there is no other way to know them — and so teardown removes
+	 * folders this scenario caused to exist.
+	 */
+	public function grafanaHoldsUnderAnd(string $childA, string $parentA, string $childB, string $parentB): void {
+		$this->createdGrafanaFolders[$childA] = $this->requireGrafanaChild($parentA, $childA);
+		$this->createdGrafanaFolders[$childB] = $this->requireGrafanaChild($parentB, $childB);
+	}
+
+	/**
+	 * The uid of `$child` directly under `$parent`, both named by title.
+	 *
+	 * Asked with `parentUid`, because `GET /api/folders` lists TOP-LEVEL folders only —
+	 * a nested folder is absent from it entirely, so scanning that list for a child
+	 * reports every subfolder as missing however healthy Grafana is.
+	 */
+	private function requireGrafanaChild(string $parent, string $child): string {
+		$parentUid = $this->createdGrafanaFolders[$parent]
+			?? $this->grafanaFolderUidByTitle($parent);
+		if ($parentUid === null || $parentUid === '') {
+			throw new \RuntimeException("Grafana has no folder titled '$parent'");
+		}
+		foreach ($this->grafanaChildFolders($parentUid) as $folder) {
+			if ((string)($folder['title'] ?? '') === $child) {
+				return (string)($folder['uid'] ?? '');
+			}
+		}
+		throw new \RuntimeException(
+			"Grafana has no folder '$child' under '$parent' — the subfolder was never created",
+		);
+	}
+
+	/**
 	 * @When someone creates the folder :title under the :parentUid Grafana folder
 	 *
 	 * Straight through Grafana's own API — Grafana mints the uid, and the minted uid

@@ -51,6 +51,7 @@ final class MotionService {
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
 		private GrafanaClient $grafana,
+		private FolderMirror $folderMirror,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -69,7 +70,19 @@ final class MotionService {
 		$from = $this->mappings->resolveForPath($fromPath);
 		$to = $this->mappings->resolveForPath($node->getPath());
 		if (($from?->id) === ($to?->id)) {
-			return; // same mapping (rename / subfolder move) or a boundary-less relocation
+			// SAME MAPPING, BUT NOT NECESSARILY THE SAME FOLDER. This used to return
+			// outright, which made a drag into a subfolder a purely local act — the
+			// dashboard stayed wherever Grafana already had it, and the subfolder was
+			// never created. That is the opposite of the rule the spec states: a folder
+			// is in Grafana when a dashboard is in it, however the dashboard got there.
+			//
+			// A rename inside one folder still costs nothing: re-parenting to the folder
+			// the file is already in resolves to the same uid and Grafana stores what it
+			// already had.
+			if ($to !== null && !$managed->isLink()) {
+				$this->reparentWithinMapping($node, $managed, $to);
+			}
+			return;
 		}
 
 		if ($to !== null) {
@@ -109,6 +122,34 @@ final class MotionService {
 	}
 
 	/**
+	 * A move that stayed inside one mapping — so only the SUBFOLDER changed.
+	 *
+	 * {@see FolderMirror::folderUidFor()} answers "which Grafana folder should hold the
+	 * thing at this path", creating any missing level on the way, which is what brings
+	 * the new subfolder into existence. Moving back to the mapping root resolves to the
+	 * mapping's own folder, so the dashboard comes back out of the subfolder too.
+	 *
+	 * The banked `grafana_folderUid` is deliberately NOT consulted and is re-stamped
+	 * from the answer: it records where the dashboard was PULLED to, and a move is
+	 * exactly the gesture that makes that stale. Leaving it would send the next push
+	 * straight back to the old folder.
+	 */
+	private function reparentWithinMapping(File $node, ManagedFile $managed, Mapping $to): void {
+		$folderUid = $this->folderMirror->folderUidFor($node, $to);
+
+		$spec = $this->decodeSpec($node->getContent());
+		$spec->uid = $managed->uid;
+		$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
+
+		$update = [DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? ''];
+		$version = isset($resp['version']) ? (string)$resp['version'] : '';
+		if ($version !== '') {
+			$update[DashboardMetadata::KEY_VERSION] = $version;
+		}
+		$this->guard->run(fn () => $this->metadata->write($node->getId(), $update));
+	}
+
+	/**
 	 * mapped → a different mapped folder. Sync: re-parent the dashboard into the
 	 * destination folder (uid kept). Link: just re-home the pointer's mapping.
 	 */
@@ -120,10 +161,16 @@ final class MotionService {
 
 		$spec = $this->decodeSpec($node->getContent());
 		$spec->uid = $managed->uid; // identity is the metadata uid, never the file's typed value
-		$folderUid = $to->grafanaFolderUid === '/' ? null : $to->grafanaFolderUid;
+		// THE SUBFOLDER, NOT THE MAPPING ROOT. Using $to->grafanaFolderUid put a file
+		// dragged into another mapping's subfolder at that mapping's top level, which
+		// is the same bug the same-mapping path had — one rule, so one resolution.
+		$folderUid = $this->folderMirror->folderUidFor($node, $to);
 		$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
 
-		$update = [DashboardMetadata::KEY_MAPPING => $to->id];
+		$update = [
+			DashboardMetadata::KEY_MAPPING => $to->id,
+			DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? '',
+		];
 		$version = isset($resp['version']) ? (string)$resp['version'] : '';
 		if ($version !== '') {
 			$update[DashboardMetadata::KEY_VERSION] = $version;

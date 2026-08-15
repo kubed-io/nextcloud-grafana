@@ -25,24 +25,6 @@ Feature: Moving a dashboard file
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
-    # ── RULE: a subfolder holding a dashboard is a Grafana folder too ─────────
-
-  # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Move a dashboard into a subfolder of its mapping
-    Given a dashboard file in "Demo"
-    And a folder "Demo/Team/Drafts" holding no dashboards
-    When I move the file into "Demo/Team/Drafts"
-    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
-    And the dashboard is in the "Drafts" Grafana folder
-    And the file holds:
-      | grafana_uid     | the dashboard's uid |
-      | grafana_mapping | the mapping's id    |
-      | grafana_mode    | the mapping's mode  |
-
-    # @unbuilt — THIS IS THE SPEC, AND THE APP DOES THE OPPOSITE TODAY: a subfolder
-    # is local-only and the dashboard stays put in the mapping's Grafana folder.
-
     # ── RULE: leaving a mapping, and what the recycle bin makes of it ──────────
     # notes: ../AGENTS.md#the-recycle-bin-folder
 

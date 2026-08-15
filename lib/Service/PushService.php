@@ -167,21 +167,22 @@ final class PushService {
 	 * The Grafana folder uid a push should place the dashboard in, so a writeback never
 	 * yanks a dashboard out of its folder.
 	 *
-	 * **The banked `grafana_folderUid` still wins, and must for now.** It records the
-	 * Grafana folder a PULLED dashboard actually lives in — and the pull does not
-	 * mirror Grafana's folder tree yet, so a dashboard sitting three folders deep in
-	 * Grafana arrives flat in the mapping's root in Nextcloud. Resolving from the
-	 * file's Nextcloud location while that is true would push the dashboard out of its
-	 * Grafana subfolder and into the mapping root: a silent relocation of somebody
-	 * else's dashboard, on a gesture that was only ever an edit.
+	 * **THE BANKED `grafana_folderUid` NO LONGER WINS — ITS CONDITION EXPIRED.** It used
+	 * to short-circuit this method, and the reason was written down: the pull did not
+	 * mirror Grafana's folder tree, so a dashboard three folders deep in Grafana arrived
+	 * flat in the mapping root, and resolving from the file's Nextcloud location would
+	 * have pushed it out of its Grafana subfolder. The note ended "when the pull mirrors
+	 * the tree, the two answers converge and it can be dropped then, not before".
 	 *
-	 * So {@see FolderMirror} answers only when the file has no banked folder — which is
-	 * exactly the file CREATED in Nextcloud, where its location is the only truth there
-	 * is, and where the Grafana folders have to be brought into existence to receive
-	 * it.
+	 * The pull mirrors the tree. So the file's LOCATION is the answer, always, and
+	 * {@see FolderMirror} brings any missing level into existence to receive it.
 	 *
-	 * When the pull mirrors the tree, the two answers converge and the banked key
-	 * becomes the denormalisation it always was; it can be dropped then, not before.
+	 * Keeping it would now be the bug rather than the guard: the banked value records
+	 * where a dashboard was PULLED to, so after a user moves the file it names the old
+	 * folder — and every later push would drag the dashboard back out of the subfolder
+	 * it was just filed into. The key is still WRITTEN (the move paths re-stamp it, and
+	 * the pull records it) because it remains a useful record of where the dashboard
+	 * actually sits; it is simply no longer consulted ahead of the file's own path.
 	 *
 	 * General placement (null → {@see DashboardBody::toUpsertBody} omits folderUid) is
 	 * reached **only** via an explicit reserved-root (`/`) mapping. Any "can't determine
@@ -191,9 +192,6 @@ final class PushService {
 	 * the file to retry once the mapping is restored/re-created; the notifier shows why.
 	 */
 	private function resolveFolderUid(Node $node, ManagedFile $managed): ?string {
-		if ($managed->folderUid !== '') {
-			return $managed->folderUid;
-		}
 		if ($managed->mappingId === '') {
 			// A managed file always records its mapping (stampSynced writes it); missing it
 			// means we can't know the placement, so don't guess General.
