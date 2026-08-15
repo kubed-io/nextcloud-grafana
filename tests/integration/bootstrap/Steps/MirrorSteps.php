@@ -313,7 +313,8 @@ trait MirrorSteps {
 		$actual = $this->davReadTime($path, 'creationdate');
 		return $actual === $created
 			? null
-			: 'the file was created ' . gmdate('c', (int)$actual) . ', the dashboard at ' . gmdate('c', $created);
+			: 'the file was created ' . gmdate('c', (int)$actual) . ', the dashboard at ' . gmdate('c', $created)
+				. $this->whenGrafanaWroteIt($uid);
 	}
 
 	private function checkModifiedRow(string $path, string $expected): ?string {
@@ -335,7 +336,18 @@ trait MirrorSteps {
 		$mtime = $this->davReadTime($path, 'getlastmodified');
 		return $mtime === $updated
 			? null
-			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated);
+			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated)
+				. $this->whenGrafanaWroteIt($uid);
+	}
+
+	/**
+	 * The write history behind a clock mismatch, as a trailing clause — empty when
+	 * Grafana has nothing to say. See {@see grafanaDashboardWrites()} for why a
+	 * failing clock is ambiguous without it.
+	 */
+	private function whenGrafanaWroteIt(string $uid): string {
+		$writes = $this->grafanaDashboardWrites($uid);
+		return $writes === [] ? '' : ' — Grafana wrote it: ' . implode('; ', $writes);
 	}
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */
