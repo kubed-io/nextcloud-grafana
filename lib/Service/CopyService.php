@@ -10,7 +10,10 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\BackgroundJob\ReconcileNameJob;
+use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
+use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -55,6 +58,25 @@ use Psr\Log\LoggerInterface;
  * never touched; the body's stale uid is harmless, because a push forces the metadata
  * uid onto the spec and the next pull rewrites the file anyway.
  *
+ * ## AND THE NAME NEXTCLOUD PICKED IS THE COPY'S REAL NAME
+ *
+ * A copy landing beside its source collides, so Nextcloud names it — `Board.grafana (1).json`,
+ * counting before the last extension because to Nextcloud our file is a `.json` called
+ * `Board.grafana`. Two things follow, and neither used to happen:
+ *
+ *   1. **That name is the copy's name, in all three places.** `createForFile` puts the
+ *      filename's display name on the spec so Grafana is right from the first write,
+ *      and step 3 below writes it into the file's JSON `title` to match. Without it a
+ *      copy reached Grafana under the ORIGINAL's title — two dashboards, one name, and
+ *      a file claiming a third thing.
+ *   2. **The file is renamed into our spelling**, `Board (1).grafana.json`, so the
+ *      counter sits on the dashboard's name instead of inside its extension.
+ *      {@see FilenameCodec::canonicalise()} has always READ Nextcloud's spelling; this
+ *      is the write that stops the user having to look at it.
+ *
+ * Both are file writes, so both are deferred to {@see ReconcileNameJob} — see the lock
+ * above. Grafana is correct within the request; the file catches up a tick later.
+ *
  * Failures are logged and swallowed: the NC copy already happened, and a copy that
  * failed to register is just an untracked `.grafana.json` the user can re-save to retry.
  */
@@ -64,6 +86,8 @@ final class CopyService {
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
+		private IJobList $jobList,
+		private IUserSession $userSession,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -92,7 +116,35 @@ final class CopyService {
 				'path' => $node->getPath(),
 				'exception' => $e,
 			]);
+			return; // nothing to reconcile a name against — the copy is an untracked file
 		}
+
+		$this->settleName($node);
+	}
+
+	/**
+	 * Hand the copy's name to {@see ReconcileNameJob}, which runs once the locks this
+	 * hook holds are gone: rename the file out of Nextcloud's spelling into ours, and
+	 * write the resulting display name into the JSON `title`.
+	 *
+	 * `title_from_filename` is the right action because a copy IS a naming — the file
+	 * was just given a name by Nextcloud, exactly as a rename gives it one by hand, and
+	 * both make the filename the authority. The job re-checks everything and no-ops when
+	 * a copy needed neither (the ordinary case: a copy into a folder where nothing
+	 * collided already agrees with itself).
+	 */
+	private function settleName(File $node): void {
+		// The job resolves the file per-user, because team-folder files are mounted that
+		// way — same reason the async push job takes one.
+		$uid = $this->userSession->getUser()?->getUID() ?? $node->getOwner()?->getUID() ?? '';
+		if ($uid === '') {
+			return;
+		}
+		$this->jobList->add(ReconcileNameJob::class, [
+			'fileId' => $node->getId(),
+			'userId' => $uid,
+			'action' => 'title_from_filename',
+		]);
 	}
 
 	/**

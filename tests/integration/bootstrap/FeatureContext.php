@@ -127,6 +127,16 @@ final class FeatureContext implements Context {
 	/** The uid Grafana minted when a scenario copied a dashboard there. */
 	private string $grafanaCopyUid = '';
 	/**
+	 * The folder a scenario last named the whole contents of, and the names it found.
+	 *
+	 * Held so a following step can re-read the SAME set — "these names survive another
+	 * sync" is a before/after claim, and re-deriving the "before" after the sync would
+	 * compare the folder with itself and pass no matter what happened.
+	 */
+	private string $namedFolder = '';
+	/** @var list<string> */
+	private array $namedFiles = [];
+	/**
 	 * THE FILE THE SCENARIO CALLS "the original" — which is NOT $currentFilePath.
 	 *
 	 * $currentFilePath is a cursor: it follows whatever the last gesture touched, so

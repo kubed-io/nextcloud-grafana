@@ -73,8 +73,20 @@ final class CreateService {
 		// (measured live: the source gained a v2 and no second dashboard existed).
 		// Dropped from the spec rather than from the file, because the copy's hook holds
 		// locks and cannot rewrite it — see CopyService for the whole story.
+		//
+		// AND IT IS ALSO A NAMING, by Nextcloud, which the body cannot know about. The
+		// bytes are the original's, so `title` still says the ORIGINAL's name; the file
+		// they landed in is called whatever Nextcloud picked to avoid a collision. Left
+		// alone, a copy made beside its source reached Grafana as a second dashboard
+		// titled exactly like the first while its file said `(1)` — three places, two
+		// answers. The filename is the authority here for the same reason a rename's is:
+		// it is the thing the user just changed.
 		if ($asNewDashboard) {
 			unset($spec->uid);
+			$display = FilenameCodec::displayName($node->getName());
+			if ($display !== '') {
+				$spec->title = $display;
+			}
 		}
 
 		// WHERE the dashboard lands: the Grafana folder mirroring the Nextcloud folder

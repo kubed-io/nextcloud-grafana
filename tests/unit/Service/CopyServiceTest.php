@@ -9,13 +9,17 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\BackgroundJob\ReconcileNameJob;
 use OCA\GrafanaSync\Service\CopyService;
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
+use OCP\IUser;
+use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -31,13 +35,29 @@ final class CopyServiceTest extends TestCase {
 	private CreateService $create;
 	private MappingService $mappings;
 	private DashboardMetadata $metadata;
+	private IJobList $jobList;
 	private CopyService $service;
 
 	protected function setUp(): void {
 		$this->create = $this->createMock(CreateService::class);
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->service = new CopyService($this->create, $this->mappings, $this->metadata, new SyncGuard(), new NullLogger());
+		$this->jobList = $this->createMock(IJobList::class);
+
+		$user = $this->createStub(IUser::class);
+		$user->method('getUID')->willReturn('alice');
+		$session = $this->createStub(IUserSession::class);
+		$session->method('getUser')->willReturn($user);
+
+		$this->service = new CopyService(
+			$this->create,
+			$this->mappings,
+			$this->metadata,
+			new SyncGuard(),
+			$this->jobList,
+			$session,
+			new NullLogger(),
+		);
 	}
 
 	private function mapping(string $mode = Mapping::MODE_SYNC): Mapping {
@@ -119,5 +139,44 @@ final class CopyServiceTest extends TestCase {
 		$node->expects(self::never())->method('putContent');
 
 		$this->service->onCopy($node);
+	}
+
+	/**
+	 * THE NAME NEXTCLOUD PICKED HAS TO REACH THE FILE, and the copy's own hook cannot
+	 * put it there — same locks as {@see testTheCopiedFileIsNeverRewritten()}. So the
+	 * work is handed to {@see ReconcileNameJob}, which runs once they are gone.
+	 *
+	 * `title_from_filename` because a copy IS a naming: Nextcloud just gave this file a
+	 * name, exactly as a rename does, and in both cases the filename is the authority.
+	 */
+	public function testACopyHandsItsNameToTheReconcileJob(): void {
+		$this->mappings->method('resolveForPath')->willReturn($this->mapping(Mapping::MODE_SYNC));
+		$this->jobList->expects(self::once())->method('add')->with(
+			ReconcileNameJob::class,
+			['fileId' => 7, 'userId' => 'alice', 'action' => 'title_from_filename'],
+		);
+
+		$this->service->onCopy($this->file(7));
+	}
+
+	/**
+	 * A copy that never became a dashboard has no name to reconcile — it is a plain
+	 * untracked file, and the job's own gate would drop it anyway. Enqueuing regardless
+	 * would leave the queue carrying one dead job per failed copy.
+	 */
+	public function testAFailedRegistrationEnqueuesNothing(): void {
+		$this->mappings->method('resolveForPath')->willReturn($this->mapping(Mapping::MODE_SYNC));
+		$this->create->method('createForFile')->willThrowException(new \RuntimeException('Grafana said no'));
+		$this->jobList->expects(self::never())->method('add');
+
+		$this->service->onCopy($this->file(1));
+	}
+
+	/** A copy that was never registered anywhere has nothing to name either. */
+	public function testACopyOutsideAMappingEnqueuesNothing(): void {
+		$this->mappings->method('resolveForPath')->willReturn(null);
+		$this->jobList->expects(self::never())->method('add');
+
+		$this->service->onCopy($this->file(1));
 	}
 }

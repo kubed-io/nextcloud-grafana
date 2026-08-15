@@ -417,6 +417,58 @@ points at somebody else's underneath.
 We do not get to choose that name. `FilenameCodec::canonicalise()` folds it into
 our spelling at the door, so every caller downstream is unchanged.
 
+Reading it is what makes the app WORK; it is not the whole answer. The file on
+disk still said `Board.grafana (1).json`, with a counter sitting inside a file
+extension, and only this app knew that was a name at all.
+
+### The copy is named before it exists, not renamed afterwards
+
+**Nextcloud's server does not name a copy at all.** WebDAV COPY means "copy to
+exactly this path"; if something is already there and `Overwrite: F`, the answer is
+a flat 412. Nothing on the copy path calls `Folder::getNonExistingName()`.
+
+The name is chosen in the BROWSER, by `getUniqueName()` from `@nextcloud/files`:
+
+```ts
+let i = 1
+while (otherNames.includes(newName)) {
+  const ext = extname(name)         // ".json" — the LAST extension only
+  const base = basename(name, ext)  // "Board.grafana"
+  newName = `${base} ${opts.suffix(i++)}${ext}`
+}
+```
+
+Hence `Board.grafana (1).json`, counting from one. There is a `suffix` option, and
+no way for an app to pass one — the Files app calls `getUniqueName()` internally.
+**The rule cannot be changed.**
+
+It can be got AHEAD of, and there is exactly one place: the chosen name arrives as
+the COPY request's `Destination` header, and Sabre fires `beforeMethod:COPY` while
+that header is still a string. `CopyNamePlugin` rewrites it, so the file is BORN as
+`Board (1).grafana.json`.
+
+**Why that beats renaming it afterwards.** The first cut let the file land wrong and
+fixed it from a background job, which leaves a window — up to a cron tick — where a
+real file on disk is called something only this app can read. That does not scale:
+the window has to be tolerated for `(1)`, `(2)` and every `(N)` after them, in every
+predicate that ever looks at a filename. One rule applied once at the door replaces
+all of it. Verified live, deliberately with `(2)` rather than `(1)`, so the claim is
+about the general counter and not one lucky case.
+
+`canonicalise()` still reads the other spelling and `ReconcileNameJob` still repairs
+it — for copies that never touch WebDAV (an internal `File::copy()`, a file restored
+from an old backup). Belt and braces, with the plugin as the belt.
+
+**Also worth knowing: the compound extension is not what gives these files their
+icon.** Nextcloud's own detector reads only the last extension, so
+`detectPath('Board.grafana.json')` answers `application/json` and always has. The
+custom type comes from the app's filecache re-stamp, `updateFilecache('grafana.json')`,
+which is a `LIKE '%.grafana.json'`. A copy inherits its source's filecache row, so a
+wrongly-named copy KEPT its type — measured — but the re-stamp could never match that
+file again, so any later re-detect would have quietly dropped it. The single-extension
+sibling (penpot) is immune to the whole problem; the compound-extension ones (grafana,
+n8n) are not.
+
 ### A copy's clocks are its own
 
 `copy.feature` pins `Created` and `Modified` in the post-state because a copy is a
@@ -487,6 +539,94 @@ The original is checked as pre/post state — the uid it had, it still has, and 
 dashboard is still in Grafana. That single sentence replaced three separate claims
 (it kept its uid, it was not restored, it was not duplicated), which were three
 wordings of "the original did not move".
+
+### A copy made in Nextcloud is named by Nextcloud
+
+**Who performed the gesture decides who names the result.** A copy made in the
+Files app is named by Nextcloud — it has to be, because the bytes it copied would
+otherwise collide with the file they came from — and that name is then the copy's
+real name in all three places: the filename, the JSON `title`, and the dashboard in
+Grafana.
+
+Left to itself, none of that happened. Copying `Fleet Health.grafana.json` beside
+itself produced, on the live instance:
+
+    file    Fleet Health.grafana (1).json     <- Nextcloud's spelling, never rewritten
+    JSON    "title": "Fleet Health"           <- the ORIGINAL's name, copied verbatim
+    Grafana  Fleet Health                     <- a second dashboard, same title
+
+Three places, two answers, and a Grafana folder holding two dashboards nothing could
+tell apart. The body cannot be blamed for it: a copy's bytes ARE the original's, so
+of course its `title` says the original's name. The only party that knows a copy
+happened is the file's name.
+
+So the filename is the authority, for exactly the reason it is on a rename: it is
+the thing that just changed. By the time `CreateService` runs, the file already
+carries the right name — `CopyNamePlugin` saw to that before the copy happened — so
+it reads the display name off the filename and puts it on the spec before the
+upsert, and Grafana is right inside the request. Only the file's own JSON `title`
+lags, fixed a tick later by `ReconcileNameJob`, because the copy hook cannot write
+the file it is holding locks on (saga §2, round 6).
+
+**The name it reads is `display`, not `name`.** `FilenameCodec::parse()` returns
+both, and they differ by exactly the collision counter. Taking the counter-stripped
+one — the field a PULL wants, so a mirror already wearing `(1)` is matched to its
+dashboard next time — is what let the copy reach Grafana under the original's title.
+`FilenameCodec::displayName()` exists so that mistake has to be made deliberately.
+
+### A copy made in Grafana is named by Grafana
+
+The mirror image, and the one exception to *a name is one value living in three
+places*.
+
+Grafana permits two dashboards in one folder to share a title; Nextcloud cannot
+permit two files in one folder to share a name. Both constraints are real, and only
+one of them is Nextcloud's business. So the counter goes on the FILENAME and stops
+there — the JSON `title` and the Grafana dashboard keep saying the duplicated name,
+because that is what their owner called them.
+
+    Fleet Health.grafana.json      title "Fleet Health"   Grafana: Fleet Health
+    Fleet Health (1).grafana.json  title "Fleet Health"   Grafana: Fleet Health
+
+Same filename shape as a Nextcloud-side copy, deliberately: Nextcloud's constraint
+is satisfied identically either way. What differs is whether the counter is allowed
+to travel. Outward it must — it is the real name. Inward it must not — renaming
+someone's dashboard because our filesystem is fussy is overreach.
+
+`copy.feature` covers this in one Scenario Outline, and the arrange is the whole
+reason it works now: the "copy in Grafana" step used to append " Copy" to the title,
+which is what Grafana's dialog PRE-FILLS and not what it enforces. A renamed copy
+cannot collide, so the rule the scenario exists to pin was never once exercised.
+
+### The second suffix, and the pull that used to fight it
+
+Three dashboards, not two, because **two is the case that passes by accident**: a
+counter that only ever reaches `(1)` is indistinguishable from an app that appends a
+fixed string, and the second suffix is where an off-by-one would live.
+
+**The word "still" in the last line is doing real work.** Landing three names is the
+easy half; KEEPING them is where `SyncService` was wrong. For an existing mirror it
+asked for `FilenameCodec::format($displayName, $uid, false, 0)` — collision index
+zero, unconditionally — so on every single tick both duplicates were told to go and
+take the name the first mirror was sitting on.
+
+It "worked" because the move threw and the catch logged `rename skipped
+(collision?)`. An exception is not a naming policy, and that log line's own question
+mark says nobody was sure it was one. Anything that made the move succeed — the
+incumbent deleted in Grafana, a differently-ordered pull — and the mirrors would
+start swapping names underneath the user.
+
+`desiredMirrorName()` replaces it: prefer the plain name, else the first free
+counter, and count the file's OWN current name as free. That last clause is what
+lets a legitimate duplicate keep the suffix it has, and it also means a mirror whose
+twin was deleted gets its unsuffixed name back instead of wearing a counter forever.
+
+**The second sync that proves it does not get a line of its own.** It is a
+mechanism — how the claim is checked, not what the user ends up with — so it lives
+inside the `are still titled` step, which reads the folder, syncs once more, and
+checks that neither the titles nor the names moved. A scenario saying "and sync
+again" out loud would be narrating the app's plumbing; `still` already means the
+state held.
 
 ### A folder copied in Grafana is indistinguishable from a new one
 

@@ -47,11 +47,12 @@ trait RenameSteps {
 
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
-		$this->putDashboardFile($folder, $stem);
-		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
-		if ($this->lastUid !== '') {
-			$this->createdDashboardUids[] = $this->lastUid;
-		}
+		// Same settling as the unnamed arrange — a uid-carrying body and a captured
+		// pre-state — because a scenario that names its file is no less entitled to a
+		// realistic one. `copy.feature` needs both: it can only spell the collision name
+		// it expects if it chose the original's name, and it can only prove the original
+		// survived if something read it first.
+		$this->captureOriginal($this->putDashboardFile($folder, $stem), $stem);
 	}
 
 	/**

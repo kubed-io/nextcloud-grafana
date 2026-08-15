@@ -281,6 +281,17 @@ trait MirrorSteps {
 				}
 				continue;
 			}
+			// THE THREE PLACES A NAME LIVES, side by side in one table on purpose. They
+			// are supposed to be one value, and the only way to catch them disagreeing
+			// is to read all three in the same glance — a copy shipped saying three
+			// different things at once, and each of the three looked fine alone.
+			if (in_array($property, ['filename', 'title in the file', 'title in Grafana'], true)) {
+				$problem = $this->checkNameRow($path, $property, $expected);
+				if ($problem !== null) {
+					$failures[] = "  {$property}: {$problem}";
+				}
+				continue;
+			}
 			$actual = $this->davReadMetadata($path, $property);
 			$problem = $this->checkMetadataRow($path, $property, $expected, $actual);
 			if ($problem !== null) {
@@ -338,6 +349,60 @@ trait MirrorSteps {
 			? null
 			: 'the file is dated ' . gmdate('c', (int)$mtime) . ', the dashboard changed at ' . gmdate('c', $updated)
 				. $this->whenGrafanaWroteIt($uid);
+	}
+
+	/**
+	 * One of the three name rows. Always a quoted literal — a name is the one thing in
+	 * this vocabulary a scenario really can spell out, and spelling it is the point.
+	 *
+	 * Every failure reports all three, because the interesting question is never "is
+	 * this one wrong" but "which of the three disagreed with the other two", and that is
+	 * unanswerable from a single value.
+	 */
+	private function checkNameRow(string $path, string $property, string $expected): ?string {
+		if (!str_starts_with($expected, '"') || !str_ends_with($expected, '"')) {
+			throw new \RuntimeException(
+				"the table says {$property} is {$expected}; a name row takes a quoted literal.",
+			);
+		}
+		$want = trim($expected, '"');
+		$actual = match ($property) {
+			'filename' => basename($path),
+			'title in the file' => $this->titleInTheFile($path),
+			default => $this->titleInGrafana($path),
+		};
+		return $actual === $want ? null : "expected '{$want}', found '{$actual}'" . $this->whatTheThreeNamesSay($path);
+	}
+
+	/** The `title` key of the file's own JSON — a sync spec and a link pointer both have one. */
+	private function titleInTheFile(string $path): string {
+		try {
+			$spec = json_decode($this->davGet($path), false, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException $e) {
+			return '<unreadable JSON: ' . $e->getMessage() . '>';
+		}
+		return ($spec instanceof \stdClass && isset($spec->title) && is_string($spec->title))
+			? $spec->title
+			: '<no title key>';
+	}
+
+	/** What Grafana calls the dashboard this file claims — found by uid, never by name. */
+	private function titleInGrafana(string $path): string {
+		$uid = (string)$this->davReadMetadata($path, self::META_UID);
+		if ($uid === '') {
+			return '<the file carries no uid, so it names no dashboard>';
+		}
+		$record = $this->grafanaGetDashboard($uid);
+		return $record === null
+			? "<dashboard '{$uid}' is gone from Grafana>"
+			: (string)($record['dashboard']['title'] ?? '<no title>');
+	}
+
+	/** All three names as a trailing clause, so a failure shows which one broke ranks. */
+	private function whatTheThreeNamesSay(string $path): string {
+		return ' — the file is called ' . basename($path)
+			. ', its JSON says ' . $this->titleInTheFile($path)
+			. ', Grafana says ' . $this->titleInGrafana($path);
 	}
 
 	/**

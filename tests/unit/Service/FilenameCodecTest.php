@@ -266,6 +266,62 @@ final class FilenameCodecTest extends TestCase {
 		self::assertSame('Cluster (eu-west-1)', $parsed['name']);
 	}
 
+	// ── the two names a suffixed file has ──────────────────────────────────────
+
+	/**
+	 * `name` and `display` differ by exactly the counter, and callers want opposite
+	 * ones: a pull matches on the LOGICAL name so a mirror already wearing `(1)` is
+	 * recognised next time, while anything showing the user a name wants it as written.
+	 */
+	public function testASuffixedFileHasBothALogicalNameAndADisplayedOne(): void {
+		$parsed = FilenameCodec::parse('Fleet Health (1).grafana.json');
+
+		self::assertNotNull($parsed);
+		self::assertSame('Fleet Health', $parsed['name'], 'the logical name a pull matches on');
+		self::assertSame('Fleet Health (1)', $parsed['display'], 'the name the user reads');
+		self::assertSame(1, $parsed['suffix']);
+	}
+
+	/** With no counter the two are the same string, so callers can use either safely. */
+	public function testAnUnsuffixedFilesTwoNamesAreTheSame(): void {
+		$parsed = FilenameCodec::parse('Fleet Health.grafana.json');
+
+		self::assertNotNull($parsed);
+		self::assertSame($parsed['name'], $parsed['display']);
+	}
+
+	/**
+	 * THE ONE-LINER THAT STOPS THE MISTAKE. Reaching into `parse()` and taking `name`
+	 * is how a dashboard copied in Nextcloud reached Grafana still wearing the
+	 * ORIGINAL's title — the counter, which was the entire difference between the two
+	 * names, had been stripped on the way past.
+	 *
+	 * Nextcloud's own spelling included, because that is the shape a real copy has.
+	 */
+	public function testDisplayNameKeepsTheCounterInEitherSpelling(): void {
+		self::assertSame('Fleet Health (1)', FilenameCodec::displayName('Fleet Health (1).grafana.json'));
+		self::assertSame('Fleet Health (1)', FilenameCodec::displayName('Fleet Health.grafana (1).json'));
+		self::assertSame('Fleet Health', FilenameCodec::displayName('Fleet Health.grafana.json'));
+	}
+
+	/** Not one of ours — no name to display, and no exception either. */
+	public function testDisplayNameOfSomethingElseIsEmpty(): void {
+		self::assertSame('', FilenameCodec::displayName('Budget.xlsx'));
+	}
+
+	/**
+	 * The write-side question, kept apart from the read-side one. `canonicalise()` is
+	 * what makes the app WORK on Nextcloud's spelling; this is what decides whether the
+	 * file on disk should be renamed out of it, so the counter ends up on the
+	 * dashboard's name instead of inside its extension.
+	 */
+	public function testNextcloudsSpellingIsRecognisedAsSomethingToRename(): void {
+		self::assertTrue(FilenameCodec::isNextcloudSpelling('Fleet Health.grafana (1).json'));
+		self::assertFalse(FilenameCodec::isNextcloudSpelling('Fleet Health (1).grafana.json'), 'already ours');
+		self::assertFalse(FilenameCodec::isNextcloudSpelling('Fleet Health.grafana.json'), 'no counter at all');
+		self::assertFalse(FilenameCodec::isNextcloudSpelling('Budget.xlsx'), 'not ours to rename');
+	}
+
 	/** Not ours at all — the counter is there but the type is not. */
 	public function testAnUnrelatedFileWithACounterIsNotOurs(): void {
 		self::assertFalse(FilenameCodec::isDashboardName('Budget.xlsx (1).json'));

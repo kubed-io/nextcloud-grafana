@@ -188,6 +188,74 @@ final class CreateServiceTest extends TestCase {
 		self::assertFalse(isset($captured['dashboard']->uid), 'the original uid never reaches Grafana');
 	}
 
+	/**
+	 * A COPY IS NAMED BY NEXTCLOUD, and the bytes cannot know it. The body is the
+	 * original's, so its `title` still says the original's name; the file it landed in
+	 * is called whatever Nextcloud picked to dodge the collision. Left alone, Grafana
+	 * received a second dashboard titled identically to the first while the file said
+	 * `(1)` — one name, three places, two answers.
+	 *
+	 * The Nextcloud spelling is deliberate here: `Fleet Health.grafana (1).json` is what
+	 * a copy landing beside its source is really called on disk, counter before the last
+	 * extension, and the title has to be read back out of THAT.
+	 */
+	public function testACopyIsTitledAfterTheNameNextcloudGaveTheFile(): void {
+		$captured = null;
+		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['uid' => 'minted-uid', 'version' => 1];
+		});
+
+		$this->service->createForFile(
+			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health.grafana (1).json'),
+			$this->mapping(),
+			true,
+		);
+
+		self::assertSame('Fleet Health (1)', $captured['dashboard']->title ?? null);
+	}
+
+	/**
+	 * The same rule with nothing to do: a copy that landed somewhere without a collision
+	 * keeps the name it already had, so all three places agree without being touched.
+	 */
+	public function testACopyThatCollidedWithNothingKeepsItsTitle(): void {
+		$captured = null;
+		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['uid' => 'minted-uid', 'version' => 1];
+		});
+
+		$this->service->createForFile(
+			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health.grafana.json'),
+			$this->mapping(),
+			true,
+		);
+
+		self::assertSame('Fleet Health', $captured['dashboard']->title ?? null);
+	}
+
+	/**
+	 * CREATE-ON-LAND IS NOT A NAMING. A hand-made file dropped into a mapping keeps the
+	 * title its author wrote, even where that disagrees with the filename — resolving
+	 * that disagreement is the rename path's job, and doing it here would silently
+	 * retitle every dashboard someone imported under a tidier filename.
+	 */
+	public function testCreateOnLandLeavesTheBodysTitleAlone(): void {
+		$captured = null;
+		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['uid' => 'minted-uid', 'version' => 1];
+		});
+
+		$this->service->createForFile(
+			$this->file(1, '{"title":"Fleet Health"}', 'Something Else.grafana.json'),
+			$this->mapping(),
+		);
+
+		self::assertSame('Fleet Health', $captured['dashboard']->title ?? null);
+	}
+
 	public function testCreateOnLandStillReAdoptsTheUidTheFileCarries(): void {
 		$captured = null;
 		$this->grafana->method('upsertDashboard')->willReturnCallback(function (array $body) use (&$captured): array {

@@ -34,9 +34,32 @@ use OCP\Files\Node;
  * the classic JSON cut for now.)
  *
  * Collision policy: when two dashboards in the same Grafana folder share a `title`
- * (Grafana permits this), the second through Nth file get an NC-style `(2)`, `(3)`,
- * … suffix. The chosen filename is what gets stored in metadata, so subsequent pulls
- * are stable and won't oscillate.
+ * (Grafana permits this), the first file gets the plain name and the ones after it get
+ * an NC-style ` (1)`, ` (2)`, … suffix — Nextcloud's own counter, which starts at one.
+ * The chosen filename is what gets stored in metadata, so subsequent pulls are stable
+ * and won't oscillate.
+ *
+ * ## TWO NAMES, AND THE DIFFERENCE MATTERS
+ *
+ * {@see parse()} returns both, because callers want opposite things from a suffixed
+ * file:
+ *
+ *   `name`     the LOGICAL name, counter stripped — `Fleet Health`. What a pull matches
+ *              a dashboard's title against, so a mirror already wearing `(1)` is
+ *              recognised as the same logical file next time round.
+ *   `display`  the name AS WRITTEN, counter and all — `Fleet Health (1)`. What the user
+ *              sees, and therefore what the JSON `title` and the Grafana dashboard have
+ *              to say whenever NEXTCLOUD is the one that named the file.
+ *
+ * Which of the two is authoritative is decided by WHERE THE GESTURE HAPPENED, and both
+ * directions are exercised by a copy:
+ *
+ *   - Copied in Nextcloud → Nextcloud picked the name, counter included, so `display`
+ *     is the name and it propagates to the JSON title and to Grafana. All three agree.
+ *   - Copied in Grafana → Grafana permits two dashboards with one title and Nextcloud
+ *     does not permit two files with one name, so the counter is added to the FILENAME
+ *     ONLY and `name` is what still matches the dashboard. This is the single exception
+ *     to *a name is one value living in three places*.
  *
  * This class is **pure logic**: no filesystem access, no DI dependencies, trivial to
  * unit test.
@@ -128,7 +151,7 @@ final class FilenameCodec {
 	 * Both clean and uid-suffixed shapes are recognised; the uid field is `null` for
 	 * the clean shape and a non-empty string for the suffixed shape.
 	 *
-	 * @return array{name:string, uid:?string, suffix:int}|null suffix is the collision counter (0 = canonical name, 1+ = "(N)" duplicate)
+	 * @return array{name:string, uid:?string, suffix:int, display:string}|null suffix is the collision counter (0 = canonical name, 1+ = "(N)" duplicate); `display` is the name with that counter still on it
 	 */
 	public static function parse(string $basename): ?array {
 		$slash = strrpos($basename, '/');
@@ -159,14 +182,48 @@ final class FilenameCodec {
 		}
 
 		// Strip an optional " (N)" collision suffix off the *end* of the resolved name
-		// so subsequent pulls can detect they're updating the same logical file.
+		// so subsequent pulls can detect they're updating the same logical file. The
+		// unstripped form is kept as `display`, because a counter Nextcloud put there is
+		// part of the name the user sees — see this class's docblock for which of the
+		// two a caller wants.
+		$display = $name;
 		$suffix = 0;
 		if (preg_match('/^(?<base>.+) \((?<n>\d+)\)$/', $name, $m)) {
 			$suffix = (int)$m['n'];
 			$name = $m['base'];
 		}
 
-		return ['name' => $name, 'uid' => $uid, 'suffix' => $suffix];
+		return ['name' => $name, 'uid' => $uid, 'suffix' => $suffix, 'display' => $display];
+	}
+
+	/**
+	 * The name a managed file shows the user: its stem with any collision counter left
+	 * on, and no uid segment or extension. Empty string when $basename is not one of
+	 * ours.
+	 *
+	 * THE ONE-LINER FOR "WHAT IS THIS FILE CALLED", so callers that want the visible
+	 * name don't reach into {@see parse()} and take `name` — the counter-stripped field
+	 * — by mistake. That mistake is not theoretical: it is why a dashboard copied in
+	 * Nextcloud arrived in Grafana still wearing the ORIGINAL's title, with the file,
+	 * the JSON and Grafana disagreeing three ways about a name.
+	 */
+	public static function displayName(string $basename): string {
+		$parsed = self::parse($basename);
+		return $parsed !== null ? trim($parsed['display']) : '';
+	}
+
+	/**
+	 * True when $name is one of ours but spelled NEXTCLOUD'S way — `Board.grafana (1).json`
+	 * rather than `Board (1).grafana.json`.
+	 *
+	 * {@see canonicalise()} folds that spelling on the way IN so every predicate reads
+	 * it. This is the write-side question: should the file on disk be renamed? Reading
+	 * the name is enough to make the app work; renaming it is what makes the counter
+	 * land where a user of this app expects to see it, on the dashboard's name rather
+	 * than inside its extension.
+	 */
+	public static function isNextcloudSpelling(string $name): bool {
+		return self::canonicalise($name) !== $name;
 	}
 
 	/**
