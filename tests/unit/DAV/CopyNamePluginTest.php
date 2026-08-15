@@ -31,28 +31,45 @@ use Sabre\HTTP\ResponseInterface;
 #[CoversClass(CopyNamePlugin::class)]
 final class CopyNamePluginTest extends TestCase {
 	private const BASE = 'http://cloud.example/remote.php/dav/files/kelly';
+	/** What {@see Server::calculateUri()} strips off the front of a destination. */
+	private const DAV_ROOT = '/remote.php/dav/';
 
 	/**
-	 * @param list<string> $existing paths (as Sabre sees them) that are already taken
+	 * @param list<string> $existing tree paths that are already taken, in the shape
+	 *                               `calculateUri()` answers with — `files/kelly/Demo/…`
 	 */
 	private function plugin(array $existing = []): CopyNamePlugin {
 		$tree = $this->createStub(Tree::class);
 		$tree->method('nodeExists')->willReturnCallback(
-			static fn (string $path): bool => in_array(ltrim($path, '/'), $existing, true),
+			static fn (string $path): bool => in_array(trim($path, '/'), $existing, true),
 		);
 
 		$server = $this->createStub(Server::class);
 		$server->tree = $tree;
-		// Sabre's own behaviour: an absolute destination is reduced to its path, and the
-		// DAV base is stripped. Reproduced rather than mocked away, because the plugin
-		// hands it a raw header and the shape it gets back is the whole input.
-		$server->method('calculateUri')->willReturnCallback(
-			static fn (string $uri): string => trim(rawurldecode((string)parse_url($uri, PHP_URL_PATH)), '/'),
-		);
+		$server->method('calculateUri')->willReturnCallback(self::calculateUri(...));
 
 		$plugin = new CopyNamePlugin(new NullLogger());
 		$plugin->initialize($server);
 		return $plugin;
+	}
+
+	/**
+	 * Sabre's own behaviour, reproduced rather than mocked away: an absolute destination
+	 * is reduced to its path, decoded, and **the DAV base is stripped** — so what a
+	 * plugin gets back is `files/kelly/Demo/…`, not the whole URL path.
+	 *
+	 * That last part is not a detail. Leaving the base on made every path this handed the
+	 * tree disagree with the paths the test declared as taken, so `nodeExists()` answered
+	 * false to everything and the occupied-target case silently exercised the ordinary
+	 * one instead. A stub that is wrong in the same direction as the code under test
+	 * proves nothing at all.
+	 */
+	private static function calculateUri(string $uri): string {
+		$path = rawurldecode((string)parse_url($uri, PHP_URL_PATH));
+		if (str_starts_with($path, self::DAV_ROOT)) {
+			$path = substr($path, strlen(self::DAV_ROOT));
+		}
+		return trim($path, '/');
 	}
 
 	/**
@@ -140,10 +157,25 @@ final class CopyNamePluginTest extends TestCase {
 	 * work into a 412 the user never asked for, so the client's name wins.
 	 */
 	public function testAnOccupiedTargetLeavesTheClientsNameAlone(): void {
-		$plugin = $this->plugin(['Demo/Fleet Health (1).grafana.json']);
+		$plugin = $this->plugin(['files/kelly/Demo/Fleet Health (1).grafana.json']);
 		$destination = self::BASE . '/Demo/' . rawurlencode('Fleet Health.grafana (1).json');
 
 		self::assertSame($destination, $this->copyTo($plugin, $destination));
+	}
+
+	/**
+	 * The guard above must not be so eager that it declines every rewrite. Same fixture,
+	 * one counter along: `(2)` is free, so it is taken — which is also what proves the
+	 * occupied case was answering about the right path rather than failing to find any.
+	 */
+	public function testTheNextFreeCounterIsStillRewrittenAroundAnOccupiedOne(): void {
+		$plugin = $this->plugin(['files/kelly/Demo/Fleet Health (1).grafana.json']);
+		$rewritten = $this->copyTo(
+			$plugin,
+			self::BASE . '/Demo/' . rawurlencode('Fleet Health.grafana (2).json'),
+		);
+
+		self::assertSame(self::BASE . '/Demo/' . rawurlencode('Fleet Health (2).grafana.json'), $rewritten);
 	}
 
 	/**

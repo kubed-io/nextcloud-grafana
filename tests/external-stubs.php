@@ -61,10 +61,10 @@ namespace Sabre\DAV {
 	}
 }
 
-// Sabre's HTTP layer. Only the header accessors are declared: a `beforeMethod:*`
-// handler receives the request before it is dispatched, and rewriting one header is
-// the entirety of what CopyNamePlugin does with it.
 namespace Sabre\HTTP {
+	// Only the header accessors are declared: a `beforeMethod:*` handler receives the
+	// request before it is dispatched, and rewriting one header is the entirety of what
+	// CopyNamePlugin does with it.
 	if (!interface_exists(RequestInterface::class, false)) {
 		interface RequestInterface {
 			public function getHeader(string $name): ?string;
