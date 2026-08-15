@@ -79,10 +79,23 @@ final class FilenameCodec {
 	 * {@see parse()} then strips the counter exactly as it does for our own form.
 	 */
 	public static function canonicalise(string $name): string {
-		if (preg_match('/^(.+)\.grafana \((\d+)\)\.json$/', $name, $m) === 1) {
-			return $m[1] . ' (' . $m[2] . ')' . self::EXT;
+		if (preg_match('/^(.+)\.grafana \((\d+)\)\.json$/', $name, $m) !== 1) {
+			return $name;
 		}
-		return $name;
+		$stem = $m[1];
+		$counter = ' (' . $m[2] . ')';
+
+		// THE UID SEGMENT STAYS LAST. {@see format()} composes the opt-in shape as
+		// `<name> (N).<uid>.grafana.json` — counter on the NAME, uid immediately before
+		// the extension — and {@see parse()} looks for the uid at the last dot. Appending
+		// the counter blindly would produce `Board.<uid> (1).grafana.json`, where the uid
+		// segment reads as `<uid> (1)`, matches nothing, and the identity is silently
+		// lost on exactly the gesture most likely to need it.
+		$lastDot = strrpos($stem, '.');
+		if ($lastDot !== false && preg_match(self::UID_RE, substr($stem, $lastDot + 1)) === 1) {
+			return substr($stem, 0, $lastDot) . $counter . substr($stem, $lastDot) . self::EXT;
+		}
+		return $stem . $counter . self::EXT;
 	}
 
 	/**

@@ -22,16 +22,27 @@ Feature: Renaming a dashboard
     # ── RULE: a name is one value living in three places ──────────────────────
 
   @user @in-nextcloud @gesture @ui
-  Scenario: Rename the file in nextcloud
+  Scenario Outline: Rename the file in nextcloud
     Given a dashboard file named "Old Name.grafana.json" in "Demo"
-    When I rename the file to "New Name.grafana.json"
-    Then the file is named "New Name.grafana.json"
-    And the JSON title is "New Name"
-    And the dashboard is named "New Name" in Grafana
+    When I rename the file to "<new name>.grafana.json"
+    Then the file is named "<new name>.grafana.json"
+    And the JSON title is "<new name>"
+    And the dashboard is named "<new name>" in Grafana
     And the file holds:
       | grafana_uid     | the dashboard's uid                        |
       | grafana_mapping | the mapping's id                           |
       | Modified        | when the dashboard last changed in Grafana |
+
+    Examples: names that look like something the filename grammar means
+      | new name                |
+      | New Name                |
+      | v1.2 board              |
+      | Cluster (eu-west-1)     |
+      | Latency — p99 · eu-west |
+
+    # Every row is a name the CODEC could misread, not a decorative charset test: a
+    # dot is where it looks for a uid and brackets are how it spells a collision.
+    # notes: ../AGENTS.md#three-titles-the-filename-grammar-cannot-read-back
 
   @user @in-nextcloud @gesture @ui
   Scenario: Rename the dashboard inside the file

@@ -133,12 +133,12 @@ trait TagSteps {
 	 * proves the plumbing the scenario is about to exercise actually exists.
 	 */
 	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags): void {
-		// A LINK MAPPING CANNOT BE WRITTEN INTO — that refusal is a shipped feature, not
-		// an obstacle. So a link mirror is seeded the only way one really appears: the
-		// dashboard is made in Grafana and pulled down. This branch was dead until the
-		// table-based mapping arrange started recording modes; it works now.
+		$this->aDashboardFileIn($folder);
+
+		// A LINK's tags are Grafana's, so they are seeded THERE and pulled — writing
+		// into a link folder is refused by design. aDashboardFileIn() already arranged
+		// the mirror; this only dresses its dashboard.
 		if (($this->mappingModes[$folder] ?? '') === 'link') {
-			$this->seedMirrorViaPull($folder, 'Linked ' . bin2hex(random_bytes(3)));
 			if (trim($tags) !== '') {
 				$this->grafanaCreateTaggedDashboard(
 					$this->lastUid,
@@ -151,7 +151,6 @@ trait TagSteps {
 			return;
 		}
 
-		$this->aDashboardFileIn($folder);
 		// `the file holds:` reads the CURSOR, not the original — and the arrange above
 		// only sets the latter, so without this every Modified assertion in this file
 		// fails on "no file to inspect" rather than on anything it is about.

@@ -179,6 +179,85 @@ final class FilenameCodecTest extends TestCase {
 		self::assertSame($ours, $theirs);
 	}
 
+	/**
+	 * THE UID-SUFFIXED SHAPE SURVIVES IT. `format()` composes that shape as
+	 * `<name> (N).<uid>.grafana.json` — counter on the name, uid last, which is where
+	 * `parse()` looks. Appending the counter blindly gives `Board.<uid> (1).grafana.json`,
+	 * whose uid segment reads as `<uid> (1)`, matches nothing, and drops the identity on
+	 * the very gesture most likely to need it.
+	 */
+	public function testACopiedUidSuffixedNameKeepsItsUid(): void {
+		$parsed = FilenameCodec::parse('Board.af397c9y8enswf.grafana (1).json');
+
+		self::assertNotNull($parsed);
+		self::assertSame('af397c9y8enswf', $parsed['uid']);
+		self::assertSame('Board', $parsed['name']);
+	}
+
+	/** And it lands on exactly the name our own spelling would have produced. */
+	public function testBothSpellingsAgreeOnTheUidSuffixedShapeToo(): void {
+		self::assertSame(
+			FilenameCodec::parse(FilenameCodec::format('Board', 'af397c9y8enswf', true, 1)),
+			FilenameCodec::parse('Board.af397c9y8enswf.grafana (1).json'),
+		);
+	}
+
+	/**
+	 * A title round-trips through the filename unchanged.
+	 *
+	 * @param string $name
+	 */
+	#[DataProvider('safeNames')]
+	public function testATitleSurvivesTheRoundTrip(string $name): void {
+		$parsed = FilenameCodec::parse(FilenameCodec::format($name, 'af397c9y8enswf', false));
+
+		self::assertNotNull($parsed, "'$name' did not parse back");
+		self::assertSame($name, $parsed['name']);
+	}
+
+	/** @return iterable<string, array{string}> */
+	public static function safeNames(): iterable {
+		yield 'ordinary' => ['New Name'];
+		yield 'a dot that is not a uid' => ['v1.2 board'];
+		yield 'punctuation and unicode' => ['Latency — p99 · eu-west'];
+		yield 'brackets that are not a counter' => ['Cluster (eu-west-1)'];
+		yield 'a trailing number, unbracketed' => ['Latency 99'];
+	}
+
+	/**
+	 * NAMES THE GRAMMAR CANNOT READ BACK — a known, unfixed ambiguity, pinned here so
+	 * it is a documented limit rather than a surprise.
+	 *
+	 * The filename is the only carrier, and these titles are genuinely
+	 * indistinguishable from the grammar's own markers: a dot is where {@see
+	 * FilenameCodec::parse()} looks for a uid, `" (N)"` is how {@see
+	 * FilenameCodec::format()} spells a collision, and `grafana` happens to satisfy
+	 * `UID_RE` (7 alphanumerics) so even half the extension reads as an id.
+	 *
+	 * IT IS NOT COSMETIC. `NameSyncListener` keeps the filename, the JSON title and the
+	 * Grafana title in agreement, so a title that parses back short reads as a rename
+	 * the user never made — and the app renames their dashboard in Grafana to the
+	 * truncated form. Asserting the WRONG value on purpose: this is what it does today,
+	 * and the assertion flips the moment somebody fixes it.
+	 *
+	 * @param string $name
+	 * @param string $readBackAs
+	 */
+	#[DataProvider('namesTheGrammarSwallows')]
+	public function testAKnownAmbiguityTruncatesTheTitle(string $name, string $readBackAs): void {
+		$parsed = FilenameCodec::parse(FilenameCodec::format($name, 'af397c9y8enswf', false));
+
+		self::assertNotNull($parsed);
+		self::assertSame($readBackAs, $parsed['name'], 'the known ambiguity changed shape');
+	}
+
+	/** @return iterable<string, array{string, string}> */
+	public static function namesTheGrammarSwallows(): iterable {
+		yield 'a real uid as the last segment' => ['Board.af397c9y8enswf', 'Board'];
+		yield 'our own collision spelling' => ['Report (1)', 'Report'];
+		yield 'half the extension' => ['Board.grafana', 'Board'];
+	}
+
 	/** A name that merely contains a bracketed number is not a collision name. */
 	public function testAParenthesisedNumberInTheNameIsNotACounter(): void {
 		$parsed = FilenameCodec::parse('Cluster (eu-west-1).grafana.json');

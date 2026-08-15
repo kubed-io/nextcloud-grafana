@@ -280,6 +280,25 @@ trait LifecycleSteps {
 	 * @Given a dashboard file in :folder
 	 */
 	public function aDashboardFileIn(string $folder): void {
+		// A LINK MAPPING CANNOT BE WRITTEN INTO — the link-write guard refuses it, which
+		// is a shipped feature. So a link mirror is arranged the only way one really
+		// appears: made in Grafana and pulled down. Handled HERE, in the arrange every
+		// feature file shares, rather than per-file: this same `Pointers` row has broken
+		// a scenario in three separate files now, each time fixed locally.
+		if (($this->mappingModes[$folder] ?? '') === 'link') {
+			$this->seedMirrorViaPull($folder, 'Linked ' . bin2hex(random_bytes(3)));
+			$this->originalBody = $this->davGet($this->originalPath);
+			$this->grafanaBefore = ['folder' => '', 'title' => ''];
+			$record = $this->grafanaGetDashboard($this->lastUid);
+			if ($record !== null) {
+				$this->grafanaBefore = [
+					'folder' => (string)($record['meta']['folderUid'] ?? ''),
+					'title' => (string)($record['dashboard']['title'] ?? ''),
+				];
+			}
+			return;
+		}
+
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
 		$path = $this->putDashboardFile($folder, 'Source ' . bin2hex(random_bytes(3)));

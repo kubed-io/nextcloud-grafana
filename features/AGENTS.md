@@ -2125,6 +2125,33 @@ is untestable is the arrange, not the rule.
 `@blocked` is the honest tag here rather than `@decision`: nothing has been decided
 against, the harness simply cannot reach the state.
 
+### Three titles the filename grammar cannot read back
+
+Found by adding awkward names to the rename outline, which is exactly what that
+outline is for. The filename is the only carrier of a dashboard's title, and three
+shapes are indistinguishable from the grammar's own markers:
+
+| title | reads back as | why |
+|---|---|---|
+| `Board.af397c9y8enswf` | `Board` | the last segment matches `UID_RE` |
+| `Report (1)` | `Report` | that is how a collision is spelled |
+| `Board.grafana` | `Board` | `grafana` is 7 alphanumerics, so it matches `UID_RE` too |
+
+**It is not cosmetic.** `NameSyncListener` keeps the filename, the JSON title and the
+Grafana title in agreement, so a title that parses back short reads as a rename
+nobody made — and the app renames the user's dashboard in Grafana to the truncated
+form.
+
+Not fixed here, and deliberately not papered over. `FilenameCodecTest` asserts the
+WRONG values on purpose, under a name that says so, so the limit is documented and
+the assertions flip the moment somebody fixes it. `rename.feature`'s Examples carry
+only the shapes that do round-trip; adding these three would assert behaviour the
+app does not have.
+
+The fix is not a tighter regex — no regex separates a title ending in an id-shaped
+word from an id. It needs the parse to be told the uid it is looking for, which the
+app always knows from metadata, and that is a signature change across every caller.
+
 ### The app never invents a substitute name
 
 A dashboard with no usable title must not produce ".grafana.json" with an empty
