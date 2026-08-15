@@ -77,6 +77,16 @@ use Psr\Log\LoggerInterface;
  * Both are file writes, so both are deferred to {@see ReconcileNameJob} — see the lock
  * above. Grafana is correct within the request; the file catches up a tick later.
  *
+ * **AND THE RENAME CANNOT BE PULLED FORWARD INTO THE REQUEST, however tempting.** A Sabre
+ * plugin can rewrite the COPY's `Destination` header, and doing so really does make the
+ * file be BORN correctly named — but the Files app then reports *"The file does not exist
+ * anymore"* and shows no new file until a manual refresh. Its copy action stats the path
+ * IT chose the instant the copy returns, and only when the copy landed in the folder it
+ * came from, which is precisely and only the case that collides. Measured both ways on a
+ * live instance: intercepting gives COPY 201 then STAT 404; deferring gives COPY 201 then
+ * STAT 207 and a correct name one tick later. The wrong name for a moment is the price of
+ * the client seeing its own file, and it is the cheaper of the two.
+ *
  * Failures are logged and swallowed: the NC copy already happened, and a copy that
  * failed to register is just an untracked `.grafana.json` the user can re-save to retry.
  */

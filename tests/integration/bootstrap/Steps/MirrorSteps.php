@@ -366,10 +366,18 @@ trait MirrorSteps {
 			);
 		}
 		$want = trim($expected, '"');
+		// EVERY ARM NAMED, AND NO `default`. The caller decides which rows reach here, so
+		// a `default` arm makes two lists that have to agree and silently reads the wrong
+		// value the day they stop — a new row would be checked against Grafana's title
+		// whatever it was supposed to mean, and the failure would blame the value rather
+		// than the vocabulary. An unhandled row is a bug in this trait, so it says so.
 		$actual = match ($property) {
 			'filename' => basename($path),
 			'title in the file' => $this->titleInTheFile($path),
-			default => $this->titleInGrafana($path),
+			'title in Grafana' => $this->titleInGrafana($path),
+			default => throw new \RuntimeException(
+				"'{$property}' is routed to the name rows but has no reader — add one here.",
+			),
 		};
 		return $actual === $want ? null : "expected '{$want}', found '{$actual}'" . $this->whatTheThreeNamesSay($path);
 	}
