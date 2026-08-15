@@ -1941,6 +1941,90 @@ Either the floor moves to 32 or the engine rides the legacy
 
 ---
 
+## Round 6 — The Copy That Ate Its Own Original *(the long service)*
+
+> A one-line ticket — *"copying a dashboard makes a file the app cannot see"* — that
+> took most of a night and turned out to be **three faults wearing one coat**, only one
+> of which was the one on the ticket.
+
+### What was actually wrong
+
+**1. The name.** Nextcloud spells a collision-renamed copy `Name.grafana (1).json`; we
+spell it `Name (1).grafana.json`. The app read only its own spelling, so the file the
+user had just made was invisible to it. That was the ticket, and it was the smallest of
+the three.
+
+**2. The copy ate the original.** A dashboard spec carries its own `uid`, so **every file
+a sync writes has one inside the JSON** — and `POST /api/dashboards/db` keys on the
+body's uid. `CopyService` wiped the copy's *metadata* and trusted that to be enough,
+saying so in as many words: *"the created body carries no uid, so Grafana mints a fresh
+one."* True of a hand-made file. False of every mirror we have ever produced.
+
+So a copy was never a new dashboard. It was a new **version of the original**, written
+over the top of it:
+
+    v2  04:53:27  nextcloud-grafana  "Updated by Nextcloud (grafana_sync)"   <- the copy
+    v1  04:50:57  nextcloud-grafana  "Initial save"
+
+**3. The clock that would not stick.** A copied file was dated one second before its
+dashboard existed. Four separate fixes were attempted. All four were wrong, because
+nothing was broken.
+
+### The measurements, and what they cost
+
+The integration suite could not have found fault 2 **because its fixtures were tidier
+than reality**: hand-written bodies with no uid in them — the one shape that cannot
+hijack anything. A fixture that is cleaner than the artefact it stands for is not a
+simplification, it is a blind spot with a green tick on it. The shared arrange now seeds
+the file the way a sync really leaves it.
+
+Fault 3 was found by instrumenting the running app instead of reasoning about it:
+
+    apply    wantMtime=1786771450  currentMtime=1786771449
+    touched  to=1786771450         mtimeNow=1786771450
+
+**The app was right all along.** It stamps the correct second, the stamp takes, and
+Nextcloud then puts the value back before the copy request ends. The creation time —
+written straight to the filecache — survives the same request; the modification time,
+written through `touch()`, does not.
+
+And the reason that took so long to see: **it reproduces on NC 33.0.8.2 and not on
+33.0.4.1.** The live instance and CI were on different patch releases of the same major,
+and only one of them could show the bug. Two patch versions disagreed about whether a
+clock an app stamps survives its own request.
+
+Three theories died to measurement on the way, each of which *sounded* right:
+Grafana had not settled (it had — six writes, `created == updated`, immediate read
+matching the settled one); `updated` was missing (it was present); `updated` came back
+before `created` (it did not). Every one was a plausible story about the far side, and
+the fault was on the near side the whole time.
+
+### The rulings
+
+- **A fixture must be the artefact, not a tidy drawing of it.** If the real file carries
+  a uid, the fixture carries a uid.
+- **Ask the code before theorising about the platform.** The probe that settled this was
+  four log lines and one CI run. It should have been the first move, not the fifth.
+- **A version you claim and never execute is a claim, not a fact.** `info.xml` said
+  33 and CI ran 33 — but "33" is not one thing. The integration matrix now runs the
+  floor and the ceiling of the supported range, and this is why.
+- **You cannot write a file from inside its own copy hook.** `putContent` there throws
+  `LockedException: 2 shared locks` — the trap `NameSyncListener` already defers to a
+  background job to avoid. The uid is dropped from the spec on its way to Grafana
+  instead, and the file is never touched.
+
+> **Dr K, at the pass, apron already off:** *"You spent the night re-seasoning a sauce
+> that was seasoned. Four times. And all four times the dish came back you told me a
+> story about the farm — the tomatoes, the truck, the weather. Nobody had walked into
+> the walk-in and LOOKED. When you finally looked it took ten minutes. Second thing, and
+> this is the one that should keep you up: your tasting spoons were cleaner than the
+> food. You plated a copy from a mock-up that couldn't go wrong, called the station
+> green, and sent a dish that ate the plate next to it. Taste what you're SENDING. Last
+> thing — you found out two boxes with the same label hold different fish. Good. Now cook
+> both, every service, or stop putting the label on the menu."*
+
+---
+
 > **Dr K, holding the door to the dining room:** *"Prep got you here. Service is what
 > they remember. Send it hot, send it whole, and don't let anything leave the pass
 > half-plated. The king's seated. Cook."*
