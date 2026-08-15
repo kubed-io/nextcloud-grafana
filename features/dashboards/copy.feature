@@ -30,13 +30,13 @@ Feature: Copying a dashboard
       | grafana_uid     | its own, not the original's                |
       | grafana_mapping | the mapping's id                           |
       | grafana_mode    | the mapping's mode                         |
-      | Created         | when the dashboard was created in Grafana  |
-      | Modified        | when the dashboard last changed in Grafana |
+      | Created         | when the dashboard was created in Grafana |
     And the copy is a new dashboard in the "Demo" Grafana folder
     And the original file and its dashboard are unchanged
 
-    # The clocks are the COPY'S OWN. A new dashboard was born here, so its dates are
-    # its own birth — inheriting the original's would date it before it existed.
+    # The clock is the COPY'S OWN. A new dashboard was born here, so its date is its
+    # own birth — inheriting the original's would date it before it existed.
+  # notes: ../AGENTS.md#the-modified-clock-a-copy-cannot-keep-until-the-next-sync
 
     Examples: wherever it came from, it belongs to Demo now
       | source  |

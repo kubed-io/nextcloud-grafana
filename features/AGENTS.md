@@ -444,6 +444,32 @@ disagree" has two causes that read identically — the stamp never happened, or 
 happened and a second write moved the clock afterwards. One line of version
 history separates them, and a CI run is gone by the time you could ask Grafana.
 
+### The modified clock a copy cannot keep until the next sync
+
+`Created` is asserted on a copy and `Modified` is not, and the asymmetry is
+Nextcloud's rather than ours.
+
+Both are written by one call, from one read, and the app gets it right — probed
+inside a failing CI run:
+
+    apply    wantMtime=1786771450  currentMtime=1786771449
+    touched  to=1786771450         mtimeNow=1786771450
+
+The stamp lands. Nextcloud then puts the modification time back to 1786771449
+before the copy request ends, which is what a PROPFIND a moment later reports.
+The creation time, written straight to the filecache, survives the same request.
+
+So the file wears its dashboard's modified date only from the next sync onward,
+and asserting it in the moment after the gesture is asserting something the
+platform will not hold. Version-dependent, too: it reproduces on NC 33.0.8.2 and
+does not on 33.0.4.1, so the row would be a coin flip across supported versions
+even if it were worth keeping.
+
+Worth revisiting when the cause is known — it is somewhere in the post-copy hook
+chain, after `NodeCopiedEvent` and before the request ends. A deferred re-stamp
+(the shape {@see ReconcileNameJob} already uses for the same class of problem)
+would hold it, at the cost of a job per copy.
+
 ### The copy belongs to where it lands
 
 A copy is never the original's identity — that is the whole feature. What decides
