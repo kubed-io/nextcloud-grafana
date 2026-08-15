@@ -341,13 +341,24 @@ trait MirrorSteps {
 	}
 
 	/**
-	 * The write history behind a clock mismatch, as a trailing clause — empty when
-	 * Grafana has nothing to say. See {@see grafanaDashboardWrites()} for why a
-	 * failing clock is ambiguous without it.
+	 * Everything Grafana knows about when a dashboard happened, as a trailing clause.
+	 *
+	 * BOTH of its clocks, not just the one being asserted: they are supposed to be the
+	 * same instant on a dashboard nobody has edited, and a gap between them is itself
+	 * the finding. Then the write history, because "the file and the dashboard
+	 * disagree" has two causes that read identically — the stamp never happened, or a
+	 * second write moved the clock after a correct stamp.
 	 */
 	private function whenGrafanaWroteIt(string $uid): string {
+		$record = $this->grafanaGetDashboard($uid);
+		$clock = static function (string $key) use ($record): string {
+			$raw = (string)($record['meta'][$key] ?? '');
+			$at = strtotime($raw);
+			return $raw === '' ? 'none' : (is_int($at) ? gmdate('H:i:s', $at) : $raw);
+		};
+		$out = ' — Grafana says created ' . $clock('created') . ', updated ' . $clock('updated');
 		$writes = $this->grafanaDashboardWrites($uid);
-		return $writes === [] ? '' : ' — Grafana wrote it: ' . implode('; ', $writes);
+		return $writes === [] ? $out : $out . '; wrote it: ' . implode('; ', $writes);
 	}
 
 	/** One row. Returns a human sentence on failure, or null when it holds. */
