@@ -564,8 +564,19 @@ final class SyncService {
 
 		$existing = $existingByUid[$uid] ?? null;
 		if ($existing instanceof File) {
-			$desired = FilenameCodec::format($displayName, $uid, false, 0);
-			if ($existing->getName() !== $desired) {
+			// THE SUFFIX IS PART OF THE NAME THIS FILE IS ENTITLED TO KEEP. Grafana
+			// permits two dashboards in one folder to share a title and Nextcloud does
+			// not permit two files to share a name, so the second mirror wears a
+			// counter — and asking for index 0 unconditionally told it, every single
+			// pull, to go and take a name the first mirror is sitting on.
+			//
+			// It "worked" by throwing: the move failed, the catch below logged
+			// `rename skipped (collision?)`, and the file kept its suffix by accident.
+			// Every tick, for every duplicate — and with three dashboards sharing a
+			// title, twice a tick. An exception is not a naming policy, and the log
+			// line's own question mark says nobody was sure it was one.
+			$desired = $this->desiredMirrorName($existing, $displayName, $uid);
+			if ($desired !== null && $existing->getName() !== $desired) {
 				try {
 					// Rename within the file's OWN folder — never yank a file the user
 					// put in a subfolder back to the mapping root.
@@ -617,6 +628,33 @@ final class SyncService {
 		$this->times->apply($file, $read?->lastChanged(), $read?->created, true);
 		$this->tagSync->applyToDashboard($file, self::tagsIn($body));
 		return false; // a brand-new mirror is always a write
+	}
+
+	/**
+	 * What an EXISTING mirror should be called, given the title its dashboard now
+	 * carries — collision counter included when another file has the plain name.
+	 *
+	 * The plain name is always preferred: a dashboard whose duplicate was deleted in
+	 * Grafana should get its unsuffixed name back rather than wear a counter forever.
+	 * Failing that, the first free counter is taken, and reaching the file's OWN current
+	 * name counts as free — that is how a legitimate duplicate keeps the suffix it has
+	 * instead of being renamed on every tick.
+	 *
+	 * Returns null when no name is available at all, which the caller reads as "leave it
+	 * alone". A wrong-but-unique name is strictly better than an exception here: the
+	 * dashboard's identity lives in its metadata, so a mirror is never lost by being
+	 * misnamed, and a pull that aborts over cosmetics would strand the whole folder.
+	 */
+	private function desiredMirrorName(File $existing, string $displayName, string $uid): ?string {
+		$parent = $existing->getParent();
+		$current = $existing->getName();
+		for ($collision = 0; $collision <= 1000; $collision++) {
+			$candidate = FilenameCodec::format($displayName, $uid, false, $collision);
+			if ($candidate === $current || !$parent->nodeExists($candidate)) {
+				return $candidate;
+			}
+		}
+		return null;
 	}
 
 	/**

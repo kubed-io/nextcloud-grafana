@@ -447,7 +447,14 @@ trait SyncSteps {
 		$out = [];
 		foreach ($doc->xpath('//d:href') ?: [] as $href) {
 			$base = basename(rtrim(rawurldecode((string)$href), '/'));
-			if (str_ends_with($base, '.grafana.json')) {
+			// BOTH SPELLINGS OF A COLLISION, because a helper that can only see our own
+			// would be blind to exactly the file a copy scenario is hunting. Nextcloud
+			// names a colliding copy `Board.grafana (1).json`, counting before the last
+			// extension; the app renames it to `Board (1).grafana.json`, and a test that
+			// could not see the "before" could never fail when the rename did not happen.
+			// This is the same blind spot the app itself shipped with — see
+			// FilenameCodec::canonicalise().
+			if (str_ends_with($base, '.grafana.json') || preg_match('/\.grafana \(\d+\)\.json$/', $base) === 1) {
 				$out[] = $base;
 			}
 		}

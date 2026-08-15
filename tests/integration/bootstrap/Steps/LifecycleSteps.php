@@ -302,18 +302,28 @@ trait LifecycleSteps {
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
 		$title = 'Source ' . bin2hex(random_bytes(3));
-		$path = $this->putDashboardFile($folder, $title);
+		$this->captureOriginal($this->putDashboardFile($folder, $title), $title);
+	}
+
+	/**
+	 * Bring a freshly-written dashboard file to the state a real sync leaves it in, and
+	 * record the pre-state every "the original is unchanged" claim compares against.
+	 *
+	 * A REAL MIRROR CARRIES ITS UID INSIDE THE FILE, and these arranges used to leave a
+	 * hand-written body that never did. A dashboard spec has a `uid` key, so the moment
+	 * a sync writes the file the uid is in there — and an upsert keys on the body's uid.
+	 * Seeding the tidier fixture meant a copy could only ever be tested against a body
+	 * that could not hijack anything, and the hijack it was meant to catch shipped.
+	 *
+	 * Shared by both dashboard-file arranges rather than living in one of them: which
+	 * arrange a scenario happens to use should never decide whether its fixture is
+	 * realistic.
+	 */
+	private function captureOriginal(string $path, string $title): void {
 		$this->originalPath = $path;
 		// Managed only if it landed in a mapping; outside one there is no uid, and
 		// that is the arrange for half these scenarios rather than a failure.
-		$uid = $this->davReadMetadata($path, self::META_UID);
-		$this->lastUid = (string)$uid;
-		// A REAL MIRROR CARRIES ITS UID INSIDE THE FILE, and this arrange used to leave
-		// a hand-written body that never did. A dashboard spec has a `uid` key, so the
-		// moment a sync writes the file, the uid is in there — and an upsert keys on the
-		// body's uid. Seeding the tidier fixture meant a copy could only ever be tested
-		// against a body that could not hijack anything, and the hijack it was meant to
-		// catch shipped. Bring the file to the state a sync leaves it in.
+		$this->lastUid = (string)$this->davReadMetadata($path, self::META_UID);
 		if ($this->lastUid !== '') {
 			$this->davPut($path, $this->dashboardBody($title, $this->lastUid));
 		}
@@ -329,11 +339,97 @@ trait LifecycleSteps {
 		}
 	}
 
-	/** @When I copy the file into :folder */
+	/**
+	 * @When I copy the file into :folder
+	 *
+	 * THE COPY KEEPS ITS OWN NAME, and that is the whole gesture. This step used to
+	 * invent a fresh random name for the destination, which meant the suite copied a
+	 * dashboard into the folder it was already in and NEVER ONCE COLLIDED — so every
+	 * question about what a colliding copy is called went unasked, and the answers
+	 * shipped wrong in all three places at once.
+	 *
+	 * Nextcloud's own collision name is computed here rather than left to the server,
+	 * because the server does not compute one: WebDAV COPY onto an existing path is a
+	 * 412, full stop. It is the FILES CLIENT that picks a free name and then copies to
+	 * it — `getUniqueName()` from `@nextcloud/files`, which counts from 1 and inserts
+	 * the counter before the LAST extension, since to it our file is a `.json` called
+	 * `Fleet Health.grafana`. That is why the name it produces is
+	 * `Fleet Health.grafana (1).json` and not ours. Confirmed against the live
+	 * instance, which is where the shape in these scenarios came from.
+	 *
+	 * So the suite plays the client. Emulating it is not a shortcut around the real
+	 * behaviour — it IS the real behaviour, and the app's job starts the moment that
+	 * name lands.
+	 */
 	public function iCopyTheFileInto(string $folder): void {
 		$this->davMkdir($folder);
-		$this->copyTarget = $folder . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana.json';
-		$this->davCopy($this->originalPath !== '' ? $this->originalPath : $this->currentFilePath, $this->copyTarget);
+		$before = $this->davListDashboardFiles($folder);
+		$source = $this->originalPath !== '' ? $this->originalPath : $this->currentFilePath;
+		$this->davCopy($source, $this->filesClientCopyName($folder, basename($source)));
+		$this->settleCopy();
+		$this->copyTarget = $this->theOneNewDashboardFileIn($folder, $before);
+	}
+
+	/**
+	 * The single dashboard file that appeared in $folder, given what was there before.
+	 *
+	 * FOUND AFTERWARDS, NOT ASSUMED. The app renames a copy out of Nextcloud's collision
+	 * spelling into ours, so the path the COPY was made at is not the path it ends up
+	 * at — holding on to the destination would leave every later step PROPFINDing a file
+	 * that has moved. Diffing the folder finds it wherever it landed, without the step
+	 * having to know the naming rule the scenario is there to check.
+	 *
+	 * Insisting on EXACTLY ONE is the point: a copy that somehow produced two files, or
+	 * none, fails here with what the folder actually holds rather than further down as a
+	 * confusing 404.
+	 *
+	 * @param list<string> $before
+	 */
+	private function theOneNewDashboardFileIn(string $folder, array $before): string {
+		$now = $this->davListDashboardFiles($folder);
+		$new = array_values(array_diff($now, $before));
+		if (count($new) !== 1) {
+			throw new \RuntimeException(
+				"expected exactly one new dashboard file in '$folder', found " . count($new)
+				. ".\n  before: " . implode(', ', $before)
+				. "\n  after:  " . implode(', ', $now),
+			);
+		}
+		return $folder . '/' . $new[0];
+	}
+
+	/**
+	 * The destination the Files app would COPY to: the source's own name, with the
+	 * client's ` (N)` counter before the last extension if that name is taken.
+	 */
+	private function filesClientCopyName(string $folder, string $basename): string {
+		$ext = strrchr($basename, '.');
+		$stem = $ext === false ? $basename : substr($basename, 0, -strlen($ext));
+		$ext = $ext === false ? '' : $ext;
+
+		$candidate = $basename;
+		for ($n = 1; $this->davExists($folder . '/' . $candidate); $n++) {
+			$candidate = $stem . ' (' . $n . ')' . $ext;
+			if ($n > 100) {
+				throw new \RuntimeException("no free name for '$basename' in '$folder'");
+			}
+		}
+		return $folder . '/' . $candidate;
+	}
+
+	/**
+	 * Run the deferred half of a copy.
+	 *
+	 * A copy's own hook holds locks on the file it just made, so the app cannot rename
+	 * that file or rewrite its JSON inside the request — it hands both to
+	 * {@see \OCA\GrafanaSync\BackgroundJob\ReconcileNameJob}, exactly as a rename does.
+	 * Draining the queue here is what lets the scenario assert the END state rather than
+	 * a half-finished one; the deferral itself is `rename.feature`'s subject, not this
+	 * file's.
+	 */
+	private function settleCopy(): void {
+		$this->drainJobs(self::JOB_RENAME);
+		$this->drainJobs(self::JOB_PUSH);
 	}
 
 	/** @Then the copy holds no Grafana metadata at all */
@@ -875,11 +971,21 @@ trait LifecycleSteps {
 	}
 
 	/**
-	 * @When someone copies its dashboard in Grafana
+	 * @When someone copies its dashboard in Grafana, keeping the title
 	 *
-	 * Grafana's own "Save as copy": a NEW uid carrying the same spec, with " Copy"
-	 * appended to the title the way Grafana does it. Then a pull, because the mirror
-	 * arriving is the behaviour under test and the sync that carries it is not.
+	 * Grafana's own "Save as copy": a NEW uid carrying the same spec — and THE SAME
+	 * TITLE, which is the hard case and the only one worth arranging.
+	 *
+	 * This step used to append " Copy" to the title. That is what Grafana's dialog
+	 * PRE-FILLS, not what it enforces: the field is editable, and two `POST
+	 * /api/dashboards/db` with one title, one folderUid and `overwrite:false` both
+	 * return 200 with different uids (verified against Grafana 13.0.2). By renaming the
+	 * copy, the arrange guaranteed no collision could ever reach Nextcloud — so the one
+	 * rule this scenario exists to pin, that Nextcloud's filename gives way where
+	 * Grafana's title does not, was never once exercised.
+	 *
+	 * Then a pull, because the mirror arriving is the behaviour under test and the sync
+	 * that carries it is not.
 	 */
 	public function someoneCopiesItsDashboardInGrafana(): void {
 		$record = $this->grafanaGetDashboard($this->lastUid);
@@ -890,7 +996,6 @@ trait LifecycleSteps {
 		$this->grafanaCopyUid = 'nc-copy-' . bin2hex(random_bytes(3));
 		$spec['uid'] = $this->grafanaCopyUid;
 		$spec['id'] = null;
-		$spec['title'] = ((string)($spec['title'] ?? 'Untitled')) . ' Copy';
 
 		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
 			'headers' => ['Content-Type' => 'application/json'],
@@ -938,5 +1043,99 @@ trait LifecycleSteps {
 			throw new \RuntimeException('no copy has been located by a previous step');
 		}
 		$this->theMirrorHolds($this->copyTarget, $table);
+	}
+
+	/**
+	 * @Then :folder holds one file per dashboard, named:
+	 *
+	 * THE WHOLE FOLDER, AS A SET. Naming the files individually would say nothing about
+	 * how many there are, and the failure a suffix bug produces is usually a MISSING
+	 * file rather than a misnamed one — two dashboards collapsing onto one mirror.
+	 *
+	 * "One file per dashboard" is the second half, and it is checked by uid: three files
+	 * with the right three names could still be three views of one dashboard, which is
+	 * the shape a copy-that-hijacks leaves behind.
+	 */
+	public function holdsOneFilePerDashboardNamed(string $folder, TableNode $table): void {
+		$want = array_map(static fn (array $row): string => trim($row[0]), $table->getRows());
+		sort($want);
+		$got = $this->davListDashboardFiles($folder);
+		sort($got);
+		if ($got !== $want) {
+			throw new \RuntimeException(
+				"'$folder' does not hold the files the scenario describes:\n  expected: "
+				. implode(', ', $want) . "\n  found:    " . implode(', ', $got),
+			);
+		}
+
+		$uids = [];
+		foreach ($got as $name) {
+			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+			if ($uid === '') {
+				throw new \RuntimeException("'$folder/$name' carries no uid, so it mirrors no dashboard");
+			}
+			if (isset($uids[$uid])) {
+				throw new \RuntimeException(
+					"'$name' and '{$uids[$uid]}' both claim dashboard '$uid' — one dashboard, two mirrors",
+				);
+			}
+			$uids[$uid] = $name;
+			$this->createdDashboardUids[] = $uid;
+		}
+		$this->namedFolder = $folder;
+		$this->namedFiles = $got;
+	}
+
+	/**
+	 * @Then all three dashboards are still titled :title in Grafana
+	 *
+	 * THE COUNTER STOPS AT THE FILENAME. Nextcloud cannot hold three files with one
+	 * name, so it numbers them — but that is Nextcloud's constraint, and pushing it back
+	 * into Grafana would rename dashboards nobody asked to rename. Grafana is allowed
+	 * its duplicates and keeps them.
+	 */
+	public function allThreeDashboardsAreStillTitledInGrafana(string $title): void {
+		$wrong = [];
+		foreach ($this->namedFiles as $name) {
+			$path = $this->namedFolder . '/' . $name;
+			$uid = (string)$this->davReadMetadata($path, self::META_UID);
+			$record = $this->grafanaGetDashboard($uid);
+			$got = $record === null ? "<gone from Grafana>" : (string)($record['dashboard']['title'] ?? '');
+			if ($got !== $title) {
+				$wrong[] = "$name → '$got'";
+			}
+		}
+		if ($wrong !== []) {
+			throw new \RuntimeException(
+				"these dashboards are no longer titled '$title' in Grafana: " . implode('; ', $wrong)
+				. ' — a Nextcloud filename counter reached Grafana, which is the one place it must not go',
+			);
+		}
+	}
+
+	/**
+	 * @Then syncing again leaves every one of those names alone
+	 *
+	 * THE ASSERTION THAT ACTUALLY CAUGHT SOMETHING. Landing the three names correctly is
+	 * the easy half; keeping them is where the pull went wrong. It asked for the
+	 * unsuffixed name on every mirror, every tick — so both duplicates were told, over
+	 * and over, to go and take a name the first one was sitting on. It only "worked"
+	 * because the rename threw and the catch logged `rename skipped (collision?)`.
+	 *
+	 * An exception is not a naming policy, and the moment anything made that move
+	 * succeed — a deleted incumbent, a reordered pull — the mirrors would start swapping
+	 * names underneath the user. One extra sync is all it takes to say so.
+	 */
+	public function syncingAgainLeavesThoseNamesAlone(): void {
+		$before = $this->namedFiles;
+		$this->theAdminPullsFromGrafana();
+		$after = $this->davListDashboardFiles($this->namedFolder);
+		sort($after);
+		if ($after !== $before) {
+			throw new \RuntimeException(
+				"a second sync renamed the mirrors:\n  before: " . implode(', ', $before)
+				. "\n  after:  " . implode(', ', $after),
+			);
+		}
 	}
 }
