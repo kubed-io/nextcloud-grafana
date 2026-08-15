@@ -45,7 +45,7 @@ default:
   #   admin      the settings surface — the connection, the mapping list, and
   #              removing a mapping. Grouped because admin work is a different
   #              SESSION from user work, not merely a different tag.
-  #   dashboard  the verbs, as they apply to a dashboard (a .grafana.json file):
+  #   dashboard  the verbs, as they apply to a dashboard (a .grafana file):
   #              create, copy, move, rename, delete, restore, edit.
   #   core       everything else: the same verbs on a FOLDER, plus the first sync,
   #              identity, looking at a mirror, tags, purge and the app lifecycle.

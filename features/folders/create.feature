@@ -26,7 +26,7 @@ Feature: Creating a folder
   @user @in-nextcloud @gesture @ui
   Scenario: Create a dashboard in a folder of a mapping
     Given the folder "Demo/Team/Drafts" holding no dashboards
-    When I create "CPU Load.grafana.json" in "Demo/Team/Drafts"
+    When I create "CPU Load.grafana" in "Demo/Team/Drafts"
     Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
     And the dashboard is in the "Drafts" Grafana folder
     And "Demo/Team" holds:
@@ -88,6 +88,6 @@ Feature: Creating a folder
   Scenario: Create a dashboard in a folder named after the recycle-bin folder
     Given the Grafana recycle bin is on
     And the folder "Demo/nextcloud-trash" holding no dashboards
-    When I create "CPU Load.grafana.json" in "Demo/nextcloud-trash"
+    When I create "CPU Load.grafana" in "Demo/nextcloud-trash"
     Then the creation is refused with a message, explaining the name is reserved
     And the recycle-bin folder still holds what it held

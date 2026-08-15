@@ -106,7 +106,7 @@ trait LifecycleSteps {
 
 	/** @Given an untracked :ext file */
 	public function anUntrackedFile(string $ext): void {
-		$this->currentFilePath = $this->unmappedFolder() . '/Loose ' . bin2hex(random_bytes(3)) . '.grafana.json';
+		$this->currentFilePath = $this->unmappedFolder() . '/Loose ' . bin2hex(random_bytes(3)) . '.grafana';
 		$this->davPut($this->currentFilePath, $this->dashboardBody('Loose'));
 		Assert::assertNull(
 			$this->davReadMetadata($this->currentFilePath, self::META_UID),
@@ -489,13 +489,13 @@ trait LifecycleSteps {
 
 	/** @When I copy the file within the :mapping folder */
 	public function iCopyTheFileWithinTheFolder(string $mapping): void {
-		$this->copyTarget = $this->mappedFolder($mapping) . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana.json';
+		$this->copyTarget = $this->mappedFolder($mapping) . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana';
 		$this->davCopy($this->currentFilePath, $this->copyTarget);
 	}
 
 	/** @When I copy the file to a folder that is not mapped */
 	public function iCopyTheFileToAnUnmappedFolder(): void {
-		$this->copyTarget = $this->unmappedFolder() . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana.json';
+		$this->copyTarget = $this->unmappedFolder() . '/Copy ' . bin2hex(random_bytes(3)) . '.grafana';
 		$this->davCopy($this->currentFilePath, $this->copyTarget);
 	}
 
@@ -628,7 +628,7 @@ trait LifecycleSteps {
 
 	/** @When I rename the file within the :mapping folder */
 	public function iRenameTheFileWithinTheFolder(string $mapping): void {
-		$dest = $this->mappedFolder($mapping) . '/Renamed ' . bin2hex(random_bytes(3)) . '.grafana.json';
+		$dest = $this->mappedFolder($mapping) . '/Renamed ' . bin2hex(random_bytes(3)) . '.grafana';
 		$this->davMove($this->currentFilePath, $dest);
 		$this->currentFilePath = $dest;
 	}
@@ -902,7 +902,7 @@ trait LifecycleSteps {
 		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
 
-		$path = $folder . '/' . $title . '.grafana.json';
+		$path = $folder . '/' . $title . '.grafana';
 		$this->davPut($path, json_encode([
 			'title' => $title,
 			'schemaVersion' => 39,

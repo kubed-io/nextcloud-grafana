@@ -53,7 +53,7 @@ final class CopyListener implements IEventListener {
 			$this->copyService->onCopy($node);
 		} catch (\Throwable $e) {
 			// The NC copy already happened; a failed registration is just an untracked
-			// .grafana.json the user can re-save to retry. Log, never rethrow.
+			// .grafana the user can re-save to retry. Log, never rethrow.
 			$this->logger->warning('grafana_sync copy handling failed', [
 				'app' => Application::APP_ID,
 				'fileId' => $node->getId(),

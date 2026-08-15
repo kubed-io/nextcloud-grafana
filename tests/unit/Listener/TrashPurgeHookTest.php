@@ -31,7 +31,7 @@ use Psr\Log\NullLogger;
  * when the recycle bin is on.
  *
  * These are the tests it never had, and the folder ones are why it needed them: the hook
- * used to skip anything whose name did not contain `.grafana.json`, and a trashed folder
+ * used to skip anything whose name did not contain `.grafana`, and a trashed folder
  * is named after the folder. Nextcloud emits ONE purge hook for it and none for its
  * contents, so every dashboard parked from that folder stayed in Grafana forever.
  *
@@ -65,7 +65,7 @@ final class TrashPurgeHookTest extends TestCase {
 		$this->deleteService->expects(self::once())->method('hardDelete');
 		$this->cascade->expects(self::never())->method('purge');
 
-		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.json.d1770000000']);
+		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.d1770000000']);
 	}
 
 	/** Bin OFF stripped the identity at trash-time, so there is nothing left to delete. */
@@ -73,7 +73,7 @@ final class TrashPurgeHookTest extends TestCase {
 		$this->resolved = $this->file(11, managed: false);
 		$this->deleteService->expects(self::never())->method('hardDelete');
 
-		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.json.d1770000000']);
+		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.d1770000000']);
 	}
 
 	public function testAPathThatCannotBeResolvedIsSkipped(): void {
@@ -111,7 +111,7 @@ final class TrashPurgeHookTest extends TestCase {
 		$this->resolved = $this->file(11);
 		$this->deleteService->method('hardDelete')->willThrowException(new \RuntimeException('unreachable'));
 
-		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.json.d1770000000']);
+		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.d1770000000']);
 
 		self::assertTrue(true, 'the purge was allowed to proceed');
 	}
@@ -156,7 +156,7 @@ final class TrashPurgeHookTest extends TestCase {
 	private function file(int $id, bool $managed = true): File {
 		$file = $this->createStub(File::class);
 		$file->method('getId')->willReturn($managed ? $id : 0);
-		$file->method('getName')->willReturn('A.grafana.json.d1770000000');
+		$file->method('getName')->willReturn('A.grafana.d1770000000');
 		return $file;
 	}
 }

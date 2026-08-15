@@ -28,7 +28,7 @@ use OCP\Files\Node;
  * The *consequences* of an allowed move are handled afterwards by {@see MotionListener}
  * on the post-move `NodeRenamedEvent`.
  *
- * Rules (only `*.grafana.json` files under a mapping are constrained):
+ * Rules (only `*.grafana` files under a mapping are constrained):
  *   - move/rename **within** the same mapping → allow (rename, subfolder move).
  *   - move into a **different** mapping → **allow** — this is a real Grafana folder move
  *     (the dashboard re-parents, uid kept). This is where Grafana diverges from the n8n

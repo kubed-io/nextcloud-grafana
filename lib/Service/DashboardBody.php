@@ -158,7 +158,7 @@ final class DashboardBody {
 	}
 
 	/**
-	 * Derive a clean dashboard title from the on-disk filename: strip `.grafana.json`
+	 * Derive a clean dashboard title from the on-disk filename: strip `.grafana`
 	 * and any trailing " (N)" collision suffix via {@see FilenameCodec::parse()}; fall
 	 * back to "Untitled".
 	 */

@@ -186,7 +186,7 @@ trait SetupTrait {
 	 * that fires create-on-land when the folder is a sync mapping.
 	 */
 	private function putDashboardFile(string $folder, string $title): string {
-		$path = $folder . '/' . $title . '.grafana.json';
+		$path = $folder . '/' . $title . '.grafana';
 		$this->davPut($path, $this->dashboardBody($title));
 		$this->currentFilePath = $path;
 		return $path;

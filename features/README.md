@@ -84,7 +84,7 @@ leg:
 | suite | what it holds |
 |---|---|
 | `admin` | the settings surface — the connection, the mapping list, removing a mapping |
-| `dashboard` | the verbs as they apply to a dashboard (a `.grafana.json` file), editing included |
+| `dashboard` | the verbs as they apply to a dashboard (a `.grafana` file), editing included |
 | `core` | everything else: the same verbs on a **folder**, plus the first sync, identity, looking at a mirror, tags, purge and the app lifecycle |
 
 **The axis is the filename, not a tag.** A tag partition leaks: `@occ`, `@ui` and

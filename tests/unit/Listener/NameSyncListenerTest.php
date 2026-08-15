@@ -76,14 +76,14 @@ final class NameSyncListenerTest extends TestCase {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->expectEnqueue('title_from_filename');
 		// file is now "New Name", JSON title still "Old" → mismatch
-		$file = $this->file('New Name.grafana.json', $this->json('Old'));
-		$this->listener->handle(new NodeRenamedEvent($this->file('Old.grafana.json', $this->json('Old')), $file));
+		$file = $this->file('New Name.grafana', $this->json('Old'));
+		$this->listener->handle(new NodeRenamedEvent($this->file('Old.grafana', $this->json('Old')), $file));
 	}
 
 	public function testRenameWithMatchingTitleEnqueuesNothing(): void {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->jobList->expects(self::never())->method('add');
-		$file = $this->file('Same.grafana.json', $this->json('Same'));
+		$file = $this->file('Same.grafana', $this->json('Same'));
 		$this->listener->handle(new NodeRenamedEvent($file, $file));
 	}
 
@@ -91,18 +91,18 @@ final class NameSyncListenerTest extends TestCase {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->expectEnqueue('filename_from_title');
 		// filename stem "Board", JSON title now "Renamed" → mismatch
-		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana.json', $this->json('Renamed'))));
+		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana', $this->json('Renamed'))));
 	}
 
 	public function testTitleEditMatchingFilenameEnqueuesNothing(): void {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->jobList->expects(self::never())->method('add');
-		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana.json', $this->json('Board'))));
+		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana', $this->json('Board'))));
 	}
 
 	public function testGuardActiveEnqueuesNothing(): void {
 		$this->jobList->expects(self::never())->method('add');
-		$file = $this->file('New Name.grafana.json', $this->json('Old'));
+		$file = $this->file('New Name.grafana', $this->json('Old'));
 		// Run inside the guard → active() is true → bail (our own pull/stamp writes never reshuffle)
 		$this->guard->run(fn () => $this->listener->handle(new NodeRenamedEvent($file, $file)));
 	}
@@ -110,13 +110,13 @@ final class NameSyncListenerTest extends TestCase {
 	public function testUnmanagedFileEnqueuesNothing(): void {
 		$this->metadata->method('read')->willReturn($this->managed(Mapping::MODE_SYNC, '')); // no uid
 		$this->jobList->expects(self::never())->method('add');
-		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana.json', $this->json('Renamed'))));
+		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana', $this->json('Renamed'))));
 	}
 
 	public function testLinkModeEnqueuesNothing(): void {
 		$this->metadata->method('read')->willReturn($this->managed(Mapping::MODE_LINK));
 		$this->jobList->expects(self::never())->method('add');
-		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana.json', $this->json('Renamed'))));
+		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana', $this->json('Renamed'))));
 	}
 
 	public function testNonDashboardFileEnqueuesNothing(): void {
@@ -141,8 +141,8 @@ final class NameSyncListenerTest extends TestCase {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->expectEnqueue('title_from_filename');
 
-		$before = $this->file('Fleet Health.grafana.json', $this->json('Fleet Health'));
-		$after = $this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health'));
+		$before = $this->file('Fleet Health.grafana', $this->json('Fleet Health'));
+		$after = $this->file('Fleet Health (1).grafana', $this->json('Fleet Health'));
 		$this->listener->handle(new NodeRenamedEvent($before, $after));
 	}
 
@@ -151,14 +151,14 @@ final class NameSyncListenerTest extends TestCase {
 		$this->metadata->method('read')->willReturn($this->managed());
 		$this->jobList->expects(self::never())->method('add');
 
-		$file = $this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health (1)'));
+		$file = $this->file('Fleet Health (1).grafana', $this->json('Fleet Health (1)'));
 		$this->listener->handle(new NodeRenamedEvent($file, $file));
 	}
 
 	/**
 	 * THE ONE PLACE A FILENAME AND A TITLE ARE MEANT TO DISAGREE. Grafana permits two
 	 * dashboards in a folder to share a title and Nextcloud permits no two files to share
-	 * a name, so a mirror of the second one legitimately sits at `Fleet Health (1).grafana.json`
+	 * a name, so a mirror of the second one legitimately sits at `Fleet Health (1).grafana`
 	 * holding the title `Fleet Health`.
 	 *
 	 * Saving that file must enqueue NOTHING. Comparing a write against the counter-bearing
@@ -170,7 +170,7 @@ final class NameSyncListenerTest extends TestCase {
 		$this->jobList->expects(self::never())->method('add');
 
 		$this->listener->handle(new NodeWrittenEvent(
-			$this->file('Fleet Health (1).grafana.json', $this->json('Fleet Health')),
+			$this->file('Fleet Health (1).grafana', $this->json('Fleet Health')),
 		));
 	}
 
@@ -180,7 +180,7 @@ final class NameSyncListenerTest extends TestCase {
 		$this->expectEnqueue('filename_from_title');
 
 		$this->listener->handle(new NodeWrittenEvent(
-			$this->file('Fleet Health (1).grafana.json', $this->json('Capacity')),
+			$this->file('Fleet Health (1).grafana', $this->json('Capacity')),
 		));
 	}
 }

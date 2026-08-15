@@ -148,7 +148,7 @@ trait WebDavTrait {
 	 * Find the trashbin entry for a file we deleted, by basename. NC trashbin DAV
 	 * lives at /remote.php/dav/trashbin/<user>/trash and renames entries with a
 	 * `.dNNNN` deletion-time suffix, so we match on the original basename prefix.
-	 * Returns the trashbin entry filename (e.g. "Old Name.grafana.json.d171...") or null.
+	 * Returns the trashbin entry filename (e.g. "Old Name.grafana.d171...") or null.
 	 */
 	private function trashbinPathFor(string $originalPath): ?string {
 		$base = basename($originalPath);
@@ -218,7 +218,7 @@ trait WebDavTrait {
 	 * The mimetype a Files client is told, read off the same PROPFIND the Files app
 	 * uses.
 	 *
-	 * NOT `application/json`, which is what a `.grafana.json` file would otherwise
+	 * NOT `application/json`, which is what a `.grafana` file would otherwise
 	 * be sniffed as — the whole reason the app registers a mimetype and ships a
 	 * repair step for it. Asserted over DAV because that is where the Files app
 	 * reads it from; the mapping file on disk being right proves nothing about

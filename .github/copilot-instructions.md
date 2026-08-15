@@ -88,7 +88,7 @@ ignore you.
 - The connection test hits an **authenticated** endpoint (`GET /api/folders`), never
   the unauthenticated `/api/health` — a green result must prove the token, not just
   reachability.
-- The managed-file extension is the compound **`.grafana.json`** (the v2 cut is
+- The managed-file extension is the compound **`.grafana`** (the v2 cut is
   `.grafana.yaml`). Do not "simplify" it to plain `.json`.
 - A mapping binds a **Grafana folder → a Nextcloud folder** (real folders, no tag
   scheme).
@@ -107,7 +107,7 @@ ignore you.
 - **The frontend targets Nextcloud's supported (evergreen) browsers.** ES2019+ syntax —
   optional `catch {}`, `?.`, `??` — is fully supported. Don't raise old-JS-engine
   compatibility.
-- The compound `.grafana.json`/`.grafana.yaml` extension, the deliberate
+- The compound `.grafana`/`.grafana.yaml` extension, the deliberate
   `allow_local_address` egress, and testing against an authenticated endpoint are
   all intentional and documented — don't suggest "fixing" them.
 - Don't ask for an `appinfo/info.xml` `<version>` bump — the release flow owns versions.

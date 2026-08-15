@@ -11,16 +11,15 @@ namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Files\File;
-use OCP\Files\IMimeTypeLoader;
 use Psr\Log\LoggerInterface;
 
 /**
- * Create-on-land (Course 4 · Slice 1): turn a `*.grafana.json` file in a mapped sync
+ * Create-on-land (Course 4 · Slice 1): turn a `*.grafana` file in a mapped sync
  * folder that carries no `grafana_uid` yet into a real Grafana dashboard.
  *
  * Triggered by {@see \OCA\GrafanaSync\Listener\CreateInGrafanaListener} when:
  *  - a new file is made via the Files "New" menu / Text editor into a mapped folder,
- *  - a hand-made `.grafana.json` is moved/dropped into a mapped folder, or
+ *  - a hand-made `.grafana` is moved/dropped into a mapped folder, or
  *  - an external WebDAV PUT lands content in a mapped folder.
  *
  * **Simpler than the n8n master's `CreateService` in two ways** (the ingredient bends
@@ -47,7 +46,6 @@ final class CreateService {
 		private FolderMirror $folderMirror,
 		private MirrorTimes $times,
 		private SyncGuard $guard,
-		private IMimeTypeLoader $mimeLoader,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -152,23 +150,17 @@ final class CreateService {
 	}
 
 	/**
-	 * Stamp Files-Metadata (uid + mode + version + syncedHash + mapping), apply the
-	 * ownership pill, and re-stamp the custom mimetype so the icon shows immediately —
-	 * all wrapped in the SyncGuard so the implicit re-writes don't echo into the
-	 * writeback listener.
+	 * Stamp Files-Metadata (uid + mode + version + syncedHash + mapping) and apply the
+	 * ownership pill, wrapped in the SyncGuard so the implicit re-writes don't echo into
+	 * the writeback listener.
+	 *
+	 * The icon needs nothing from us: `.grafana` is the file's last extension, so core
+	 * detected `application/grafana+json` when it wrote the row. This used to re-stamp the
+	 * mimetype here because the old compound extension made core detect `.json` instead.
 	 */
 	private function stampFile(File $node, Mapping $mapping, string $uid, string $version, string $content): void {
 		$this->guard->run(function () use ($node, $mapping, $uid, $version, $content): void {
 			$this->metadata->stampSynced($node->getId(), $uid, $mapping->mode, $version, $content, $mapping->id);
-			try {
-				$this->mimeLoader->updateFilecache('grafana.json', $this->mimeLoader->getId('application/grafana+json'));
-			} catch (\Throwable $e) {
-				$this->logger->warning('grafana_sync: post-create mimetype re-stamp failed', [
-					'app' => Application::APP_ID,
-					'fileId' => $node->getId(),
-					'exception' => $e,
-				]);
-			}
 		});
 	}
 }

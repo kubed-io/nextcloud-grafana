@@ -27,7 +27,7 @@ use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
- * Create-on-land (Course 4 · Slice 1): when a `*.grafana.json` file with no
+ * Create-on-land (Course 4 · Slice 1): when a `*.grafana` file with no
  * `grafana_uid` lands in a mapped **sync** folder — made via the Files "New" menu,
  * saved by the Text editor, uploaded over WebDAV, or moved in from elsewhere — create
  * it as a real Grafana dashboard ({@see CreateService}).
@@ -40,7 +40,7 @@ use Psr\Log\LoggerInterface;
  *
  * Bail conditions (cheap → expensive, so the hot path stays fast):
  *   1. {@see SyncGuard::active()} — our own pull/stamp writes never re-enter.
- *   2. name is `*.grafana.json`.
+ *   2. name is `*.grafana`.
  *   3. path resolves into a mapping via {@see MappingService::resolveForPath}.
  *   4. the mapping's mode is `sync` — a `link` folder is for pointers, not authoring.
  *   5. {@see DashboardMetadata::read} returns no uid (else it's already managed → the
@@ -82,7 +82,7 @@ final class CreateInGrafanaListener implements IEventListener {
 
 		$mapping = $this->mappings->resolveForPath($node->getPath());
 		if ($mapping === null) {
-			return; // outside any mapping — a plain, untracked .grafana.json
+			return; // outside any mapping — a plain, untracked .grafana
 		}
 		if ($mapping->mode !== Mapping::MODE_SYNC) {
 			return; // a link folder is for read-only pointers, not authoring

@@ -19,7 +19,7 @@ use PHPUnit\Framework\Assert;
  * ## WHY
  *
  * A sync scenario used to name a magic filename and a count: *"a file named
- * Alpha Demo.grafana.json appears"* and *"holds exactly 1 dashboard file"*. Where
+ * Alpha Demo.grafana appears"* and *"holds exactly 1 dashboard file"*. Where
  * "Alpha Demo" came from was invisible — it is written by `preload-grafana.sh`,
  * which a reader of the spec has no reason to know exists. And a count is the
  * weakest possible statement about a tree: it passes whatever the file is called

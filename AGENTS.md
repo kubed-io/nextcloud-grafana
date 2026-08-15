@@ -9,7 +9,7 @@
 ## What this repo is
 
 **Grafana Sync** — a Nextcloud app (PHP backend + small JS frontend) that maps Grafana
-dashboards into Nextcloud folders as `.grafana.json` files with bidirectional sync.
+dashboards into Nextcloud folders as `.grafana` files with bidirectional sync.
 Lives under the [kubed-io](https://github.com/kubed-io) GitHub org. Licensed
 AGPL-3.0-or-later. Target: the official Nextcloud app store.
 
@@ -124,13 +124,16 @@ without a real reason documented in the saga:
 - **Custom mimetype `application/grafana+json`** drives the icon and the row click
   (deferred to the sync chapter; don't switch to extension-only detection when it
   lands).
-- **The file extension is the compound `.grafana.json` — locked, don't "simplify".**
-  The file *is* real JSON, so the `.json` tail means that **outside** Nextcloud
-  (desktop sync, download) the OS opens it in a JSON editor with no setup; the
-  `.grafana.` segment is the hook NC keys the custom mimetype / icon / file-actions
-  off **inside** the UI. Plain `.json` → no custom icon/actions. Bare `.grafana` →
-  off-Nextcloud nothing opens it. Both are worse; keep `.grafana.json`. (The v2
-  YAML cut is `.grafana.yaml`, same reasoning.)
+- **The file extension is a single segment, `.grafana` — locked, don't re-add the
+  `.json` tail.** Nextcloud reads exactly ONE extension: `detectPath()` takes the
+  last segment (`strrchr`) and the collision counter goes immediately before it. The
+  compound `.grafana.json` therefore lost both — core detected `application/json` and
+  every write had to be un-done with a table-wide filecache UPDATE, and a copy landed
+  as `Board.grafana (1).json`, which matched none of the app's own predicates. One
+  segment gets native detection and a copy that is born correctly named. The price is
+  a one-time editor association off-Nextcloud, paid per machine instead of per write.
+  (The v2 YAML cut is the same `.grafana` — `format` says what is inside the file, not
+  what it is called.)
 
 ---
 

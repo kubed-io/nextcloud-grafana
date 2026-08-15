@@ -97,7 +97,7 @@ final class FolderDeleteListenerTest extends TestCase {
 		$this->cascade->expects(self::never())->method('trash');
 
 		$file = $this->createStub(File::class);
-		$file->method('getPath')->willReturn('/alice/files/Demo/A.grafana.json');
+		$file->method('getPath')->willReturn('/alice/files/Demo/A.grafana');
 
 		$this->listener()->handle($this->event($file));
 	}

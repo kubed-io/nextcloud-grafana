@@ -43,7 +43,7 @@ export function buildUrl(grafanaUrl, uid) {
 
 /**
  * Is this file-action context a single Grafana dashboard file? True for the
- * custom mime OR a `.grafana.json` basename, and only when exactly one node is
+ * custom mime OR a `.grafana` basename, and only when exactly one node is
  * selected. Plain JSON is never matched.
  *
  * @param {{nodes?: Array<{mime?: string, basename?: string}>}} [context]
@@ -53,7 +53,7 @@ export function isDashboardFile(context) {
   const node = context?.nodes?.[0]
   if (!node || context.nodes.length !== 1) return false
   return node.mime === GRAFANA_MIME
-    || (typeof node.basename === 'string' && node.basename.endsWith('.grafana.json'))
+    || (typeof node.basename === 'string' && node.basename.endsWith('.grafana'))
 }
 
 /**

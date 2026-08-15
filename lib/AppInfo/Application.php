@@ -55,7 +55,7 @@ use OCP\SystemTag\MapperEvent;
  * are wired through info.xml's <settings> block.
  *
  * Writeback (Course 3): the {@see NodeWrittenListener} pushes a saved sync-mode
- * `.grafana.json` back to Grafana, and the {@see Notifier} renders its failure notices.
+ * `.grafana` back to Grafana, and the {@see Notifier} renders its failure notices.
  *
  * Write surface (Course 4 · Slice 1): {@see CreateInGrafanaListener} turns a new file in
  * a mapped sync folder into a real dashboard, and {@see CopyListener} makes a copy its
@@ -91,13 +91,13 @@ final class Application extends App implements IBootstrap {
 		$context->registerDeclarativeSettings(InstanceSettings::class);
 		$context->registerDeclarativeSettings(AutoSyncSettings::class);
 
-		// Writeback (Course 3): a save of a managed sync-mode .grafana.json pushes back
+		// Writeback (Course 3): a save of a managed sync-mode .grafana pushes back
 		// to Grafana. NodeWrittenEvent covers the text editor, WebDAV PUTs, and desktop
 		// syncs; the listener's own SyncGuard + content-hash checks keep our own pull
 		// writes from looping back.
 		$context->registerEventListener(NodeWrittenEvent::class, NodeWrittenListener::class);
 
-		// Create-on-land (Course 4 · Slice 1): a new .grafana.json with no uid landing in
+		// Create-on-land (Course 4 · Slice 1): a new .grafana with no uid landing in
 		// a mapped sync folder becomes a real dashboard. NodeWrittenEvent covers make/save/
 		// upload; NodeRenamedEvent covers a move-in from outside a mapping.
 		$context->registerEventListener(NodeWrittenEvent::class, CreateInGrafanaListener::class);

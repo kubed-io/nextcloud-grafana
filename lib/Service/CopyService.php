@@ -60,35 +60,30 @@ use Psr\Log\LoggerInterface;
  *
  * ## AND THE NAME NEXTCLOUD PICKED IS THE COPY'S REAL NAME
  *
- * A copy landing beside its source collides, so Nextcloud names it — `Board.grafana (1).json`,
- * counting before the last extension because to Nextcloud our file is a `.json` called
- * `Board.grafana`. Two things follow, and neither used to happen:
+ * A copy landing beside its source collides, so Nextcloud names it — `Board (1).grafana`.
+ * That name is the copy's name **in all three places**: `createForFile` puts the
+ * filename's display name on the spec so Grafana is right from the first write, and
+ * `settleName()` below writes it into the file's JSON `title` to match. Without it a copy
+ * reached Grafana under the ORIGINAL's title — two dashboards, one name, and a file
+ * claiming a third thing.
  *
- *   1. **That name is the copy's name, in all three places.** `createForFile` puts the
- *      filename's display name on the spec so Grafana is right from the first write,
- *      and step 3 below writes it into the file's JSON `title` to match. Without it a
- *      copy reached Grafana under the ORIGINAL's title — two dashboards, one name, and
- *      a file claiming a third thing.
- *   2. **The file is renamed into our spelling**, `Board (1).grafana.json`, so the
- *      counter sits on the dashboard's name instead of inside its extension.
- *      {@see FilenameCodec::canonicalise()} has always READ Nextcloud's spelling; this
- *      is the write that stops the user having to look at it.
- *
- * Both are file writes, so both are deferred to {@see ReconcileNameJob} — see the lock
+ * The title is a file write, so it is deferred to {@see ReconcileNameJob} — see the lock
  * above. Grafana is correct within the request; the file catches up a tick later.
  *
- * **AND THE RENAME CANNOT BE PULLED FORWARD INTO THE REQUEST, however tempting.** A Sabre
- * plugin can rewrite the COPY's `Destination` header, and doing so really does make the
- * file be BORN correctly named — but the Files app then reports *"The file does not exist
- * anymore"* and shows no new file until a manual refresh. Its copy action stats the path
- * IT chose the instant the copy returns, and only when the copy landed in the folder it
- * came from, which is precisely and only the case that collides. Measured both ways on a
- * live instance: intercepting gives COPY 201 then STAT 404; deferring gives COPY 201 then
- * STAT 207 and a correct name one tick later. The wrong name for a moment is the price of
- * the client seeing its own file, and it is the cheaper of the two.
+ * **THE FILE ITSELF NEEDS NO CORRECTING, and that is the single-segment extension's
+ * doing.** Nextcloud's counter goes before the LAST extension, so `.grafana` made a
+ * copy `Board.grafana (1).json` — a name ending in `.json` that matched none of this app's
+ * predicates, leaving a file that looked like a dashboard and pointed at somebody else's.
+ * Reading it took a `canonicalise()` pass in front of every predicate, un-writing it took a
+ * second deferred rename, and pulling that rename forward into the request (a Sabre plugin
+ * rewriting the COPY `Destination`) broke the Files app outright: it stats the path IT
+ * chose the instant the copy returns, and only for a copy landing in the folder it came
+ * from — precisely and only the case that collides. Measured live: intercepting gives COPY
+ * 201 then STAT 404; deferring gives 201 then 207. With one segment the counter lands where
+ * {@see FilenameCodec::format()} puts it and none of that machinery has anything to do.
  *
  * Failures are logged and swallowed: the NC copy already happened, and a copy that
- * failed to register is just an untracked `.grafana.json` the user can re-save to retry.
+ * failed to register is just an untracked `.grafana` the user can re-save to retry.
  */
 final class CopyService {
 	public function __construct(
@@ -103,7 +98,7 @@ final class CopyService {
 	}
 
 	/**
-	 * Handle a freshly-copied `*.grafana.json` file: strip any inherited identity, then
+	 * Handle a freshly-copied `*.grafana` file: strip any inherited identity, then
 	 * register it as a new dashboard if it landed in a mapped sync folder.
 	 */
 	public function onCopy(File $node): void {
@@ -116,7 +111,7 @@ final class CopyService {
 
 		// Identity was just wiped, so this mints a brand-new uid — never the source's.
 		// Logged + swallowed here (honouring this service's contract): the NC copy already
-		// happened, so a failed registration is just an untracked .grafana.json to re-save.
+		// happened, so a failed registration is just an untracked .grafana to re-save.
 		try {
 			$this->createService->createForFile($node, $mapping, true);
 		} catch (\Throwable $e) {
@@ -134,8 +129,7 @@ final class CopyService {
 
 	/**
 	 * Hand the copy's name to {@see ReconcileNameJob}, which runs once the locks this
-	 * hook holds are gone: rename the file out of Nextcloud's spelling into ours, and
-	 * write the resulting display name into the JSON `title`.
+	 * hook holds are gone, and writes the file's display name into its JSON `title`.
 	 *
 	 * `title_from_filename` is the right action because a copy IS a naming — the file
 	 * was just given a name by Nextcloud, exactly as a rename gives it one by hand, and

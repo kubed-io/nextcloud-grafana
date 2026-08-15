@@ -308,7 +308,7 @@ trait SyncSteps {
 	}
 
 	/**
-	 * Every `.grafana.json` mirror under $folder as `name ⇒ etag`, sorted by name so
+	 * Every `.grafana` mirror under $folder as `name ⇒ etag`, sorted by name so
 	 * two snapshots compare as whole maps. Nextcloud mints a fresh etag on every
 	 * write, so an identical map means nothing under the folder was written.
 	 *
@@ -431,7 +431,7 @@ trait SyncSteps {
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**
-	 * PROPFIND depth-1 a folder and return the basenames of its `.grafana.json`
+	 * PROPFIND depth-1 a folder and return the basenames of its `.grafana`
 	 * children — the CI-visible signal for "how many dashboard files landed here".
 	 *
 	 * @return list<string>
@@ -447,14 +447,14 @@ trait SyncSteps {
 		$out = [];
 		foreach ($doc->xpath('//d:href') ?: [] as $href) {
 			$base = basename(rtrim(rawurldecode((string)$href), '/'));
-			// BOTH SPELLINGS OF A COLLISION, because a helper that can only see our own
-			// would be blind to exactly the file a copy scenario is hunting. Nextcloud
-			// names a colliding copy `Board.grafana (1).json`, counting before the last
-			// extension; the app renames it to `Board (1).grafana.json`, and a test that
-			// could not see the "before" could never fail when the rename did not happen.
-			// This is the same blind spot the app itself shipped with — see
-			// FilenameCodec::canonicalise().
-			if (str_ends_with($base, '.grafana.json') || preg_match('/\.grafana \(\d+\)\.json$/', $base) === 1) {
+			// ONE SPELLING OF A COLLISION IS ENOUGH NOW. This used to have to match the
+			// retired `Board.grafana (1).json` too — Nextcloud counted before the last
+			// extension, so a copy did not end in the app's extension and a helper blind
+			// to that shape could never fail when the app failed to rename it. With a
+			// single-segment extension the client's name IS the app's name, so a helper
+			// that still accepted the old shape would only be able to report a file this
+			// app no longer produces.
+			if (str_ends_with($base, '.grafana')) {
 				$out[] = $base;
 			}
 		}

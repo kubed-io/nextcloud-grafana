@@ -104,22 +104,22 @@ final class LinkWriteGuardPluginTest extends TestCase {
 		// leaves the write allowed rather than bouncing a file that might not be a link.
 		$this->metadata->method('read')->willThrowException(new \RuntimeException('db down'));
 		$this->notifier->expects(self::never())->method('linkEditBlocked');
-		self::assertTrue($this->invoke($this->davFile('Board.grafana.json')));
+		self::assertTrue($this->invoke($this->davFile('Board.grafana')));
 	}
 
 	public function testASyncDashboardFileIsAllowed(): void {
 		// Sync + unmapped files hold the full JSON and are freely editable.
 		$this->metadata->method('read')->willReturn($this->managed(Mapping::MODE_SYNC));
 		$this->notifier->expects(self::never())->method('linkEditBlocked');
-		self::assertTrue($this->invoke($this->davFile('Board.grafana.json')));
+		self::assertTrue($this->invoke($this->davFile('Board.grafana')));
 	}
 
 	public function testALinkDashboardFileIsRefusedAndNotifies(): void {
 		$this->metadata->method('read')->willReturn($this->managed(Mapping::MODE_LINK));
-		$this->notifier->expects(self::once())->method('linkEditBlocked')->with('alice', 7, 'Board.grafana.json');
+		$this->notifier->expects(self::once())->method('linkEditBlocked')->with('alice', 7, 'Board.grafana');
 
 		$this->expectException(Forbidden::class);
-		$this->invoke($this->davFile('Board.grafana.json'));
+		$this->invoke($this->davFile('Board.grafana'));
 	}
 
 	// ── beforeCreateFile: authoring into a link folder ─────────────────────────
@@ -134,19 +134,19 @@ final class LinkWriteGuardPluginTest extends TestCase {
 
 		$this->expectException(Forbidden::class);
 		$this->expectExceptionMessageMatches('/link mode/');
-		$this->createIn('Pointers', 'CPU Load.grafana.json');
+		$this->createIn('Pointers', 'CPU Load.grafana');
 	}
 
 	public function testANewDashboardFileInASyncFolderIsAllowed(): void {
 		$this->mappedFolders = ['Demo' => Mapping::MODE_SYNC];
 
-		self::assertTrue($this->createIn('Demo', 'CPU Load.grafana.json'));
+		self::assertTrue($this->createIn('Demo', 'CPU Load.grafana'));
 	}
 
 	public function testANewDashboardFileOutsideEveryMappingIsAllowed(): void {
 		$this->mappedFolders = [];
 
-		self::assertTrue($this->createIn('Scratch', 'CPU Load.grafana.json'));
+		self::assertTrue($this->createIn('Scratch', 'CPU Load.grafana'));
 	}
 
 	/**
@@ -169,7 +169,7 @@ final class LinkWriteGuardPluginTest extends TestCase {
 		$modified = false;
 
 		self::assertTrue($this->plugin->beforeCreateFile(
-			'files/alice/Pointers/CPU Load.grafana.json',
+			'files/alice/Pointers/CPU Load.grafana',
 			$data,
 			$this->createStub(INode::class),
 			$modified,

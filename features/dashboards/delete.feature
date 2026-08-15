@@ -67,7 +67,7 @@ Feature: Trashing a dashboard file
   @user @in-nextcloud @gesture @ui
   Scenario: Trash the only dashboard in a folder
     Given the folder "Demo/Team" holding one dashboard "CPU Load"
-    When I move "Demo/Team/CPU Load.grafana.json" to the trash
+    When I move "Demo/Team/CPU Load.grafana" to the trash
     Then the Grafana folder "Team" is still under "Demo"
     And it holds no dashboards
     And "Demo/Team" holds:

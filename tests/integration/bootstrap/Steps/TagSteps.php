@@ -142,7 +142,7 @@ trait TagSteps {
 			if (trim($tags) !== '') {
 				$this->grafanaCreateTaggedDashboard(
 					$this->lastUid,
-					basename($this->originalPath, '.grafana.json'),
+					basename($this->originalPath, '.grafana'),
 					$this->grafanaFolderUidForMapping($folder),
 					$this->parseTags($tags),
 				);

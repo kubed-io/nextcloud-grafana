@@ -60,8 +60,8 @@ describe('isDashboardFile', () => {
     expect(isDashboardFile({ nodes: [{ mime: GRAFANA_MIME }] })).toBe(true)
   })
 
-  it('matches a single node by .grafana.json basename', () => {
-    expect(isDashboardFile({ nodes: [{ basename: 'Node Exporter Full.grafana.json' }] })).toBe(true)
+  it('matches a single node by .grafana basename', () => {
+    expect(isDashboardFile({ nodes: [{ basename: 'Node Exporter Full.grafana' }] })).toBe(true)
   })
 
   it('does not match plain JSON', () => {

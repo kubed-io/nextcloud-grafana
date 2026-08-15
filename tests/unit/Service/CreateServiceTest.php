@@ -18,7 +18,6 @@ use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
-use OCP\Files\IMimeTypeLoader;
 use OCP\Files\Node;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -44,22 +43,20 @@ final class CreateServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
-		$mimeLoader->method('getId')->willReturn(1);
 		// A real SyncGuard: run() executes the callback (brackets it in enter/leave).
 		$folderMirror = $this->createStub(FolderMirror::class);
 		$folderMirror->method('folderUidFor')->willReturnCallback(
 			static fn (Node $n, Mapping $m): ?string
 				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
 		);
-		$this->service = new CreateService($this->grafana, $this->metadata, $folderMirror, new MirrorTimes(new NullLogger()), new SyncGuard(), $mimeLoader, new NullLogger());
+		$this->service = new CreateService($this->grafana, $this->metadata, $folderMirror, new MirrorTimes(new NullLogger()), new SyncGuard(), new NullLogger());
 	}
 
 	private function mapping(string $folderUid = 'gf-demo', string $id = 'map-demo'): Mapping {
 		return Mapping::fromArray(['id' => $id, 'grafana_folder_uid' => $folderUid, 'nc_folder' => 'demo', 'mode' => 'sync']);
 	}
 
-	private function file(int $id, string $content, string $name = 'My Dash.grafana.json'): File {
+	private function file(int $id, string $content, string $name = 'My Dash.grafana'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
 		$node->method('getContent')->willReturn($content);
@@ -227,7 +224,7 @@ final class CreateServiceTest extends TestCase {
 		});
 
 		$this->service->createForFile(
-			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health.grafana.json'),
+			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health.grafana'),
 			$this->mapping(),
 			true,
 		);
@@ -249,7 +246,7 @@ final class CreateServiceTest extends TestCase {
 		});
 
 		$this->service->createForFile(
-			$this->file(1, '{"title":"Fleet Health"}', 'Something Else.grafana.json'),
+			$this->file(1, '{"title":"Fleet Health"}', 'Something Else.grafana'),
 			$this->mapping(),
 		);
 
@@ -276,7 +273,7 @@ final class CreateServiceTest extends TestCase {
 		$node = $this->createMock(File::class);
 		$node->method('getId')->willReturn(1);
 		$node->method('getContent')->willReturn('{"title":"X"}');
-		$node->method('getName')->willReturn('X.grafana.json');
+		$node->method('getName')->willReturn('X.grafana');
 		$node->method('getMTime')->willReturn(0);
 		$node->expects(self::once())->method('touch')->with($expected);
 		return $node;

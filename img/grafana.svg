@@ -3,10 +3,10 @@
   SPDX-FileCopyrightText: 2026 Kelly Ferrone
   SPDX-License-Identifier: AGPL-3.0-or-later
 
-  Filetype icon for application/grafana+json (.grafana.json files).
+  Filetype icon for application/grafana+json (.grafana files).
   RegisterMimetype copies this exact file into core/img/filetypes/grafana.svg,
   where Nextcloud's GenerateMimetypeFileBuilder enumerates it, so it shows on
-  every .grafana.json row in the Files app. Geometry mirrors img/app.svg (the
+  every .grafana row in the Files app. Geometry mirrors img/app.svg (the
   settings-section mark) so the file glyph and the app read as one identity: a
   folder holding a small bar chart ("dashboards, in a folder").
 

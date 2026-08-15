@@ -26,7 +26,6 @@ use OCA\GrafanaSync\Service\SyncService;
 use OCA\GrafanaSync\Service\TagSyncService;
 use OCP\Files\File;
 use OCP\Files\Folder;
-use OCP\Files\IMimeTypeLoader;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -59,7 +58,6 @@ final class SyncServiceTest extends TestCase {
 	private FolderTreeMirror $tree;
 	private TagSyncService $tagSync;
 	private SyncGuard $guard;
-	private IMimeTypeLoader $mimeLoader;
 	private SyncService $service;
 
 	protected function setUp(): void {
@@ -73,10 +71,6 @@ final class SyncServiceTest extends TestCase {
 
 		// The pull path never calls PushService; the push tests configure it.
 		$this->push = $this->createMock(PushService::class);
-
-		// fixupFilecacheMimetype: a no-op pair, never asserted.
-		$mimeLoader = $this->createStub(IMimeTypeLoader::class);
-		$mimeLoader->method('getId')->willReturn(1);
 
 		// MirrorTimes reaches into the storage/cache stack, so it is mocked here and
 		// covered on its own in MirrorTimesTest — the reconciler only owes the mapping.
@@ -92,7 +86,6 @@ final class SyncServiceTest extends TestCase {
 		$this->tagSync = $this->createStub(TagSyncService::class);
 
 		$this->guard = $guard;
-		$this->mimeLoader = $mimeLoader;
 		$this->rebuildService();
 	}
 
@@ -111,7 +104,6 @@ final class SyncServiceTest extends TestCase {
 			$this->storage,
 			$this->guard,
 			$this->push,
-			$this->mimeLoader,
 			$this->times,
 			$this->tree,
 			$this->tagSync,
@@ -130,7 +122,7 @@ final class SyncServiceTest extends TestCase {
 		]);
 	}
 
-	/** A managed `.grafana.json` File stub with a fixed id + name (no verified interactions). */
+	/** A managed `.grafana` File stub with a fixed id + name (no verified interactions). */
 	private function file(int $id, string $name): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
@@ -176,8 +168,8 @@ final class SyncServiceTest extends TestCase {
 		$folder->method('nodeExists')->willReturn(false);
 		$folder->expects(self::once())
 			->method('newFile')
-			->with('Board.grafana.json', self::isString())
-			->willReturn($this->file(100, 'Board.grafana.json'));
+			->with('Board.grafana', self::isString())
+			->willReturn($this->file(100, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($folder);
@@ -400,7 +392,7 @@ final class SyncServiceTest extends TestCase {
 		$folder = $this->createStub(Folder::class);
 		$folder->method('getDirectoryListing')->willReturn([]);
 		$folder->method('nodeExists')->willReturn(false);
-		$folder->method('newFile')->willReturn($this->file(100, 'Board.grafana.json'));
+		$folder->method('newFile')->willReturn($this->file(100, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($folder);
@@ -459,7 +451,7 @@ final class SyncServiceTest extends TestCase {
 
 		$stale = $this->createMock(File::class);
 		$stale->method('getId')->willReturn(11);
-		$stale->method('getName')->willReturn('Gone.grafana.json');
+		$stale->method('getName')->willReturn('Gone.grafana');
 		$stale->expects(self::once())->method('delete');
 
 		$folder = $this->createStub(Folder::class);
@@ -489,7 +481,7 @@ final class SyncServiceTest extends TestCase {
 		// so even though its dashboard isn't seen this pull, prune must not delete it.
 		$foreign = $this->createMock(File::class);
 		$foreign->method('getId')->willReturn(20);
-		$foreign->method('getName')->willReturn('Foreign.grafana.json');
+		$foreign->method('getName')->willReturn('Foreign.grafana');
 		$foreign->expects(self::never())->method('delete');
 
 		$folder = $this->createStub(Folder::class);
@@ -517,8 +509,8 @@ final class SyncServiceTest extends TestCase {
 		$folder->method('getDirectoryListing')->willReturn([]);
 		$folder->method('nodeExists')->willReturn(false);
 		$folder->method('newFile')
-			->with('Board.grafana.json', self::stringContains('grafana.reference/v1'))
-			->willReturn($this->file(200, 'Board.grafana.json'));
+			->with('Board.grafana', self::stringContains('grafana.reference/v1'))
+			->willReturn($this->file(200, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($folder);
@@ -541,7 +533,7 @@ final class SyncServiceTest extends TestCase {
 		$folder = $this->createStub(Folder::class);
 		$folder->method('getDirectoryListing')->willReturn([]);
 		$folder->method('nodeExists')->willReturn(false);
-		$folder->method('newFile')->willReturn($this->file(200, 'Board.grafana.json'));
+		$folder->method('newFile')->willReturn($this->file(200, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($folder);
@@ -566,9 +558,9 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	public function testPushOnePushesManagedSyncFilesAndSkipsTheRest(): void {
-		$syncFile = $this->file(1, 'Flow.grafana.json');
+		$syncFile = $this->file(1, 'Flow.grafana');
 		$notOurs = $this->file(2, 'notes.txt');          // wrong extension → skipped
-		$linkFile = $this->file(3, 'Pointer.grafana.json'); // link mode → skipped
+		$linkFile = $this->file(3, 'Pointer.grafana'); // link mode → skipped
 
 		$folder = $this->createStub(Folder::class);
 		$folder->method('getDirectoryListing')->willReturn([$syncFile, $notOurs, $linkFile]);
@@ -593,7 +585,7 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	public function testPushOneCarriesAPerFileFailureMessage(): void {
-		$syncFile = $this->file(1, 'Flow.grafana.json');
+		$syncFile = $this->file(1, 'Flow.grafana');
 		$folder = $this->createStub(Folder::class);
 		$folder->method('getDirectoryListing')->willReturn([$syncFile]);
 
@@ -608,7 +600,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $res['succeeded']);
 		self::assertSame(1, $res['failed']);
 		self::assertNotNull($res['message']);
-		self::assertStringContainsString('Flow.grafana.json', (string)$res['message']);
+		self::assertStringContainsString('Flow.grafana', (string)$res['message']);
 	}
 
 	// ── dispatch / runInline (the parity seam) ───────────────────────────────────
@@ -656,8 +648,8 @@ final class SyncServiceTest extends TestCase {
 		$team->method('nodeExists')->willReturn(false);
 		$team->expects(self::once())
 			->method('newFile')
-			->with('Board.grafana.json', self::isString())
-			->willReturn($this->file(100, 'Board.grafana.json'));
+			->with('Board.grafana', self::isString())
+			->willReturn($this->file(100, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($root);
@@ -691,7 +683,7 @@ final class SyncServiceTest extends TestCase {
 		$root->method('nodeExists')->willReturn(false);
 		$root->expects(self::once())
 			->method('newFile')
-			->willReturn($this->file(100, 'Board.grafana.json'));
+			->willReturn($this->file(100, 'Board.grafana'));
 
 		$this->storage->method('isAvailable')->willReturn(true);
 		$this->storage->method('ensureFolder')->willReturn($root);

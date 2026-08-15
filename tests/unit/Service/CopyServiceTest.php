@@ -67,7 +67,7 @@ final class CopyServiceTest extends TestCase {
 	private function file(int $id = 1, string $body = '{"title":"Copy"}'): File {
 		$node = $this->createStub(File::class);
 		$node->method('getId')->willReturn($id);
-		$node->method('getPath')->willReturn('/demo/Copy.grafana.json');
+		$node->method('getPath')->willReturn('/demo/Copy.grafana');
 		$node->method('getContent')->willReturn($body);
 		return $node;
 	}
@@ -134,7 +134,7 @@ final class CopyServiceTest extends TestCase {
 
 		$node = $this->createMock(File::class);
 		$node->method('getId')->willReturn(1);
-		$node->method('getPath')->willReturn('/demo/Copy.grafana.json');
+		$node->method('getPath')->willReturn('/demo/Copy.grafana');
 		$node->method('getContent')->willReturn('{"title":"Board","uid":"original-uid"}');
 		$node->expects(self::never())->method('putContent');
 

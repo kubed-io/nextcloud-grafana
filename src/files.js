@@ -156,7 +156,7 @@ async function openInText(node) {
   document.body.appendChild(overlay)
 
   const sel = (s) => overlay.querySelector(s)
-  sel('.grafana-sync-text-title').textContent = node.basename || 'dashboard.grafana.json'
+  sel('.grafana-sync-text-title').textContent = node.basename || 'dashboard.grafana'
   sel('.js-save').textContent = t(APP_ID, 'Save')
   sel('.js-close').textContent = t(APP_ID, 'Close')
   const ta = sel('.grafana-sync-text-area')
@@ -257,10 +257,10 @@ registerFileAction({
 
 // ── "New → Grafana dashboard" ──────────────────────────────────────────────
 // Always offered, in any folder (we deliberately don't gate on a mapping). A new
-// file outside a mapped folder is just a `.grafana.json` with our icon and empty
+// file outside a mapped folder is just a `.grafana` with our icon and empty
 // metadata — not synced. Drop it into a mapped sync folder to make it real in
-// Grafana (see the create-on-land path). The NodeWrittenListener re-stamps the
-// custom mimetype on write, so the icon is correct immediately.
+// Grafana (see the create-on-land path). `.grafana` is the file's last extension,
+// so the server detects our mimetype on write and the icon is correct immediately.
 const STARTER_DASHBOARD = JSON.stringify({
   title: 'New dashboard',
   tags: [],
@@ -277,7 +277,7 @@ addNewFileMenuEntry({
   iconSvgInline: grafanaMarkIcon,
   async handler(context, content) {
     const names = (content || []).map((n) => n.basename)
-    const name = getUniqueName(t(APP_ID, 'New dashboard') + '.grafana.json', names)
+    const name = getUniqueName(t(APP_ID, 'New dashboard') + '.grafana', names)
     const dir = context.path === '/' ? '' : context.path
     const davPath = `${getRootPath()}${dir}/${name}`
     try {
@@ -286,8 +286,8 @@ addNewFileMenuEntry({
         contentType: 'application/json',
         overwrite: false,
       })
-      // Stat back the freshly-written file (mimetype already re-stamped by the
-      // server listener) and announce it so the Files view picks it up.
+      // Stat back the freshly-written file and announce it so the Files view
+      // picks it up.
       const res = await client.stat(davPath, { details: true, data: getDefaultPropfind() })
       emit('files:node:created', resultToNode(res.data))
     } catch (e) {

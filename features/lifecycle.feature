@@ -10,7 +10,7 @@ Feature: App install lifecycle
     When the admin enables the app
     Then the app should be enabled
     And the app is installed correctly
-    And ".grafana.json" files are registered as their own file type
+    And ".grafana" files are registered as their own file type
     # The mimetype is an end state of enabling, not a feature of its own.
     # notes: AGENTS.md#enabling-the-app
 
@@ -27,5 +27,5 @@ Feature: App install lifecycle
   Scenario: Removing the app
     Given the app is enabled
     When the admin removes the app
-    Then ".grafana.json" files are not registered as their own file type
+    Then ".grafana" files are not registered as their own file type
     And the managed dashboard files are left where they are, with their metadata

@@ -38,9 +38,9 @@ use OCP\IUserSession;
  *   - {@see NodeWrittenEvent}  → content changed  → `filename_from_title`.
  *
  * **And the collision counter belongs to only one of those two directions.** A rename is the
- * user typing the whole filename, so `Fleet Health (1).grafana.json` means a dashboard called
+ * user typing the whole filename, so `Fleet Health (1).grafana` means a dashboard called
  * `Fleet Health (1)` and the counter travels. A write is the user setting a title, and a mirror
- * of a duplicated Grafana dashboard is legitimately `Fleet Health (1).grafana.json` holding the
+ * of a duplicated Grafana dashboard is legitimately `Fleet Health (1).grafana` holding the
  * title `Fleet Health` — the one place a filename and a title are MEANT to disagree — so there
  * the counter is stripped before comparing. {@see FilenameCodec} carries both names for this.
  *
@@ -109,7 +109,7 @@ final class NameSyncListener implements IEventListener {
 		}
 
 		// A RENAME IS A STATEMENT ABOUT THE WHOLE FILENAME, counter included: the user
-		// typed it, so `Fleet Health (1).grafana.json` means a dashboard called
+		// typed it, so `Fleet Health (1).grafana` means a dashboard called
 		// `Fleet Health (1)`. Comparing against the counter-stripped stem missed exactly
 		// that rename — the two read as equal, nothing was enqueued, and the title never
 		// followed — while also enqueueing a pointless reconcile whenever the title
@@ -123,7 +123,7 @@ final class NameSyncListener implements IEventListener {
 
 		// A WRITE IS A STATEMENT ABOUT THE TITLE, and the counter is not the title's
 		// business. A mirror of a duplicate Grafana dashboard legitimately sits at
-		// `Fleet Health (1).grafana.json` holding the title `Fleet Health` — that is the
+		// `Fleet Health (1).grafana` holding the title `Fleet Health` — that is the
 		// one place the two are MEANT to disagree ({@see FilenameCodec}) — so the counter
 		// is stripped before comparing and saving such a file enqueues nothing at all.
 		if ($jsonTitle !== '' && $jsonTitle !== $logical) {

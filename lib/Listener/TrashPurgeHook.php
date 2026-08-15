@@ -72,7 +72,7 @@ final class TrashPurgeHook {
 			return;
 		}
 		// NO NAME-BASED PRE-FILTER ANY MORE. A trashed dashboard is
-		// "<orig>.grafana.json.d<timestamp>", so `.grafana.json` used to settle the whole
+		// "<orig>.grafana.d<timestamp>", so `.grafana` used to settle the whole
 		// question without resolving anything — but it also silently dropped every FOLDER,
 		// and a folder's name says nothing about what is inside it. A purged folder emits
 		// ONE hook, for itself, and none for its contents (see {@see FolderCascade}), so

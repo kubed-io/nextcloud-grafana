@@ -287,7 +287,7 @@ final class MappingServiceTest extends TestCase {
 		$svc->add($this->mapping('uid-outer', 'dashboards'));
 		$inner = $svc->add($this->mapping('uid-inner', 'dashboards/observe'));
 
-		$hit = $svc->resolveForPath('/admin/files/dashboards/observe/cpu.grafana.json');
+		$hit = $svc->resolveForPath('/admin/files/dashboards/observe/cpu.grafana');
 		self::assertNotNull($hit);
 		self::assertSame($inner->id, $hit->id, 'the deepest (longest-prefix) mapping wins');
 	}
@@ -314,12 +314,12 @@ final class MappingServiceTest extends TestCase {
 		// The admin renames the folder in Nextcloud. Nothing tells the mapping.
 		$this->folderPaths[512] = 'Dashboards';
 
-		$hit = $svc->resolveForPath('/admin/files/Dashboards/cpu.grafana.json');
+		$hit = $svc->resolveForPath('/admin/files/Dashboards/cpu.grafana');
 		self::assertNotNull($hit, 'the mapping must follow its folder through a rename');
 		self::assertSame($saved->id, $hit->id);
 
 		// And the old name is now just a name — nothing lives there to claim.
-		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana.json'));
+		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana'));
 
 		// The stored label catches up too, so the panel and `occ` do not keep showing
 		// a folder that no longer exists.
@@ -347,7 +347,7 @@ final class MappingServiceTest extends TestCase {
 
 		$this->folderPaths[77] = 'Archive/Demo';
 
-		$hit = $svc->resolveForPath('/admin/files/Archive/Demo/cpu.grafana.json');
+		$hit = $svc->resolveForPath('/admin/files/Archive/Demo/cpu.grafana');
 		self::assertNotNull($hit);
 		self::assertSame($saved->id, $hit->id);
 	}
@@ -370,14 +370,14 @@ final class MappingServiceTest extends TestCase {
 
 		unset($this->folderPaths[900]);
 
-		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana.json'));
+		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana'));
 	}
 
 	public function testResolveForPathRespectsSegmentBoundaries(): void {
 		$svc = $this->service();
 		$svc->add($this->mapping('uid-a', 'observe'));
 		// "observability" must NOT be swallowed by the "observe" mapping.
-		self::assertNull($svc->resolveForPath('/admin/files/observability/x.grafana.json'));
+		self::assertNull($svc->resolveForPath('/admin/files/observability/x.grafana'));
 	}
 
 	public function testResolveForPathReturnsNullOutsideFilesRoot(): void {

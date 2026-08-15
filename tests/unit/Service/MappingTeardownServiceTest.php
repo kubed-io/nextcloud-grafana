@@ -48,9 +48,9 @@ final class MappingTeardownServiceTest extends TestCase {
 
 	private function dashFile(int $id): File {
 		$f = $this->createMock(File::class);
-		$f->method('getName')->willReturn('D' . $id . '.grafana.json');
+		$f->method('getName')->willReturn('D' . $id . '.grafana');
 		$f->method('getId')->willReturn($id);
-		$f->method('getPath')->willReturn('/alice/files/alpha/D' . $id . '.grafana.json');
+		$f->method('getPath')->willReturn('/alice/files/alpha/D' . $id . '.grafana');
 		return $f;
 	}
 

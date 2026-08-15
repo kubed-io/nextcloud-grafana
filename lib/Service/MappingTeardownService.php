@@ -24,7 +24,7 @@ use Psr\Log\LoggerInterface;
  *    deletes the connected dashboard + strips the file; bin ON parks it in the bin folder,
  *    id kept. So restoring the trash later reconnects (same uid with bin ON, a re-create with
  *    bin OFF).
- *  - files that were **never connected** (an unmapped / untracked standalone `.grafana.json`
+ *  - files that were **never connected** (an unmapped / untracked standalone `.grafana`
  *    that only ever lived in Nextcloud) are **left strictly alone** — removing a mapping they
  *    weren't part of must never move or bin them. No data loss.
  *  - finally the mapping's config binding is dropped.
