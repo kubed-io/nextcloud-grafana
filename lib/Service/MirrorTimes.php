@@ -78,12 +78,8 @@ final class MirrorTimes {
 	 */
 	public function apply(File $file, ?int $mtime, ?int $creationTime, bool $force = false): void {
 		try {
-			$this->logger->warning('PROBE apply', ['file' => $file->getName(), 'wantMtime' => $mtime, 'wantCreation' => $creationTime, 'force' => $force, 'currentMtime' => $file->getMTime()]);
 			if ($mtime !== null && ($force || $file->getMTime() !== $mtime)) {
 				$file->touch($mtime);
-				$this->logger->warning('PROBE touched', ['file' => $file->getName(), 'to' => $mtime, 'mtimeNow' => $file->getMTime()]);
-			} else {
-				$this->logger->warning('PROBE skipped', ['file' => $file->getName(), 'wantMtime' => $mtime, 'currentMtime' => $file->getMTime()]);
 			}
 			if ($creationTime !== null && $file->getCreationTime() !== $creationTime) {
 				// No OCP setter for creation time; the public cache API is the route.
