@@ -42,6 +42,6 @@ jobs:
     # it wrong in both directions — a one-line lib/ change can be invisible, and a
     # spec change can be the most important thing in a release.
     - name: Make sure Changelog is updated
-      uses: tarides/changelog-check-action@v3
+      uses: tarides/changelog-check-action@v4
       with:
         changelog: CHANGELOG.md
