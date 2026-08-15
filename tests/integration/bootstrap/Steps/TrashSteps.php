@@ -231,11 +231,17 @@ trait TrashSteps {
 		if ($record === null) {
 			throw new \RuntimeException("dashboard '{$this->lastUid}' no longer exists in Grafana");
 		}
-		$want = null;
-		foreach ($this->grafanaListFolders() as $folder) {
-			if ((string)($folder['title'] ?? '') === $title) {
-				$want = (string)($folder['uid'] ?? '');
-				break;
+		// A SCENARIO-RECORDED UID FIRST, because `GET /api/folders` lists TOP-LEVEL
+		// folders only — a nested one like "Drafts" is absent from it entirely, so the
+		// scan below would report a perfectly healthy subfolder as missing. Steps that
+		// locate a nested folder record what they found, and this reads that first.
+		$want = $this->createdGrafanaFolders[$title] ?? null;
+		if ($want === null) {
+			foreach ($this->grafanaListFolders() as $folder) {
+				if ((string)($folder['title'] ?? '') === $title) {
+					$want = (string)($folder['uid'] ?? '');
+					break;
+				}
 			}
 		}
 		if ($want === null) {

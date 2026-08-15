@@ -11,8 +11,10 @@ namespace OCA\GrafanaSync\Settings;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCP\IAppConfig;
+use OCP\IUser;
+use OCP\Security\ICrypto;
 use OCP\Settings\DeclarativeSettingsTypes;
-use OCP\Settings\IDeclarativeSettingsForm;
+use OCP\Settings\IDeclarativeSettingsFormWithHandlers;
 
 /**
  * The Grafana **instance** — the whole connection in one card: the base URL and the
@@ -34,10 +36,50 @@ use OCP\Settings\IDeclarativeSettingsForm;
  * saved". So the token field's copy is rendered *dynamically* from whether a token
  * is currently stored — a plain, reliable "is it set?" signal. (Whether that token
  * is *valid* is the separate question the Test connection button answers.)
+ *
+ * ## WHY THIS CARD HANDLES ITS OWN STORAGE, THOUGH IT HAS NO CHECKBOX
+ *
+ * It has nothing a string cannot hold, so `STORAGE_TYPE_INTERNAL` would work
+ * perfectly — for THIS card. It was poisoning the OTHER one.
+ *
+ * `DeclarativeManager::getStorageType($app, $fieldId)` answers with the FIRST
+ * schema registered for the app that declares a `storage_type`, whatever field was
+ * asked about — the schema-level `return` sits in the outer loop, so it never gets
+ * as far as the schema that actually owns the field:
+ *
+ *     foreach ($this->appSchemas[$app] as $schema) {
+ *         foreach ($schema['fields'] as $field) { ... per-field override ... }
+ *         if (array_key_exists('storage_type', $schema)) {
+ *             return $schema['storage_type'];   // <- first schema wins, always
+ *         }
+ *     }
+ *
+ * This card registers first, so its INTERNAL answer was returned for every field in
+ * the app — including {@see AutoSyncSettings}'s checkboxes. Their bool then reached
+ * `IAppConfig::setValueString()`, which is typed `string` under `strict_types=1`,
+ * so the save died with a TypeError and the toggle sprang back to off. Verified by
+ * calling `IDeclarativeManager::setValue()` directly against the live instance:
+ *
+ *     TypeError: OC\AppConfig::setValueString(): Argument #3 ($value) must be of
+ *     type string, true given, called in .../DeclarativeManager.php on line 343
+ *
+ * AutoSyncSettings declaring EXTERNAL could never have helped — nothing ever asked
+ * it. The fix has to be that NO form in the app declares INTERNAL, because any one
+ * that does can answer for all the others. Dispatch is unaffected: the EXTERNAL
+ * branch resolves the form by `formId`, so each card still gets its own values.
+ *
+ * The per-field `storage_type` override is not a way out either. It is only reached
+ * while iterating the schema that holds the field, and the first schema returns
+ * before that. Nor can the key simply be dropped — `validateSchema()` requires it
+ * and discards the whole form without it.
  */
-final class InstanceSettings implements IDeclarativeSettingsForm {
+final class InstanceSettings implements IDeclarativeSettingsFormWithHandlers {
+	private const FIELD_URL = 'grafana_url';
+	private const FIELD_TOKEN = 'grafana_token';
+
 	public function __construct(
 		private readonly IAppConfig $config,
+		private readonly ICrypto $crypto,
 	) {
 	}
 
@@ -62,12 +104,15 @@ final class InstanceSettings implements IDeclarativeSettingsForm {
 			'priority' => 5,
 			'section_type' => DeclarativeSettingsTypes::SECTION_TYPE_ADMIN,
 			'section_id' => 'grafana_sync',
-			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_INTERNAL,
+			// EXTERNAL so it cannot answer INTERNAL for another card's checkbox — see
+			// the class docblock. The handlers below do exactly what core's internal
+			// path did: a plain string for the url, ICrypto for the sensitive token.
+			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => 'Instance',
 			'description' => 'The Grafana instance the app is scoped to — its base URL and the service-account token used to reach it.',
 			'fields' => [
 				[
-					'id' => 'grafana_url',
+					'id' => self::FIELD_URL,
 					'title' => 'Grafana base URL',
 					'description' => 'e.g. https://grafana.example.com (no trailing slash). In-cluster URLs like http://grafana-service.observe.svc:3000 also work.',
 					'type' => DeclarativeSettingsTypes::URL,
@@ -75,7 +120,7 @@ final class InstanceSettings implements IDeclarativeSettingsForm {
 					'default' => '',
 				],
 				[
-					'id' => 'grafana_token',
+					'id' => self::FIELD_TOKEN,
 					'title' => 'Service-account token',
 					'description' => $tokenDescription,
 					'type' => DeclarativeSettingsTypes::PASSWORD,
@@ -85,5 +130,57 @@ final class InstanceSettings implements IDeclarativeSettingsForm {
 				],
 			],
 		];
+	}
+
+	/**
+	 * Read one field for the settings UI.
+	 *
+	 * THE TOKEN IS NEVER ECHOED BACK, which is what core's internal path did for a
+	 * `sensitive` field and what the card's copy promises. Returning the decrypted
+	 * value would put a live credential in an HTML response for a field the admin
+	 * cannot even see.
+	 */
+	#[\Override]
+	public function getValue(string $fieldId, IUser $user): mixed {
+		return match ($fieldId) {
+			self::FIELD_URL => $this->config->getValueString(Application::APP_ID, self::FIELD_URL, ''),
+			self::FIELD_TOKEN => '',
+			default => null,
+		};
+	}
+
+	/**
+	 * Persist one field.
+	 *
+	 * The token is encrypted here because EXTERNAL storage means core no longer does
+	 * it — the same `ICrypto` round trip {@see \OCA\GrafanaSync\Command\SetToken}
+	 * performs, so a token set from the panel and one set from `occ` are byte-identical
+	 * on disk and {@see \OCA\GrafanaSync\Service\GrafanaClient} decrypts either.
+	 *
+	 * AN EMPTY SUBMISSION LEAVES THE STORED TOKEN ALONE. The field renders blank on
+	 * every page load (see getValue), so saving the card after editing only the URL
+	 * posts an empty token — and treating that as "clear it" would delete a working
+	 * credential as a side effect of an unrelated edit.
+	 */
+	#[\Override]
+	public function setValue(string $fieldId, mixed $value, IUser $user): void {
+		switch ($fieldId) {
+			case self::FIELD_URL:
+				$url = is_string($value) ? rtrim(trim($value), '/') : '';
+				$this->config->setValueString(Application::APP_ID, self::FIELD_URL, $url);
+				break;
+			case self::FIELD_TOKEN:
+				$token = is_string($value) ? trim($value) : '';
+				if ($token === '') {
+					return;
+				}
+				$this->config->setValueString(
+					Application::APP_ID,
+					self::FIELD_TOKEN,
+					$this->crypto->encrypt($token),
+					sensitive: true,
+				);
+				break;
+		}
 	}
 }

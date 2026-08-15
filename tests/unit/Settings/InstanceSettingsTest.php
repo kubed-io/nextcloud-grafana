@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Settings;
 
 use OCA\GrafanaSync\Settings\InstanceSettings;
 use OCP\IAppConfig;
+use OCP\Security\ICrypto;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,7 +26,7 @@ final class InstanceSettingsTest extends TestCase {
 	private function field(bool $hasToken, string $id): array {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn($hasToken ? 'encrypted-blob' : '');
-		$schema = (new InstanceSettings($config))->getSchema();
+		$schema = (new InstanceSettings($config, $this->createStub(ICrypto::class)))->getSchema();
 		foreach ($schema['fields'] as $field) {
 			if (($field['id'] ?? null) === $id) {
 				return $field;
@@ -37,7 +38,7 @@ final class InstanceSettingsTest extends TestCase {
 	public function testTheCardHoldsBothTheUrlAndTheToken(): void {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('');
-		$schema = (new InstanceSettings($config))->getSchema();
+		$schema = (new InstanceSettings($config, $this->createStub(ICrypto::class)))->getSchema();
 		self::assertSame('instance', $schema['id']);
 		$ids = array_map(static fn ($f) => $f['id'], $schema['fields']);
 		self::assertContains('grafana_url', $ids);

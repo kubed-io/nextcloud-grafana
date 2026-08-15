@@ -157,6 +157,15 @@ trait LifecycleSteps {
 		$stem = preg_replace('/\.grafana\.json$/', '', $filename) ?? $filename;
 		$this->currentFolder = $folder;
 		$this->putDashboardFile($folder, $stem);
+
+		// CAPTURE THE UID THE APP MINTED. Creating is the one gesture where the
+		// dashboard did not exist until now, so nothing else in the scenario can know
+		// its id — and every later "the dashboard ..." assertion resolves through it.
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($uid !== '') {
+			$this->lastUid = $uid;
+			$this->createdDashboardUids[] = $uid;
+		}
 	}
 
 	/**

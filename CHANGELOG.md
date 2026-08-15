@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Moving a dashboard into a folder now creates that folder in Grafana, the same as creating one there does. It was the only one of the two gestures that did nothing.
+- The scheduled-sync and recycle-bin toggles can be turned on at last. They reverted to off on every save, silently.
 - Tags sync both ways: change them in Nextcloud, in the file, or in Grafana, and every surface agrees.
 - Mapped folders and their subfolders carry tags too, in both directions. A root (`/`) mapping is the whole instance rather than a folder, so it has none.
 - A sync brings tags with it, on the folders and the dashboards alike.

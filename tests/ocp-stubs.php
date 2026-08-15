@@ -356,10 +356,21 @@ namespace OCP\Settings {
 			public function getSchema(): array;
 		}
 	}
+	// EVERY declarative form in this app implements the handler pair — not because
+	// each one needs custom storage, but because a single form left on INTERNAL
+	// answers the storage question for all the others. See InstanceSettings.
+	if (!interface_exists(IDeclarativeSettingsFormWithHandlers::class, false)) {
+		interface IDeclarativeSettingsFormWithHandlers extends IDeclarativeSettingsForm {
+			public function getValue(string $fieldId, \OCP\IUser $user): mixed;
+
+			public function setValue(string $fieldId, mixed $value, \OCP\IUser $user): void;
+		}
+	}
 	if (!class_exists(DeclarativeSettingsTypes::class, false)) {
 		final class DeclarativeSettingsTypes {
 			public const SECTION_TYPE_ADMIN = 'admin';
 			public const STORAGE_TYPE_INTERNAL = 'internal';
+			public const STORAGE_TYPE_EXTERNAL = 'external';
 			public const TEXT = 'text';
 			public const PASSWORD = 'password';
 			public const URL = 'url';

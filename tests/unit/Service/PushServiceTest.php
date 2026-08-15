@@ -176,10 +176,19 @@ final class PushServiceTest extends TestCase {
 		self::assertArrayNotHasKey('folderUid', $captured, 'General placement omits folderUid');
 	}
 
-	public function testBankedFolderUidWinsOverTheMapping(): void {
-		// If the file already banks a grafana_folderUid, the push honours it directly.
+	/**
+	 * INVERTED ON PURPOSE. This test used to assert the opposite — that a banked
+	 * `grafana_folderUid` short-circuited the resolution — and it was right to, while
+	 * the pull left every mirror flat in the mapping root. The pull mirrors Grafana's
+	 * folder tree now, which is the condition PushService's docblock named for dropping
+	 * it ("then, not before").
+	 *
+	 * Honouring the banked value today is the bug: it records where the dashboard was
+	 * PULLED to, so the moment a user files the file into a subfolder it names the old
+	 * folder, and the next push drags the dashboard straight back out.
+	 */
+	public function testTheFilesLocationBeatsTheBankedFolderUid(): void {
 		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha', 'banked-folder'));
-		// getById should not even be needed, but return the mapping to be safe.
 		$this->mappings->method('getById')->willReturn($this->mapping('gf-alpha'));
 
 		$captured = null;
@@ -190,7 +199,7 @@ final class PushServiceTest extends TestCase {
 
 		$this->service->push($this->file(1, '{"uid":"d1","title":"X"}'));
 
-		self::assertSame('banked-folder', $captured['folderUid'] ?? null);
+		self::assertSame('gf-alpha', $captured['folderUid'] ?? null, 'the stale banked folder must not win');
 	}
 
 	// ── failure never stamps (so the next save retries) ─────────────────────────
