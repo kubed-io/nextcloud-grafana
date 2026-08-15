@@ -21,8 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A dashboard copied next to itself is now called the same thing in all three places: `Fleet Health (1).grafana.json`, titled `Fleet Health (1)` in the file and in Grafana. It used to reach Grafana under the original's title, with the counter buried inside the file extension.
-- Two — or three, or more — dashboards in one Grafana folder may share a title. Their files take a numbered suffix so Nextcloud can hold them, and the dashboards keep the name you gave them. Repeated syncs no longer try to rename them back.
+- A copy is named once: the filename, the JSON title and the Grafana title all say `Fleet Health (1)`.
+- Dashboards in one Grafana folder may share a title; their files take a numbered suffix and keep it.
 - Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's uid still inside it. Nextcloud names that copy differently to us, and the app now reads its spelling too.
 - Moving a dashboard into a folder now creates that folder in Grafana, the same as creating one there does. It was the only one of the two gestures that did nothing.
 - The scheduled-sync and recycle-bin toggles can be turned on at last. They reverted to off on every save, silently.

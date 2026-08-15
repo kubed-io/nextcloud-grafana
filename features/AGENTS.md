@@ -604,7 +604,7 @@ Three dashboards, not two, because **two is the case that passes by accident**: 
 counter that only ever reaches `(1)` is indistinguishable from an app that appends a
 fixed string, and the second suffix is where an off-by-one would live.
 
-The scenario's last line is the one that found something. Landing three names is the
+**The word "still" in the last line is doing real work.** Landing three names is the
 easy half; KEEPING them is where `SyncService` was wrong. For an existing mirror it
 asked for `FilenameCodec::format($displayName, $uid, false, 0)` — collision index
 zero, unconditionally — so on every single tick both duplicates were told to go and
@@ -620,6 +620,13 @@ start swapping names underneath the user.
 counter, and count the file's OWN current name as free. That last clause is what
 lets a legitimate duplicate keep the suffix it has, and it also means a mirror whose
 twin was deleted gets its unsuffixed name back instead of wearing a counter forever.
+
+**The second sync that proves it does not get a line of its own.** It is a
+mechanism — how the claim is checked, not what the user ends up with — so it lives
+inside the `are still titled` step, which reads the folder, syncs once more, and
+checks that neither the titles nor the names moved. A scenario saying "and sync
+again" out loud would be narrating the app's plumbing; `still` already means the
+state held.
 
 ### A folder copied in Grafana is indistinguishable from a new one
 

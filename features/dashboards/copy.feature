@@ -103,10 +103,6 @@ Feature: Copying a dashboard
       | Demo     |
       | Pointers |
 
-    # THE COUNTER GOES NO FURTHER THAN THE FILENAME. Grafana let two dashboards share
-    # a title, Nextcloud cannot let two files share a name, and only Nextcloud's
-    # constraint is Nextcloud's to enforce — so the file counts and the dashboard is
-    # left saying what its owner named it.
   # notes: ../AGENTS.md#a-copy-made-in-grafana-is-named-by-grafana
 
   @grafana @in-grafana @gesture @ui
@@ -119,10 +115,5 @@ Feature: Copying a dashboard
       | Fleet Health (1).grafana.json |
       | Fleet Health (2).grafana.json |
     And all three dashboards are still titled "Fleet Health" in Grafana
-    And syncing again leaves every one of those names alone
 
-    # TWO IS THE CASE THAT PASSES BY ACCIDENT. A counter that only ever reaches (1) is
-    # indistinguishable from an app that appends a fixed string, and the second suffix
-    # is where an off-by-one lives. The last line is the one that matters most: the
-    # names have to survive the NEXT pull, not merely be right the moment they land.
   # notes: ../AGENTS.md#the-second-suffix-and-the-pull-that-used-to-fight-it

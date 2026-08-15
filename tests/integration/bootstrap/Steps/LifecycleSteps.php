@@ -1093,48 +1093,53 @@ trait LifecycleSteps {
 	 * name, so it numbers them — but that is Nextcloud's constraint, and pushing it back
 	 * into Grafana would rename dashboards nobody asked to rename. Grafana is allowed
 	 * its duplicates and keeps them.
+	 *
+	 * ## WHY "STILL" IS DOING REAL WORK IN THAT SENTENCE
+	 *
+	 * Landing the three names correctly is the easy half; KEEPING them is where the pull
+	 * was wrong. It asked for the unsuffixed name on every mirror on every tick, so both
+	 * duplicates were told, over and over, to go and take a name the first one was
+	 * sitting on. It only "worked" because the rename threw and the catch logged
+	 * `rename skipped (collision?)` — and the moment anything made that move succeed, the
+	 * mirrors would start swapping names underneath the user.
+	 *
+	 * So this settles the folder before believing it: read, sync once more, and check
+	 * that neither the titles nor the names moved. The sync is a MECHANISM and stays
+	 * here; a scenario that said "and sync again" out loud would be describing the
+	 * app's plumbing instead of what the user ends up with.
 	 */
 	public function allThreeDashboardsAreStillTitledInGrafana(string $title): void {
+		$this->assertAllTitled($title, 'as they landed');
+		$namesBefore = $this->namedFiles;
+
+		$this->theAdminPullsFromGrafana();
+
+		$namesAfter = $this->davListDashboardFiles($this->namedFolder);
+		sort($namesAfter);
+		if ($namesAfter !== $namesBefore) {
+			throw new \RuntimeException(
+				"the names did not survive another sync:\n  were: " . implode(', ', $namesBefore)
+				. "\n  now:  " . implode(', ', $namesAfter),
+			);
+		}
+		$this->assertAllTitled($title, 'after another sync');
+	}
+
+	/** Every file the scenario named claims a dashboard Grafana still calls $title. */
+	private function assertAllTitled(string $title, string $when): void {
 		$wrong = [];
 		foreach ($this->namedFiles as $name) {
-			$path = $this->namedFolder . '/' . $name;
-			$uid = (string)$this->davReadMetadata($path, self::META_UID);
+			$uid = (string)$this->davReadMetadata($this->namedFolder . '/' . $name, self::META_UID);
 			$record = $this->grafanaGetDashboard($uid);
-			$got = $record === null ? "<gone from Grafana>" : (string)($record['dashboard']['title'] ?? '');
+			$got = $record === null ? '<gone from Grafana>' : (string)($record['dashboard']['title'] ?? '');
 			if ($got !== $title) {
 				$wrong[] = "$name → '$got'";
 			}
 		}
 		if ($wrong !== []) {
 			throw new \RuntimeException(
-				"these dashboards are no longer titled '$title' in Grafana: " . implode('; ', $wrong)
+				"$when, these are no longer titled '$title' in Grafana: " . implode('; ', $wrong)
 				. ' — a Nextcloud filename counter reached Grafana, which is the one place it must not go',
-			);
-		}
-	}
-
-	/**
-	 * @Then syncing again leaves every one of those names alone
-	 *
-	 * THE ASSERTION THAT ACTUALLY CAUGHT SOMETHING. Landing the three names correctly is
-	 * the easy half; keeping them is where the pull went wrong. It asked for the
-	 * unsuffixed name on every mirror, every tick — so both duplicates were told, over
-	 * and over, to go and take a name the first one was sitting on. It only "worked"
-	 * because the rename threw and the catch logged `rename skipped (collision?)`.
-	 *
-	 * An exception is not a naming policy, and the moment anything made that move
-	 * succeed — a deleted incumbent, a reordered pull — the mirrors would start swapping
-	 * names underneath the user. One extra sync is all it takes to say so.
-	 */
-	public function syncingAgainLeavesThoseNamesAlone(): void {
-		$before = $this->namedFiles;
-		$this->theAdminPullsFromGrafana();
-		$after = $this->davListDashboardFiles($this->namedFolder);
-		sort($after);
-		if ($after !== $before) {
-			throw new \RuntimeException(
-				"a second sync renamed the mirrors:\n  before: " . implode(', ', $before)
-				. "\n  after:  " . implode(', ', $after),
 			);
 		}
 	}

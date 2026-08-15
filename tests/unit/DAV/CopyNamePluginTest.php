@@ -16,8 +16,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Sabre\DAV\Server;
 use Sabre\DAV\Tree;
-use Sabre\HTTP\Request;
-use Sabre\HTTP\Response;
+use Sabre\HTTP\RequestInterface;
+use Sabre\HTTP\ResponseInterface;
 
 /**
  * Unit tests for {@see CopyNamePlugin} — the header rewrite that decides what a copied
@@ -55,10 +55,40 @@ final class CopyNamePluginTest extends TestCase {
 		return $plugin;
 	}
 
+	/**
+	 * A request carrying one header and remembering what was written back to it — which
+	 * is the entire interface between this plugin and Sabre.
+	 */
+	private function request(?string $destination): RequestInterface {
+		return new class($destination) implements RequestInterface {
+			/** @var array<string,string> */
+			public array $headers = [];
+
+			public function __construct(?string $destination) {
+				if ($destination !== null) {
+					$this->headers['Destination'] = $destination;
+				}
+			}
+
+			public function getHeader(string $name): ?string {
+				return $this->headers[$name] ?? null;
+			}
+
+			public function setHeader(string $name, string $value): void {
+				$this->headers[$name] = $value;
+			}
+		};
+	}
+
+	private function response(): ResponseInterface {
+		return new class implements ResponseInterface {
+		};
+	}
+
+	/** Run the hook and report the `Destination` the request is left holding. */
 	private function copyTo(CopyNamePlugin $plugin, string $destination): string {
-		$request = new Request('COPY', self::BASE . '/Demo/Fleet%20Health.grafana.json');
-		$request->setHeader('Destination', $destination);
-		$plugin->beforeCopy($request, new Response());
+		$request = $this->request($destination);
+		$plugin->beforeCopy($request, $this->response());
 		return (string)$request->getHeader('Destination');
 	}
 
@@ -139,9 +169,9 @@ final class CopyNamePluginTest extends TestCase {
 
 	/** A COPY with no destination at all is Sabre's problem to reject, not ours. */
 	public function testAMissingDestinationIsNotOurProblem(): void {
-		$request = new Request('COPY', self::BASE . '/Demo/Fleet%20Health.grafana.json');
+		$request = $this->request(null);
 
-		self::assertTrue($this->plugin()->beforeCopy($request, new Response()));
+		self::assertTrue($this->plugin()->beforeCopy($request, $this->response()));
 		self::assertNull($request->getHeader('Destination'));
 	}
 }
