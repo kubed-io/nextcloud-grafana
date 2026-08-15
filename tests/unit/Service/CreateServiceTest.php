@@ -192,9 +192,10 @@ final class CreateServiceTest extends TestCase {
 	 * received a second dashboard titled identically to the first while the file said
 	 * `(1)` — one name, three places, two answers.
 	 *
-	 * The Nextcloud spelling is deliberate here: `Fleet Health.grafana (1).json` is what
-	 * a copy landing beside its source is really called on disk, counter before the last
-	 * extension, and the title has to be read back out of THAT.
+	 * The name is the one the FILES CLIENT picks — `getUniqueName()` puts the counter
+	 * immediately before the last extension — which since the single-segment cut is the
+	 * same name `FilenameCodec::format()` builds. The title has to be read back out of
+	 * THAT, counter included.
 	 */
 	public function testACopyIsTitledAfterTheNameNextcloudGaveTheFile(): void {
 		$captured = null;
@@ -204,7 +205,7 @@ final class CreateServiceTest extends TestCase {
 		});
 
 		$this->service->createForFile(
-			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health.grafana (1).json'),
+			$this->file(1, '{"title":"Fleet Health","uid":"original-uid"}', 'Fleet Health (1).grafana'),
 			$this->mapping(),
 			true,
 		);
