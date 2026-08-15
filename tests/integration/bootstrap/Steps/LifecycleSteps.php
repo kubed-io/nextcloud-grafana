@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Integration\Steps;
 
+use Behat\Gherkin\Node\TableNode;
 use PHPUnit\Framework\Assert;
 
 /**
@@ -798,5 +799,115 @@ trait LifecycleSteps {
 		if ($this->lastFolderUid === '') {
 			throw new \RuntimeException("'$folder' was never stamped with a Grafana folder uid — the arrange is broken");
 		}
+	}
+
+	/**
+	 * @Then the copy holds:
+	 *
+	 * The cursor form of `"<path>" holds:` for the file {@see iCopyTheFileInto()} just
+	 * made — a scenario cannot name that path without restating the collision rules the
+	 * app owns, which is the arithmetic-vs-behaviour trap the table exists to avoid.
+	 */
+	public function theCopyHolds(TableNode $table): void {
+		if ($this->copyTarget === '') {
+			throw new \RuntimeException('no copy was made — a When must arrange one');
+		}
+		$this->theMirrorHolds($this->copyTarget, $table);
+	}
+
+	/**
+	 * @Then the copy is a new dashboard in the :title Grafana folder
+	 *
+	 * TWO CLAIMS IN ONE SENTENCE, because separating them would let a scenario pass on
+	 * a copy that reused the original's dashboard: it has to be a DIFFERENT uid, and
+	 * that uid has to really exist in Grafana, in the folder the copy landed in.
+	 */
+	public function theCopyIsANewDashboardInTheGrafanaFolder(string $title): void {
+		$copyUid = (string)$this->davReadMetadata($this->copyTarget, self::META_UID);
+		if ($copyUid === '') {
+			throw new \RuntimeException('the copy carries no grafana_uid, so no dashboard was registered for it');
+		}
+		if ($copyUid === $this->lastUid) {
+			throw new \RuntimeException(
+				"the copy reused the original's dashboard ($copyUid) instead of minting one",
+			);
+		}
+		$this->createdDashboardUids[] = $copyUid;
+
+		$record = $this->grafanaGetDashboard($copyUid);
+		if ($record === null) {
+			throw new \RuntimeException("the copy claims dashboard '$copyUid', which does not exist in Grafana");
+		}
+		$want = $this->createdGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
+		$got = (string)($record['meta']['folderUid'] ?? '');
+		if ($got !== $want) {
+			throw new \RuntimeException("the copy's dashboard is in '$got', expected '$want'");
+		}
+	}
+
+	/**
+	 * @When someone copies its dashboard in Grafana
+	 *
+	 * Grafana's own "Save as copy": a NEW uid carrying the same spec, with " Copy"
+	 * appended to the title the way Grafana does it. Then a pull, because the mirror
+	 * arriving is the behaviour under test and the sync that carries it is not.
+	 */
+	public function someoneCopiesItsDashboardInGrafana(): void {
+		$record = $this->grafanaGetDashboard($this->lastUid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '{$this->lastUid}' does not exist in Grafana");
+		}
+		$spec = $record['dashboard'] ?? [];
+		$this->grafanaCopyUid = 'nc-copy-' . bin2hex(random_bytes(3));
+		$spec['uid'] = $this->grafanaCopyUid;
+		$spec['id'] = null;
+		$spec['title'] = ((string)($spec['title'] ?? 'Untitled')) . ' Copy';
+
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode([
+				'dashboard' => $spec,
+				'folderUid' => (string)($record['meta']['folderUid'] ?? ''),
+				'overwrite' => false,
+				'message' => 'integration copy-in-grafana',
+			], JSON_THROW_ON_ERROR),
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException('copying in Grafana failed: ' . (string)$res->getBody());
+		}
+		$this->createdDashboardUids[] = $this->grafanaCopyUid;
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
+	 * @Then the copy arrives as its own file in :folder
+	 *
+	 * ITS OWN FILE — found by the uid Grafana minted, not by name. A pull that wrote
+	 * the copy over the original would leave one file and pass a name-based check.
+	 */
+	public function theCopyArrivesAsItsOwnFileIn(string $folder): void {
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$path = $folder . '/' . $name;
+			if ($this->davReadMetadata($path, self::META_UID) === $this->grafanaCopyUid) {
+				$this->copyTarget = $path;
+				return;
+			}
+		}
+		throw new \RuntimeException(
+			"no file in '$folder' mirrors the copied dashboard '{$this->grafanaCopyUid}'",
+		);
+	}
+
+	/**
+	 * @Then that file holds:
+	 *
+	 * The file the previous Then located — kept distinct from `the copy holds:` so a
+	 * scenario cannot assert against a copy it never found.
+	 */
+	public function thatFileHolds(TableNode $table): void {
+		if ($this->copyTarget === '') {
+			throw new \RuntimeException('no copy has been located by a previous step');
+		}
+		$this->theMirrorHolds($this->copyTarget, $table);
 	}
 }

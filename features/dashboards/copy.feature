@@ -22,7 +22,7 @@ Feature: Copying a dashboard
     # ── RULE: the copy belongs to where it lands, never to where it came from ──
 
   # notes: ../AGENTS.md#the-copy-belongs-to-where-it-lands
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario Outline: Copy a dashboard into a mapped folder
     Given a dashboard file in "<source>"
     When I copy the file into "Demo"
@@ -79,7 +79,7 @@ Feature: Copying a dashboard
     # ── RULE: a dashboard copied in Grafana arrives as its own file ────────────
 
   # notes: ../AGENTS.md#a-dashboard-copied-in-grafana-arrives-as-its-own-file
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario Outline: Copy a dashboard in Grafana
     Given a dashboard file in "<folder>"
     When someone copies its dashboard in Grafana
