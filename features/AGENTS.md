@@ -398,6 +398,33 @@ A link is a pointer body, so a copy of one holds a pointer and no dashboard JSON
 It must not inherit the pointer's identity, and it cannot become a sync file by
 accident — there are no bytes to create a dashboard from.
 
+### Nextcloud names the copy, and it does not spell it the way we do
+
+A copy landing beside its source collides, and NEXTCLOUD picks the new name. It
+counts before the LAST extension, because to Nextcloud our file is a `.json`
+called `Board.grafana`:
+
+    Board.grafana (1).json          <- Nextcloud's spelling
+    Board (1).grafana.json          <- ours
+
+Only ours was ever read, so a copy made beside its source did not end in
+`.grafana.json` and every predicate in the app answered "not ours". Measured on
+the live instance: no metadata, no dashboard in Grafana, clicking it did nothing —
+and the file still carried the ORIGINAL's uid in its body, which is the most
+dangerous shape a stray copy can take, because it looks like a dashboard and
+points at somebody else's underneath.
+
+We do not get to choose that name. `FilenameCodec::canonicalise()` folds it into
+our spelling at the door, so every caller downstream is unchanged.
+
+### A copy's clocks are its own
+
+`copy.feature` pins `Created` and `Modified` in the post-state because a copy is a
+BIRTH: a new dashboard exists in Grafana that did not before. Inheriting the
+original's dates would date the copy before it existed, and the app already makes
+a point of a mirror wearing the dashboard's clock rather than the sync's — so the
+copy has to wear its OWN.
+
 ### The copy belongs to where it lands
 
 A copy is never the original's identity — that is the whole feature. What decides

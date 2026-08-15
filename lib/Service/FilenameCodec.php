@@ -50,9 +50,39 @@ final class FilenameCodec {
 	 * Pure string test — the single source of truth for "is this one of ours?".
 	 */
 	public static function isDashboardName(string $name): bool {
+		$name = self::canonicalise($name);
 		// Require a non-empty stem so this agrees with parse() (which rejects a bare
 		// ".grafana.json") — the two predicates must never disagree on "is this ours?".
 		return strlen($name) > strlen(self::EXT) && str_ends_with($name, self::EXT);
+	}
+
+	/**
+	 * Fold NEXTCLOUD'S collision spelling into ours.
+	 *
+	 * There are two conventions for "that name is taken", and only one was ever read.
+	 * Ours puts the counter on the logical name — `Board (1).grafana.json` — and
+	 * {@see parse()} strips it. Nextcloud puts it before the LAST extension, because
+	 * to Nextcloud the extension is `.json` and the basename is `Board.grafana`:
+	 *
+	 *     Board.grafana (1).json
+	 *
+	 * That does not end in `.grafana.json`, so every predicate in this app answered
+	 * "not ours" — measured on the live instance, where copying a dashboard into a
+	 * folder that already held it produced exactly that name, no metadata, no
+	 * dashboard in Grafana, and a file still carrying the ORIGINAL's uid in its body.
+	 * A copy the app cannot see is the most dangerous shape it can take: it looks like
+	 * a dashboard to the user and points at somebody else's dashboard underneath.
+	 *
+	 * We do not get to choose this name — Nextcloud picks it, on our files, whenever a
+	 * copy lands beside its source. So it has to be read. Rewriting it to our own
+	 * spelling here means every caller downstream keeps working unchanged, and
+	 * {@see parse()} then strips the counter exactly as it does for our own form.
+	 */
+	public static function canonicalise(string $name): string {
+		if (preg_match('/^(.+)\.grafana \((\d+)\)\.json$/', $name, $m) === 1) {
+			return $m[1] . ' (' . $m[2] . ')' . self::EXT;
+		}
+		return $name;
 	}
 
 	/**
@@ -92,6 +122,7 @@ final class FilenameCodec {
 		if ($slash !== false) {
 			$basename = substr($basename, $slash + 1);
 		}
+		$basename = self::canonicalise($basename);
 		if (!str_ends_with($basename, self::EXT)) {
 			return null;
 		}

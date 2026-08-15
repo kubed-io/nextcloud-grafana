@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's id still inside it. Nextcloud names that copy differently to us, and the app now reads its spelling too.
 - Moving a dashboard into a folder now creates that folder in Grafana, the same as creating one there does. It was the only one of the two gestures that did nothing.
 - The scheduled-sync and recycle-bin toggles can be turned on at last. They reverted to off on every save, silently.
 - Tags sync both ways: change them in Nextcloud, in the file, or in Grafana, and every surface agrees.

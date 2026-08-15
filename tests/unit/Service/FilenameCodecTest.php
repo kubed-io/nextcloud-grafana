@@ -156,4 +156,40 @@ final class FilenameCodecTest extends TestCase {
 	public function testIsDashboardFileFalseForNull(): void {
 		self::assertFalse(FilenameCodec::isDashboardFile(null));
 	}
+
+	// ── Nextcloud's own collision spelling ─────────────────────────────────────
+
+	/**
+	 * THE BUG THIS CLASS COULD NOT SEE. Copying a dashboard beside its source makes
+	 * NEXTCLOUD pick the name, and it counts before the last extension — so the file
+	 * did not end in `.grafana.json` and every predicate answered "not ours". Measured
+	 * live: no metadata, no dashboard in Grafana, and a body still carrying the
+	 * ORIGINAL's uid, which is the most dangerous shape a stray copy can take.
+	 */
+	public function testNextcloudsCollisionNameIsStillOneOfOurs(): void {
+		self::assertTrue(FilenameCodec::isDashboardName('ZZ-Smoke-Move.grafana (1).json'));
+	}
+
+	/** And it parses to the same logical name our own spelling would. */
+	public function testBothCollisionSpellingsParseTheSame(): void {
+		$theirs = FilenameCodec::parse('Board.grafana (2).json');
+		$ours = FilenameCodec::parse('Board (2).grafana.json');
+
+		self::assertNotNull($theirs);
+		self::assertSame($ours, $theirs);
+	}
+
+	/** A name that merely contains a bracketed number is not a collision name. */
+	public function testAParenthesisedNumberInTheNameIsNotACounter(): void {
+		$parsed = FilenameCodec::parse('Cluster (eu-west-1).grafana.json');
+
+		self::assertNotNull($parsed);
+		self::assertSame('Cluster (eu-west-1)', $parsed['name']);
+	}
+
+	/** Not ours at all — the counter is there but the type is not. */
+	public function testAnUnrelatedFileWithACounterIsNotOurs(): void {
+		self::assertFalse(FilenameCodec::isDashboardName('Budget.xlsx (1).json'));
+		self::assertFalse(FilenameCodec::isDashboardName('notes (1).json'));
+	}
 }
