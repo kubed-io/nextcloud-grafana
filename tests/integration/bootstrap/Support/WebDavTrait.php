@@ -218,11 +218,21 @@ trait WebDavTrait {
 	 * The mimetype a Files client is told, read off the same PROPFIND the Files app
 	 * uses.
 	 *
-	 * NOT `application/json`, which is what a `.grafana` file would otherwise
-	 * be sniffed as — the whole reason the app registers a mimetype and ships a
-	 * repair step for it. Asserted over DAV because that is where the Files app
-	 * reads it from; the mapping file on disk being right proves nothing about
-	 * what a client is told.
+	 * NOT whatever core would fall back to. `.grafana` means nothing to Nextcloud on its
+	 * own: `detectPath()` finds no mapping, returns `application/octet-stream`, and
+	 * `detect()` then sniffs the bytes with finfo — so an unregistered instance answers
+	 * some generic text/JSON type and the Files row gets a generic icon. Registering the
+	 * extension is the only thing that produces `application/grafana+json`, which is why
+	 * this is asserted at all.
+	 *
+	 * Asserted over DAV because that is where the Files app reads it from; the mapping
+	 * file on disk being right proves nothing about what a client is told.
+	 *
+	 * And the registration is now the ONLY thing standing between those two answers,
+	 * which is what makes this worth more than it used to be. Under the retired
+	 * `.grafana.json` the path answered `application/json` — a real mapping, just the
+	 * wrong one — so this could pass on a half-registered instance where a listener had
+	 * merely re-stamped the filecache after the write.
 	 */
 	private function davContentType(string $path): string {
 		$res = $this->davClient()->request('PROPFIND', $this->davEncode($path), [

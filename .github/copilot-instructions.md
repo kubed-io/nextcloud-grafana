@@ -88,8 +88,12 @@ ignore you.
 - The connection test hits an **authenticated** endpoint (`GET /api/folders`), never
   the unauthenticated `/api/health` — a green result must prove the token, not just
   reachability.
-- The managed-file extension is the compound **`.grafana`** (the v2 cut is
-  `.grafana.yaml`). Do not "simplify" it to plain `.json`.
+- The managed-file extension is a **single segment, `.grafana`**. Nextcloud reads only
+  the last extension (`detectPath()` uses `strrchr`, and the collision counter goes
+  immediately before it), so the retired compound `.grafana.json` cost a filecache
+  correction on every write and made a copy the app could not recognise. Do not
+  re-add a `.json` tail, and do not "simplify" to plain `.json` either. `format`
+  (json/yaml) says what is INSIDE the file; both are written as `.grafana`.
 - A mapping binds a **Grafana folder → a Nextcloud folder** (real folders, no tag
   scheme).
 - **No `External Storage` / `OCP\Files\Storage` backend** — wrong tool, already rejected.
@@ -107,9 +111,9 @@ ignore you.
 - **The frontend targets Nextcloud's supported (evergreen) browsers.** ES2019+ syntax —
   optional `catch {}`, `?.`, `??` — is fully supported. Don't raise old-JS-engine
   compatibility.
-- The compound `.grafana`/`.grafana.yaml` extension, the deliberate
-  `allow_local_address` egress, and testing against an authenticated endpoint are
-  all intentional and documented — don't suggest "fixing" them.
+- The single-segment `.grafana` extension, the deliberate `allow_local_address`
+  egress, and testing against an authenticated endpoint are all intentional and
+  documented — don't suggest "fixing" them.
 - Don't ask for an `appinfo/info.xml` `<version>` bump — the release flow owns versions.
 - The app-store publish step is intentionally deferred while the app is pre-1.0 —
   don't flag its absence.

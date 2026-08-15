@@ -71,9 +71,10 @@ use Psr\Log\LoggerInterface;
  * above. Grafana is correct within the request; the file catches up a tick later.
  *
  * **THE FILE ITSELF NEEDS NO CORRECTING, and that is the single-segment extension's
- * doing.** Nextcloud's counter goes before the LAST extension, so `.grafana` made a
- * copy `Board.grafana (1).json` — a name ending in `.json` that matched none of this app's
- * predicates, leaving a file that looked like a dashboard and pointed at somebody else's.
+ * doing.** Nextcloud's counter goes before the LAST extension, so the retired
+ * `.grafana.json` made a copy `Board.grafana (1).json` — a name ending in `.json` that
+ * matched none of this app's predicates, leaving a file that looked like a dashboard
+ * and pointed at somebody else's.
  * Reading it took a `canonicalise()` pass in front of every predicate, un-writing it took a
  * second deferred rename, and pulling that rename forward into the request (a Sabre plugin
  * rewriting the COPY `Destination`) broke the Files app outright: it stats the path IT
