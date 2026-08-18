@@ -96,6 +96,11 @@ trait WebDavTrait {
 		$this->assertStatus($this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body]), [201, 204], "PUT $path");
 	}
 
+	/** PUT a file, returning the raw status (so create-refused scenarios can inspect it). */
+	private function davPutStatus(string $path, string $body): int {
+		return $this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body])->getStatusCode();
+	}
+
 	/** GET a file's content. */
 	private function davGet(string $path): string {
 		$res = $this->davClient()->request('GET', $this->davEncode($path));
@@ -132,6 +137,14 @@ trait WebDavTrait {
 			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
 		]);
 		$this->assertStatus($res, [201, 204], "COPY $from → $to");
+	}
+
+	/** COPY a file, returning the raw status (so copy-refused scenarios can inspect it). */
+	private function davCopyStatus(string $from, string $to): int {
+		$dest = $this->ncBaseUrl . '/remote.php/dav/files/' . rawurlencode($this->ncUser) . '/' . $this->davEncode($to);
+		return $this->davClient()->request('COPY', $this->davEncode($from), [
+			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
+		])->getStatusCode();
 	}
 
 	/** DELETE a file (asserting success → trash). */

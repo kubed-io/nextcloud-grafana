@@ -173,6 +173,17 @@ final class FeatureContext implements Context {
 	private array $trashedMetadata = [];
 	private int $lastMoveStatus = 0;
 
+	/** Raw status of the last deliberately-refused COPY / DELETE, for the guard scenarios. */
+	private int $lastCopyStatus = 0;
+	private int $lastDeleteStatus = 0;
+
+	/** Where a refused copy WOULD have landed, so the refusal can prove nothing did. */
+	private string $attemptedCopyPath = '';
+
+	/** Same, for a refused create. */
+	private int $lastCreateStatus = 0;
+	private string $attemptedCreatePath = '';
+
 	public function __construct() {
 		$this->occ = getenv('OCC') ?: 'php occ';
 		$this->ncBaseUrl = rtrim(getenv('NC_BASE_URL') ?: 'http://localhost:8080', '/');

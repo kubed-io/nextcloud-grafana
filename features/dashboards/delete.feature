@@ -44,7 +44,7 @@ Feature: Trashing a dashboard file
     # ── RULE: a link is read-only, so it is not deleted from this side ─────────
 
   # notes: ../AGENTS.md#a-link-cannot-be-deleted-from-nextcloud
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Trash a link
     Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When I try to move it to the trash

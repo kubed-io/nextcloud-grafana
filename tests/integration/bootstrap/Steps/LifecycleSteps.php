@@ -233,6 +233,39 @@ trait LifecycleSteps {
 		}
 	}
 
+	/**
+	 * The same gesture, asked of a folder that must refuse it.
+	 *
+	 * @When I try to create a new dashboard in :folder via the Files "New" menu
+	 */
+	public function iTryToCreateANewDashboardIn(string $folder): void {
+		$this->currentFolder = $folder;
+		$this->attemptedCreatePath = $folder . '/' . self::NEW_DASHBOARD_NAME . '.grafana';
+		$this->lastCreateStatus = $this->davPutStatus(
+			$this->attemptedCreatePath,
+			$this->dashboardBody(self::NEW_DASHBOARD_NAME),
+		);
+	}
+
+	/**
+	 * @Then the creation is refused with a message
+	 *
+	 * Both halves, because a guard that answers 403 after the bytes have landed is
+	 * the failure this rule exists to prevent: a `.grafana` sitting in a link folder
+	 * looking managed, and never being.
+	 */
+	public function theCreationIsRefused(): void {
+		Assert::assertNotContains(
+			$this->lastCreateStatus,
+			[201, 204],
+			"the file was created (HTTP {$this->lastCreateStatus}) but should have been refused",
+		);
+		Assert::assertFalse(
+			$this->davExists($this->attemptedCreatePath),
+			"a file arrived at {$this->attemptedCreatePath} despite the refusal",
+		);
+	}
+
 	/** @When I create a new :ext file in that folder via the Files "New" menu */
 	public function iCreateANewFileViaTheNewMenu(string $ext): void {
 		// The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
@@ -758,6 +791,89 @@ trait LifecycleSteps {
 	public function aMatchingDashboardIsCreatedInFolder(string $name): void {
 		$this->aMatchingDashboardIsCreatedInGrafana();
 		$this->theDashboardIsCreatedInTheFolder($name);
+	}
+
+	// ── the guard gestures: asked for, and refused ────────────────────────────
+	//
+	// ONE SHAPE FOR ALL THREE. A guard's scenario is "I asked, and the app said no
+	// and the world did not move" — so each `try to` step keeps the RAW status
+	// instead of asserting success, and the matching `Then` proves it was not a
+	// success code. Reading the message body is deliberately not asserted: the
+	// Sabre guards answer 403 with `<s:message>` and the typed listeners answer 403
+	// bare, and a scenario that demanded the richer of the two would be testing
+	// which route the gesture happened to take rather than whether it was refused.
+
+	/** @When I try to copy the file into :folder */
+	public function iTryToCopyTheFileInto(string $folder): void {
+		$this->davMkdir($folder);
+		$dest = $folder . '/' . basename($this->currentFilePath);
+		$this->lastCopyStatus = $this->davCopyStatus($this->currentFilePath, $dest);
+		$this->attemptedCopyPath = $dest;
+	}
+
+	/** @Then the copy is refused with a message */
+	public function theCopyIsRefused(): void {
+		Assert::assertNotContains(
+			$this->lastCopyStatus,
+			[201, 204],
+			"the copy succeeded (HTTP {$this->lastCopyStatus}) but should have been refused",
+		);
+	}
+
+	/**
+	 * @Then no file is added to :folder
+	 *
+	 * The other half of the refusal, and the one that would catch a guard that
+	 * answers 403 AFTER the bytes have landed.
+	 */
+	public function noFileIsAddedTo(string $folder): void {
+		Assert::assertFalse(
+			$this->davExists($this->attemptedCopyPath),
+			"a file arrived at {$this->attemptedCopyPath} despite the refusal",
+		);
+	}
+
+	/** @When I try to move it to the trash */
+	public function iTryToMoveItToTheTrash(): void {
+		$this->lastDeleteStatus = $this->davDeleteStatus($this->currentFilePath);
+	}
+
+	/** @Then the trash is refused with a message */
+	public function theTrashIsRefused(): void {
+		Assert::assertNotContains(
+			$this->lastDeleteStatus,
+			[200, 204],
+			"the delete succeeded (HTTP {$this->lastDeleteStatus}) but should have been refused",
+		);
+	}
+
+	/**
+	 * A rename IS a MOVE over WebDAV — same verb, same status, different intent.
+	 *
+	 * @When I try to rename the file to :filename
+	 */
+	public function iTryToRenameTheFileTo(string $filename): void {
+		$dest = dirname($this->currentFilePath) . '/' . $filename;
+		$this->lastMoveStatus = $this->davMoveStatus($this->currentFilePath, $dest);
+	}
+
+	/**
+	 * A stem of nothing but spaces. Nextcloud refuses a fully EMPTY filename itself,
+	 * so the case the app has to answer for is the one core lets through.
+	 *
+	 * @When I try to rename the file to a name that is only whitespace
+	 */
+	public function iTryToRenameTheFileToWhitespace(): void {
+		$this->iTryToRenameTheFileTo(' .grafana');
+	}
+
+	/** @Then the rename is refused with a message */
+	public function theRenameIsRefused(): void {
+		Assert::assertNotContains(
+			$this->lastMoveStatus,
+			[201, 204],
+			"the rename succeeded (HTTP {$this->lastMoveStatus}) but should have been refused",
+		);
 	}
 
 	/** @Then the move is refused with a message */
