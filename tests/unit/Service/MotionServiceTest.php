@@ -184,7 +184,14 @@ final class MotionServiceTest extends TestCase {
 		$this->service->onMove($this->file(self::DST_PATH), self::SRC_PATH);
 	}
 
-	public function testALinkMoveIntoADifferentMappingOnlyRehomesThePointer(): void {
+	/**
+	 * DEFENSIVE ONLY, since {@see \OCA\GrafanaSync\Listener\MoveGuardListener} now refuses
+	 * this move before it happens — a pointer's membership is Grafana's to decide, so a
+	 * re-stamp here would disagree with Grafana until the next pull undid it. Kept, and
+	 * kept asserting that Grafana is never called, because a service reached anyway should
+	 * still do the least surprising thing. Same shape as the link move-out below.
+	 */
+	public function testALinkMoveIntoADifferentMappingIsNotReachedButNeverCallsGrafana(): void {
 		$from = $this->mapping('m-src', 'gf-src', 'src', Mapping::MODE_LINK);
 		$to = $this->mapping('m-dst', 'gf-dst', 'dst', Mapping::MODE_LINK);
 		$this->metadata->method('read')->willReturn($this->managed('dash-link', Mapping::MODE_LINK));

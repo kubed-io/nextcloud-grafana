@@ -133,39 +133,26 @@ Feature: Moving a dashboard file
 
     # A pointer restored from the trash would point at nothing this mapping mirrors.
 
-    # ── RULE: a link belongs to Grafana — it may re-home, but never leave ──────
+    # ── RULE: a link is not movable, and a link mapping is not a destination ──
 
-  # notes: ../AGENTS.md#moving-a-link-from-one-mapped-folder-to-another-only-re-homes-the-pointer
+  # notes: ../AGENTS.md#a-link-is-not-movable-and-a-link-mapping-is-not-a-destination
   @user @in-nextcloud @gesture @ui
-  Scenario: Move a link to another link mapping
-    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
-    When I move the file into "Mirrors"
-    Then Grafana is not contacted
-    And the file holds:
-      | grafana_uid     | the uid it had before the move |
-      | grafana_mapping | the mapping's id               |
-      | grafana_mode    | "link"                         |
-
-  # notes: ../AGENTS.md#a-link-cannot-be-deleted-from-nextcloud
-  @user @in-nextcloud @gesture @ui
-  Scenario: Move a link out of its mapping
-    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
-    When I try to move the file into "Scratch"
-    Then the move is refused with a message
-    And the file stays in "Pointers"
-
-  # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario Outline: Move a dashboard between sync and link folders
+  Scenario Outline: Moving a link, or into a link mapping, is refused
     Given a dashboard file named "Fleet Health.grafana" in "<source>"
     When I try to move the file into "<destination>"
     Then the move is refused with a message
     And the file stays in "<source>"
+    And Grafana is not contacted
 
-    Examples: a mode is a property of the folder, and a move may not change one
+    Examples: a link is read-only in Nextcloud, and there is nowhere it may go
       | source   | destination |
-      | Demo     | Pointers    |
+      | Pointers | Scratch     |
       | Pointers | Demo        |
+      | Pointers | Mirrors     |
+
+    Examples: and a link mapping is filled from Grafana, whatever is arriving
+      | source | destination |
+      | Demo   | Pointers    |
 
     # ── RULE: a move that cannot finish leaves the file as it was ──────────────
 

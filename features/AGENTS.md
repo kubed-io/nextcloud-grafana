@@ -1920,11 +1920,34 @@ which its own comment calls "the second of exactly two ways a Grafana folder is
 born from Nextcloud, which is why it lives here and not with the other move
 gestures."
 
-### Moving a link from one mapped folder to another only re-homes the pointer
+### A link is not movable, and a link mapping is not a destination
 
-Unit-tested (testALinkMoveIntoADifferentMappingOnlyRehomesThePointer) and never
-written down. A link owns no dashboard, so a mapped→mapped move re-stamps which
-mapping the pointer belongs to and stops there — Grafana is not called at all.
+THE SAME RULE COPY STATES, AND THE SAME SHAPE — one Outline, two Examples blocks,
+because the two halves are independent. The first is the SOURCE rule and it is
+TOTAL: there is nowhere a link may go. The second is the DESTINATION rule, which
+only needs a source the first has not already refused.
+
+RETIRES `Moving a link from one mapped folder to another only re-homes the pointer`,
+which was wrong and had a unit test holding it in place. A pointer's membership is
+decided by which GRAFANA folder its dashboard sits in, not by where the file sits in
+Nextcloud — so re-stamping `grafana_mapping` on a link moved from one link mapping to
+another is fiction. Follow it through the next pull: `indexByUid` walks the
+destination mapping and finds the re-homed file (its stamp now says it belongs
+there), its uid is not among that Grafana folder's `seenUids`, so `pruneStale`
+deletes it — and the source mapping's pull then sees a dashboard with no mirror and
+writes the file back where it started. The move is undone, silently, one sync later.
+
+That is the exact failure the rename rule already refuses by name: a gesture that
+survives until the next pull and is then quietly reversed is worse than a refusal,
+because the user is neither told no nor allowed to keep it.
+
+WITHIN one mapping a link still moves freely — rename, subfolder, anywhere under the
+same mapping — because nothing about its membership changes. The guard keys on the
+mapping ID, not on the folder.
+
+MotionService keeps its re-home branch as a defensive path, the way it keeps the
+link move-out strip: the guard refuses first, and a service that is reached anyway
+should still do the least surprising thing.
 
 ### A failed Grafana delete on move-out never strips the file's identity
 

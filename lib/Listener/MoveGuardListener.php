@@ -89,22 +89,46 @@ final class MoveGuardListener implements IEventListener {
 			return; // not under any mapping (e.g. already unmapped) — nothing to enforce
 		}
 		$tgtMapping = $this->mappings->resolveForPath($event->getTarget()->getPath());
-		if ($tgtMapping !== null) {
-			// same mapping (rename/subfolder) or a different mapping (a real folder move) —
-			// both allowed; MotionService re-parents on the post-move event.
+
+		// The file's own stamp wins over the mapping's mode: a file can be mid-re-mode,
+		// and what it IS decides what may be done to it.
+		$managed = $this->metadata->read($source->getId());
+		$mode = ($managed !== null && $managed->mode !== '') ? $managed->mode : $srcMapping->mode;
+
+		// WITHIN its own mapping, anything goes — a rename, a subfolder, anywhere under
+		// the same mapping. Nothing about the file's membership changes, so there is
+		// nothing here to protect. Keyed on the mapping ID rather than the folder,
+		// because a subfolder resolves to the same mapping and must stay allowed.
+		if ($tgtMapping !== null && $tgtMapping->id === $srcMapping->id) {
 			return;
 		}
 
-		// Leaving its mapping for an unmapped location. Sync is allowed (delete + strip);
-		// link is refused (a pointer with no local JSON — moving it out orphans it).
-		$managed = $this->metadata->read($source->getId());
-		$mode = ($managed !== null && $managed->mode !== '') ? $managed->mode : $srcMapping->mode;
+		// A LINK IS NOT MOVABLE, AND THERE IS NOWHERE IT MAY GO. It is a read-only
+		// projection of a dashboard that lives in Grafana, and its membership is decided
+		// by which GRAFANA folder that dashboard sits in — never by where the file sits
+		// here. So moving it to another link mapping does not re-home it, it just
+		// disagrees with Grafana until the next pull prunes it from the destination and
+		// writes it back at the source. Refusing is the only answer that is not a silent
+		// undo one sync later.
 		if ($mode === Mapping::MODE_LINK) {
 			throw new AbortedEventException(
 				'A linked Grafana dashboard can’t be moved out of its mapped folder ("'
 				. $srcMapping->ncFolder . '") — it’s only a pointer. Move it within that folder instead.',
 			);
 		}
+
+		// AND A LINK MAPPING IS NOT A DESTINATION. Its folder is filled from the Grafana
+		// folder it mirrors and from nowhere else, so a file moved in by hand is at best
+		// ignored and at worst pruned by the next pull.
+		if ($tgtMapping !== null && $tgtMapping->mode === Mapping::MODE_LINK) {
+			throw new AbortedEventException(
+				'“' . $tgtMapping->ncFolder . '” mirrors a Grafana folder in link mode, so its dashboards '
+				. 'are Grafana’s to place — files can’t be moved into it. Move the dashboard in Grafana instead.',
+			);
+		}
+
+		// Sync leaving the mapped set is allowed; MotionService deletes it in Grafana
+		// (or parks it in the recycle bin) and unmaps the file afterwards.
 		// sync → allow; MotionService deletes it in Grafana and unmaps the file afterwards.
 	}
 
