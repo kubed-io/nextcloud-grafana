@@ -35,14 +35,17 @@
 }
 
 /* grafana-folder | mode      (row 1)
- * nc-folder      | format    (row 2)
- * tf                        (row 3)
- * actions                    (row 4, spans the two left columns)
- * groups spans all four rows in the third (wider) column. */
+ * nc-folder      | tf        (row 2)
+ * actions                    (row 3, spans the two left columns)
+ * groups spans all three rows in the third (wider) column.
+ *
+ * Team Folder moved up into the slot Format used to hold: with the format
+ * option gone there are four fields, and leaving a hole in column 2 while a
+ * lone checkbox sat on its own row read as a rendering fault. */
 .grafana-sync-mappings__grid {
 	display: grid;
 	grid-template-columns: minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(340px, 2.2fr);
-	grid-template-rows: auto auto auto auto;
+	grid-template-rows: auto auto auto;
 	gap: 10px 18px;
 	align-items: start;
 }
@@ -50,9 +53,8 @@
 .gf-folder     { grid-area: 1 / 1; }
 .gf-nc         { grid-area: 2 / 1; }
 .gf-mode       { grid-area: 1 / 2; }
-.gf-format     { grid-area: 2 / 2; }
-.gf-tf         { grid-area: 3 / 1; align-self: center; }
-.gf-groups { grid-area: 1 / 3 / 5 / 4; align-self: stretch; } /* span all rows in col 3 */
+.gf-tf         { grid-area: 2 / 2; align-self: center; }
+.gf-groups { grid-area: 1 / 3 / 4 / 4; align-self: stretch; } /* span all rows in col 3 */
 
 /* ⓘ info button next to each field label — a pure-CSS hover/focus tooltip
  * (no JS, no @nextcloud/vue). Reliable where the native `title=` was useless. */
@@ -170,9 +172,9 @@
 }
 
 /* Save / Sync / Delete — a horizontal group of colored, icon-only buttons.
- * Row 4 of the grid, spanning the two left columns, pinned to the bottom. */
+ * Row 3 of the grid, spanning the two left columns, pinned to the bottom. */
 .grafana-sync-mappings__actions {
-	grid-area: 4 / 1 / 5 / 3;
+	grid-area: 3 / 1 / 4 / 3;
 	align-self: end;
 	display: flex;
 	gap: 8px;
@@ -241,7 +243,7 @@
 		grid-template-columns: 1fr;
 		grid-template-rows: auto;
 	}
-	.gf-folder, .gf-nc, .gf-mode, .gf-format, .gf-tf, .gf-groups,
+	.gf-folder, .gf-nc, .gf-mode, .gf-tf, .gf-groups,
 	.grafana-sync-mappings__actions {
 		grid-area: auto;
 	}

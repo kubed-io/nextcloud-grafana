@@ -21,7 +21,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Change which Nextcloud groups a mapping's folder is shared with — the ONE
  * editable thing about a mapping, and previously reachable only from the admin
  * panel. Everything else is fixed at create: the Grafana folder, the Nextcloud folder, the
- * storage backend, the mode and the format.
+ * storage backend and the mode.
  *
  * IT WRITES TO THE FOLDER, NOT TO THE MAPPING. Groups are a property of the
  * folder and Nextcloud already stores them — as groupfolders assignments or as

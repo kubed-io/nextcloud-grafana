@@ -55,15 +55,13 @@ use JsonSerializable;
  * (a read-only pointer that opens the dashboard in Grafana — the natural fit for
  * operator/GitOps-provisioned dashboards owned elsewhere).
  *
- * Format model (saga Ch1 "Difference #2"): Grafana serves a dashboard two ways —
- * the classic dashboard JSON (`v1beta1`/`v1`) and the newer k8s-style App Platform
- * schema that reads cleanly as YAML (`v2`). The cut is a property of the *mapping*,
- * not the app, so one folder can be classic JSON and another the YAML cut. `format`
- * is `json` (the safe default — every existing dashboard already is this) or `yaml`
- * (opt-in). The sync chapter reads it to pick the serializer + file extension
- * (JSON vs the k8s-style YAML schema — both written as `.grafana`, since the
- * extension names the app and the format names what is inside); it is inert config
- * until then.
+ * THERE IS NO FORMAT OPTION. A mapping used to carry `format` — `json` or `yaml` —
+ * for a k8s-style App Platform (`v2`) serialization that was never built: nothing
+ * in the app ever read the value, no serializer existed, and the only thing the
+ * suite could prove was that the string survived a config round trip. It was a
+ * question put to the admin whose answer changed nothing. Dashboards are JSON.
+ * If the v2 cut is picked up later it will be decided by what Grafana serves, not
+ * by a per-folder switch set before anyone knows the answer.
  *
  * Storage model (mirrors the n8n master's Mapping, so the two reduce cleanly into a
  * shared base later): `useTeamFolder` picks the backend — an ownerless Team Folder
@@ -99,25 +97,18 @@ use JsonSerializable;
  *  - `grafanaFolderUid` MUST be non-empty.
  *  - `ncFolder` MUST be non-empty (after normalising away surrounding slashes).
  *  - `mode` MUST be `sync` or `link`.
- *  - `format` MUST be `json` or `yaml`.
  *  - `ncFolderId` is 0 or a real Nextcloud file id; never negative.
  */
 final class Mapping implements JsonSerializable {
 	public const MODE_SYNC = 'sync';
 	public const MODE_LINK = 'link';
 
-	public const FORMAT_JSON = 'json';
-	public const FORMAT_YAML = 'yaml';
-
-	/**
-	 */
 	public function __construct(
 		public readonly string $id,
 		public readonly string $grafanaFolderUid,
 		public readonly string $grafanaFolderTitle,
 		public readonly string $ncFolder,
 		public readonly string $mode,
-		public readonly string $format,
 		public readonly bool $useTeamFolder,
 		public readonly int $ncFolderId = 0,
 	) {
@@ -137,7 +128,6 @@ final class Mapping implements JsonSerializable {
 			$this->grafanaFolderTitle,
 			$this->ncFolder,
 			$this->mode,
-			$this->format,
 			$this->useTeamFolder,
 			max(0, $id),
 		);
@@ -151,7 +141,6 @@ final class Mapping implements JsonSerializable {
 			$this->grafanaFolderTitle,
 			self::normaliseFolder($ncFolder),
 			$this->mode,
-			$this->format,
 			$this->useTeamFolder,
 			$this->ncFolderId,
 		);
@@ -190,20 +179,13 @@ final class Mapping implements JsonSerializable {
 		// thinking about mode cannot cost anything. Individual files are promoted
 		// afterwards.
 		//
-		// Note the inconsistency this removes: `format` two lines below has always
-		// defaulted, and for the same reason. Mode was the odd one out.
+		// `useTeamFolder` below has always defaulted, and for the same reason. Mode
+		// was the odd one out.
 		//
 		// Matches the Penpot sibling, which has always defaulted this way. The gap
 		// here and in nextcloud-n8n was found by writing the admin-mapping spec's
 		// defaults table and having no value to put in the `mode` row.
 		$mode = (string)($data['mode'] ?? self::MODE_LINK);
-
-		// Format defaults to the classic JSON cut when absent — everything already
-		// is this, so an omitted field is never a surprise.
-		$format = (string)($data['format'] ?? self::FORMAT_JSON);
-		if ($format === '') {
-			$format = self::FORMAT_JSON;
-		}
 
 		// Storage backend. DEFAULT FALSE — an omitted flag means an admin-owned
 		// folder, because that is the only backend guaranteed to exist.
@@ -239,11 +221,10 @@ final class Mapping implements JsonSerializable {
 		if (!in_array($mode, [self::MODE_SYNC, self::MODE_LINK], true)) {
 			throw new \InvalidArgumentException('mode must be "sync" or "link"');
 		}
-		if (!in_array($format, [self::FORMAT_JSON, self::FORMAT_YAML], true)) {
-			throw new \InvalidArgumentException('format must be "json" or "yaml"');
-		}
-
-		return new self($id, $uid, $title, $ncFolder, $mode, $format, $useTeamFolder, $ncFolderId);
+		// A stored `format` from before the option was removed is IGNORED rather than
+		// rejected: fromArray drops every key it does not know, and refusing one would
+		// make an existing mapping row unreadable for a value nothing consumes.
+		return new self($id, $uid, $title, $ncFolder, $mode, $useTeamFolder, $ncFolderId);
 	}
 
 	/** @return array<string,mixed> */
@@ -255,7 +236,6 @@ final class Mapping implements JsonSerializable {
 			'nc_folder' => $this->ncFolder,
 			'nc_folder_id' => $this->ncFolderId,
 			'mode' => $this->mode,
-			'format' => $this->format,
 			'use_team_folder' => $this->useTeamFolder,
 		];
 	}

@@ -25,7 +25,7 @@ use OCP\Util;
  * add/update/delete through MappingController.
  *
  * The card layout mirrors the n8n master (Grafana folder + NC folder | mode +
- * format + team-folder | groups | actions). The **groups** list and the
+ * team-folder | groups | actions). The **groups** list and the
  * **team-folder-available** flag feed the col-3 picker + the Team Folder checkbox.
  * Team Folder persists with the mapping; GROUPS DO NOT — they are read from the
  * mapped folder as this renders (see Mapping's class docblock). (The model carries

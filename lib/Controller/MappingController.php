@@ -26,7 +26,7 @@ use OCP\IRequest;
  *
  * Routes (see appinfo/routes.php):
  *   GET    /apps/grafana_sync/mappings           → list
- *   POST   /apps/grafana_sync/mappings           → add   { grafana_folder_uid, grafana_folder_title, nc_folder, mode, format }
+ *   POST   /apps/grafana_sync/mappings           → add   { grafana_folder_uid, grafana_folder_title, nc_folder, mode }
  *   PUT    /apps/grafana_sync/mappings/{id}      → update
  *   DELETE /apps/grafana_sync/mappings/{id}      → delete (drops the binding only —
  *                                                  no files or Grafana dashboards are

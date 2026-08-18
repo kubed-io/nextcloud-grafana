@@ -7,7 +7,7 @@
  * match the n8n master so the two apps look the same:
  *
  *   col 1: Grafana folder (row 1) · Nextcloud folder (row 2)
- *   col 2: Mode (row 1) · Format (row 2) · Team Folder (row 3)
+ *   col 2: Mode (row 1) · Team Folder (row 2)
  *   col 3: Groups picker (spans every row)
  *   row 4: Save / Sync / Delete
  *
@@ -16,7 +16,7 @@
  * GET /apps/grafana_sync/folders.
  *
  * NB (parity, provisioning deferred): the Grafana mapping model now persists the
- * full row — folder → folder + mode + format + groups + team-folder — so every
+ * full row — folder → folder + mode + groups + team-folder — so every
  * field round-trips. **Team Folder, Groups, and the per-folder Sync button are still
  * inert on the Grafana side**: the value is saved, but the sync engine that
  * provisions the folder / runs the per-folder sync lands in a later release.
@@ -37,7 +37,6 @@ $desc = [
 	'folder' => $l->t('The Grafana folder to mirror. Its dashboards become the files in the Nextcloud folder. Bound by uid, so a rename in Grafana never breaks the mapping.'),
 	'nc' => $l->t('Name of the Nextcloud folder the dashboards appear in.'),
 	'mode' => $l->t('Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
-	'format' => $l->t('JSON: the classic Grafana dashboard model. YAML: the newer k8s-style dashboard schema. Both are written as .grafana files.'),
 	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 	'groups' => $l->t('Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 ];
@@ -84,7 +83,6 @@ $info = static function (string $tip) use ($icon): string {
 			$uid = (string)($m['grafana_folder_uid'] ?? '');
 			$title = (string)($m['grafana_folder_title'] ?? '');
 			$modeSel = (($m['mode'] ?? '') === 'link') ? 'link' : 'sync';
-			$formatSel = (($m['format'] ?? '') === 'yaml') ? 'yaml' : 'json';
 			$label = $title !== '' ? $title . ' (' . $uid . ')' : $uid;
 			$selectedGroups = $m['nc_groups'] ?? [];
 			$useTf = filter_var($m['use_team_folder'] ?? $tfAvailable, FILTER_VALIDATE_BOOLEAN);
@@ -113,14 +111,6 @@ $info = static function (string $tip) use ($icon): string {
 								 mapping was written, so changing it invalidates what is on
 								 disk. Re-create the mapping instead. */ ?>
 						<span class="grafana-sync-fixed js-mode" data-value="<?php p($modeSel); ?>"><?php p($modeSel === 'sync' ? $l->t('Sync') : $l->t('Link')); ?></span>
-					</div>
-					<div class="grafana-sync-field gf-format">
-						<label><?php p($l->t('Format'));
-			print_unescaped($info($desc['format'])); ?></label>
-						<?php /* Immutable, for the same reason as mode: it chose the
-								 serializer and the file extension of everything already
-								 mirrored. */ ?>
-						<span class="grafana-sync-fixed js-format" data-value="<?php p($formatSel); ?>"><?php p($formatSel === 'yaml' ? $l->t('YAML') : $l->t('JSON')); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-tf">
 						<?php /* Immutable: switching backend migrates the folder and every

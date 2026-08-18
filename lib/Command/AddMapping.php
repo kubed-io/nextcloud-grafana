@@ -27,7 +27,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * The JSON is the mapping shape, e.g.:
  *   {"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe",
- *    "nc_folder":"observe","mode":"sync","format":"json",
+ *    "nc_folder":"observe","mode":"sync",
  *    "nc_groups":["admin"],"use_team_folder":true}
  */
 final class AddMapping extends Command {

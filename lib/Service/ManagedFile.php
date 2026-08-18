@@ -24,9 +24,12 @@ namespace OCA\GrafanaSync\Service;
  * stored `reference` wire value is already translated back to `link` by
  * {@see DashboardMetadata::read()} before it reaches here.
  *
- * `folderUid` and `apiVersion` are banked keys (saga Ch2 Fork A): registered and
- * readable now, but only *written* by later courses (the subfolder mirror and the
- * v2/YAML cut respectively). They read back as `''` until then.
+ * `folderUid` is a banked key (saga Ch2 Fork A): registered and readable now, but
+ * only *written* by the subfolder mirror course. It reads back as `''` until then.
+ *
+ * There used to be an `apiVersion` beside it, banked for a v2/YAML serialization
+ * course. That course is not happening — dashboards are JSON — so the key is gone
+ * rather than left registered against a decision nobody is going to make.
  */
 final class ManagedFile {
 	public function __construct(
@@ -36,7 +39,6 @@ final class ManagedFile {
 		public readonly string $syncedHash,
 		public readonly string $mappingId,
 		public readonly string $folderUid,
-		public readonly string $apiVersion,
 	) {
 	}
 

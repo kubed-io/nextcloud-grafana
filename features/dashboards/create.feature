@@ -8,13 +8,21 @@ Feature: Creating a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
+    And a mapping with the following values:
+      | grafana folder | Shared      |
+      | nc folder      | Shared      |
+      | mode           | sync        |
+      | storage        | team folder |
+      | groups         | admin       |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -22,14 +30,21 @@ Feature: Creating a dashboard
     # ── RULE: where the file lands decides whether it is a dashboard ───────────
 
   @user @in-nextcloud @gesture @ui
-  Scenario: Create a new dashboard in a mapped folder
-    When I create "CPU Load.grafana" in "Demo" via the Files "New" menu
+  Scenario Outline: Create a new dashboard in a mapped folder
+    When I create "CPU Load.grafana" in "<nc folder>" via the Files "New" menu
     Then a matching dashboard is created in Grafana
-    And the dashboard is named "CPU Load", in the "Demo" Grafana folder
-    And "Demo/CPU Load.grafana" holds:
-      | grafana_uid     | the dashboard's uid |
-      | grafana_mapping | the mapping's id    |
-      | grafana_mode    | "sync"              |
+    And the dashboard is named "CPU Load", in the "<grafana folder>" Grafana folder
+    And "<nc folder>/CPU Load.grafana" holds:
+      | grafana_uid        | the dashboard's uid |
+      | grafana_mapping    | the mapping's id    |
+      | grafana_mode       | "sync"              |
+      | grafana_version    | set                 |
+      | grafana_syncedHash | set                 |
+
+    Examples: the folder is the whole input — the Background said what each one is
+      | nc folder | grafana folder |
+      | Demo      | Demo           |
+      | Shared    | Shared         |
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Create an unmapped dashboard
@@ -69,12 +84,15 @@ Feature: Creating a dashboard
   Scenario Outline: Create a dashboard in Grafana
     When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
     Then "<nc folder>/CPU Load.grafana" holds:
-      | grafana_uid     | the dashboard's uid |
-      | grafana_mapping | the mapping's id    |
-      | grafana_mode    | "<mode>"            |
+      | grafana_uid        | the dashboard's uid |
+      | grafana_mapping    | the mapping's id    |
+      | grafana_mode       | "<mode>"            |
+      | grafana_version    | set                 |
+      | grafana_syncedHash | set                 |
     And the file holds "<contents>"
 
     Examples: one gesture, and the mapping decides what the file is
       | grafana folder | nc folder | mode | contents                   |
       | demo           | Demo      | sync | the dashboard's full JSON  |
       | links          | Pointers  | link | a pointer to the dashboard |
+      | Shared         | Shared    | sync | the dashboard's full JSON  |

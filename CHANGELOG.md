@@ -46,11 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The per-mapping Format option (JSON vs YAML) is gone.** Nothing ever read it: there was no YAML serializer, and the only thing it changed was a string in the mapping's config. Dashboards are JSON. A `format` already saved on a mapping is ignored, so nothing needs doing.
 - **The "when you save a dashboard file" timing option is gone.** Nextcloud → Grafana writeback now runs in the background where that works and during the save where it does not, decided per instance. Nothing to configure, and no setting to get wrong.
 - **The admin "Purge Nextcloud files" button is gone.** It was disabled and had no implementation behind it, so it read as a feature that was merely switched off. Purge means one thing now: emptying the Nextcloud trash, which finishes the delete the trash gesture started.
 
 ### Changed
 
+- The recycle-bin toggle and its folder name moved out of Sync Settings into their own **Recycle Bin** section. They decide whether deleting is reversible, which is not a sync setting and is too consequential to read as a footnote to the pull schedule.
 - **BREAKING:** dashboard files are named `.grafana`, not `.grafana.json`. Nextcloud only ever reads one file extension, so the compound one meant every save wrote the wrong file type for the app to correct afterwards, and a copy made beside its source was named something the app could not recognise at all. Outside Nextcloud a `.grafana` file needs telling once which editor opens it.
 
 - Supports Nextcloud **34**, and every major in the supported range is now actually executed by the integration suite — after two patch releases of Nextcloud turned out to disagree about behaviour the app relies on.

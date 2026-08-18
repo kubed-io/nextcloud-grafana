@@ -30,8 +30,6 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  *   grafana_folderUid   — source Grafana folder uid (nested-folder breadcrumb).
  *                         BANKED: registered + readable now, written by the subfolder
  *                         course.
- *   grafana_apiVersion  — serialization schema (classic JSON vs v2 YAML). BANKED:
- *                         registered now, written by the v2/YAML course (Course 6).
  *
  * Why this is the cleanest layer (same as the master):
  *  - **Server-side reads** (listeners, occ commands) call ::read() directly — zero
@@ -66,7 +64,6 @@ final class DashboardMetadata {
 	/** Source Grafana folder uid (nested-folder breadcrumb). Banked — written by the subfolder course. */
 	public const KEY_FOLDER_UID = 'grafana_folderUid';
 	/** Serialization schema (classic JSON vs v2 YAML). Banked — written by Course 6. */
-	public const KEY_API_VERSION = 'grafana_apiVersion';
 
 	/** File-mode values not covered by {@see Mapping} (which only configures sync/link). */
 	public const MODE_UNMAPPED = 'unmapped';
@@ -86,7 +83,6 @@ final class DashboardMetadata {
 		self::KEY_SYNCED_HASH,
 		self::KEY_MAPPING,
 		self::KEY_FOLDER_UID,
-		self::KEY_API_VERSION,
 	];
 
 	/** Keys stored as searchable indexes (the rest are plain, read-only props). */
@@ -131,7 +127,6 @@ final class DashboardMetadata {
 	 *     grafana_syncedHash?:string,
 	 *     grafana_mapping?:string,
 	 *     grafana_folderUid?:string,
-	 *     grafana_apiVersion?:string
 	 * } $values
 	 */
 	public function write(int $fileId, array $values): void {
@@ -160,8 +155,8 @@ final class DashboardMetadata {
 	 * body — hashing Grafana's echoed-back object (which carries the bumped `version`)
 	 * would make a push→pull look like a change and loop (saga Ch1 risk #6).
 	 *
-	 * The banked keys (`grafana_folderUid`, `grafana_apiVersion`) are intentionally NOT
-	 * stamped here — their courses write them via {@see write()}.
+	 * The banked key `grafana_folderUid` is intentionally NOT stamped here — the
+	 * subfolder course writes it via {@see write()}.
 	 */
 	public function stampSynced(int $fileId, string $uid, string $mode, string $version, string $spec, string $mappingId): void {
 		$this->write($fileId, [
@@ -196,7 +191,6 @@ final class DashboardMetadata {
 			$value(self::KEY_SYNCED_HASH),
 			$value(self::KEY_MAPPING),
 			$value(self::KEY_FOLDER_UID),
-			$value(self::KEY_API_VERSION),
 		);
 	}
 

@@ -24,8 +24,8 @@ use PHPUnit\Framework\TestCase;
  */
 #[CoversClass(ManagedFile::class)]
 final class ManagedFileTest extends TestCase {
-	private function make(string $uid, string $mode = '', string $folderUid = '', string $apiVersion = ''): ManagedFile {
-		return new ManagedFile($uid, $mode, 'v3', 'abc123', 'map-alpha', $folderUid, $apiVersion);
+	private function make(string $uid, string $mode = '', string $folderUid = ''): ManagedFile {
+		return new ManagedFile($uid, $mode, 'v3', 'abc123', 'map-alpha', $folderUid);
 	}
 
 	public function testEmptyUidIsNotManaged(): void {
@@ -34,14 +34,13 @@ final class ManagedFileTest extends TestCase {
 	}
 
 	public function testNonEmptyUidIsManaged(): void {
-		$mf = $this->make('kel4vkt', Mapping::MODE_SYNC, 'nc-alpha', 'v1beta1');
+		$mf = $this->make('kel4vkt', Mapping::MODE_SYNC, 'nc-alpha');
 		self::assertTrue($mf->isManaged());
 		self::assertSame('kel4vkt', $mf->uid);
 		self::assertSame('v3', $mf->version);
 		self::assertSame('abc123', $mf->syncedHash);
 		self::assertSame('map-alpha', $mf->mappingId);
 		self::assertSame('nc-alpha', $mf->folderUid);
-		self::assertSame('v1beta1', $mf->apiVersion);
 	}
 
 	#[DataProvider('modeCases')]
