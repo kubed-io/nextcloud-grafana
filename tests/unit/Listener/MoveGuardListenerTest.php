@@ -15,6 +15,7 @@ use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Exceptions\AbortedEventException;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\File;
@@ -190,6 +191,35 @@ final class MoveGuardListenerTest extends TestCase {
 		self::assertTrue(true, 'not refused');
 	}
 
+	/**
+	 * RENAMING A LINK NEVER RENAMES THE DASHBOARD, so the rename is refused rather than
+	 * left to be silently undone by the next pull. Within the SAME mapping — the case
+	 * the mapping-ID early return used to wave through.
+	 */
+	public function testALinkRenameIsRefused(): void {
+		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
+
+		$this->expectException(AbortedEventException::class);
+		$this->expectExceptionMessageMatches('/name comes from Grafana/u');
+		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Pointers/Renamed.grafana', Mapping::MODE_LINK);
+	}
+
+	public function testARenameToAWhitespaceStemIsRefused(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+
+		$this->expectException(AbortedEventException::class);
+		$this->expectExceptionMessageMatches('/needs a name/');
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Demo/ .grafana', Mapping::MODE_SYNC);
+	}
+
+	public function testASyncRenameWithinItsFolderIsAllowed(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Demo/Renamed.grafana', Mapping::MODE_SYNC);
+
+		self::assertTrue(true, 'not refused');
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	private function guard(string $from, string $to, int $id): void {
@@ -222,7 +252,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($folders, $mappings, $this->createStub(DashboardMetadata::class));
+		$listener = new MoveGuardListener($folders, $mappings, $this->createStub(DashboardMetadata::class), new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 
@@ -260,7 +290,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($this->createStub(FolderMetadata::class), $mappings, $metadata);
+		$listener = new MoveGuardListener($this->createStub(FolderMetadata::class), $mappings, $metadata, new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 }

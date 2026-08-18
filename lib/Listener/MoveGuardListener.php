@@ -14,6 +14,7 @@ use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Exceptions\AbortedEventException;
@@ -67,12 +68,19 @@ final class MoveGuardListener implements IEventListener {
 		private FolderMetadata $folders,
 		private MappingService $mappings,
 		private DashboardMetadata $metadata,
+		private SyncGuard $guard,
 	) {
 	}
 
 	#[\Override]
 	public function handle(Event $event): void {
 		if (!$event instanceof BeforeNodeRenamedEvent) {
+			return;
+		}
+		// THE PULL RENAMES MIRRORS ITSELF — links included — via Node::move() on the
+		// file's own folder, which fires this very event. A guard the app's own
+		// reconcile can trip is not a safety, it is a broken pull.
+		if ($this->guard->active()) {
 			return;
 		}
 		$source = $event->getSource();
@@ -94,6 +102,33 @@ final class MoveGuardListener implements IEventListener {
 		// and what it IS decides what may be done to it.
 		$managed = $this->metadata->read($source->getId());
 		$mode = ($managed !== null && $managed->mode !== '') ? $managed->mode : $srcMapping->mode;
+
+		// A NAME CHANGE IS ITS OWN GESTURE, judged before the where-is-it-going rules:
+		// the two refusals below hold wherever the file is headed, its own folder included.
+		$renamed = $source->getName() !== $event->getTarget()->getName();
+
+		// A DASHBOARD ALWAYS HAS A NAME. Nextcloud refuses a fully empty filename on its
+		// own, but ` .grafana` has a whitespace stem — and NameSyncListener would bail on
+		// it silently, leaving the file, the JSON and Grafana in a three-way disagreement
+		// nothing reports. Refused here, where the user can see why.
+		$targetName = $event->getTarget()->getName();
+		if ($renamed && FilenameCodec::isDashboardName($targetName) && FilenameCodec::displayName($targetName) === '') {
+			throw new AbortedEventException(
+				'A dashboard file needs a name — the title in Grafana comes from it. '
+				. 'Give the file a non-blank name.',
+			);
+		}
+
+		// RENAMING A LINK NEVER RENAMES THE DASHBOARD — a pointer has no writeback
+		// channel, so the new name would survive exactly until the next pull re-derived
+		// the filename from Grafana and quietly undid it. A rename undone later is worse
+		// than one refused now: the user is neither told no nor allowed to keep it.
+		if ($renamed && $mode === Mapping::MODE_LINK) {
+			throw new AbortedEventException(
+				'“' . $source->getName() . '” is a linked Grafana dashboard, so its name comes from Grafana '
+				. 'and can’t be changed here. Rename the dashboard in Grafana instead.',
+			);
+		}
 
 		// WITHIN its own mapping, anything goes — a rename, a subfolder, anywhere under
 		// the same mapping. Nothing about the file's membership changes, so there is

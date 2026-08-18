@@ -68,6 +68,24 @@ final class DeleteToGrafanaListener implements IEventListener {
 			return; // an untracked / already-stripped file — no Grafana side, let NC delete it
 		}
 
+		// A LINK IS NOT NEXTCLOUD'S TO DELETE. The file is a read-only projection of a
+		// dashboard that lives in Grafana and is perfectly fine; removing the pointer only
+		// makes the mapped folder disagree with the Grafana folder it mirrors, and the next
+		// pull writes the file straight back — so the delete was never durable, it was just
+		// silent. Refusing says so at the moment the user asks.
+		//
+		// The same rule the DAV guard already enforces for content and existence
+		// ({@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin}); this is the backstop for
+		// every route that never touches Sabre. The way OUT of a link folder is to delete
+		// the dashboard in Grafana, or to remove the mapping — both decisions about the
+		// mapping rather than about one file.
+		if ($managed->isLink()) {
+			throw new AbortedEventException(
+				'This file is a link to a dashboard in Grafana, so it cannot be deleted from Nextcloud. '
+				. 'Delete the dashboard in Grafana instead.',
+			);
+		}
+
 		$isHardStep = $this->isInTrashbin($node->getPath());
 		try {
 			if ($isHardStep) {

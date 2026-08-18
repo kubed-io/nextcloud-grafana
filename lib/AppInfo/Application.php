@@ -13,6 +13,7 @@ use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Files_Trashbin\Events\NodeRestoredEvent;
 use OCA\GrafanaSync\BackgroundJob\ScheduledPullJob;
+use OCA\GrafanaSync\Listener\CopyGuardListener;
 use OCA\GrafanaSync\Listener\CopyListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
@@ -27,6 +28,7 @@ use OCA\GrafanaSync\Listener\NodeWrittenListener;
 use OCA\GrafanaSync\Listener\RegisterDavPluginsListener;
 use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
 use OCA\GrafanaSync\Listener\TagChangeListener;
+use OCA\GrafanaSync\Listener\TeamFolderPurgeListener;
 use OCA\GrafanaSync\Listener\TrashPurgeHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
@@ -39,6 +41,8 @@ use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\BackgroundJob\IJobList;
+use OCP\Files\Cache\CacheEntryRemovedEvent;
+use OCP\Files\Events\Node\BeforeNodeCopiedEvent;
 use OCP\Files\Events\Node\BeforeNodeDeletedEvent;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
@@ -120,6 +124,9 @@ final class Application extends App implements IBootstrap {
 		// CreateInGrafanaListener (also on NodeRenamedEvent) owns the unmanaged move-in;
 		// the two never overlap — it bails on managed files, MotionService on unmanaged.
 		$context->registerEventListener(BeforeNodeRenamedEvent::class, MoveGuardListener::class);
+		// The copy guard — a link is not copyable, and a link mapping is not a destination.
+		// The Sabre plugin answers WebDAV with a 403 + message; this holds everywhere else.
+		$context->registerEventListener(BeforeNodeCopiedEvent::class, CopyGuardListener::class);
 		$context->registerEventListener(NodeRenamedEvent::class, MotionListener::class);
 		// The folder half of a rename — every other listener filters to files on its
 		// first line, so a folder gesture had nothing watching it.
@@ -138,6 +145,25 @@ final class Application extends App implements IBootstrap {
 		// NOT a typed event — it's the legacy \OCP\Trashbin preDelete hook, wired in boot().
 		$context->registerEventListener(BeforeNodeDeletedEvent::class, DeleteToGrafanaListener::class);
 		$context->registerEventListener(NodeRestoredEvent::class, RestoreFromTrashListener::class);
+
+		// …and the purge leg for every OTHER trash. The legacy `preDelete` hook wired in
+		// boot() is emitted by `Files_Trashbin\Trashbin` and nowhere else, so emptying a
+		// TEAM FOLDER's trash — the trash a `team folder` mapping actually uses — reached
+		// Grafana never, and a parked dashboard stayed in the recycle-bin folder forever.
+		// groupfolders' backend emits nothing; the one thing it cannot skip is dropping
+		// the file's cache entry. See {@see TeamFolderPurgeListener} for why that event,
+		// and for the three filters keeping it to actual purges.
+		//
+		// PRIORITY 100, AND IT IS LOAD-BEARING ON NEXTCLOUD 32/33. Core registers its
+		// own `FilesMetadata\Listener\MetadataDelete` on THIS SAME EVENT there
+		// (`FilesMetadataManager::304`), at the default priority and during boot — so
+		// it runs first and deletes the `grafana_uid` stamp before this listener can
+		// read it; the purge then finds an unmanaged file and correctly does nothing.
+		// Nextcloud 34 moved core's cleanup to the PLURAL `CacheEntriesRemovedEvent`,
+		// which is why the n8n sibling only ever saw this fail on 32/33 and why it
+		// survived a CI matrix that runs one version per PR. Higher priority = earlier
+		// (see IRegistrationContext::registerEventListener), so we read the stamp first.
+		$context->registerEventListener(CacheEntryRemovedEvent::class, TeamFolderPurgeListener::class, 100);
 
 		// The FOLDER half of the same gesture. It is a separate listener rather than a
 		// branch in the one above because Nextcloud does NOT decompose a folder delete:
