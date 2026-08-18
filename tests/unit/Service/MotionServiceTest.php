@@ -70,7 +70,7 @@ final class MotionServiceTest extends TestCase {
 	}
 
 	private function managed(string $uid, string $mode = Mapping::MODE_SYNC, string $version = '3'): ManagedFile {
-		return new ManagedFile($uid, $mode, $version, 'hash', 'm-src', $folderUid = '', $apiVersion = '');
+		return new ManagedFile($uid, $mode, $version, 'hash', 'm-src', '');
 	}
 
 	private function file(string $path, string $content = '{"title":"Dash","uid":"stale","panels":[]}'): File {

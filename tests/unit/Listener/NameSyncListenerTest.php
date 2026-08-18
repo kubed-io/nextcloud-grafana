@@ -58,7 +58,7 @@ final class NameSyncListenerTest extends TestCase {
 	}
 
 	private function managed(string $mode = Mapping::MODE_SYNC, string $uid = 'dash-1'): ManagedFile {
-		return new ManagedFile($uid, $mode, '1', 'h', 'm-1', '', '');
+		return new ManagedFile($uid, $mode, '1', 'h', 'm-1', '');
 	}
 
 	private function json(string $title): string {

@@ -47,7 +47,7 @@ final class TagSyncServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->grafana = $this->createMock(GrafanaClient::class);
 		$this->ncTags = $this->createMock(NextcloudTags::class);
-		$this->managed = new ManagedFile('d1', Mapping::MODE_SYNC, '', '', 'm-demo', '', '');
+		$this->managed = new ManagedFile('d1', Mapping::MODE_SYNC, '', '', 'm-demo', '');
 	}
 
 	// ── dashboards ─────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ final class TagSyncServiceTest extends TestCase {
 
 	/** A link's tags are Grafana's; the next pull puts its set back. */
 	public function testALinkIsNotPushed(): void {
-		$this->managed = new ManagedFile('d1', Mapping::MODE_LINK, '', '', 'm-demo', '', '');
+		$this->managed = new ManagedFile('d1', Mapping::MODE_LINK, '', '', 'm-demo', '');
 
 		self::assertFalse($this->service()->pushDashboard($this->file('{"tags":[]}'), TagSet::of(['mine'])));
 		self::assertNull($this->written);

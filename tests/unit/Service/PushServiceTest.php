@@ -79,7 +79,7 @@ final class PushServiceTest extends TestCase {
 	}
 
 	private function managed(string $uid = 'd1', string $mode = Mapping::MODE_SYNC, string $mappingId = 'map-alpha', string $folderUid = ''): ManagedFile {
-		return new ManagedFile($uid, $mode, '', '', $mappingId, $folderUid, '');
+		return new ManagedFile($uid, $mode, '', '', $mappingId, $folderUid);
 	}
 
 	/** A sync `.grafana` File with the given id + JSON content. */

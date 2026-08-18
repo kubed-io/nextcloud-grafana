@@ -63,7 +63,6 @@ final class DashboardMetadata {
 	public const KEY_MAPPING = 'grafana_mapping';
 	/** Source Grafana folder uid (nested-folder breadcrumb). Banked — written by the subfolder course. */
 	public const KEY_FOLDER_UID = 'grafana_folderUid';
-	/** Serialization schema (classic JSON vs v2 YAML). Banked — written by Course 6. */
 
 	/** File-mode values not covered by {@see Mapping} (which only configures sync/link). */
 	public const MODE_UNMAPPED = 'unmapped';
@@ -184,14 +183,7 @@ final class DashboardMetadata {
 		$value = fn (string $key): string => $metadata->hasKey($key)
 			? $this->fromWire($key, $metadata->getString($key))
 			: '';
-		return new ManagedFile(
-			$value(self::KEY_UID),
-			$value(self::KEY_MODE),
-			$value(self::KEY_VERSION),
-			$value(self::KEY_SYNCED_HASH),
-			$value(self::KEY_MAPPING),
-			$value(self::KEY_FOLDER_UID),
-		);
+		return new ManagedFile($value(self::KEY_UID), $value(self::KEY_MODE), $value(self::KEY_VERSION), $value(self::KEY_SYNCED_HASH), $value(self::KEY_MAPPING), $value(self::KEY_FOLDER_UID));
 	}
 
 	/**

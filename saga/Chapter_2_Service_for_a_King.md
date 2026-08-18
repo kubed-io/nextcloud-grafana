@@ -2196,6 +2196,61 @@ The Gherkin came out the way the argument said it would: **not one new scenario,
 one new Examples column.** Every feature file changed by exactly the length of a
 string.
 
+## Round 8 — JSON only, a bin of its own, and an error state we have never cooked
+
+Three things went, and one thing got named for later.
+
+**THE FORMAT OPTION WAS A QUESTION WITH NO ANSWER BEHIND IT.** A mapping carried
+`format` — `json` or `yaml` — for the App Platform v2 cut. Nothing in `lib/` ever
+branched on it: no serializer, no extension switch, no reader. It was stored,
+validated, round-tripped, and consumed by nobody, and the only thing the suite could
+prove was that the string survived a config round trip. Four admin-visible fields
+became three, and the mode × storage matrix in the Gherkin got *stronger* for it —
+with `format` gone, the four Examples rows stopped being near-duplicates and started
+being a real 2×2. The banked `grafana_apiVersion` metadata key went with it: it
+existed only to record which cut a file was written in, so with the cut abandoned it
+was a registered key held against a decision nobody is going to make.
+
+**THE RECYCLE BIN EARNED ITS OWN CARD.** `bin_enabled` + `bin_folder` had been
+sitting at the bottom of Sync Settings, under a heading about how often Nextcloud
+pulls. They are not sync settings. Sync is two sides staying equal on a schedule;
+this is whether **deleting is reversible** — and it is the one setting in this app
+that can cost a dashboard. The EXTERNAL-storage workaround the sibling found is
+merely annoying for a schedule and destructive here: if that checkbox silently
+springs back, every subsequent trash becomes a permanent Grafana delete, and Grafana
+has no undo. A setting with that consequence does not belong as a footnote to the
+thing above it.
+
+**AND THE PART WORTH REMEMBERING: WE FOUND AN ERROR STATE WE HAVE NEVER DEALT WITH.**
+
+`A body that cannot become a dashboard leaves a plain file` stays `@unbuilt`, and
+deliberately so. It is not waiting on a step definition; it is waiting on a decision
+neither this app nor the n8n sibling has ever made. Every failure mode either app
+handles today is a failure of the REMOTE side — Grafana unreachable, a token
+rejected, a workflow gone — and the answer is always the same shape: log it, notify,
+leave Nextcloud alone, let the next sync settle it. This is different. Here the
+USER'S OWN FILE is the thing that is wrong, the gesture is one they just made, and
+there is no next sync that fixes it because the file will be just as invalid then.
+
+That opens questions we have not answered anywhere:
+
+  - Is the file left on disk (they typed it; it is theirs) or removed (it is not a
+    dashboard and never will be)? Leaving it means a `.grafana` file in a mapped
+    folder that is not managed — a state the mode vocabulary has no word for.
+  - Is the failure a notification, or does it abort the save the way a link-mode
+    write does? A save that silently half-worked is the thing this app is most
+    careful to avoid, and a toast about a file the user is still editing may be the
+    wrong surface entirely.
+  - Grafana rejecting a body and our own parser rejecting it are the same outcome to
+    a user and completely different events to us. Do they read the same?
+
+**Named here rather than answered, on purpose.** The scenario stays `@unbuilt` with
+its two Examples rows intact, because the rows are right even though the behaviour
+is undecided — and the n8n sibling has the identical hole, so whatever is settled
+here should be settled there in the same conversation. It is the first error state
+that is about the user rather than about the network, and it deserves its own
+service rather than being improvised at the end of this one.
+
 ---
 
 Sources / cross-links:

@@ -132,7 +132,7 @@ final class SyncServiceTest extends TestCase {
 
 	/** A {@see ManagedFile} read() stub value (the typed metadata DashboardMetadata::read returns). */
 	private function managed(string $uid = '', string $mode = '', string $mappingId = ''): ManagedFile {
-		return new ManagedFile($uid, $mode, '', '', $mappingId, '', '');
+		return new ManagedFile($uid, $mode, '', '', $mappingId, '');
 	}
 
 	/** One `/api/search` row in the shape {@see GrafanaClient::listDashboards} returns. */

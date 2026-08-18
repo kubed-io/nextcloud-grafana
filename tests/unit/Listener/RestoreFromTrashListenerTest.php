@@ -129,7 +129,7 @@ final class RestoreFromTrashListenerTest extends TestCase {
 		$metadata->method('read')->willReturnCallback(
 			fn (int $id): ?ManagedFile => array_key_exists($id, $this->managed)
 				? $this->managed[$id]
-				: new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', '', ''),
+				: new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', ''),
 		);
 
 		$mapping = Mapping::fromArray([

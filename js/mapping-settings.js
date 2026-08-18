@@ -11,9 +11,10 @@
  *   row 4: Save / Sync / Delete
  *
  * The Grafana folder list is fetched once on init and merged into every card's
- * <select>. Team Folder, Groups and mode all persist with the mapping;
- * the per-folder Sync button and the folder-provisioning those groups/team-folder
- * describe arrive with the (not-yet-built) sync engine.
+ * <select>. Mode and Team Folder persist WITH the mapping; GROUPS DO NOT — they
+ * are applied to the mapped Nextcloud folder and read back from it, never stored
+ * in the mapping row (see MappingService::add and Mapping::toArray, which has no
+ * groups key).
  */
 (function () {
 	'use strict';

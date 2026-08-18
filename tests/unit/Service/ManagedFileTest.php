@@ -29,7 +29,7 @@ final class ManagedFileTest extends TestCase {
 	}
 
 	public function testEmptyUidIsNotManaged(): void {
-		$mf = new ManagedFile('', '', '', '', '', '', '');
+		$mf = new ManagedFile('', '', '', '', '', '');
 		self::assertFalse($mf->isManaged());
 	}
 

@@ -157,8 +157,6 @@ final class MappingTest extends TestCase {
 		self::assertNotSame($m->id, $other->id);
 	}
 
-
-
 	public function testTitleDefaultsToEmptyWhenAbsent(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
@@ -235,7 +233,6 @@ final class MappingTest extends TestCase {
 		$this->expectException(\InvalidArgumentException::class);
 		Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'nc_folder' => 'observe', 'mode' => 'backup']);
 	}
-
 
 	public function testNormalisesTheNcFolder(): void {
 		$cases = [

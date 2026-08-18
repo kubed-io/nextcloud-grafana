@@ -63,7 +63,7 @@ final class DeleteServiceTest extends TestCase {
 	}
 
 	private function managed(string $uid, string $mode = Mapping::MODE_SYNC, string $mappingId = 'm-1'): ManagedFile {
-		return new ManagedFile($uid, $mode, '3', 'hash', $mappingId, '', '');
+		return new ManagedFile($uid, $mode, '3', 'hash', $mappingId, '');
 	}
 
 	private function mapping(string $folderUid = 'gf-alpha', string $mode = Mapping::MODE_SYNC): Mapping {
@@ -157,7 +157,7 @@ final class DeleteServiceTest extends TestCase {
 		// The id was stripped at trash-time, so the restored file is unmanaged → create-on-land
 		// re-creates it (a fresh dashboard, new uid) because it landed back in a sync mapping.
 		$mapping = $this->mapping();
-		$unmanaged = new ManagedFile('', '', '', '', '', '', '');
+		$unmanaged = new ManagedFile('', '', '', '', '', '');
 		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping);
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->grafana->expects(self::never())->method('deleteDashboard');
@@ -166,7 +166,7 @@ final class DeleteServiceTest extends TestCase {
 	}
 
 	public function testRestoreBinOffDoesNotRecreateOutsideASyncMapping(): void {
-		$unmanaged = new ManagedFile('', '', '', '', '', '', '');
+		$unmanaged = new ManagedFile('', '', '', '', '', '');
 		$this->create->expects(self::never())->method('createForFile');
 
 		// restored into a link mapping → nothing to author

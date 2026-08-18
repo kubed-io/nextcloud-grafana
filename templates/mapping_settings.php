@@ -15,11 +15,11 @@
  * add/save/sync/delete and fills the Grafana folder picker from
  * GET /apps/grafana_sync/folders.
  *
- * NB (parity, provisioning deferred): the Grafana mapping model now persists the
- * full row — folder → folder + mode + groups + team-folder — so every
- * field round-trips. **Team Folder, Groups, and the per-folder Sync button are still
- * inert on the Grafana side**: the value is saved, but the sync engine that
- * provisions the folder / runs the per-folder sync lands in a later release.
+ * WHAT PERSISTS WHERE: the mapping row carries folder → folder + mode +
+ * team-folder. GROUPS DO NOT travel with it — they are applied to the mapped
+ * Nextcloud folder and read back from it, so the card shows the folder's current
+ * sharing rather than a stored value (see MappingService::add, and Mapping::toArray,
+ * which has no groups key).
  *
  * @var array{mappings: list<array<string,mixed>>, groups: list<string>, team_folders_available: bool} $_
  * @var \OCP\IL10N $l
