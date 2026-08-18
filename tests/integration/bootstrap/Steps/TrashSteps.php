@@ -345,6 +345,29 @@ trait TrashSteps {
 		$this->iMoveItToTheTrash();
 	}
 
+	/**
+	 * A file that LEFT ITS MAPPING with the recycle bin on — so its dashboard is parked
+	 * and the file is an ordinary unmanaged-looking document that still carries its uid.
+	 *
+	 * ARRANGED BY PERFORMING THE GESTURE, not by hand-stamping the end state. The
+	 * parking IS the behaviour under test in its sibling scenario, so faking it here
+	 * would let a broken move-out produce a passing restore — the arrange would be
+	 * asserting the very thing it was supposed to assume.
+	 *
+	 * Distinct from `a trashed sync dashboard file whose dashboard is parked in …`,
+	 * which puts the file in the TRASH. Both end with a parked dashboard; only one of
+	 * them leaves a file the user can still see and drag.
+	 *
+	 * @Given a dashboard file named :filename in :folder whose dashboard is parked in :bin
+	 */
+	public function aDashboardFileParkedAfterLeaving(string $filename, string $folder, string $bin): void {
+		$this->setBinFolder($bin);
+		$this->setBinEnabled(true);
+		$this->aDashboardFileNamedIn($filename, $this->mappingForMode('sync'));
+		$this->iMoveTheFileIntoNamedFolder($folder);
+		$this->theDashboardIsInTheGrafanaFolder($bin);
+	}
+
 	/** @Given a trashed sync dashboard file whose dashboard is parked in :folder */
 	public function aTrashedFileParkedIn(string $folder): void {
 		$this->setBinFolder($folder);
@@ -621,6 +644,28 @@ trait TrashSteps {
 		$name = basename($this->currentFilePath);
 		if (in_array($name, $this->davListDashboardFiles($folder), true)) {
 			throw new \RuntimeException("'$name' is still in '$folder' — its dashboard is gone from Grafana");
+		}
+	}
+
+	/**
+	 * @Then the file is gone from :folder, leaving no trash entry
+	 *
+	 * BOTH HALVES, BECAUSE THE FOLDER ALONE CANNOT TELL THEM APART. A link removed
+	 * properly and a link removed INTO THE TRASH both leave the mapped folder empty —
+	 * only the trash distinguishes them, and only one of them is right. A trashed
+	 * pointer offers the user a restore that reconnects to nothing, which is why
+	 * SyncService::removeMirror suppresses the trash for a link and not for a sync file.
+	 *
+	 * "Since this scenario started", not "no entry with this name": the trash is shared
+	 * across the suite and every scenario names its dashboard the same thing.
+	 */
+	public function theFileIsGoneFromLeavingNoTrashEntry(string $folder): void {
+		$this->theFileIsGoneFrom($folder);
+		$entry = $this->trashbinPathFor($this->currentFilePath, $this->scenarioStartedAt);
+		if ($entry !== null) {
+			throw new \RuntimeException(
+				"the pointer landed in the Nextcloud trash as '$entry' — a restore from there reconnects to nothing",
+			);
 		}
 	}
 

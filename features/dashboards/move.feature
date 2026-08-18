@@ -71,7 +71,7 @@ Feature: Moving a dashboard file
     And the file holds no Grafana metadata at all
     And the full dashboard JSON is still in the Nextcloud file
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Move a dashboard out of its mapping with the recycle bin on
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Demo"
@@ -99,7 +99,7 @@ Feature: Moving a dashboard file
 
   # notes: ../AGENTS.md#a-bin-off-return-reuses-the-uid-in-the-body-rather-than-minting-one
 
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Move a parked file back into a mapping with the recycle bin on
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Scratch" whose dashboard is parked in "nextcloud-trash"
@@ -123,7 +123,7 @@ Feature: Moving a dashboard file
     # so the local gesture must be too.
 
   # notes: ../AGENTS.md#a-mirror-that-loses-its-dashboard-goes-to-the-trash-unless-it-was-a-link
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui
   Scenario: Move a dashboard out of a link mapping in Grafana
     Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone moves the dashboard into the "Archive" Grafana folder

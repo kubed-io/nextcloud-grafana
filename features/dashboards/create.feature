@@ -48,33 +48,35 @@ Feature: Creating a dashboard
       | Demo      | Demo           |
       | Shared    | Shared         |
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a dashboard in Grafana
     When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
     Then "<nc folder>/CPU Load.grafana" holds:
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | the mapping's id    |
       | grafana_mode       | "<mode>"            |
-      | grafana_version    | set                 |
+      | grafana_version    | <version>           |
       | grafana_syncedHash | set                 |
     And the file holds "<contents>"
 
     Examples: one gesture, and the mapping decides what the file is
-      | grafana folder | nc folder | mode | contents                   |
-      | demo           | Demo      | sync | the dashboard's full JSON  |
-      | links          | Pointers  | link | a pointer to the dashboard |
-      | Shared         | Shared    | sync | the dashboard's full JSON  |
+      | grafana folder | nc folder | mode | version | contents                   |
+      | demo           | Demo      | sync | set     | the dashboard's full JSON  |
+      | links          | Pointers  | link | absent  | a pointer to the dashboard |
+      | Shared         | Shared    | sync | set     | the dashboard's full JSON  |
+
+    # A version records what a push last sent, and a link never pushes.
 
     # ── RULE: where the file lands decides whether it is a dashboard ───────────
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Create an unmapped dashboard
     When I create a new dashboard in "Scratch" via the Files "New" menu
     Then no dashboard is created in Grafana
     And "Scratch/New dashboard.grafana" holds no Grafana metadata at all
 
   # notes: ../AGENTS.md#a-link-mapping-authors-nothing
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Creating a dashboard in a link-mapped folder is refused
     When I try to create a new dashboard in "Pointers" via the Files "New" menu
     Then the creation is refused with a message

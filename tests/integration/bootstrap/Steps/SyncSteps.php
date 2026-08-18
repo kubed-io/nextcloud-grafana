@@ -313,6 +313,65 @@ trait SyncSteps {
 		}
 	}
 
+	/**
+	 * @When someone creates the dashboard :title in the :folder Grafana folder
+	 *
+	 * THE PULL IS FOLDED IN, as it is for every other in-Grafana gesture: nobody creates
+	 * a dashboard in order to run a sync. The uid is minted here rather than read back so
+	 * the teardown can remove it — a dashboard this app mirrors into a mapped folder is
+	 * re-mirrored into every later scenario that maps the same folder and pulls.
+	 */
+	public function someoneCreatesTheDashboardIn(string $title, string $folder): void {
+		$uid = 'nc-made-' . bin2hex(random_bytes(3));
+		$this->grafanaCreateDashboard($uid, $title, $this->grafanaFolderUidByTitle($folder));
+		$this->createdDashboardUids[] = $uid;
+		$this->lastUid = $uid;
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
+	 * @Then the file holds :contents
+	 *
+	 * THE MODE'S WHOLE OBSERVABLE DIFFERENCE, in one sentence. A sync mirror carries the
+	 * dashboard; a link carries a pointer to it. Everything else about the two files —
+	 * the name, the uid, the mapping — is identical, so the BODY is the only place the
+	 * mode is visible to a person, and the only place a pull can get it wrong.
+	 */
+	public function theFileHoldsContents(string $contents): void {
+		$body = json_decode($this->davGet($this->currentFilePath), true);
+		if (!is_array($body)) {
+			throw new \RuntimeException('the mirror is not JSON');
+		}
+		$isPointer = ($body['$schema'] ?? '') === 'grafana.reference/v1';
+		switch (trim($contents)) {
+			case "the dashboard's full JSON":
+				if ($isPointer) {
+					throw new \RuntimeException('a sync mirror holds a pointer; it should hold the dashboard');
+				}
+				if (!array_key_exists('panels', $body)) {
+					throw new \RuntimeException('the mirror carries no panels, so it is not the dashboard');
+				}
+				return;
+			case 'a pointer to the dashboard':
+				if (!$isPointer) {
+					throw new \RuntimeException('a link holds the dashboard body; it should hold only a pointer');
+				}
+				return;
+			default:
+				throw new \RuntimeException("'$contents' is not a body this vocabulary knows");
+		}
+	}
+
+	/** A Grafana folder's uid from its title, for scenarios that name folders the way a person does. */
+	private function grafanaFolderUidByTitle(string $title): string {
+		foreach ($this->grafanaListFolders() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				return (string)($folder['uid'] ?? '');
+			}
+		}
+		throw new \RuntimeException("Grafana has no folder titled '$title'");
+	}
+
 	/** @return list<array<string,mixed>> */
 	private function listMappingsForSync(): array {
 		$res = $this->occ('grafana_sync:list-mappings');

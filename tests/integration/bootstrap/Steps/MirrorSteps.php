@@ -490,6 +490,10 @@ trait MirrorSteps {
 			case 'the uid it had before it was trashed':
 			case 'the uid it had before the rename':
 			case 'the uid it had before the move':
+			// The same claim, made by a file coming BACK: it left with the recycle bin on,
+			// so nothing was destroyed and nothing had to be forgotten. A returning file
+			// that minted a fresh uid would mean the parking never preserved anything.
+			case 'the uid it had before it left':
 				// THE IDENTITY SURVIVED THE GESTURE. `set` would pass for any uid at all,
 				// and the whole claim is that it is the SAME one — that the app moved a
 				// thing rather than replacing it.

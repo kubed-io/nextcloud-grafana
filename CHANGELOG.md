@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A dashboard deleted out of the Grafana recycle-bin folder now clears its trashed file in Nextcloud too, instead of leaving a trash entry that could not be restored to anything.
 - Dragging a dashboard file out of its mapped folder always deleted the dashboard, even with the recycle bin on — the same removal you get from the trash now parks it in the bin folder instead, and moving the file back brings the same dashboard out again.
 - A dashboard file moved back into a mapping stayed marked unmapped, so later gestures treated a live mirror as though it belonged to nothing.
 - Emptying a Team Folder's trash never reached Grafana: the dashboard stayed parked in the recycle-bin folder for good, with nothing to say so. It is deleted now, like emptying any other trash.
