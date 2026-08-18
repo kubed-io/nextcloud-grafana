@@ -133,6 +133,52 @@ Feature: Moving a dashboard file
 
     # A pointer restored from the trash would point at nothing this mapping mirrors.
 
+    # ── RULE: a duplicate arriving in a mapping keeps the uid already there ────
+    # The person answers what the CONTENT should be; the identity is never theirs to pick.
+
+  # notes: ../AGENTS.md#keeping-one-version-of-a-duplicate-leaves-one-file-and-one-dashboard
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario Outline: Keeping one version of a duplicate leaves one file and one dashboard
+    Given a dashboard file named "Turnbuckle.grafana" in "Demo"
+    And an unmapped file named "Turnbuckle.grafana" in "Scratch" carrying "<its uid>"
+    And that file's panels differ from the dashboard's
+    When I move the unmapped file into "Demo"
+    And I select "<kept>"
+    Then "Demo/Turnbuckle.grafana" holds the panels of "<the body that wins>"
+    And its dashboard in Grafana still exists and holds those same panels
+    And "Demo/Turnbuckle.grafana" holds:
+      | grafana_uid     | the uid the destination already had |
+      | grafana_mapping | the mapping's id                    |
+      | grafana_mode    | the mapping's mode                  |
+
+    Examples: the answer decides whose body it keeps, and the uid it arrived with never does
+      | kept                 | its uid                | the body that wins     |
+      | the existing version | the same grafana_uid   | the file already there |
+      | the existing version | a different grafana_uid | the file already there |
+      | the existing version | no grafana_uid at all  | the file already there |
+      | the new version      | the same grafana_uid   | the file that arrived  |
+      | the new version      | a different grafana_uid | the file that arrived  |
+      | the new version      | no grafana_uid at all  | the file that arrived  |
+
+  # notes: ../AGENTS.md#keeping-both-versions-of-a-duplicate-makes-the-arrival-its-own-dashboard
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Keeping both versions of a duplicate makes the arrival its own dashboard
+    Given a dashboard file named "Turnbuckle.grafana" in "Demo"
+    And an unmapped file named "Turnbuckle.grafana" in "Scratch" carrying "the same grafana_uid"
+    And that file's panels differ from the dashboard's
+    When I move the unmapped file into "Demo"
+    And I select "both versions"
+    Then "Demo/Turnbuckle.grafana" holds:
+      | grafana_uid     | the uid the destination already had |
+      | grafana_mapping | the mapping's id                    |
+      | grafana_mode    | the mapping's mode                  |
+    And its dashboard in Grafana is titled "Turnbuckle" and holds the panels it always had
+    And "Demo/Turnbuckle (1).grafana" holds:
+      | grafana_uid     | its own, not the one it arrived with |
+      | grafana_mapping | the mapping's id                     |
+      | grafana_mode    | the mapping's mode                   |
+    And its dashboard in Grafana is titled "Turnbuckle (1)" and holds the panels that arrived
+
     # ── RULE: a link is not movable, and a link mapping is not a destination ──
 
   # notes: ../AGENTS.md#a-link-is-not-movable-and-a-link-mapping-is-not-a-destination

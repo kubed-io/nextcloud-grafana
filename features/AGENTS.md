@@ -1920,6 +1920,74 @@ which its own comment calls "the second of exactly two ways a Grafana folder is
 born from Nextcloud, which is why it lives here and not with the other move
 gestures."
 
+### Keeping one version of a duplicate leaves one file and one dashboard
+
+PORTED FROM THE n8n SIBLING, WHERE IT IS BUILT. A file carrying a uid is moved into
+a mapping that already mirrors that dashboard — an unmapped copy sat outside while
+the folder re-synced. This is not the same file relocating; it is a duplicate.
+
+**Nextcloud asks the person, and the answer IS the behaviour.** `apps/files`
+PROPFINDs the destination, finds the collision, and opens the "Which files do you
+want to keep?" picker before a single request goes out. Its answer splits three ways:
+*existing version* filters the node out and sends nothing at all; *both versions*
+renames via `getUniqueName()` and sends one MOVE; *new version* sends one MOVE to the
+original name and sabre deletes the destination first. So the `When` has two halves —
+the move announces the collision, the selection performs it — and a step that moved
+first and "resolved" afterwards would be modelling a client that does not exist.
+
+**THE DESTINATION'S UID SURVIVES EVERY ANSWER.** That is the whole rule. The person
+is choosing which CONTENT to keep; the identity is never theirs to pick, because
+picking it breaks the link between the file and the dashboard it names. The row reads
+`the uid the destination already had` rather than "the uid both files carried", which
+is what the arrange happens to produce and not what the app promises.
+
+**Why it matters is only visible when the two files are different dashboards.** The
+folder holds `foo.grafana` bound to **A**; an unmapped `foo.grafana` bound to **B** is
+moved in over it. If the arrival keeps B, then A is still live in the mapped Grafana
+folder with no file — and the next pull finds a dashboard with no mirror and writes
+one, so `foo (1).grafana` reappears beside the file that replaced it. One overwrite,
+and the mapping has forked.
+
+**AND HERE IT IS SHARPER THAN IN n8n, WHICH IS THE PART THAT DOES NOT PORT.** "Keep
+the new version" makes sabre DELETE the destination before the arrival lands, and our
+delete listener acts on that. n8n's delete ARCHIVES, so its `moveIn` can unarchive and
+the mistake is recoverable. Grafana has no archive: with the recycle bin off a delete
+is permanent and proven so, so the destination's dashboard — and the uid this rule
+exists to preserve — is simply gone. The delete has to be SUPPRESSED, not compensated
+for afterwards, which is a stronger requirement than the sibling's. n8n's
+`ReplacedByMovePlugin` records the destination's id from sabre's `beforeMove`, the only
+hook that fires while both halves are still one gesture; that is the shape, but the
+suppression is ours to add.
+
+**The arrival's uid is a column with three values,** because the rule does not depend
+on it and varying it is the only way to show the app is not just keeping whatever
+arrived: the same uid (both files mirror one dashboard), a different uid (two
+dashboards, one name — the case the rule exists for), and none at all (the copy case,
+since a copy carries no metadata row). The `Given` saying the panels DIFFER is what
+makes the body column discriminating; without it the rows grade nothing.
+
+**Not asserted, deliberately:** what else is in the folder, the trash, and where the
+arrival went when it was not kept — the picker filtered it out before any request, so
+it never moved.
+
+### Keeping both versions of a duplicate makes the arrival its own dashboard
+
+A `Then` PER FILE, which is why this is a scenario and not a third row. The two files
+end in genuinely different states and the interesting claim is the CONTRAST:
+`Turnbuckle.grafana` keeps the uid the destination already had and the panels it always
+had, while `Turnbuckle (1).grafana` gets *its own, not the one it arrived with* and the
+panels that arrived. Folded into an Outline that must speak about "each file", the one
+thing worth asserting — that these are now two different dashboards — can only be said
+sideways.
+
+The rename is Nextcloud's own `getUniqueName()`, not a name anybody typed.
+
+IT STAYS ON `the same grafana_uid` WHILE ITS SIBLING VARIES THE COLUMN, and the sibling
+note explains why: with a different uid there is no duplicate at all, so nothing is
+minted and the arrival simply restores under a name Nextcloud picked. The claim here is
+that a SECOND COPY OF THE DESTINATION'S DASHBOARD is minted, and only one value of the
+column produces one.
+
 ### A link is not movable, and a link mapping is not a destination
 
 THE SAME RULE COPY STATES, AND THE SAME SHAPE — one Outline, two Examples blocks,
