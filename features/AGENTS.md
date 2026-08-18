@@ -1920,6 +1920,25 @@ which its own comment calls "the second of exactly two ways a Grafana folder is
 born from Nextcloud, which is why it lives here and not with the other move
 gestures."
 
+### An edit reaches Grafana even where background jobs never run
+
+THE SCENARIO THE SIBLING HAS AND WE NEVER WROTE, for a mechanism this app already
+carries. `WritebackStrategy` derives the push timing from `backgroundjobs_mode` in
+appconfig under `core` — on an instance set to `ajax`, cron never runs unattended, so
+a queued job would sit there until somebody happened to load a page. The strategy
+answers "can this be queued?" with no, and the write goes out inline instead.
+
+IT IS THE DEFAULT ON A FRESH INSTALL, which is what makes it worth a scenario rather
+than a footnote: the configuration where deferring is broken is the one most people
+start on, and every other edit scenario runs on an instance where cron works, so none
+of them can tell the difference.
+
+@todo rather than live: the code is here and unit-tested, the arrange is not — the step
+has to set `config:app:set core backgroundjobs_mode --value=ajax` and put it back. Note
+the APPCONFIG path; `config:system:get backgroundjobs_mode` does not resolve at all, and
+setting the system key instead writes something nothing reads, which is a no-op
+precondition wearing the costume of a test.
+
 ### A purge has to work on both trashes
 
 FOUND IN THE n8n SIBLING, IN LIVE USE, AND THIS APP HAS THE SAME HOLE. `TrashPurgeHook`

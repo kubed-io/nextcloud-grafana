@@ -8,13 +8,15 @@ Feature: Editing a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -34,6 +36,18 @@ Feature: Editing a dashboard
       | grafana_version    | set                                        |
       | grafana_syncedHash | set                                        |
       | Modified           | when the dashboard last changed in Grafana |
+
+  # notes: ../AGENTS.md#an-edit-reaches-grafana-even-where-background-jobs-never-run
+  @user @in-nextcloud @gesture @ui @todo
+  Scenario: Edit a dashboard file where background jobs never run
+    Given background jobs on this instance only run when someone visits a page
+    And a dashboard file in "Demo"
+    When I edit the file's panels and save
+    Then the dashboard in Grafana holds the file's panels
+    And the file holds:
+      | grafana_uid        | the dashboard's uid |
+      | grafana_version    | set                 |
+      | grafana_syncedHash | set                 |
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Edit a dashboard file outside every mapping
