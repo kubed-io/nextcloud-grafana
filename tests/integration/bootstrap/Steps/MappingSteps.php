@@ -123,13 +123,13 @@ trait MappingSteps {
 	public function aMappingWithTheFollowingValues(TableNode $table): void {
 		if (!$this->mappingsDeclared) {
 			$this->noGrafanaFoldersAreMapped();
-			// PIN THE WRITEBACK TO INLINE. Without this every PUT is handled by a
+			// PIN THE WRITEBACK TO INLINE. Without this every PUT is handed to a
 			// background job, so a file's uid is not stamped by the time the next step
 			// reads it and every assertion downstream sees an empty uid. The older
 			// `a folder mapped as … ` arrange has always done this; the table form was
 			// added without it, which is why it could only ever be used by scenarios
 			// that never looked at a uid.
-			$this->forceSyncTiming();
+			$this->forceInlineWriteback();
 			$this->mappingsDeclared = true;
 		}
 		$form = $this->formValues($table);

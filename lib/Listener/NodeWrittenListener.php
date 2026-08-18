@@ -15,13 +15,14 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\PushService;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
+use OCA\GrafanaSync\Service\WritebackStrategy;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\IAppConfig;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -35,19 +36,18 @@ use Psr\Log\LoggerInterface;
  *   - guard not active (i.e. not our own pull/push write),
  *   - name ends in `.grafana` (cheap bail for everything else),
  *   - the file is ours (`grafana_uid` set) and its mode is `sync` (link/unmapped/
- *     ignored never push),
+ *     never push),
  *   - the content actually changed since the last sync (sha1 ≠ `grafana_syncedHash`) —
  *     the loop guard against re-pushing our own / unchanged content.
- *
- * Timing (the Course-1 `timing` switch): `sync` pushes inline; `async` (default)
- * enqueues {@see PushDashboardJob}.
  *
  * @implements IEventListener<NodeWrittenEvent>
  */
 final class NodeWrittenListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
-		private IAppConfig $config,
 		private IJobList $jobList,
+		private WritebackStrategy $strategy,
 		private PushService $pushService,
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
@@ -82,7 +82,7 @@ final class NodeWrittenListener implements IEventListener {
 			return; // not (yet) one of ours — new-file create is Course 4
 		}
 		if (!$managed->isSync()) {
-			return; // only sync pushes; link/unmapped/ignored never do
+			return; // only sync pushes; link/unmapped never do
 		}
 
 		try {
@@ -96,10 +96,12 @@ final class NodeWrittenListener implements IEventListener {
 
 		// Who to notify if the push fails (and which Files view the async job re-resolves
 		// the node through).
-		$uid = $this->userSession->getUser()?->getUID() ?? $node->getOwner()?->getUID() ?? '';
+		$uid = $this->actingUserUid($node);
 
-		$timing = $this->config->getValueString(Application::APP_ID, 'timing', 'async');
-		if ($timing !== 'sync' && $uid !== '') {
+		// QUEUED WHEN THAT WILL ACTUALLY RUN, INLINE OTHERWISE. The admin radio that
+		// used to answer this is gone; {@see WritebackStrategy} derives it from whether
+		// there is a user for the job to act as and whether anything drains the queue.
+		if ($this->strategy->canQueue($uid)) {
 			// Defer to the job, which pushes and surfaces its own failure toast.
 			$this->jobList->add(PushDashboardJob::class, ['fileId' => $node->getId(), 'userId' => $uid]);
 			return;

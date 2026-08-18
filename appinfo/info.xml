@@ -26,10 +26,10 @@ no tagging scheme to maintain. The link between a file and its dashboard is the
 stable Grafana **uid** stored in the file's metadata, not the filename, so
 renaming, moving, and restoring never break the connection.
 
-⚠️ Early development — this build ships the admin **connection** panel (point the
-app at Grafana, store a service-account token, and test it) and the **folder
-mapping** panel (bind a Grafana folder to a Nextcloud folder, with a mode and
-format). The actual dashboard sync those mappings drive lands in later releases.
+Map a Grafana folder to a Nextcloud folder and its dashboards appear as files you
+can open, edit, rename, move, copy, tag, trash and restore — with every one of
+those gestures carried back to Grafana. Point the app at your Grafana, store a
+service-account token, and pick the folders you want mirrored.
 
 This is a community integration and is not affiliated with, endorsed by, or
 sponsored by Grafana Labs. "Grafana" and the Grafana logo are trademarks of
@@ -76,12 +76,14 @@ Grafana Labs, used here only to identify the service this app integrates with.
   <bugs>https://github.com/kubed-io/nextcloud-grafana/issues</bugs>
   <repository type="git">https://github.com/kubed-io/nextcloud-grafana.git</repository>
   <dependencies>
-    <!-- 31, not 30: AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers
-         (@since 31.0.0), which is the only way an ADMIN declarative form can carry a
-         CHECKBOX at all — core's INTERNAL storage throws a TypeError on both the read
-         and the write of a bool (see that class's docblock). This app has two, and one
-         of them (bin_enabled) decides whether a delete is recoverable. Nextcloud 30
-         reached end of life in 2025, so nothing supported is lost. -->
+    <!-- The FLOOR IS 31 BY CAPABILITY AND 32 BY SUPPORT, and it declares 32.
+         AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers (@since
+         31.0.0), which is the only way an ADMIN declarative form can carry a CHECKBOX
+         at all — core's INTERNAL storage throws a TypeError on both the read and the
+         write of a bool (see that class's docblock). This app has two, and one of them
+         (bin_enabled) decides whether a delete is recoverable. 31 is therefore the
+         technical minimum; the declared floor is 32 because 30 and 31 are both past
+         end of life, so nothing supported is lost by asking for the newer one. -->
     <nextcloud min-version="32" max-version="34"/>
   </dependencies>
   <settings>
@@ -106,10 +108,6 @@ Grafana Labs, used here only to identify the service this app integrates with.
     </install>
     <post-migration>
       <step>OCA\GrafanaSync\Migration\RegisterMimetype</step>
-      <!-- Deletes the retired grafana:sync/link/unmapped/ignore pills once. Not the
-           `grafana` FOLDER tag, which is a different thing and stays. Idempotent;
-           see lib/Migration/RemoveModePills.php. -->
-      <step>OCA\GrafanaSync\Migration\RemoveModePills</step>
     </post-migration>
     <uninstall>
       <!-- Mirror image of RegisterMimetype: reverts the core-tree mimetype/icon

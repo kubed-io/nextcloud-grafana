@@ -16,6 +16,7 @@ use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;
@@ -57,6 +58,8 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<NodeWrittenEvent|NodeRenamedEvent>
  */
 final class CreateInGrafanaListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private CreateService $createService,
 		private MappingService $mappings,
@@ -74,7 +77,7 @@ final class CreateInGrafanaListener implements IEventListener {
 			return;
 		}
 
-		$node = $this->resolveNode($event);
+		$node = EventNode::of($event);
 		if (!FilenameCodec::isDashboardFile($node)) {
 			return;
 		}
@@ -102,21 +105,11 @@ final class CreateInGrafanaListener implements IEventListener {
 				'path' => $node->getPath(),
 				'exception' => $e,
 			]);
-			$uid = $this->userSession->getUser()?->getUID() ?? $node->getOwner()?->getUID() ?? '';
+			$uid = $this->actingUserUid($node);
 			if ($uid !== '') {
 				$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
 			}
 		}
 	}
 
-	/** Pull the post-event file node out of either supported event. */
-	private function resolveNode(Event $event): ?Node {
-		if ($event instanceof NodeWrittenEvent) {
-			return $event->getNode();
-		}
-		if ($event instanceof NodeRenamedEvent) {
-			return $event->getTarget();
-		}
-		return null;
-	}
 }

@@ -65,7 +65,7 @@ final class PushService {
 			]);
 			return false;
 		}
-		// Only sync files push. A link file is a read-only pointer; unmapped/ignored never
+		// Only sync files push. A link file is a read-only pointer; unmapped never
 		// push. A legacy file with no recorded mode is treated as sync (backward compat).
 		if ($managed->mode !== '' && !$managed->isSync()) {
 			return false;

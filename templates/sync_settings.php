@@ -8,26 +8,23 @@
  * sync_settings.php so the two apps look the same and reduce into a shared base:
  *
  *   • Manual bulk sync — "Sync to Grafana" / "Sync from Grafana"
- *   • Purge — remove the dashboard files this app created (Nextcloud side only)
  *   • Connection test — "Test connection" (wired by admin-test.js)
  *
- * NB (honest UI, saga Ch2): "Sync from Grafana" (pull, Course 2) and "Sync to Grafana"
- * (push, Course 3) are both **live** — pull provisions + fills a mapped folder, push
- * writes local edits back to Grafana (handlers in sync-settings.js). "Purge" stays
- * **disabled** until Course 4's delete machine. **Test connection works today.**
+ * Every button here is LIVE. A disabled "Purge Nextcloud files" button used to sit
+ * between them, promising a bulk delete that was never built — the n8n sibling
+ * removed the same thing for the same reason: a control that asks for something it
+ * cannot do reads as a feature that works. Purge means one thing now, and it is the
+ * Nextcloud one: emptying the trash (see features/dashboards/purge.feature).
  *
  * @var \OCP\IL10N $l
  */
-
-// Tooltip on every not-yet-live button — one string, so the promise is consistent.
-$soon = $l->t('Available once dashboard sync lands (a later release). Test connection works now.');
 ?>
 <div class="section">
 <div id="grafana-sync-manual" class="grafana-sync-manual">
 	<h3><?php p($l->t('Sync Actions')); ?></h3>
 
 	<p class="settings-hint">
-		<?php p($l->t('Run a one-shot bulk sync at any time. Sync from Grafana pulls every mapped folder’s dashboards into Nextcloud; Sync to Grafana pushes your local edits back up. Purge arrives with a later release — until then that button is disabled. Test connection works now.')); ?>
+		<?php p($l->t('Run a one-shot bulk sync at any time. Sync from Grafana pulls every mapped folder’s dashboards into Nextcloud; Sync to Grafana pushes your local edits back up.')); ?>
 	</p>
 
 	<div class="grafana-sync-manual__row" data-direction="push">
@@ -41,15 +38,6 @@ $soon = $l->t('Available once dashboard sync lands (a later release). Test conne
 
 	<div class="grafana-sync-manual__footer">
 		<span id="grafana-sync-manual-status" class="msg"></span>
-	</div>
-
-	<p class="settings-hint grafana-sync-actions__sep">
-		<?php p($l->t('Reset the Nextcloud side. Purge removes the dashboard files this app created (sync & link). Grafana is never touched, and unmapped/standalone files are kept — get the rest back any time with “Sync from Grafana”.')); ?>
-	</p>
-
-	<div class="grafana-sync-manual__row" data-action="purge">
-		<button type="button" class="button js-purge" disabled title="<?php p($soon); ?>"><?php p($l->t('Purge Nextcloud files')); ?></button>
-		<span id="grafana-sync-purge-status" class="msg"></span>
 	</div>
 
 	<p class="settings-hint grafana-sync-actions__sep">

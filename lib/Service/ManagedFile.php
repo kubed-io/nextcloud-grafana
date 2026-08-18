@@ -21,7 +21,7 @@ namespace OCA\GrafanaSync\Service;
  * ManagedFile with empty fields.
  *
  * The mode is in the **canonical** vocabulary (`sync` / `link` / `unmapped` /
- * `ignored`) — the stored `reference` wire value is already translated back to
+ * — the stored `reference` wire value is already translated back to
  * `link` by {@see DashboardMetadata::read()} before it reaches here.
  *
  * `folderUid` and `apiVersion` are banked keys (saga Ch2 Fork A): registered and

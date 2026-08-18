@@ -14,6 +14,7 @@ use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;
@@ -60,6 +61,8 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<NodeRenamedEvent>
  */
 final class FolderMoveListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private FolderMetadata $folders,
 		private MappingService $mappings,
@@ -142,7 +145,7 @@ final class FolderMoveListener implements IEventListener {
 				'exception' => $e,
 			]);
 			$this->notifier->failed(
-				$this->userSession->getUser()?->getUID() ?? $target->getOwner()?->getUID() ?? '',
+				$this->actingUserUid($target),
 				$target->getId(),
 				$target->getName(),
 				GrafanaClient::describeConnectionError($e),

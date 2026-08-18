@@ -1929,22 +1929,38 @@ of the @todo work queue.
 
 `features/dashboards/purge.feature`
 
-Purge — an admin-only button beside "Sync from/to Grafana" and "Test connection"
-(also `occ grafana_sync:purge`) that removes the dashboard files THIS APP created and
-nothing else. It deletes every **restorable** managed file — `sync` and `link`,
-whose dashboard is still live + tagged in Grafana — across all mappings, and:
-  - never contacts Grafana (the delete runs under SyncGuard so it can't mirror out);
-  - leaves the mappings configured;
-  - leaves the custom mimetype registration alone (that is uninstall's job).
+PURGE MEANS EMPTYING THE NEXTCLOUD TRASH, and nothing else. It is the second half
+of a delete the user already started: the trash gesture archived or parked the
+dashboard, and this is the moment they say they meant it.
 
-It deliberately KEEPS files a "Sync from Grafana" could not bring back, so purge can
-never cost you data: `unmapped` files (moved out of a mapping — a standalone copy /
-template you kept, whose full JSON lives in the file), `ignored` files, and untracked
-`.grafana` (a plain document the app never created).
+THIS SECTION USED TO DESCRIBE A DIFFERENT FEATURE ENTIRELY — an admin button (and
+an `occ grafana_sync:purge` command) that swept every managed file across every
+mapping. That feature is retired and was never built; see *RETIRED — the admin
+purge* above for why the promise it made could not hold. The description outlived
+the retirement and sat here pointing at a `Command\Purge` class that does not
+exist, which mattered because this heading is the anchor `purge.feature` itself
+links to: every reader of the real feature was being handed the wrong one.
 
-Driven headlessly through `occ grafana_sync:purge` ({@see \OCA\GrafanaSync\Command\Purge}).
-Two intended flows: purge → "Sync from Grafana" (everything reappears), and
-purge → uninstall (Nextcloud looks like the app was never there).
+The scenarios turn on ONE question — where the dashboard is when the file is
+purged — because that is what decides whether Grafana is touched at all:
+
+  - **bin off** — the dashboard was hard-deleted when the file was trashed, so
+    emptying the trash has nothing left to do in Grafana and must not invent work.
+  - **bin on** — the dashboard is parked in the recycle-bin folder, and the purge
+    is what finally deletes it. The file leaving the trash is the signal.
+  - **not in the bin** — somebody moved it back, or it never arrived. The purge
+    leaves it alone: a dashboard sitting in a live folder is not ours to delete
+    just because a stale mirror was thrown away.
+  - **one file while others are parked** — the purge is scoped to the file being
+    purged, so parked siblings survive. This is the scenario that catches a
+    delete written against the bin FOLDER rather than the one dashboard.
+  - **Grafana unreachable** — the Nextcloud side still completes. The trash is
+    the user's, and stranding a file in it because a remote system is down would
+    make the app's failure the user's problem.
+
+Both trashes are exercised for the same reason as every other delete leg: the
+home trash and a Team Folder's trash emit different signals, and only one of them
+is a typed event (see `TrashPurgeHook`).
 
 ## connection/sync-now
 
@@ -2992,11 +3008,14 @@ listener gate, all of it there only because the app put its own tags on the same
 files as the user's. Removing the pills BEFORE building tag sync means that
 filter never gets written.
 
-THE UPGRADE IS A DELETION. Once dashboard tags sync, a leftover `grafana:sync`
-pill is an ordinary tag on a mirrored file and would be PUSHED TO GRAFANA —
-seeding every dashboard with a tag nobody chose. `Migration\RemoveModePills`
-deletes the five retired DEFINITIONS once, which removes them from every file at
-once and leaves the namespace empty before anything can read it as content.
+THE UPGRADE WAS A DELETION, AND THEN IT DID NOT NEED TO BE. Once dashboard tags
+sync, a leftover `grafana:sync` pill is an ordinary tag on a mirrored file and
+would be PUSHED TO GRAFANA — seeding every dashboard with a tag nobody chose. A
+`Migration\RemoveModePills` repair step deleted the five retired DEFINITIONS once
+to prevent exactly that. It has been REMOVED: this app has never been released,
+so there is no instance anywhere carrying those pills, and a migration whose
+whole job is cleaning up a past that never happened is code pretending to have
+history. If the app ships and someone somehow has them, the step is in git.
 
 Deleting a tag definition is something this app otherwise refuses to do: a catalog
 is shared, and a definition may be pinned on files it knows nothing about. These

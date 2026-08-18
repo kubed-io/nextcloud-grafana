@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\Listener;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\GrafanaClient;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;
@@ -59,6 +60,8 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<NodeRenamedEvent>
  */
 final class FolderRenameListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private FolderMetadata $folders,
 		private GrafanaClient $grafana,
@@ -124,7 +127,7 @@ final class FolderRenameListener implements IEventListener {
 				'exception' => $e,
 			]);
 			$this->notifier->failed(
-				$this->userSession->getUser()?->getUID() ?? $target->getOwner()?->getUID() ?? '',
+				$this->actingUserUid($target),
 				$target->getId(),
 				$name,
 				GrafanaClient::describeConnectionError($e),

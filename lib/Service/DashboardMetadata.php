@@ -20,7 +20,7 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  * the "seam"); the key set was scrutinised, not 1:1 renamed (Fork A):
  *
  *   grafana_uid         — the dashboard uid. Stable across renames/moves.
- *   grafana_mode        — sync | link | unmapped | ignored. INDEXED.
+ *   grafana_mode        — sync | link | unmapped. INDEXED.
  *   grafana_version     — the Grafana `version` we last reconciled. Grafana bumps
  *                         this on EVERY save, so we store it but NEVER hash it
  *                         (saga Ch1 risk #6).
@@ -45,7 +45,7 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  * them as callbacks when `is_callable($value)` is true. The string `link` matches
  * PHP's builtin `link()`, so storing it explodes every PROPFIND. So **link mode is
  * stored as the value `reference`** and translated back on read — everywhere else in
- * the codebase the mode is `link`. `sync` / `unmapped` / `ignored` are not callable,
+ * the codebase the mode is `link`. `sync` / `unmapped` are not callable,
  * so they store as-is. Any future mode value MUST clear `is_callable()`.
  *
  * Isolation from the n8n sibling is free by construction: NC Files-Metadata keys are
@@ -57,7 +57,7 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  */
 final class DashboardMetadata {
 	public const KEY_UID = 'grafana_uid';
-	public const KEY_MODE = 'grafana_mode';       // sync | reference(=link) | unmapped | ignored — INDEXED
+	public const KEY_MODE = 'grafana_mode';       // sync | reference(=link) | unmapped — INDEXED
 	public const KEY_VERSION = 'grafana_version';
 	/** sha1 of the spec we sent at the last successful pull/push — the writeback loop guard. */
 	public const KEY_SYNCED_HASH = 'grafana_syncedHash';
@@ -103,7 +103,7 @@ final class DashboardMetadata {
 	 * Called once from {@see \OCA\GrafanaSync\AppInfo\Application::boot()}. After this
 	 * runs, the keys are surfaced over DAV as `{nc:}metadata-<key>`, and the
 	 * INDEXED_KEYS (mode + mapping) are SEARCH/REPORT-queryable — so "find every sync /
-	 * unmapped / ignored file" is a fast indexed query, not a folder walk. Registering
+	 * unmapped file" is a fast indexed query, not a folder walk. Registering
 	 * the two banked keys now (before anything writes them) means the subfolder / YAML
 	 * courses drop in without a metadata migration.
 	 */
@@ -121,7 +121,7 @@ final class DashboardMetadata {
 	/**
 	 * Upsert the managed keys for a file. Any key omitted from `$values` is left as-is;
 	 * pass an explicit empty string to overwrite. The mode is given in the canonical
-	 * vocabulary (`sync`/`link`/`unmapped`/`ignored`); `link` is stored as `reference`
+	 * vocabulary (`sync`/`link`/`unmapped`); `link` is stored as `reference`
 	 * on the wire (see class docblock).
 	 *
 	 * @param array{
