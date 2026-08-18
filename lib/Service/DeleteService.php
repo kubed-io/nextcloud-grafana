@@ -203,8 +203,16 @@ final class DeleteService {
 		// BIN OFF stripped the id at trash-time. The restored plain file is back in a mapped
 		// folder → re-create it via create-on-land, a fresh dashboard with a new uid. Only a
 		// sync mapping authors; a link/unmapped destination gets nothing.
+		//
+		// `asNewDashboard`, AND THE METADATA IS NOT WHAT MAKES IT NEW. Stripping the file's
+		// stamp is not enough, because the file's BODY is the dashboard's full JSON and
+		// carries `uid` inside it — so the upsert keyed on it and Grafana rebuilt the
+		// dashboard at the id the trashing had just destroyed. The file came back wearing
+		// the uid it arrived with, silently, and only the spec's `its own, not the one it
+		// arrived with` caught it. This is the same flag, for the same reason, that a copy
+		// sets: a birth must not inherit the id written in the bytes it was born from.
 		if ($mapping !== null && $mapping->mode === Mapping::MODE_SYNC) {
-			$this->createService->createForFile($node, $mapping);
+			$this->createService->createForFile($node, $mapping, true);
 		}
 	}
 

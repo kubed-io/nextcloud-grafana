@@ -11,6 +11,8 @@ namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Exception\GrafanaApiException;
+use OCP\Files\File;
+use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -64,6 +66,7 @@ use Psr\Log\LoggerInterface;
  */
 final class TrashReconcileService {
 	public function __construct(
+		private IRootFolder $rootFolder,
 		private TrashControl $trash,
 		private DashboardMetadata $metadata,
 		private GrafanaClient $grafana,
@@ -71,6 +74,92 @@ final class TrashReconcileService {
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Bring $mapping's trashed mirror of $dashboardUid back out of the trash, if there is
+	 * one, and return the restored file.
+	 *
+	 * THE OTHER DIRECTION OF THE SAME RULE. A mirror sits in the trash only while its
+	 * dashboard is out of the mapped folder; the moment the dashboard is back — somebody
+	 * dragged it out of the recycle-bin folder in Grafana — the trash entry is describing
+	 * a state that has stopped being true.
+	 *
+	 * WITHOUT THIS, THE PULL WRITES A SECOND FILE. The dashboard reappears in the mapped
+	 * folder, `indexByUid` finds no live mirror for it (the only one is in the trash), and
+	 * the pull does the reasonable thing and creates one — leaving the user a restored
+	 * dashboard, a fresh file, and a trash entry for the file they actually had. Restoring
+	 * the existing entry is what makes it the SAME file rather than a copy beside the
+	 * original.
+	 *
+	 * Answers null whenever there is nothing to restore, which is the ordinary case: the
+	 * caller then writes a mirror as it always did.
+	 */
+	public function restoreMirror(Mapping $mapping, string $dashboardUid): ?File {
+		if ($dashboardUid === '') {
+			return null;
+		}
+		$uid = $this->actorUid($mapping);
+		if ($uid === null) {
+			return null;
+		}
+
+		$trashed = $this->mirrors($uid, $mapping)[$dashboardUid] ?? null;
+		if ($trashed === null) {
+			return null;
+		}
+
+		try {
+			// UNDER THE GUARD. A restore emits `post_restore`, and
+			// {@see \OCA\GrafanaSync\Listener\TrashRestoreHook} answers it by pushing the
+			// dashboard back into its mapped folder — which is where it already is, and
+			// which is the news this whole pass is downstream of.
+			$this->guard->run(static function () use ($trashed): void {
+				$trashed->restore();
+			});
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not restore the mirror of a rescued dashboard', [
+				'app' => Application::APP_ID,
+				'fileId' => $trashed->fileId,
+				'name' => $trashed->name,
+				'uid' => $dashboardUid,
+				'exception' => $e,
+			]);
+			return null;
+		}
+
+		$node = $this->resolve($uid, $trashed->fileId);
+		$this->logger->info('grafana_sync trash: brought a mirror back out of the trash for a rescued dashboard', [
+			'app' => Application::APP_ID,
+			'fileId' => $trashed->fileId,
+			'name' => $trashed->name,
+			'uid' => $dashboardUid,
+			'resolved' => $node !== null,
+		]);
+		return $node;
+	}
+
+	/**
+	 * The restored file, found by the id it kept through the trash.
+	 *
+	 * Null is survivable and is not a failure: the file IS back either way — that is what
+	 * the restore did — and the caller falls back to writing a fresh mirror only if it
+	 * cannot get a node to update. Looked up BY ID rather than by path because a restore
+	 * can land the file under a `(1)` name when something has since taken its original
+	 * one, and the id is the identity anyway.
+	 */
+	private function resolve(string $uid, int $fileId): ?File {
+		try {
+			$node = $this->rootFolder->getUserFolder($uid)->getFirstNodeById($fileId);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: restored the mirror but could not find it afterwards', [
+				'app' => Application::APP_ID,
+				'fileId' => $fileId,
+				'exception' => $e,
+			]);
+			return null;
+		}
+		return $node instanceof File ? $node : null;
 	}
 
 	/**

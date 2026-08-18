@@ -30,6 +30,7 @@ use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
 use OCA\GrafanaSync\Listener\TagChangeListener;
 use OCA\GrafanaSync\Listener\TeamFolderPurgeListener;
 use OCA\GrafanaSync\Listener\TrashPurgeHook;
+use OCA\GrafanaSync\Listener\TrashRestoreHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMetadata;
@@ -82,6 +83,9 @@ final class Application extends App implements IBootstrap {
 
 	/** Guards the legacy preDelete hook registration so a repeated boot() can't stack it. */
 	private static bool $purgeHookRegistered = false;
+
+	/** Same guard as above: connectHook appends with no de-duplication. */
+	private static bool $restoreHookRegistered = false;
 
 	public function __construct(array $params = []) {
 		parent::__construct(self::APP_ID, $params);
@@ -240,12 +244,48 @@ final class Application extends App implements IBootstrap {
 		// in the same PHP process (tests, repeated loadApp) stacking the handler — which would
 		// fire TrashPurgeHook::preDelete more than once per purge (repeated deletes / log spam).
 		if (!self::$purgeHookRegistered) {
-			self::$purgeHookRegistered = true;
 			$purgeHook = $context->injectFn(static fn (TrashPurgeHook $hook): TrashPurgeHook => $hook);
-			// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
-			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
-			/** @psalm-suppress DeprecatedMethod */
-			\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+			// INSTANCEOF, NOT A SUPPRESSION. `injectFn` is typed `mixed`, so nothing proves
+			// the container built anything — and `connectHook` takes the OBJECT, so a null
+			// here registers a handler that can never fire. Silently: the legacy hook system
+			// has no way to complain, so the purge would simply stop happening. Checking is
+			// one line and turns an invisible failure into a boot that registers nothing.
+			//
+			// The flag moves inside the check for the same reason: a boot that failed to
+			// build the hook must not mark it registered and skip the next attempt.
+			if ($purgeHook instanceof TrashPurgeHook) {
+				self::$purgeHookRegistered = true;
+				// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete
+				// signal (there is no typed event for a trash purge), so its deprecation is
+				// unavoidable here.
+				/** @psalm-suppress DeprecatedMethod */
+				\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+			}
+		}
+
+		// AND THE RESTORE, for the trashes the typed event never fires for. Its sibling
+		// {@see RestoreFromTrashListener} keys on `NodeRestoredEvent`, which
+		// `Files_Trashbin\Trashbin` emits and groupfolders' backend does not — so
+		// restoring a dashboard out of a TEAM FOLDER's trash reached Grafana never, and
+		// with the recycle bin on the next pull trashed the file straight back. Both
+		// backends DO emit the legacy `post_restore` hook, so that is the one signal
+		// covering both. See {@see TrashRestoreHook}; same guard, same reason.
+		if (!self::$restoreHookRegistered) {
+			$restoreHook = $context->injectFn(static fn (TrashRestoreHook $hook): TrashRestoreHook => $hook);
+			if ($restoreHook instanceof TrashRestoreHook) {
+				self::$restoreHookRegistered = true;
+				// THE SIGNAL CLASS IS NOT THE ONE ABOVE. The trashbin emits its two hooks
+				// under two DIFFERENT names: `preDelete` under `\OCP\Trashbin`
+				// (Trashbin::emitTrashbinPreDelete) and `post_restore` under
+				// `\OCA\Files_Trashbin\Trashbin` (Trashbin::restore, and groupfolders'
+				// TrashBackend::restoreItem verbatim). OC_Hook keys on the literal string,
+				// so registering this one beside its neighbour under `\OCP\Trashbin` — as
+				// it was — connected a handler that could never fire, for either backend.
+				// Nothing reports that: a legacy hook nobody emits is indistinguishable
+				// from one whose slot decided not to act.
+				/** @psalm-suppress DeprecatedMethod */
+				\OCP\Util::connectHook('\OCA\Files_Trashbin\Trashbin', 'post_restore', $restoreHook, 'postRestore');
+			}
 		}
 	}
 }

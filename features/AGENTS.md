@@ -921,11 +921,17 @@ test drives the method directly; over WebDAV something upstream of it differs, m
 the `$parent instanceof DavDirectory` branch waving the write through because Nextcloud
 hands the hook a node type the guard does not recognise.
 
-@todo RATHER THAN @unbuilt, and the distinction is the whole point of the two tags: there
-IS code, it has a unit test, and it does not work on the path a person uses. Filed as a
-test that cannot pass yet rather than as a rule nobody wrote — and stated here with the
-status code, so whoever picks it up starts from evidence instead of from a passing unit
-test, which is what cost three CI cycles.
+@unbuilt, AND THE TAG TOOK A ROUND TO SETTLE. @todo means "code exists, test missing",
+which reads right — there IS a method and it HAS a unit test. But `check-todo-is-not-a-choice`
+refuses a @todo whose steps all exist, correctly: the steps DO exist, so a @todo would be a
+written test being withheld. And @blocked is worse, because the harness reaches this fine.
+
+None of the four tags means "the app is wrong", so @unbuilt is the least dishonest: on the
+route a person actually uses, this rule is not implemented. A method that never runs is not
+code for the purposes of a tag that exists to answer "can this be tested yet".
+
+Stated here with the status code so whoever picks it up starts from evidence rather than
+from a passing unit test — which is what cost three CI cycles.
 
 The other three link refusals — copy, delete, rename — all run, so the Sabre plugin is
 reachable and registered. Only `beforeCreateFile` is inert.

@@ -19,6 +19,7 @@ use OCA\GrafanaSync\Service\TeamFolderService;
 use OCA\GrafanaSync\Service\TrashControl;
 use OCA\GrafanaSync\Service\TrashedFile;
 use OCA\GrafanaSync\Service\TrashReconcileService;
+use OCP\Files\IRootFolder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -122,6 +123,33 @@ final class TrashReconcileServiceTest extends TestCase {
 		self::assertSame(0, $service->reap($this->mapping()));
 	}
 
+	/**
+	 * THE OTHER DIRECTION. A dashboard rescued out of the bin folder has its mirror
+	 * brought back, rather than the pull writing a second file beside a trash entry for
+	 * the one the user actually had.
+	 */
+	public function testARescuedDashboardHasItsMirrorRestored(): void {
+		$restored = false;
+		$service = $this->service(
+			[$this->trashed('Fleet Health.grafana', 7, null, static function () use (&$restored): void {
+				$restored = true;
+			})],
+			$this->managed('dash-rescued'),
+			static fn (): array => ['meta' => [], 'dashboard' => ['uid' => 'dash-rescued']],
+		);
+
+		$service->restoreMirror($this->mapping(), 'dash-rescued');
+
+		self::assertTrue($restored, 'the trashed mirror was not restored');
+	}
+
+	/** Nothing trashed for this dashboard: the caller writes a mirror as it always did. */
+	public function testNoTrashedMirrorMeansNothingToRestore(): void {
+		$service = $this->service([], $this->managed('dash-live'), static fn (): array => []);
+
+		self::assertNull($service->restoreMirror($this->mapping(), 'dash-live'));
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	private function mapping(): Mapping {
@@ -137,13 +165,13 @@ final class TrashReconcileServiceTest extends TestCase {
 		return new ManagedFile($uid, Mapping::MODE_SYNC, '1', 'hash', self::MAPPING_ID, '');
 	}
 
-	private function trashed(string $name, int $fileId, ?\Closure $purge = null): TrashedFile {
+	private function trashed(string $name, int $fileId, ?\Closure $purge = null, ?\Closure $restore = null): TrashedFile {
 		return new TrashedFile(
 			$fileId,
 			$name,
 			$purge ?? static function (): void {
 			},
-			static function (): void {
+			$restore ?? static function (): void {
 			},
 		);
 	}
@@ -165,6 +193,14 @@ final class TrashReconcileServiceTest extends TestCase {
 		$teamFolders = $this->createStub(TeamFolderService::class);
 		$teamFolders->method('resolveActorUid')->willReturn('admin');
 
-		return new TrashReconcileService($trash, $metadata, $grafana, $teamFolders, new SyncGuard(), new NullLogger());
+		return new TrashReconcileService(
+			$this->createStub(IRootFolder::class),
+			$trash,
+			$metadata,
+			$grafana,
+			$teamFolders,
+			new SyncGuard(),
+			new NullLogger(),
+		);
 	}
 }

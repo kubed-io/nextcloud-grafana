@@ -80,8 +80,14 @@ final class RestoreFromTrashListener implements IEventListener {
 		$this->restoreOne($target);
 	}
 
-	/** The per-file rule table, reached one file at a time or a whole folder at a time. */
-	private function restoreOne(\OCP\Files\File $target): void {
+	/**
+	 * The per-file rule table, reached one file at a time or a whole folder at a time.
+	 *
+	 * PUBLIC BECAUSE A SECOND ENTRY POINT NEEDS IT. {@see TrashRestoreHook} covers the
+	 * trashes this typed event never fires for, and both must answer a restore the same
+	 * way — a second copy of these branches is a second place for them to drift.
+	 */
+	public function restoreOne(\OCP\Files\File $target): void {
 		$managed = $this->metadata->read($target->getId());
 		if ($managed !== null && $managed->isManaged()) {
 			// BIN ON parked path: move the dashboard back into its stored mapping's folder. If the

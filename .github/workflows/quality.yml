@@ -77,6 +77,14 @@ jobs:
     - name: Behat step definitions
       run: bash tests/integration/bin/check-step-definitions.sh
 
+    # Its neighbour, for the failure the step check cannot see. Steps/ is nine TRAITS
+    # composed into one FeatureContext, and PHP fatals on a name two of them both
+    # declare — at compile time, before Behat runs a scenario. So one duplicate private
+    # helper takes down every leg of the matrix with a PHP error instead of a result,
+    # which is a minute per leg to learn something a text scan answers instantly.
+    - name: Behat trait collisions
+      run: bash tests/integration/bin/check-trait-collisions.sh
+
     # The feature files carry no essays; each scenario ends with a one-line
     # pointer into features/AGENTS.md. That split rots two silent ways — an
     # anchor stops resolving when a scenario is renamed, and prose creeps back

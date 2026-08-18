@@ -325,12 +325,17 @@ trait LifecycleSteps {
 		Assert::assertNotNull($this->davReadMetadata($this->currentFilePath, $key), "no $key on {$this->currentFilePath}");
 	}
 
-	/** @Then no dashboard is created in Grafana */
+	/**
+	 * @Then no dashboard is created in Grafana
+	 *
+	 * Reading the FILE rather than asking Grafana, and that is the point: a query needs
+	 * something to query for, and the claim is precisely that nothing was minted to name.
+	 */
 	public function noDashboardIsCreatedInGrafana(): void {
-		Assert::assertNull(
-			$this->davReadMetadata($this->currentFilePath, self::META_UID),
-			'the file was stamped with a uid, so a dashboard was created',
-		);
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($uid !== '') {
+			throw new \RuntimeException("the file was stamped with '$uid', so a dashboard was created after all");
+		}
 	}
 
 	/** @Then the file has no :key metadata */
@@ -667,10 +672,26 @@ trait LifecycleSteps {
 
 	/** @Then the file holds no Grafana metadata at all */
 	public function theFileHoldsNoGrafanaMetadataAtAll(): void {
+		$this->assertNoMetadataAt($this->currentFilePath);
+	}
+
+	/**
+	 * @Then :path holds no Grafana metadata at all
+	 *
+	 * The same claim about a NAMED file. A create scenario knows the path it asked for
+	 * and nothing else does — the cursor points at whatever the gesture last touched,
+	 * which for a refused or ignored create is not necessarily this file at all.
+	 */
+	public function thePathHoldsNoGrafanaMetadataAtAll(string $path): void {
+		$this->assertNoMetadataAt($path);
+	}
+
+	/** The whole managed surface, absent. A file outside every mapping is not ours in ANY respect. */
+	private function assertNoMetadataAt(string $path): void {
 		foreach ([self::META_UID, self::META_MODE, self::META_MAPPING] as $key) {
-			$actual = $this->davReadMetadata($this->currentFilePath, $key);
+			$actual = $this->davReadMetadata($path, $key);
 			if (($actual ?? '') !== '') {
-				throw new \RuntimeException("the file still carries $key ('$actual') after leaving every mapping");
+				throw new \RuntimeException("'$path' still carries $key ('$actual') after leaving every mapping");
 			}
 		}
 	}

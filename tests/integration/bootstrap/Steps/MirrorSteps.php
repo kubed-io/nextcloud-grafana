@@ -257,6 +257,14 @@ trait MirrorSteps {
 	 * @Then /^"([^"]*)" holds:$/
 	 */
 	public function theMirrorHolds(string $path, TableNode $table): void {
+		// THE FILE THIS SCENARIO IS TALKING ABOUT, for whatever says `the file` next. A
+		// gesture performed in GRAFANA cannot set that antecedent — nothing on the
+		// Nextcloud side was touched by a hand — so `create.feature`'s "someone creates
+		// the dashboard in Grafana" had to name the path here, and the very next line,
+		// `the file holds "<contents>"`, read an empty cursor and reported the root
+		// listing as a mirror that is not JSON.
+		$this->currentFilePath = $path;
+
 		$failures = [];
 		foreach ($table->getRowsHash() as $property => $expected) {
 			// `Modified` IS NOT A METADATA KEY, and it belongs in this table anyway: it
@@ -481,15 +489,33 @@ trait MirrorSteps {
 				// A MINT, NOT A RESTORE: the file carried an id in and the app decided it
 				// was not usable, so the answer is a fresh one. Asserting "different from
 				// what it arrived with" is what tells the two apart.
+				//
+				// AGAINST `arrivedWithUid`, NOT `lastUid`. The uid the file arrived with is
+				// gone from `lastUid` by the time this runs: `a matching dashboard is
+				// created in Grafana` — the Then directly above this table in
+				// `restore.feature` — reads the uid back off the file and stores it there.
+				// So the comparison was the new uid against itself, always equal, and the
+				// scenario failed no matter what the app did.
 				if (($actual ?? '') === '') {
 					return 'expected a uid of its own, found nothing';
 				}
-				return $actual !== $this->lastUid
+				if ($this->arrivedWithUid === '') {
+					// LOUD, because the alternative is this claim quietly weakening to
+					// `set` for any scenario whose arrange forgot to capture the uid.
+					throw new \RuntimeException(
+						"'{$expected}' needs the uid the file arrived with; no arrange step captured one",
+					);
+				}
+				return $actual !== $this->arrivedWithUid
 					? null
 					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
 			case 'the uid it had before it was trashed':
 			case 'the uid it had before the rename':
 			case 'the uid it had before the move':
+				// The same claim, made by a file coming BACK: it left with the recycle bin on,
+				// so nothing was destroyed and nothing had to be forgotten. A returning file
+				// that minted a fresh uid would mean the parking never preserved anything.
+			case 'the uid it had before it left':
 				// THE IDENTITY SURVIVED THE GESTURE. `set` would pass for any uid at all,
 				// and the whole claim is that it is the SAME one — that the app moved a
 				// thing rather than replacing it.
