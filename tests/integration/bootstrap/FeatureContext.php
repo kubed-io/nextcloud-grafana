@@ -177,8 +177,11 @@ final class FeatureContext implements Context {
 	private int $lastCopyStatus = 0;
 	private int $lastDeleteStatus = 0;
 
-	/** Where a refused copy WOULD have landed, so the refusal can prove nothing did. */
-	private string $attemptedCopyPath = '';
+	/** What the destination held before a refused copy, so the refusal can prove nothing landed. */
+	private string $attemptedCopyFolder = '';
+
+	/** @var list<string> */
+	private array $filesBeforeCopy = [];
 
 	/** Same, for a refused create. */
 	private int $lastCreateStatus = 0;
@@ -220,6 +223,17 @@ final class FeatureContext implements Context {
 			}
 		}
 		$this->createdGrafanaFolders = [];
+		// EMPTY THE NEXTCLOUD TRASH, and it is not housekeeping — it is isolation.
+		//
+		// The trash is looked up BY BASENAME (`trashbinPathFor`), and since every
+		// scenario names its dashboard the same thing, a leftover entry from an
+		// earlier scenario answers first. The purge scenarios then destroyed the
+		// STALE entry, left their own in place, and failed on "the file is gone from
+		// the Nextcloud trash" — a failure with nothing in the diff to explain it.
+		//
+		// Deleting the scenario's folders above puts them here too, so this has to
+		// run after that loop rather than before it.
+		$this->emptyNextcloudTrash();
 		// Reset the mapping list so the next scenario starts from zero mappings.
 		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
 		$this->createdFolders = [];

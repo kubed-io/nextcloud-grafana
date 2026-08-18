@@ -181,6 +181,19 @@ namespace OCP {
 	if (!interface_exists(IUserSession::class, false)) {
 		interface IUserSession {
 			public function getUser(): ?IUser;
+
+			/**
+			 * {@see OCA\GrafanaSync\Service\TrashControl} sets the acting user around a
+			 * restore, because the home trash restores whoever is LOGGED IN rather than
+			 * whoever it was asked about — a pull has no session, so the call needs one.
+			 */
+			public function setUser(?IUser $user): void;
+		}
+	}
+	// TrashControl resolves the trashed item's owner to restore as them.
+	if (!interface_exists(IUserManager::class, false)) {
+		interface IUserManager {
+			public function get(string $uid): ?IUser;
 		}
 	}
 	// MappingSettings reads the group list for the per-mapping picker; both are

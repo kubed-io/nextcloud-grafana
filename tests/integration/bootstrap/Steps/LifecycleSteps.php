@@ -806,9 +806,15 @@ trait LifecycleSteps {
 	/** @When I try to copy the file into :folder */
 	public function iTryToCopyTheFileInto(string $folder): void {
 		$this->davMkdir($folder);
+		// THE FOLDER'S CONTENTS BEFORE THE ATTEMPT, not the path the copy would take.
+		// One row of this Outline copies a link into the folder it is already in, where
+		// the "destination path" IS the source file — so asserting that path is empty
+		// asserts the original was destroyed, which is the opposite of the claim.
+		// Counting what the folder holds says the real thing: nothing was added.
+		$this->attemptedCopyFolder = $folder;
+		$this->filesBeforeCopy = $this->davListDashboardFiles($folder);
 		$dest = $folder . '/' . basename($this->currentFilePath);
 		$this->lastCopyStatus = $this->davCopyStatus($this->currentFilePath, $dest);
-		$this->attemptedCopyPath = $dest;
 	}
 
 	/** @Then the copy is refused with a message */
@@ -827,9 +833,12 @@ trait LifecycleSteps {
 	 * answers 403 AFTER the bytes have landed.
 	 */
 	public function noFileIsAddedTo(string $folder): void {
-		Assert::assertFalse(
-			$this->davExists($this->attemptedCopyPath),
-			"a file arrived at {$this->attemptedCopyPath} despite the refusal",
+		$after = $this->davListDashboardFiles($folder);
+		$added = array_values(array_diff($after, $this->filesBeforeCopy));
+		Assert::assertSame(
+			[],
+			$added,
+			"'$folder' gained " . implode(', ', $added) . ' despite the refusal',
 		);
 	}
 

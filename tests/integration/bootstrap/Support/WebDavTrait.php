@@ -187,6 +187,25 @@ trait WebDavTrait {
 		return null;
 	}
 
+	/**
+	 * Destroy every entry in the user's trash. Best-effort, like the rest of teardown.
+	 *
+	 * A DELETE on the trashbin ROOT is the documented "empty trash" call, and it is one
+	 * request rather than one per entry — which matters because this runs after every
+	 * scenario in the suite.
+	 */
+	private function emptyNextcloudTrash(): void {
+		try {
+			$this->davClient()->request(
+				'DELETE',
+				$this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash',
+			);
+		} catch (\Throwable) {
+			// An empty trash answers 404 on some versions; either way there is nothing
+			// left to isolate the next scenario from.
+		}
+	}
+
 	/** Full trashbin href for a trash entry filename. */
 	private function trashHref(string $entry): string {
 		return $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash/' . rawurlencode($entry);
