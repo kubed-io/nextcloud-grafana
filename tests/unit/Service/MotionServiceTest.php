@@ -16,6 +16,7 @@ use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MotionService;
+use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -39,6 +40,7 @@ final class MotionServiceTest extends TestCase {
 	private DashboardMetadata $metadata;
 	private GrafanaClient $grafana;
 	private FolderMirror $folderMirror;
+	private RecycleBin $recycleBin;
 	private MotionService $service;
 
 	protected function setUp(): void {
@@ -50,11 +52,18 @@ final class MotionServiceTest extends TestCase {
 		$this->folderMirror = $this->createStub(FolderMirror::class);
 		$this->folderMirror->method('folderUidFor')->willReturn('gf-subfolder');
 
+		// BIN OFF by default, which is the app's default and the state every existing
+		// test in this file was written against. The parking path gets its own tests
+		// below, with the stub answering a bin uid.
+		$this->recycleBin = $this->createStub(RecycleBin::class);
+		$this->recycleBin->method('activeFolderUid')->willReturn(null);
+
 		$this->service = new MotionService(
 			$this->mappings,
 			$this->metadata,
 			$this->grafana,
 			$this->folderMirror,
+			$this->recycleBin,
 			new SyncGuard(),
 			new NullLogger(),
 		);
@@ -226,6 +235,83 @@ final class MotionServiceTest extends TestCase {
 		$this->metadata->expects(self::once())->method('clear')->with(42);
 
 		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
+	}
+
+	/**
+	 * BIN ON, LEAVING A MAPPING: nothing is destroyed, so nothing is forgotten.
+	 *
+	 * Grafana has no archive — an ordinary folder move into the nominated bin is the only
+	 * reversible removal there is — so the dashboard is re-parented rather than deleted
+	 * and the file KEEPS its uid, which is what lets it restore to the same dashboard.
+	 * It stops belonging to a mapping, which is all `unmapped` means.
+	 */
+	public function testABinOnMoveOutParksTheDashboardAndKeepsTheUid(): void {
+		$from = $this->mapping('m-src', 'gf-src', 'src');
+		$this->metadata->method('read')->willReturn($this->managed('dash-parked'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::SRC_PATH, $from],
+			[self::UNMAPPED_PATH, null],
+		]);
+		$this->recycleBin = $this->createStub(RecycleBin::class);
+		$this->recycleBin->method('activeFolderUid')->willReturn('gf-bin');
+		$this->rebuildWithBin();
+
+		$this->grafana->expects(self::never())->method('deleteDashboard');
+		$this->grafana->expects(self::once())->method('upsertDashboard')
+			->with(self::callback(static function (array $body): bool {
+				return ($body['folderUid'] ?? null) === 'gf-bin'
+					&& ($body['dashboard']->uid ?? null) === 'dash-parked';
+			}))
+			->willReturn(['version' => 4]);
+		$this->metadata->expects(self::never())->method('clear');
+		$this->metadata->expects(self::once())->method('write')
+			->with(42, [
+				DashboardMetadata::KEY_MAPPING => '',
+				DashboardMetadata::KEY_MODE => DashboardMetadata::MODE_UNMAPPED,
+				DashboardMetadata::KEY_FOLDER_UID => 'gf-bin',
+			]);
+
+		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
+	}
+
+	/**
+	 * AND THE MODE COMES BACK. A file parked with the bin on is stamped `unmapped`;
+	 * re-adopting it without re-stating the mode left a live mirror in a sync mapping
+	 * still claiming to be unmapped, which every later gesture reads to decide what it
+	 * may do.
+	 */
+	public function testEnteringAMappingRestoresTheMode(): void {
+		$to = $this->mapping('m-dst', 'gf-dst', 'dst');
+		$this->metadata->method('read')->willReturn($this->managed('dash-back', DashboardMetadata::MODE_UNMAPPED));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::UNMAPPED_PATH, null],
+			[self::DST_PATH, $to],
+		]);
+		$this->grafana->method('upsertDashboard')->willReturn(['version' => 7]);
+
+		$captured = null;
+		$this->metadata->expects(self::once())->method('write')
+			->willReturnCallback(function (int $id, array $values) use (&$captured): void {
+				$captured = $values;
+			});
+
+		$this->service->onMove($this->file(self::DST_PATH), self::UNMAPPED_PATH);
+
+		self::assertSame(Mapping::MODE_SYNC, $captured[DashboardMetadata::KEY_MODE] ?? null);
+		self::assertSame('m-dst', $captured[DashboardMetadata::KEY_MAPPING] ?? null);
+	}
+
+	/** Rebuild with whatever the test just stubbed the bin to answer. */
+	private function rebuildWithBin(): void {
+		$this->service = new MotionService(
+			$this->mappings,
+			$this->metadata,
+			$this->grafana,
+			$this->folderMirror,
+			$this->recycleBin,
+			new SyncGuard(),
+			new NullLogger(),
+		);
 	}
 
 	public function testAFailedGrafanaDeleteLeavesTheFileIdentityIntact(): void {
