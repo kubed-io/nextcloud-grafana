@@ -1874,6 +1874,33 @@ of every mapping and trashing it both run through the bin decision. They live in
 because the gestures differ, so whenever either changes, check the rules still agree.
 Every scenario whose outcome depends on that setting carries @recycle-bin.
 
+### What move still owes the n8n sibling
+
+Compared scenario by scenario against `workflows/move.feature`. Three gaps are
+CODE, not spec, and are written here rather than invented as scenarios:
+
+**Conflict answers.** n8n specifies what happens when a file lands on a name that
+is already taken — keep the existing version, keep the new one, or keep both — as
+one Outline over six rows (the answer × whether the arrival carried the same id, a
+different id, or none) plus a `keep both` scenario. This app has no conflict
+handling at all, so there is nothing to state yet. It is the largest single gap.
+
+**The storage axis.** n8n's Background carries five mappings across both storage
+kinds so its rebind Outline can run "between the two storage kinds, in both
+directions" and "between two folders of the same kind". Ours deliberately does not:
+per the SCOPE note above, a move into or out of a Team Folder crosses a storage
+boundary and rides the delete/create lifecycle rather than this engine. Adding the
+rows would specify a fast-follow, not this one.
+
+**A destination that was hard-deleted on the far side.** n8n falls back to create
+when the workflow a returning file names is gone. Our `@recycle-bin` scenarios
+cover the parked case; the truly-gone case is unstated.
+
+AND ONE THING WE STATE THAT n8n CANNOT. Membership here is a FOLDER, so a dashboard
+moved in Grafana relocates its mirror and a subfolder is a real re-parent. In n8n
+membership is a tag, so its move file has no in-n8n direction at all and its subtree
+rule is simply "nothing happens". Neither file is a superset of the other.
+
 ### Moving a dashboard into a tagged subfolder re-parents it in Grafana
 
 ── into a TAGGED subfolder — a real Grafana folder ───────────────────────────────

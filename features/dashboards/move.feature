@@ -8,22 +8,52 @@ Feature: Moving a dashboard file
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | Reports |
-      | nc folder      | Reports |
-      | mode           | sync    |
+      | grafana folder | Reports      |
+      | nc folder      | Reports      |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
+    And a mapping with the following values:
+      | grafana folder | mirrors      |
+      | nc folder      | Mirrors      |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
     And a Grafana folder "Archive" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
+
+    # ── RULE: inside its own mapping, the subfolder decides ────────────────────
+
+  # notes: ../AGENTS.md#moving-into-an-untagged-subfolder-is-local-only-stays-bound-to-the-parent
+  @user @in-nextcloud @gesture @ui @todo
+  Scenario: Move a dashboard into an untagged subfolder of its mapping
+    Given a dashboard file in "Demo"
+    When I move the file into an untagged subfolder of "Demo"
+    Then the dashboard stays in the "Demo" Grafana folder
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | the mapping's mode  |
+
+  # notes: ../AGENTS.md#moving-a-dashboard-into-a-tagged-subfolder-re-parents-it-in-grafana
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Move a dashboard into a tagged subfolder of its mapping
+    Given a dashboard file in "Demo"
+    And a subfolder of "Demo" that is its own Grafana folder
+    When I move the file into that subfolder
+    Then the dashboard is in that subfolder's Grafana folder
+    And the dashboard keeps the same "grafana_uid"
 
     # ── RULE: leaving a mapping, and what the recycle bin makes of it ──────────
     # notes: ../AGENTS.md#the-recycle-bin-folder
@@ -52,7 +82,7 @@ Feature: Moving a dashboard file
     # It keeps the uid because nothing was truly deleted — the dashboard is parked,
     # and moving the file back into a mapping is what brings it out again.
 
-    # ── RULE: a link is read-only, so it does not travel ───────────────────────
+    # ── RULE: a link belongs to Grafana — it may re-home, but never leave ──────
 
   # notes: ../AGENTS.md#a-link-cannot-be-deleted-from-nextcloud
   @user @in-nextcloud @gesture @ui
@@ -61,6 +91,17 @@ Feature: Moving a dashboard file
     When I try to move the file into "Scratch"
     Then the move is refused with a message
     And the file stays in "Pointers"
+
+  # notes: ../AGENTS.md#moving-a-link-from-one-mapped-folder-to-another-only-re-homes-the-pointer
+  @user @in-nextcloud @gesture @ui @todo
+  Scenario: Move a link to another link mapping
+    Given a dashboard file in "Pointers"
+    When I move the file into "Mirrors"
+    Then Grafana is not contacted
+    And the file holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | the mapping's id    |
+      | grafana_mode    | "link"              |
 
   # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
   @user @in-nextcloud @gesture @ui @unbuilt
