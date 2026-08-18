@@ -150,6 +150,30 @@ namespace OCP\Files\Cache {
 			public function update($id, array $data);
 		}
 	}
+
+	// The signal {@see OCA\GrafanaSync\Listener\TeamFolderPurgeListener} rides, because
+	// dropping the cache entry is the one thing NO trash backend can skip — groupfolders
+	// emits neither the legacy hook nor a typed event, so this is all there is.
+	// Constructor mirrors the real `AbstractCacheEvent`: storage, path, fileId, storageId.
+	if (!class_exists(CacheEntryRemovedEvent::class, false)) {
+		class CacheEntryRemovedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Storage\IStorage $storage,
+				private string $path,
+				private int $fileId,
+				private int $storageId,
+			) {
+			}
+
+			public function getPath(): string {
+				return $this->path;
+			}
+
+			public function getFileId(): int {
+				return $this->fileId;
+			}
+		}
+	}
 }
 
 namespace OCP\BackgroundJob {
@@ -311,6 +335,26 @@ namespace OCP\Files\Events\Node {
 	// post-move sibling, so the guard can be driven directly.
 	if (!class_exists(BeforeNodeRenamedEvent::class, false)) {
 		class BeforeNodeRenamedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $source,
+				private \OCP\Files\Node $target,
+			) {
+			}
+
+			public function getSource(): \OCP\Files\Node {
+				return $this->source;
+			}
+
+			public function getTarget(): \OCP\Files\Node {
+				return $this->target;
+			}
+		}
+	}
+	// The pre-copy gate {@see OCA\GrafanaSync\Listener\CopyGuardListener} throws from.
+	// It carries the SOURCE node, which is the only place "was this a link?" can still
+	// be answered — by the time the post-copy event runs the stamp has been stripped.
+	if (!class_exists(BeforeNodeCopiedEvent::class, false)) {
+		class BeforeNodeCopiedEvent extends \OCP\EventDispatcher\Event {
 			public function __construct(
 				private \OCP\Files\Node $source,
 				private \OCP\Files\Node $target,
