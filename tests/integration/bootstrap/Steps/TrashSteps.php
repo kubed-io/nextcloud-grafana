@@ -171,6 +171,31 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @Then the file is not in the Nextcloud trash
+	 *
+	 * THE NEGATIVE OF THE RULE ABOVE, AND IT IS THE WHOLE POINT OF A LINK. A sync
+	 * mirror goes to the trash because the file IS the dashboard's content and a
+	 * restore restores it; a link has nothing to restore FROM, so a trashed pointer
+	 * would offer the user a recovery that reconnects to nothing.
+	 *
+	 * Asserted against the trash listing rather than the file's absence, because the
+	 * two failures look identical from the mapped folder: a link removed properly and
+	 * a link removed into the trash both leave the folder empty. Only the trash tells
+	 * them apart, and only one of them is right.
+	 */
+	public function theFileIsNotInTheNextcloudTrash(): void {
+		// SINCE THIS SCENARIO STARTED. Nothing was trashed here, so there is no entry to
+		// name — and an identically-named leftover from an earlier scenario would
+		// otherwise read as this link having been trashed.
+		$entry = $this->trashbinPathFor($this->trashedFrom, $this->scenarioStartedAt);
+		if ($entry !== null) {
+			throw new \RuntimeException(
+				"'{$this->trashedFrom}' landed in the Nextcloud trash as '$entry' — a pointer restored from there reconnects to nothing",
+			);
+		}
+	}
+
+	/**
 	 * @Then it still holds no Grafana metadata
 	 *
 	 * The honest post-condition for trashing a file outside every mapping. It
@@ -599,9 +624,21 @@ trait TrashSteps {
 		}
 	}
 
-	/** @Then the file is gone from the Nextcloud trash */
+	/**
+	 * @Then the file is gone from the Nextcloud trash
+	 *
+	 * THE ENTRY THIS SCENARIO ACTED ON, not "any entry with this name". The trash is
+	 * shared across the whole suite and every scenario names its dashboard the same
+	 * thing, so a basename lookup finds an earlier scenario's leftover the moment the
+	 * real one is destroyed — reporting a purge that worked as a purge that did nothing.
+	 */
 	public function theFileIsGoneFromTheTrash(): void {
-		Assert::assertNull($this->trashbinPathFor($this->trashedFrom), 'the file is still in the Nextcloud trash');
+		if ($this->lastTrashEntry === '') {
+			throw new \RuntimeException('no trash entry was resolved — the gesture never reached the trash');
+		}
+		if ($this->trashEntryExists($this->lastTrashEntry)) {
+			throw new \RuntimeException("'{$this->lastTrashEntry}' is still in the Nextcloud trash");
+		}
 	}
 
 	/** @Then no dashboard is deleted in Grafana */
@@ -629,6 +666,10 @@ trait TrashSteps {
 	private function requireTrashEntry(): string {
 		$entry = $this->trashbinPathFor($this->trashedFrom);
 		Assert::assertNotNull($entry, "no trashbin entry for '{$this->trashedFrom}' — was it actually deleted?");
+		// REMEMBERED, because "the file is gone from the trash" has to name WHICH entry.
+		// A basename search would find an earlier scenario's leftover and report the
+		// purge as having done nothing.
+		$this->lastTrashEntry = $entry;
 		return $entry;
 	}
 }

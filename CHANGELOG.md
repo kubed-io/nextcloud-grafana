@@ -90,6 +90,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Emptying a Team Folder's trash never reached Grafana: the dashboard stayed parked in the recycle-bin folder for good, with nothing to say so. It is deleted now, like emptying any other trash.
+- A linked dashboard could be copied, deleted or renamed from Nextcloud. Each looked like it worked and was undone by the next sync; all three are refused with a message now, as editing one already was.
+- A dashboard file could be renamed to nothing but spaces, leaving its filename, its JSON title and its Grafana title disagreeing three ways with nothing to say so.
 - A linked dashboard could be dragged into another mapped folder. Nothing said no, and the next sync moved it back — the move is now refused with a message, as moving one out already was.
 - Copying a dashboard file overwrote the dashboard it was copied from, instead of making a new one. The copy's contents landed on the original as a new version, and no second dashboard was ever created.
 - A dashboard file could be dated a second before its dashboard existed: Grafana's created and modified clocks can come back either side of a second boundary right after a write, and the app believed the earlier one.

@@ -173,6 +173,31 @@ final class FeatureContext implements Context {
 	private array $trashedMetadata = [];
 	private int $lastMoveStatus = 0;
 
+	/** Raw status of the last deliberately-refused COPY / DELETE, for the guard scenarios. */
+	private int $lastCopyStatus = 0;
+	private int $lastDeleteStatus = 0;
+
+	/**
+	 * When this scenario began, and the exact trash entry its gesture acted on.
+	 *
+	 * BOTH EXIST BECAUSE THE TRASH IS SHARED AND NAMES REPEAT. Every scenario names its
+	 * dashboard the same thing, nothing empties the trash between them (emptying it is
+	 * itself a gesture that finishes deletes in Grafana), so a basename lookup can always
+	 * find somebody else's leftover. A claim about the trash has to name WHICH entry.
+	 */
+	private int $scenarioStartedAt = 0;
+	private string $lastTrashEntry = '';
+
+	/** What the destination held before a refused copy, so the refusal can prove nothing landed. */
+	private string $attemptedCopyFolder = '';
+
+	/** @var list<string> */
+	private array $filesBeforeCopy = [];
+
+	/** Same, for a refused create. */
+	private int $lastCreateStatus = 0;
+	private string $attemptedCreatePath = '';
+
 	public function __construct() {
 		$this->occ = getenv('OCC') ?: 'php occ';
 		$this->ncBaseUrl = rtrim(getenv('NC_BASE_URL') ?: 'http://localhost:8080', '/');
@@ -183,6 +208,18 @@ final class FeatureContext implements Context {
 	}
 
 	// ── per-scenario lifecycle (teardown) ─────────────────────────────────────
+
+	/**
+	 * Stamp the scenario's start, so a trash claim can tell this scenario's entries from
+	 * the ones already sitting there. The trash spells entries `<name>.d<unix timestamp>`,
+	 * which is the only thing distinguishing them when the names are identical.
+	 *
+	 * @BeforeScenario
+	 */
+	public function stampScenarioStart(): void {
+		$this->scenarioStartedAt = time();
+		$this->lastTrashEntry = '';
+	}
 
 	/**
 	 * After every scenario, delete the NC folders we made and clear the mappings
@@ -209,6 +246,15 @@ final class FeatureContext implements Context {
 			}
 		}
 		$this->createdGrafanaFolders = [];
+		// THE TRASH IS DELIBERATELY LEFT ALONE, and the attempt to empty it here is
+		// worth recording. Purging a trashed mirror is a REAL GESTURE: it fires the
+		// purge hooks, which finish the delete in Grafana. Teardown doing that
+		// destroyed the PRELOADED fixtures (`nc-alpha`'s dashboard, seeded once by
+		// bin/preload-grafana.sh), and the next scenario to pull that folder mirrored
+		// nothing — failing three scenarios later with an empty folder and no clue why.
+		//
+		// Isolation between scenarios is `trashbinPathFor` picking the NEWEST matching
+		// entry instead, which costs nothing and triggers no app behaviour.
 		// Reset the mapping list so the next scenario starts from zero mappings.
 		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
 		$this->createdFolders = [];

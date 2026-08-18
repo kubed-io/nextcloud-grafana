@@ -29,17 +29,76 @@ namespace Sabre\DAV {
 	}
 	if (!class_exists(Server::class, false)) {
 		class Server {
+			/**
+			 * The node tree. A real public property on Sabre's Server, and the only route
+			 * from the PATH that `beforeUnbind` / `method:COPY` hand a plugin to the NODE
+			 * itself — {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin}. Declared here
+			 * because neither Psalm nor the unit suite ships Sabre.
+			 *
+			 * Untyped with a docblock rather than `public Tree $tree`: a typed property
+			 * with no constructor to set it is an uninitialised-property finding waiting
+			 * to happen, and this stub is never instantiated — its whole job is to tell
+			 * Psalm the property exists and what it holds.
+			 *
+			 * @var Tree
+			 */
+			public $tree;
+
 			public function on(string $eventName, callable $callBack, int $priority = 100): bool {
 				return true;
 			}
 
 			public function addPlugin(ServerPlugin $plugin): void {
 			}
+
+			/**
+			 * Turn an absolute `Destination:` URL into a path inside this DAV root — the
+			 * only way to learn where a COPY is going, since the header is a URL and
+			 * everything else in a plugin speaks paths.
+			 *
+			 * Real signature throws `Sabre\DAV\Exception\Forbidden` for a destination
+			 * outside the root, which {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin::onCopy}
+			 * treats as "not ours to judge".
+			 */
+			public function calculateUri(string $uri): string {
+				return '';
+			}
+		}
+	}
+	if (!class_exists(Tree::class, false)) {
+		class Tree {
+			public function getNodeForPath(string $path): INode {
+				throw new \RuntimeException('stub');
+			}
 		}
 	}
 	if (!class_exists(ServerPlugin::class, false)) {
 		abstract class ServerPlugin {
 			abstract public function initialize(Server $server): void;
+		}
+	}
+}
+
+/**
+ * `sabre/http` is a separate package from `sabre/dav` and neither is shipped to Psalm or
+ * to the unit suite, so the two interfaces a `method:*` handler is handed need declaring
+ * here alongside the DAV ones. Only the members
+ * {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin::onCopy} actually calls.
+ */
+
+namespace Sabre\HTTP {
+	if (!interface_exists(RequestInterface::class, false)) {
+		interface RequestInterface {
+			/** The request path, relative to the DAV root — the COPY's SOURCE. */
+			public function getPath(): string;
+
+			/** A header's value, or null when the request does not carry it. */
+			public function getHeader(string $name): ?string;
+		}
+	}
+	if (!interface_exists(ResponseInterface::class, false)) {
+		/** Declared only because Sabre passes one; the copy guard never touches it. */
+		interface ResponseInterface {
 		}
 	}
 }

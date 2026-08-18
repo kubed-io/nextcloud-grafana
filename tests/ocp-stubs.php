@@ -150,6 +150,7 @@ namespace OCP\Files\Cache {
 			public function update($id, array $data);
 		}
 	}
+
 }
 
 namespace OCP\BackgroundJob {
@@ -180,6 +181,19 @@ namespace OCP {
 	if (!interface_exists(IUserSession::class, false)) {
 		interface IUserSession {
 			public function getUser(): ?IUser;
+
+			/**
+			 * {@see OCA\GrafanaSync\Service\TrashControl} sets the acting user around a
+			 * restore, because the home trash restores whoever is LOGGED IN rather than
+			 * whoever it was asked about — a pull has no session, so the call needs one.
+			 */
+			public function setUser(?IUser $user): void;
+		}
+	}
+	// TrashControl resolves the trashed item's owner to restore as them.
+	if (!interface_exists(IUserManager::class, false)) {
+		interface IUserManager {
+			public function get(string $uid): ?IUser;
 		}
 	}
 	// MappingSettings reads the group list for the per-mapping picker; both are
@@ -275,6 +289,35 @@ namespace OCP\Exceptions {
 	}
 }
 
+namespace OCP\Files\Cache {
+	// DECLARED HERE, NOT WITH ICache ABOVE, because it extends `OCP\EventDispatcher\Event`
+	// and this file is read top to bottom — the Cache block above runs before the
+	// EventDispatcher one, so the parent would not exist yet.
+	// The signal {@see OCA\GrafanaSync\Listener\TeamFolderPurgeListener} rides, because
+	// dropping the cache entry is the one thing NO trash backend can skip — groupfolders
+	// emits neither the legacy hook nor a typed event, so this is all there is.
+	// Constructor mirrors the real `AbstractCacheEvent`: storage, path, fileId, storageId.
+	if (!class_exists(CacheEntryRemovedEvent::class, false)) {
+		class CacheEntryRemovedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Storage\IStorage $storage,
+				private string $path,
+				private int $fileId,
+				private int $storageId,
+			) {
+			}
+
+			public function getPath(): string {
+				return $this->path;
+			}
+
+			public function getFileId(): int {
+				return $this->fileId;
+			}
+		}
+	}
+}
+
 namespace OCP\Files\Events\Node {
 	// The two node events the name-sync / writeback / move listeners key off. nextcloud/ocp
 	// ships no event classes, so the standalone unit suite needs constructable stubs to exercise
@@ -311,6 +354,26 @@ namespace OCP\Files\Events\Node {
 	// post-move sibling, so the guard can be driven directly.
 	if (!class_exists(BeforeNodeRenamedEvent::class, false)) {
 		class BeforeNodeRenamedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Node $source,
+				private \OCP\Files\Node $target,
+			) {
+			}
+
+			public function getSource(): \OCP\Files\Node {
+				return $this->source;
+			}
+
+			public function getTarget(): \OCP\Files\Node {
+				return $this->target;
+			}
+		}
+	}
+	// The pre-copy gate {@see OCA\GrafanaSync\Listener\CopyGuardListener} throws from.
+	// It carries the SOURCE node, which is the only place "was this a link?" can still
+	// be answered — by the time the post-copy event runs the stamp has been stripped.
+	if (!class_exists(BeforeNodeCopiedEvent::class, false)) {
+		class BeforeNodeCopiedEvent extends \OCP\EventDispatcher\Event {
 			public function __construct(
 				private \OCP\Files\Node $source,
 				private \OCP\Files\Node $target,

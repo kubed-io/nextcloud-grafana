@@ -49,7 +49,7 @@ Feature: Emptying the trash
     And the file is gone from the Nextcloud trash
 
   # notes: ../AGENTS.md#a-purge-has-to-work-on-both-trashes
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty a Team Folder's trash with the recycle bin on
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Shared"
@@ -59,7 +59,8 @@ Feature: Emptying the trash
     Then that file's dashboard is permanently deleted from Grafana
     And the file is gone from the Nextcloud trash
 
-    # A Team Folder's trash emits no purge signal at all, so nothing runs today.
+    # The leg that reached Grafana never: a Team Folder's trash emits no purge signal,
+    # so TeamFolderPurgeListener rides the cache-entry removal instead.
 
     # ── RULE: a purge reaches exactly one dashboard — the purged file's ───────
 

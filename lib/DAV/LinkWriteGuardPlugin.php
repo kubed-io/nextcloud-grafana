@@ -23,6 +23,8 @@ use Sabre\DAV\Exception\Forbidden;
 use Sabre\DAV\INode;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
+use Sabre\HTTP\RequestInterface;
+use Sabre\HTTP\ResponseInterface;
 
 /**
  * Refuses to let a `link`-mode dashboard file be overwritten over WebDAV.
@@ -57,14 +59,190 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	) {
 	}
 
+	/** Kept from {@see initialize} so {@see beforeUnbind} and {@see onCopy} can resolve paths. */
+	private ?Server $server = null;
+
 	#[\Override]
 	public function initialize(Server $server): void {
+		$this->server = $server;
 		// Run early (low priority number = higher precedence) so we refuse before any
 		// bytes are streamed to the part file.
 		$server->on('beforeWriteContent', [$this, 'beforeWriteContent'], 10);
 		// The other half of the same door: refusing an OVERWRITE is no use if a link
 		// folder will happily accept a brand-new file beside the pointers.
 		$server->on('beforeCreateFile', [$this, 'beforeCreateFile'], 10);
+		// EXISTENCE IS THE OTHER HALF OF READ-ONLY, and it needs its own hook. The
+		// delete IS refused without this — {@see \OCA\GrafanaSync\Listener\DeleteToGrafanaListener}
+		// throws `AbortedEventException` from `BeforeNodeDeletedEvent` — but that
+		// surfaces over DAV as a bare 403 with no `<s:message>`, so the Files app shows
+		// the user a failure with nothing in it. Sabre's `beforeUnbind` is where a
+		// refusal can still say why.
+		$server->on('beforeUnbind', [$this, 'beforeUnbind'], 10);
+		// COPY IS NEITHER A WRITE NOR AN UNBIND, so neither hook above sees it, and the
+		// typed `BeforeNodeCopiedEvent` is no help on its own: aborting it stops the copy
+		// but Sabre still answers 201, so the user is told it worked and no file appears.
+		// Measured in a pod on the n8n sibling — the mechanism is core's, not the app's.
+		// {@see \OCA\GrafanaSync\Listener\CopyGuardListener} carries that event for the
+		// non-DAV routes; this is the one a person sees.
+		//
+		// `method:COPY` rather than `beforeBind`: it fires only for a copy, and it HANDS
+		// OVER the request, so the source path needs no reaching into `Server::$httpRequest`
+		// — an untyped public property psalm will not resolve. The priority runs it ahead
+		// of Sabre's own `httpCopy` (100).
+		$server->on('method:COPY', [$this, 'onCopy'], 10);
+	}
+
+	/**
+	 * Refuse a COPY that involves a link, in either direction, with a message.
+	 *
+	 * @param ResponseInterface $response unused; part of Sabre's `method:*` signature
+	 *
+	 * ## TWO REFUSALS, ONE HOOK, BECAUSE A COPY HAS TWO ENDS
+	 *
+	 * **A link is not copyable.** It is a read-only projection of a dashboard that lives
+	 * in Grafana; duplicating the pointer does not duplicate anything, it just makes a
+	 * second file claiming the same dashboard. The same reasoning already refuses editing
+	 * one ({@see beforeWriteContent}) and deleting one ({@see beforeUnbind}) — copy was
+	 * the hole left in a rule the other two state.
+	 *
+	 * **A link mapping is not a destination.** Its folder is filled from the Grafana
+	 * folder it mirrors and from nothing else, so a file put there by hand is at best
+	 * ignored and at worst pruned by the next pull.
+	 *
+	 * ## FAILING OPEN IS THE RULE HERE, AS EVERYWHERE IN THIS PLUGIN
+	 *
+	 * Every lookup that cannot answer leaves the copy alone. A guard that blocks on doubt
+	 * turns a missing mapping or an unreadable node into a user who cannot copy their own
+	 * files, which is worse than the thing being guarded against.
+	 */
+	public function onCopy(RequestInterface $request, ResponseInterface $response): bool {
+		$this->refuseIfSourceIsALink($request->getPath());
+
+		$destination = $request->getHeader('Destination');
+		if ($destination !== null && $destination !== '' && $this->server !== null) {
+			try {
+				$path = $this->server->calculateUri($destination);
+			} catch (\Throwable) {
+				return true; // a destination Sabre cannot place is not ours to judge
+			}
+			$this->refuseIfDestinationIsALinkMapping($path);
+		}
+		return true;
+	}
+
+	/** The source of the COPY — the path the request was made against. */
+	private function refuseIfSourceIsALink(string $source): void {
+		try {
+			$node = $this->server?->tree->getNodeForPath($source);
+		} catch (\Throwable) {
+			return;
+		}
+		if (!$this->isLinkFile($node)) {
+			return;
+		}
+
+		$name = $node->getName();
+		$this->logger->warning('grafana_sync: refused a WebDAV copy of a link-mode dashboard file', [
+			'app' => Application::APP_ID,
+			'fileId' => $node->getId(),
+			'file' => $name,
+		]);
+		throw new Forbidden(
+			'“' . $name . '” is a linked Grafana dashboard — only a pointer to a dashboard that lives in Grafana, '
+			. 'so there is nothing here to copy. Duplicate the dashboard in Grafana instead, and it will '
+			. 'appear here on the next sync.',
+		);
+	}
+
+	/**
+	 * The destination the copy is binding to. The node does not exist yet, so the
+	 * mapping is resolved from the PATH — built the way the rest of the app spells an
+	 * internal path (`/<uid>/files/<relative>`), which is what
+	 * {@see MappingService::resolveForPath} is given everywhere else.
+	 */
+	private function refuseIfDestinationIsALinkMapping(string $path): void {
+		$uid = $this->userSession->getUser()?->getUID() ?? '';
+		if ($uid === '') {
+			return;
+		}
+		$relative = preg_replace('#^files/[^/]+/#', '', ltrim($path, '/'));
+		if (!is_string($relative) || $relative === '') {
+			return;
+		}
+		try {
+			$mapping = $this->mappings->resolveForPath('/' . $uid . '/files/' . $relative);
+		} catch (\Throwable) {
+			return;
+		}
+		if ($mapping === null || $mapping->mode !== Mapping::MODE_LINK) {
+			return;
+		}
+
+		$this->logger->warning('grafana_sync: refused a WebDAV copy into a link mapping', [
+			'app' => Application::APP_ID,
+			'path' => $relative,
+			'mapping' => $mapping->id,
+		]);
+		throw new Forbidden(
+			'“' . $mapping->ncFolder . '” mirrors a Grafana folder in link mode, so its contents come from Grafana '
+			. 'and files can’t be added here. Create the dashboard in Grafana instead, or switch the mapping '
+			. 'to sync mode to author dashboards in Nextcloud.',
+		);
+	}
+
+	/**
+	 * Refuse DELETE on a link file, with a message.
+	 *
+	 * A link is a read-only projection of a dashboard that lives in Grafana and is
+	 * perfectly fine. Removing the pointer only makes the mapped folder disagree with
+	 * the Grafana folder it mirrors, and the next pull writes the file straight back —
+	 * so the delete was never durable, it was just silent. The listener is the backstop
+	 * that catches every route (occ, another app, a script); this is the one the user sees.
+	 */
+	public function beforeUnbind(string $path): bool {
+		try {
+			$node = $this->server?->tree->getNodeForPath($path);
+		} catch (\Throwable) {
+			return true; // gone already, or not ours to judge — never block on doubt
+		}
+		if (!$this->isLinkFile($node)) {
+			return true; // sync/unmapped files are the user's to delete
+		}
+
+		$name = $node->getName();
+		$this->logger->warning('grafana_sync: refused a WebDAV delete of a link-mode dashboard file', [
+			'app' => Application::APP_ID,
+			'fileId' => $node->getId(),
+			'file' => $name,
+		]);
+
+		throw new Forbidden(
+			'“' . $name . '” is a linked Grafana dashboard — only a pointer to a dashboard that lives in Grafana, '
+			. 'so it can’t be deleted here. Delete the dashboard in Grafana, '
+			. 'or remove the mapping itself.',
+		);
+	}
+
+	/**
+	 * Is this DAV node one of our link-mode dashboard files? Classified from the
+	 * file's own metadata, and ANY doubt — wrong node type, foreign name, an
+	 * unreadable stamp — answers no: everything this plugin does is a refusal,
+	 * so failing open is what keeps a metadata hiccup from blocking a user.
+	 *
+	 * `@psalm-assert-if-true` narrows $node for the caller's true branch, which
+	 * is what lets the refusal sites call getId()/getName() without re-checking.
+	 *
+	 * @psalm-assert-if-true DavFile $node
+	 */
+	private function isLinkFile(?INode $node): bool {
+		if (!$node instanceof DavFile || !FilenameCodec::isDashboardName($node->getName())) {
+			return false;
+		}
+		try {
+			return $this->metadata->read($node->getId())?->isLink() ?? false;
+		} catch (\Throwable) {
+			return false;
+		}
 	}
 
 	/**

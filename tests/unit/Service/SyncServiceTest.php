@@ -24,10 +24,14 @@ use OCA\GrafanaSync\Service\StorageService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncService;
 use OCA\GrafanaSync\Service\TagSyncService;
+use OCA\GrafanaSync\Service\TrashControl;
 use OCP\Files\File;
 use OCP\Files\Folder;
+use OCP\IUserManager;
+use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -107,6 +111,16 @@ final class SyncServiceTest extends TestCase {
 			$this->times,
 			$this->tree,
 			$this->tagSync,
+			// A REAL TrashControl, not a double. The unit suite has no
+			// `files_trashbin`, so `withoutTrash()` finds no manager and simply runs
+			// the callback — which is the production path on an instance without the
+			// trash app, and the only one these tests should be exercising anyway.
+			new TrashControl(
+				$this->createStub(ContainerInterface::class),
+				$this->createStub(IUserManager::class),
+				$this->createStub(IUserSession::class),
+				new NullLogger(),
+			),
 			new NullLogger(),
 		);
 	}

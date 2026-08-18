@@ -80,7 +80,7 @@ Feature: Renaming a dashboard
     # ── RULE: a link is read-only, so its name is Grafana's to set ────────────
 
   # notes: ../AGENTS.md#renaming-a-link-never-renames-the-dashboard
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Rename a link in Nextcloud
     Given a dashboard file named "Old Name.grafana" in "Pointers"
     When I try to rename the file to "New Name.grafana"
@@ -114,7 +114,7 @@ Feature: Renaming a dashboard
     # Two halves from opposite ends: refused on the way out, fallen back on the way in.
 
   # notes: ../AGENTS.md#a-rename-to-an-empty-or-whitespace-only-name-is-refused
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Rename a dashboard file to a blank name
     Given a dashboard file named "Old Name.grafana" in "Demo"
     When I try to rename the file to a name that is only whitespace

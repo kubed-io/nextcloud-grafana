@@ -25,37 +25,48 @@ default:
     filters:
       tags: '~@todo&&~@unbuilt&&~@blocked&&~@decision'
 
-  # THREE SUITES, AND THEY ARE A PARTITION — every feature file belongs to exactly
+  # SIX SUITES, AND THEY ARE A PARTITION — every feature file belongs to exactly
   # one. `bin/check-suites.sh` enforces that mechanically, because the failure
   # mode of getting it wrong is SILENT: a file in no suite is simply never run,
   # and a green build says so confidently.
   #
-  # Running plain `behat` runs all three in sequence, which is exactly the old
-  # single-suite coverage — the split is inert until something selects a suite.
-  # That is deliberate: it lets CI prove the partition covers everything BEFORE
-  # the workflow starts depending on it (`behat --suite=dashboard` per leg).
+  # Running plain `behat` runs all six in sequence, which is exactly the old
+  # single-suite coverage — the split only changes how CI spreads the work.
   #
   # THE AXIS IS THE FILENAME, NOT A TAG. Tags look like the obvious split and are
   # the wrong tool: `@occ`, `@ui` and `@in-grafana` are carried by some scenarios
   # and not others, so any tag partition leaks — the untagged ones would match no
   # leg and quietly stop running, with every leg still green. A path partition
-  # cannot leak, because `ls features/*.feature` minus the union must be empty and
-  # that is one line to check.
+  # cannot leak, because `ls features/**/*.feature` minus the union must be empty
+  # and that is one line to check.
   #
   #   admin      the settings surface — the connection, the mapping list, and
   #              removing a mapping. Grouped because admin work is a different
   #              SESSION from user work, not merely a different tag.
-  #   dashboard  the verbs, as they apply to a dashboard (a .grafana file):
-  #              create, copy, move, rename, delete, restore, edit.
-  #   core       everything else: the same verbs on a FOLDER, plus the first sync,
-  #              identity, looking at a mirror, tags, purge and the app lifecycle.
+  #   authoring  the verbs that MAKE or CHANGE a dashboard: create, copy, edit,
+  #              rename. Every one ends with a dashboard that exists and differs
+  #              from before.
+  #   trash      the verbs that move a dashboard between STATES rather than change
+  #              its content: delete, restore, purge. Each is a round trip through
+  #              the recycle-bin folder, and each needs BOTH Nextcloud trashes.
+  #   motion     move.feature alone — the gestures that cross a mapping boundary.
+  #   tags       the tag vocabulary and its three-way sync, in both directions.
+  #   core       what is not a verb on a dashboard: the same verbs on a FOLDER,
+  #              plus viewing, opening, and the app lifecycle.
   #
-  # WHY `folder` IS NOT ITS OWN SUITE YET, though it is the obvious fourth and is
-  # exactly how nextcloud-penpot splits (admin/design/project/core): all 56 of its
-  # scenarios are specification — the folder-mirroring engine lands in a later
-  # course — so the leg would boot a Nextcloud and a Grafana to run nothing at
-  # all. It splits out with the engine, which is a one-line move that
-  # check-suites.sh verifies.
+  # WHY `dashboard` WAS SPLIT, having been one suite until now. It held create,
+  # copy, delete, edit, move, rename and restore between them — the overwhelming
+  # majority of the scenarios in the repo — while `admin` and `core` finished in a
+  # fraction of the time. The axis was no longer dividing the work; it was hiding
+  # one slow leg behind two fast ones. This is the same six-way split the n8n
+  # sibling arrived at for the same reason, which is the point: a scenario's home
+  # should be the same question in both apps.
+  #
+  # WHY `folders` IS NOT ITS OWN SUITE YET, though it is the obvious seventh and is
+  # exactly how nextcloud-penpot splits: nearly all of its scenarios are still
+  # specification — the folder-mirroring engine lands later — so the leg would boot
+  # a Nextcloud and a Grafana to run almost nothing. It splits out with the engine,
+  # which is a one-line move that check-suites.sh verifies.
   suites:
     admin:
       paths:
@@ -70,15 +81,29 @@ default:
       contexts: &contexts
       - OCA\GrafanaSync\Tests\Integration\FeatureContext
 
-    dashboard:
+    authoring:
       paths:
       - '%paths.base%/../../features/dashboards/create.feature'
       - '%paths.base%/../../features/dashboards/copy.feature'
-      - '%paths.base%/../../features/dashboards/delete.feature'
       - '%paths.base%/../../features/dashboards/edit.feature'
-      - '%paths.base%/../../features/dashboards/move.feature'
       - '%paths.base%/../../features/dashboards/rename.feature'
+      contexts: *contexts
+
+    trash:
+      paths:
+      - '%paths.base%/../../features/dashboards/delete.feature'
       - '%paths.base%/../../features/dashboards/restore.feature'
+      - '%paths.base%/../../features/dashboards/purge.feature'
+      contexts: *contexts
+
+    motion:
+      paths:
+      - '%paths.base%/../../features/dashboards/move.feature'
+      contexts: *contexts
+
+    tags:
+      paths:
+      - '%paths.base%/../../features/dashboards/tags.feature'
       contexts: *contexts
 
     core:
@@ -93,8 +118,6 @@ default:
       - '%paths.base%/../../features/folders/tags.feature'
       - '%paths.base%/../../features/dashboards/view.feature'
       - '%paths.base%/../../features/dashboards/open-with.feature'
-      - '%paths.base%/../../features/dashboards/tags.feature'
-      - '%paths.base%/../../features/dashboards/purge.feature'
       - '%paths.base%/../../features/lifecycle.feature'
       contexts: *contexts
 

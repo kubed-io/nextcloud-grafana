@@ -59,6 +59,7 @@ final class SyncService {
 		private MirrorTimes $times,
 		private FolderTreeMirror $tree,
 		private TagSyncService $tagSync,
+		private TrashControl $trash,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -407,7 +408,7 @@ final class SyncService {
 				continue;
 			}
 			try {
-				$node->delete();
+				$this->removeMirror($node, $mapping);
 				$pruned++;
 			} catch (\Throwable $e) {
 				$this->logger->warning('prune stale file failed', [
@@ -419,6 +420,33 @@ final class SyncService {
 			}
 		}
 		return $pruned;
+	}
+
+	/**
+	 * Remove a mirror whose dashboard is no longer in the mirrored Grafana folder — and
+	 * decide, from the mapping's MODE, whether the user gets it back.
+	 *
+	 *   sync → the Nextcloud trash. The file IS the dashboard's content, and the thing
+	 *          that happened in Grafana (a move, a re-file) may itself be undone, so the
+	 *          local gesture must be reversible too.
+	 *   link → gone, with no trash entry. A link is a read-only projection; once the
+	 *          dashboard is out of the mirrored folder there is nothing for a restore to
+	 *          reconnect to, and a trashed pointer would offer the user exactly that.
+	 *
+	 * {@see TrashControl} explains why pausing the trash is the only supported way to
+	 * make a delete permanent, and why it is the right one for a Team Folder. Ported
+	 * from the n8n master's `removeMirror`, where the fork and its reasons first shipped.
+	 */
+	private function removeMirror(Node $node, Mapping $mapping): void {
+		if ($mapping->mode !== Mapping::MODE_LINK) {
+			$node->delete();
+			return;
+		}
+		// A STATEMENT BODY, not an arrow function: `Node::delete()` is `void`, and
+		// `fn () => $node->delete()` implies a result that does not exist.
+		$this->trash->withoutTrash(static function () use ($node): void {
+			$node->delete();
+		});
 	}
 
 	/**

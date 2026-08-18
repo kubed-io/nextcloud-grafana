@@ -83,7 +83,7 @@ Feature: Copying a dashboard
     # ── RULE: a link is not copyable, and a link mapping is not a destination ──
 
   # notes: ../AGENTS.md#a-link-is-not-copyable-and-a-link-mapping-is-not-a-destination
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario Outline: Copying a link, or into a link mapping, is refused
     Given a dashboard file named "Fleet Health.grafana" in "<source>"
     When I try to copy the file into "<destination>"

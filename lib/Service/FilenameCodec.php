@@ -99,6 +99,16 @@ final class FilenameCodec {
 	}
 
 	/**
+	 * True for the TRASH'S OWN SPELLING of a dashboard file — `<orig>.grafana.d<timestamp>`.
+	 * A file only ever carries that shape while it sits in a trash, which is what lets
+	 * {@see \OCA\GrafanaSync\Listener\TeamFolderPurgeListener} use it as a cheap filter
+	 * on an event that fires for every cache removal in the instance.
+	 */
+	public static function isTrashedDashboardName(string $name): bool {
+		return (bool)preg_match('/' . preg_quote(self::EXT, '/') . '\.d\d+$/', $name);
+	}
+
+	/**
 	 * True when $node is a managed Grafana dashboard file: a {@see File} whose name
 	 * ends in {@see EXT}. The one predicate the listeners/services share instead of
 	 * open-coding `$node instanceof File && str_ends_with(...)` everywhere.

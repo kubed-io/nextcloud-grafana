@@ -96,6 +96,11 @@ trait WebDavTrait {
 		$this->assertStatus($this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body]), [201, 204], "PUT $path");
 	}
 
+	/** PUT a file, returning the raw status (so create-refused scenarios can inspect it). */
+	private function davPutStatus(string $path, string $body): int {
+		return $this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body])->getStatusCode();
+	}
+
 	/** GET a file's content. */
 	private function davGet(string $path): string {
 		$res = $this->davClient()->request('GET', $this->davEncode($path));
@@ -134,6 +139,14 @@ trait WebDavTrait {
 		$this->assertStatus($res, [201, 204], "COPY $from → $to");
 	}
 
+	/** COPY a file, returning the raw status (so copy-refused scenarios can inspect it). */
+	private function davCopyStatus(string $from, string $to): int {
+		$dest = $this->ncBaseUrl . '/remote.php/dav/files/' . rawurlencode($this->ncUser) . '/' . $this->davEncode($to);
+		return $this->davClient()->request('COPY', $this->davEncode($from), [
+			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
+		])->getStatusCode();
+	}
+
 	/** DELETE a file (asserting success → trash). */
 	private function davDelete(string $path): void {
 		$this->assertStatus($this->davClient()->request('DELETE', $this->davEncode($path)), [204, 200], "DELETE $path");
@@ -150,7 +163,7 @@ trait WebDavTrait {
 	 * `.dNNNN` deletion-time suffix, so we match on the original basename prefix.
 	 * Returns the trashbin entry filename (e.g. "Old Name.grafana.d171...") or null.
 	 */
-	private function trashbinPathFor(string $originalPath): ?string {
+	private function trashbinPathFor(string $originalPath, int $notBefore = 0): ?string {
 		$base = basename($originalPath);
 		$href = $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash';
 		$res = $this->davClient()->request('PROPFIND', $href, [
@@ -162,16 +175,58 @@ trait WebDavTrait {
 		$doc = new \SimpleXMLElement((string)$res->getBody());
 		$doc->registerXPathNamespace('d', 'DAV:');
 		$doc->registerXPathNamespace('nc', 'http://nextcloud.org/ns');
+		// THE NEWEST MATCH, NOT THE FIRST. Every scenario names its dashboard the same
+		// thing and nothing empties the trash between them — emptying it is itself a
+		// gesture that finishes deletes in Grafana, so teardown must not — which left
+		// this returning a STALE entry from an earlier scenario. The purge steps then
+		// destroyed that one and reported the current file still in the trash.
+		//
+		// The trash spells its entries `<name>.d<unix timestamp>`, so the largest
+		// suffix is the most recent deletion, which is always this scenario's.
+		$best = null;
+		$bestStamp = -1;
 		foreach ($doc->xpath('//d:response') ?: [] as $resp) {
 			$resp->registerXPathNamespace('d', 'DAV:');
 			$resp->registerXPathNamespace('nc', 'http://nextcloud.org/ns');
 			$origName = trim((string)($resp->xpath('.//nc:trashbin-filename')[0] ?? ''));
 			$rawHref = rawurldecode(trim((string)($resp->xpath('d:href')[0] ?? '')));
-			if ($origName === $base && $rawHref !== '') {
-				return basename(rtrim($rawHref, '/'));
+			if ($origName !== $base || $rawHref === '') {
+				continue;
+			}
+			$entry = basename(rtrim($rawHref, '/'));
+			$stamp = preg_match('/\.d(\d+)$/', $entry, $m) === 1 ? (int)$m[1] : 0;
+			// $notBefore lets a caller ask "was this trashed DURING my scenario?" — the
+			// only way to tell one scenario's entry from an earlier one's when the names
+			// are identical, which since the naming sweep they always are.
+			if ($stamp < $notBefore) {
+				continue;
+			}
+			if ($stamp >= $bestStamp) {
+				$bestStamp = $stamp;
+				$best = $entry;
 			}
 		}
-		return null;
+		return $best;
+	}
+
+	/** Is this exact trash entry still there? Named, not searched — see its callers. */
+	private function trashEntryExists(string $entry): bool {
+		$href = $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash';
+		$res = $this->davClient()->request('PROPFIND', $href, [
+			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+		]);
+		if ($res->getStatusCode() !== 207) {
+			return false; // no trash to be in
+		}
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		foreach ($doc->xpath('//d:href') ?: [] as $href) {
+			if (basename(rtrim(rawurldecode(trim((string)$href)), '/')) === $entry) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Full trashbin href for a trash entry filename. */

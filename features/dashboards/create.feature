@@ -74,7 +74,7 @@ Feature: Creating a dashboard
     And "Scratch/New dashboard.grafana" holds no Grafana metadata at all
 
   # notes: ../AGENTS.md#a-link-mapping-authors-nothing
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Creating a dashboard in a link-mapped folder is refused
     When I try to create a new dashboard in "Pointers" via the Files "New" menu
     Then the creation is refused with a message
