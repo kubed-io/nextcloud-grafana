@@ -89,16 +89,15 @@
 			The trash app is REMOVABLE, which is the whole reason {@see OCA\GrafanaSync\Service\TrashControl}
 			resolves its manager lazily instead of taking it in the constructor — a hard
 			dependency would make this app fail to boot on an instance without it. Psalm
-			cannot see either interface for the same reason, so the suppression is the
-			honest counterpart of the runtime `interface_exists()` check. Same list the
-			n8n master carries.
+			cannot see either interface for the same reason, so the suppression above is
+			the honest counterpart of the runtime `interface_exists()` check.
+
+			NO `UndefinedDocblockClass` BLOCK, though the n8n master carries one: psalm
+			treats an unused suppression as an error in its own right, and here the two
+			interfaces are only ever named in real type positions, never in a docblock.
+			The master's TrashControl does name them in docblocks, which is the whole
+			difference — a suppression copied across for symmetry fails the build.
 		-->
-		<UndefinedDocblockClass>
-			<errorLevel type="suppress">
-				<referencedClass name="OCA\Files_Trashbin\Trash\ITrashItem" />
-				<referencedClass name="OCA\Files_Trashbin\Trash\ITrashManager" />
-			</errorLevel>
-		</UndefinedDocblockClass>
 		<!--
 			MissingDependency doesn't support <referencedClass> in Psalm 6's schema.
 			The only instances are IRootFolder reporting its base oc\hooks\emitter as
