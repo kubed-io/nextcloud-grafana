@@ -39,7 +39,7 @@ Feature: Creating a folder
   # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
   @user @in-nextcloud @gesture @ui
   Scenario: Move a dashboard into a folder of a mapping
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And the folder "Demo/Team/Drafts" holding no dashboards
     When I move the file into "Demo/Team/Drafts"
     Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"

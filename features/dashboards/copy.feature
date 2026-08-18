@@ -107,7 +107,7 @@ Feature: Copying a dashboard
   # notes: ../AGENTS.md#a-copy-landing-outside-every-mapping-is-a-plain-document
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Copy a dashboard into an unmapped folder
-    Given a dashboard file in "<source>"
+    Given a dashboard file named "Fleet Health.grafana" in "<source>"
     When I copy the file into "Scratch"
     Then the copy holds no Grafana metadata at all
     And no dashboard is created in Grafana for the copy

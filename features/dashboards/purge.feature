@@ -30,7 +30,7 @@ Feature: Emptying the trash
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash with the recycle bin off
     Given the Grafana recycle bin is off
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     When I purge it from the trash
     Then the file is gone from the Nextcloud trash
@@ -41,7 +41,7 @@ Feature: Emptying the trash
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash with the recycle bin on
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When I purge it from the trash
@@ -52,7 +52,7 @@ Feature: Emptying the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Empty a Team Folder's trash with the recycle bin on
     Given the Grafana recycle bin is on
-    And a dashboard file in "Shared"
+    And a dashboard file named "Fleet Health.grafana" in "Shared"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When I purge it from the trash
@@ -67,7 +67,7 @@ Feature: Emptying the trash
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Empty the trash for one file while others are parked
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     And "nextcloud-trash" also holds dashboards Nextcloud never managed
@@ -81,7 +81,7 @@ Feature: Emptying the trash
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario Outline: Empty the trash when the dashboard is not in the bin
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is <where>
     When I purge it from the trash
@@ -99,7 +99,7 @@ Feature: Emptying the trash
   @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
   Scenario: Empty the bin folder in Grafana
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When someone empties the "nextcloud-trash" folder in Grafana

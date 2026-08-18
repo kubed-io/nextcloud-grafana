@@ -23,7 +23,7 @@ Feature: Removing a folder mapping
 
   @admin @in-nextcloud @occ @ui @todo
   Scenario: Remove a sync mapping
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When the admin removes the "Demo" mapping
     Then "Demo" holds the same files it held before
     And the file holds:
@@ -40,7 +40,7 @@ Feature: Removing a folder mapping
 
   @admin @in-nextcloud @occ @ui @todo
   Scenario: Remove a link mapping
-    Given a dashboard file in "Pointers"
+    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When the admin removes the "links" mapping
     Then "Pointers" holds no dashboard files
     And the dashboard is in the "links" Grafana folder

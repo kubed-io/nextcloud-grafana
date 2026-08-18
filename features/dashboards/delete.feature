@@ -28,7 +28,7 @@ Feature: Trashing a dashboard file
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin off
     Given the Grafana recycle bin is off
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     When I move it to the trash
     Then the dashboard no longer exists in Grafana
     And the file is recoverable from the Nextcloud trash
@@ -36,7 +36,7 @@ Feature: Trashing a dashboard file
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Trash a dashboard with the recycle bin on
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     When I move it to the trash
     Then the dashboard is in the "nextcloud-trash" Grafana folder
     And the file is recoverable from the Nextcloud trash
@@ -46,7 +46,7 @@ Feature: Trashing a dashboard file
   # notes: ../AGENTS.md#a-link-cannot-be-deleted-from-nextcloud
   @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Trash a link
-    Given a dashboard file in "Pointers"
+    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When I try to move it to the trash
     Then the trash is refused with a message
     And the file stays in "Pointers"
@@ -58,7 +58,7 @@ Feature: Trashing a dashboard file
 
   @user @in-nextcloud @gesture @ui
   Scenario: Trash an unmapped dashboard file
-    Given a dashboard file in "Scratch"
+    Given a dashboard file named "Fleet Health.grafana" in "Scratch"
     When I move it to the trash
     Then the file is recoverable from the Nextcloud trash
     And it still holds no Grafana metadata
@@ -85,7 +85,7 @@ Feature: Trashing a dashboard file
   Scenario: Delete a dashboard with the Nextcloud trash disabled
     Given the Nextcloud trash is disabled
     And the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     When I delete it
     Then the dashboard no longer exists in Grafana
 
@@ -94,7 +94,7 @@ Feature: Trashing a dashboard file
   # notes: ../AGENTS.md#a-dashboard-deleted-in-grafana-loses-its-mirror-in-nextcloud
   @grafana @in-grafana @gesture @ui
   Scenario: Delete a dashboard in Grafana
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone deletes the dashboard in Grafana
     Then the file is gone from "Demo"
     And the file is recoverable from the Nextcloud trash
@@ -105,7 +105,7 @@ Feature: Trashing a dashboard file
   # notes: ../AGENTS.md#a-link-leaves-when-its-dashboard-does
   @grafana @in-grafana @gesture @ui @unbuilt
   Scenario: Delete a link's dashboard in Grafana
-    Given a dashboard file in "Pointers"
+    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone deletes the dashboard in Grafana
     Then the file is gone from "Pointers"
     And the file is not in the Nextcloud trash
@@ -117,7 +117,7 @@ Feature: Trashing a dashboard file
   # notes: ../AGENTS.md#the-grafana-delete-is-aborted-if-grafana-is-unreachable
   @user @in-nextcloud @gesture @ui @blocked
   Scenario: Trash a dashboard while Grafana is unreachable
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And Grafana is unreachable
     When I try to move it to the trash
     Then the trash is aborted and the file stays in "Demo"

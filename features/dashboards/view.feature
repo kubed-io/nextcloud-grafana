@@ -26,8 +26,8 @@ Feature: Looking at a dashboard file
   # notes: ../AGENTS.md#a-mapped-folder-shows-its-dashboards-as-dashboards
   @user @ui @todo
   Scenario: A mapped folder shows its dashboards as dashboards
-    Given a dashboard file in "Demo"
-    And a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
+    And a dashboard file named "Cluster Load.grafana" in "Demo"
     When I open "Demo" in the Files app
     Then the mapped folder shows the dashboards with the Grafana icon
 
@@ -36,7 +36,7 @@ Feature: Looking at a dashboard file
   # notes: ../AGENTS.md#viewing-the-dav-properties-on-a-file-shows-grafana-specific-details
   @user @dav @todo
   Scenario Outline: Viewing the DAV properties on a file shows Grafana specific details
-    Given a dashboard file in "<folder>"
+    Given a dashboard file named "Fleet Health.grafana" in "<folder>"
     When a WebDAV client requests the file's properties
     Then the file holds:
       | grafana_uid        | the dashboard's uid |
@@ -53,7 +53,7 @@ Feature: Looking at a dashboard file
   # notes: ../AGENTS.md#finding-dashboards-by-their-mode
   @user @dav @blocked
   Scenario: Finding dashboards by their mode
-    Given a dashboard file in "Demo"
-    And a dashboard file in "Pointers"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Pointers"
     When a DAV REPORT searches for files where "nc:metadata-grafana_mode" is "sync"
     Then only the file in "Demo" is returned

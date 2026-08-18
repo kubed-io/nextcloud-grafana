@@ -29,7 +29,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a file whose dashboard is parked
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When I restore it from the trash
@@ -43,7 +43,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a file whose dashboard was deleted at trash time
     Given the Grafana recycle bin is off
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     When I restore it from the trash
     Then a matching dashboard is created in Grafana
@@ -56,7 +56,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Restore a file from a Team Folder's trash
     Given the Grafana recycle bin is on
-    And a dashboard file in "Shared"
+    And a dashboard file named "Fleet Health.grafana" in "Shared"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When I restore it from the trash
@@ -69,7 +69,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a file whose parked dashboard has since been deleted
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard no longer exists in Grafana
     When I restore it from the trash
@@ -82,7 +82,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @todo
   Scenario: Restore a file whose dashboard is already back in place
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is back in the "Demo" Grafana folder
     When I restore it from the trash
@@ -92,7 +92,7 @@ Feature: Restoring a dashboard file from the trash
   # notes: ../AGENTS.md#restoring-into-a-mapping-that-no-longer-exists-leaves-a-plain-file
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Restore a file whose mapping has since been removed
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And the mapping has since been removed
     When I restore it from the trash
@@ -105,7 +105,7 @@ Feature: Restoring a dashboard file from the trash
   @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a dashboard out of the bin in Grafana
     Given the Grafana recycle bin is on
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     And its dashboard is parked in "nextcloud-trash"
     When someone moves the dashboard into the "Demo" Grafana folder
@@ -122,7 +122,7 @@ Feature: Restoring a dashboard file from the trash
   @user @in-nextcloud @gesture @ui @recycle-bin @decision
   Scenario: A bin-off restore gives the dashboard a new URL and an empty history
     Given the Grafana recycle bin is off
-    And a dashboard file in "Demo"
+    And a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
     When I restore it from the trash
     Then the dashboard's URL in Grafana is the new uid's

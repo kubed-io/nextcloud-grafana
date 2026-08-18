@@ -126,14 +126,19 @@ trait TagSteps {
 
 	/**
 	 * @Given a dashboard file in :folder whose tags are :tags
+	 * @Given a dashboard file named :filename in :folder whose tags are :tags
 	 *
 	 * Seeded through the FILE, not through Grafana, because that is the pre-state the
 	 * scenarios describe — a mirror that already carries tags. The write goes out over
 	 * DAV so the app's own push carries it to Grafana, which means the arrange also
 	 * proves the plumbing the scenario is about to exercise actually exists.
 	 */
-	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags): void {
-		$this->aDashboardFileIn($folder);
+	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags, string $filename = ''): void {
+		if ($filename !== '') {
+			$this->aDashboardFileNamedIn($filename, $folder);
+		} else {
+			$this->aDashboardFileIn($folder);
+		}
 
 		// A LINK's tags are Grafana's, so they are seeded THERE and pulled — writing
 		// into a link folder is refused by design. aDashboardFileIn() already arranged

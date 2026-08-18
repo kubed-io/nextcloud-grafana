@@ -539,7 +539,7 @@ a file copied out of a mapping into `Scratch` is a plain document, and a file
 copied out of `Scratch` into a mapping is a new dashboard. So the source is an
 Examples column and the destination is the scenario.
 
-That is why there is one arrange for every source. `a dashboard file in "<folder>"`
+That is why there is one arrange for every source. `a dashboard file named "…" in "<folder>"`
 makes a file wherever the scenario says, and the Background says what that folder
 is; the arrange asserts nothing about a uid, because outside a mapping there
 isn't one and that is the point rather than a failure.
