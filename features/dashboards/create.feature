@@ -27,7 +27,9 @@ Feature: Creating a dashboard
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
-    # ── RULE: where the file lands decides whether it is a dashboard ───────────
+    # ── RULE: creating on either side creates on both ─────────────────────────
+    # The base case, seen twice: where you happened to be standing when you made
+    # it is not a decision the user should have to make.
 
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Create a new dashboard in a mapped folder
@@ -46,8 +48,6 @@ Feature: Creating a dashboard
       | Demo      | Demo           |
       | Shared    | Shared         |
 
-    # ── RULE: a dashboard made in Grafana arrives in the folder mapped to it ───
-
   @grafana @in-grafana @gesture @ui @todo
   Scenario Outline: Create a dashboard in Grafana
     When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
@@ -65,6 +65,8 @@ Feature: Creating a dashboard
       | links          | Pointers  | link | a pointer to the dashboard |
       | Shared         | Shared    | sync | the dashboard's full JSON  |
 
+    # ── RULE: where the file lands decides whether it is a dashboard ───────────
+
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Create an unmapped dashboard
     When I create a new dashboard in "Scratch" via the Files "New" menu
@@ -79,5 +81,3 @@ Feature: Creating a dashboard
 
     # A link folder is Grafana's to write, so a file authored into one could never
     # become the dashboard it looks like. Refused at the door rather than accepted.
-
-  
