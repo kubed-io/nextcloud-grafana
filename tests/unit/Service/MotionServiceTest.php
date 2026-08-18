@@ -185,6 +185,11 @@ final class MotionServiceTest extends TestCase {
 			->method('write')
 			->with(42, [
 				DashboardMetadata::KEY_MAPPING => 'm-dst',
+				// THE MODE IS RE-STATED ON EVERY ARRIVAL, not only when it changed. A file
+				// parked with the recycle bin on is stamped `unmapped`, so a mapping has to
+				// say what the file IS on the way in — and writing it unconditionally is
+				// cheaper to reason about than writing it only when it differs.
+				DashboardMetadata::KEY_MODE => Mapping::MODE_SYNC,
 				DashboardMetadata::KEY_FOLDER_UID => 'gf-subfolder',
 				DashboardMetadata::KEY_VERSION => '9',
 			]);

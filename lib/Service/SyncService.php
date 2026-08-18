@@ -60,6 +60,7 @@ final class SyncService {
 		private FolderTreeMirror $tree,
 		private TagSyncService $tagSync,
 		private TrashControl $trash,
+		private TrashReconcileService $trashReconcile,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -340,6 +341,17 @@ final class SyncService {
 			}
 
 			$pruned = $this->pruneStale($existingByUid, $seenUids, $mapping);
+
+			// AND THE TRASH, which the prune above cannot see. `pruneStale` walks the
+			// mapped FOLDER; a mirror that was trashed is not in it, so a dashboard
+			// destroyed in Grafana after its file was trashed left the Nextcloud trash
+			// holding an entry whose restore had nothing to reconnect to.
+			//
+			// AFTER the prune, not before: the prune trashes mirrors of its own, and
+			// judging the trash first would mean judging it in a state the pull is about
+			// to change. The reconcile refuses to purge anything it cannot prove is gone,
+			// so a mirror it sees mid-flight is simply left for the next tick.
+			$this->trashReconcile->reap($mapping);
 
 			return [
 				'processed' => $processed,

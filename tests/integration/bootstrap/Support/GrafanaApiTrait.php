@@ -63,6 +63,25 @@ trait GrafanaApiTrait {
 	}
 
 	/**
+	 * The same record, decoded as OBJECTS — for the one caller that sends it back.
+	 *
+	 * An assoc round-trip rewrites every empty JSON object in the spec (`{}`) as an empty
+	 * ARRAY, and `json_encode` then re-sends `[]` where Grafana requires `{}` —
+	 * `annotations`, `templating` and `time` all carry them. `iEditTheFilesPanelsAndSave`
+	 * already decodes with `false` for exactly this reason; the in-Grafana edit reads a
+	 * record and re-posts it, so it needs the same care and did not have it.
+	 */
+	private function grafanaGetDashboardObject(string $uid): ?\stdClass {
+		$res = $this->grafanaClient()->request('GET', 'dashboards/uid/' . rawurlencode($uid));
+		if ($res->getStatusCode() === 404) {
+			return null;
+		}
+		Assert::assertSame(200, $res->getStatusCode(), "GET Grafana dashboard $uid failed: " . (string)$res->getBody());
+		$decoded = json_decode((string)$res->getBody(), false, 512, JSON_THROW_ON_ERROR);
+		return $decoded instanceof \stdClass ? $decoded : null;
+	}
+
+	/**
 	 * Every write Grafana recorded for a dashboard, oldest first, as
 	 * `v1 at 04:08:19 "Initial save"`.
 	 *

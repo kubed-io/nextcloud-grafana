@@ -251,7 +251,10 @@ trait WebDavTrait {
 	 * the assertion instead of the app.
 	 */
 	private static function davErrorMessage(string $body): string {
-		if (preg_match('~<s:message>(.*?)</s:message>~s', $body, $m) === 1) {
+		// `<s:message …>` MAY CARRY ATTRIBUTES — `xml:lang`, a namespace declaration —
+		// and a tag-name-only match would miss the message and fail a refusal whose
+		// message was there all along.
+		if (preg_match('~<s:message\b[^>]*>(.*?)</s:message>~s', $body, $m) === 1) {
 			return html_entity_decode(trim($m[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
 		}
 		return '';

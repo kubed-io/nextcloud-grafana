@@ -210,19 +210,23 @@ trait SyncSteps {
 		if ($uid === '') {
 			throw new \RuntimeException('no dashboard behind the file under test');
 		}
-		$record = $this->grafanaGetDashboard($uid);
+		// OBJECT DECODE, and it is not a style choice. An assoc round-trip rewrites the
+		// spec's empty `{}` objects as `[]`, and Grafana rejects the result — the same
+		// trap `iEditTheFilesPanelsAndSave` documents above. This step reads a record and
+		// sends it straight back, so it is the most exposed caller there is.
+		$record = $this->grafanaGetDashboardObject($uid);
 		if ($record === null) {
 			throw new \RuntimeException("Grafana has no dashboard '$uid'");
 		}
 
 		$this->editedPanelTitle = 'EditedInGrafana-' . bin2hex(random_bytes(3));
-		$spec = (array)($record['dashboard'] ?? []);
-		$spec['panels'] = [['type' => 'text', 'title' => $this->editedPanelTitle]];
+		$spec = $record->dashboard ?? new \stdClass();
+		$spec->panels = [(object)['type' => 'text', 'title' => $this->editedPanelTitle]];
 		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
 			'headers' => ['Content-Type' => 'application/json'],
 			'body' => json_encode([
 				'dashboard' => $spec,
-				'folderUid' => (string)($record['meta']['folderUid'] ?? ''),
+				'folderUid' => (string)($record->meta->folderUid ?? ''),
 				'overwrite' => true,
 				'message' => 'integration: edited in Grafana',
 			], JSON_THROW_ON_ERROR),
@@ -590,7 +594,11 @@ trait SyncSteps {
 		}
 		foreach ($this->viewedFiles as $path) {
 			$type = $this->davContentType($path);
-			if ($type !== 'application/grafana+json') {
+			// THE TYPE, WITHOUT ITS PARAMETERS. `getcontenttype` may legally carry
+			// `; charset=utf-8`, and the icon is chosen from the type alone — so an exact
+			// string compare would fail a scenario whose subject was entirely correct.
+			$bare = trim(explode(';', $type, 2)[0]);
+			if ($bare !== 'application/grafana+json') {
 				throw new \RuntimeException(
 					"$path is served as '$type', not application/grafana+json — its icon would be the generic glyph",
 				);

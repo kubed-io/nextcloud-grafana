@@ -42,13 +42,16 @@ Feature: Looking at a dashboard file
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | the mapping's id    |
       | grafana_mode       | the mapping's mode  |
-      | grafana_version    | set                 |
+      | grafana_version    | <version>           |
       | grafana_syncedHash | set                 |
 
-    Examples: both modes a mapping can hold
-      | folder   |
-      | Demo     |
-      | Pointers |
+    Examples: both modes a mapping can hold, and only one of them has a version
+      | folder   | version |
+      | Demo     | set     |
+      | Pointers | absent  |
+
+    # A version records what a push last sent, and a link never pushes — so it is
+    # deliberately left empty rather than being a value nobody maintains.
 
   # notes: ../AGENTS.md#finding-dashboards-by-their-mode
   @user @dav @blocked

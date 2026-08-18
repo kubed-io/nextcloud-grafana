@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dragging a dashboard file out of its mapped folder always deleted the dashboard, even with the recycle bin on — the same removal you get from the trash now parks it in the bin folder instead, and moving the file back brings the same dashboard out again.
+- A dashboard file moved back into a mapping stayed marked unmapped, so later gestures treated a live mirror as though it belonged to nothing.
 - Emptying a Team Folder's trash never reached Grafana: the dashboard stayed parked in the recycle-bin folder for good, with nothing to say so. It is deleted now, like emptying any other trash.
 - A linked dashboard could be copied, deleted or renamed from Nextcloud. Each looked like it worked and was undone by the next sync; all three are refused with a message now, as editing one already was.
 - A dashboard file could be renamed to nothing but spaces, leaving its filename, its JSON title and its Grafana title disagreeing three ways with nothing to say so.

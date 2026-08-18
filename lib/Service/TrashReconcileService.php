@@ -1,0 +1,218 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\GrafanaSync\Service;
+
+use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Exception\GrafanaApiException;
+use Psr\Log\LoggerInterface;
+
+/**
+ * The last third of the delete story: the Nextcloud trash follows Grafana in both
+ * directions.
+ *
+ * A mirror sits in the Nextcloud trash only for as long as the dashboard it mirrors
+ * still exists. Trashing a file parks its dashboard in the recycle-bin folder
+ * (`delete.feature`); emptying the Nextcloud trash deletes it for good
+ * (`purge.feature`). What neither covers is the OTHER side of the same gesture —
+ * somebody empties the bin folder in Grafana — and until now that left the Nextcloud
+ * trash holding an entry whose restore had nothing to reconnect to.
+ *
+ * {@see reap} closes it: a dashboard that is gone from Grafana purges its trashed
+ * mirror too.
+ *
+ * ## WHY MIRRORING A PURGE WITH A PURGE IS THE RIGHT ANSWER
+ *
+ * The cautious rule would be *leave the trashed file alone* — once Grafana has
+ * destroyed the dashboard, that file is the LAST COPY OF IT IN EXISTENCE, and reaching
+ * in to delete the last copy on a schedule is the most destructive thing this app could
+ * do. That fear is right about the stakes and wrong about the gesture: emptying the bin
+ * folder is not an accident anyone has on a schedule. It is the second, deliberate step
+ * of a two-step delete — the dashboard was already parked there — and it is exactly the
+ * gesture Nextcloud spells "empty the trash".
+ *
+ * What the app must not do is GUESS. {@see isGone} refuses to purge unless it can prove
+ * the dashboard is gone, and Grafana being unreachable is not proof.
+ *
+ * ## WHAT IT WILL NOT TOUCH
+ *
+ *   - a trash entry with no `grafana_uid` — never ours, never was
+ *   - a file belonging to a DIFFERENT mapping — that mapping's pull will judge it
+ *   - a file whose mode is not `sync` — an `unmapped` file left its mapping and its
+ *     dashboard stopped being this app's business (`purge.feature` says the same about
+ *     the user-driven purge), and a `link` is never trashed at all
+ *   - anything whatsoever while the answer from Grafana is uncertain
+ *
+ * ## THE PULL'S LISTING IS NOT AN EXISTENCE SET HERE, UNLIKE THE SIBLING'S
+ *
+ * n8n can answer most of this for free: its tag listing returns ARCHIVED workflows too,
+ * so the ids the pull just saw prove existence. Ours cannot. A parked dashboard has been
+ * moved OUT of the mapped folder and into the bin, so it is absent from the mapping's
+ * listing precisely BECAUSE it is parked — the state where the mirror legitimately stays
+ * in the trash. Reading "absent from the listing" as "gone" would purge every correctly
+ * parked mirror on the next pull.
+ *
+ * So every candidate is asked about by uid. The cost is one GET per trashed mirror of
+ * this mapping, which is bounded by how many files the user has trashed, not by how many
+ * dashboards exist.
+ */
+final class TrashReconcileService {
+	public function __construct(
+		private TrashControl $trash,
+		private DashboardMetadata $metadata,
+		private GrafanaClient $grafana,
+		private TeamFolderService $teamFolders,
+		private SyncGuard $guard,
+		private LoggerInterface $logger,
+	) {
+	}
+
+	/**
+	 * Purge the trashed mirrors of $mapping whose dashboards no longer exist in Grafana.
+	 *
+	 * Returns how many were purged, for the pull's counters.
+	 */
+	public function reap(Mapping $mapping): int {
+		$uid = $this->actorUid($mapping);
+		if ($uid === null) {
+			return 0;
+		}
+
+		$purged = 0;
+		foreach ($this->mirrors($uid, $mapping) as $dashboardUid => $trashed) {
+			if (!$this->isGone($dashboardUid)) {
+				continue;
+			}
+
+			try {
+				// UNDER THE GUARD, because the home trash's purge fires the legacy
+				// `preDelete` hook and {@see \OCA\GrafanaSync\Listener\TrashPurgeHook}
+				// would answer it by deleting the dashboard in Grafana. Harmless in
+				// itself — the dashboard is the thing that is already gone, so the call
+				// is an idempotent no-op — but it would put a "deleting the dashboard"
+				// line in the log for a purge doing the exact opposite, and this app has
+				// already lost hours to trash diagnostics that said the wrong thing.
+				$this->guard->run(static function () use ($trashed): void {
+					$trashed->purge();
+				});
+				$purged++;
+				$this->logger->info('grafana_sync trash: purged a mirror whose dashboard no longer exists in Grafana', [
+					'app' => Application::APP_ID,
+					'fileId' => $trashed->fileId,
+					'name' => $trashed->name,
+					'uid' => $dashboardUid,
+					'mapping' => $mapping->id,
+				]);
+			} catch (\Throwable $e) {
+				// A member without delete permission on the Team Folder, a backend that
+				// refused: leave the entry alone and say so. It is still recoverable,
+				// which is the failure direction to prefer.
+				$this->logger->warning('grafana_sync trash: could not purge a trashed mirror', [
+					'app' => Application::APP_ID,
+					'fileId' => $trashed->fileId,
+					'name' => $trashed->name,
+					'uid' => $dashboardUid,
+					'exception' => $e,
+				]);
+			}
+		}
+		return $purged;
+	}
+
+	/**
+	 * Whose trash to look in: the sync actor's, or null when there isn't one.
+	 *
+	 * `resolveActorUid()` throws on an instance whose admin group has no members. A pull
+	 * must survive that — the reconcile is a pass inside the pull, not the point of it —
+	 * so it is caught here rather than at every call site.
+	 */
+	private function actorUid(Mapping $mapping): ?string {
+		try {
+			return $this->teamFolders->resolveActorUid();
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: no sync actor, so no trash to reconcile', [
+				'app' => Application::APP_ID,
+				'mapping' => $mapping->id,
+				'exception' => $e,
+			]);
+			return null;
+		}
+	}
+
+	/**
+	 * $mapping's trashed `sync` mirrors in $uid's trash, keyed by the dashboard each one
+	 * mirrors.
+	 *
+	 * The NAME is tested before the metadata because it costs nothing and answers almost
+	 * everything: this is a whole user's trash, and the overwhelming majority of what is
+	 * in it has never had anything to do with this app. Only entries that look like ours
+	 * cost a metadata read.
+	 *
+	 * TWO MIRRORS OF ONE DASHBOARD CANNOT BOTH BE KEYED, and the later one wins. That
+	 * needs the same dashboard mirrored twice in one mapping AND both copies trashed, and
+	 * either survivor is a correct answer — the loser stays in the trash for the next
+	 * tick, which keys it once the winner is out.
+	 *
+	 * @return array<string,TrashedFile>
+	 */
+	private function mirrors(string $uid, Mapping $mapping): array {
+		$index = [];
+		foreach ($this->trash->listTrashed($uid) as $trashed) {
+			if (!FilenameCodec::isDashboardName($trashed->name)) {
+				continue;
+			}
+			$managed = $this->metadata->read($trashed->fileId);
+			if (!$managed?->isManaged() || !$managed->isSync() || $managed->mappingId !== $mapping->id) {
+				continue;
+			}
+			$index[$managed->uid] = $trashed;
+		}
+		return $index;
+	}
+
+	/**
+	 * Is $uid really gone from Grafana?
+	 *
+	 * Answers **false whenever it cannot tell**, and that asymmetry is the safety
+	 * property of this whole class. A wrong "no" leaves a trash entry the next tick looks
+	 * at again; a wrong "yes" destroys the last copy of a dashboard, and Grafana has no
+	 * undo. So an unreachable Grafana, a 500, a transport error — every one means "leave
+	 * it". Only an explicit 404 counts as proof.
+	 *
+	 * A dashboard sitting in the recycle-bin folder answers 200 here, which is the whole
+	 * point: parked is not gone, and its mirror belongs in the trash exactly where it is.
+	 */
+	private function isGone(string $uid): bool {
+		if ($uid === '') {
+			return false;
+		}
+		try {
+			$this->grafana->readDashboard($uid);
+			return false; // still there — parked in the bin, or refiled somewhere else
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus === 404) {
+				return true;
+			}
+			$this->logger->warning('grafana_sync trash: could not confirm a dashboard is gone; leaving its mirror in the trash', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'status' => $e->httpStatus,
+				'exception' => $e,
+			]);
+			return false;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not reach Grafana; leaving the mirror in the trash', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return false;
+		}
+	}
+}

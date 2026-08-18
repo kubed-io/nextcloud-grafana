@@ -842,25 +842,30 @@ trait LifecycleSteps {
 	}
 
 	/**
-	 * BOTH HALVES OF THE SENTENCE. A 403 with an empty body renders in the Files app as
-	 * nothing at all — the same thing the user sees when a gesture silently fails — so
+	 * BOTH HALVES OF THE SENTENCE. A refusal with an empty body renders in the Files app
+	 * as nothing at all — the same thing the user sees when a gesture silently fails — so
 	 * "refused WITH A MESSAGE" is not satisfied by the status alone. Ported from the n8n
 	 * master, whose delete refusal has asserted the message since it shipped.
 	 *
-	 * 403 specifically rather than any 4xx: every guard here throws either
-	 * `AbortedEventException` from a typed event or `Forbidden` from the Sabre plugin,
-	 * and Nextcloud renders both as Forbidden. A 409 or a 412 would mean the gesture was
-	 * stopped by something that is not us, which is a passing test measuring nothing.
+	 * NOT PINNED TO 403, AND THAT WAS MEASURED. The status depends on WHICH LAYER
+	 * refuses, which is an implementation detail the sentence does not claim: a Sabre
+	 * plugin throwing `Forbidden` answers 403, while `AbortedEventException` from
+	 * `BeforeNodeRenamedEvent` surfaces as **412** — both the link rename and the link
+	 * move came back 412 on a run where the guards worked perfectly. The master pins 403
+	 * only for the DELETE, whose guard is the one that genuinely renders Forbidden, and
+	 * accepts any non-success elsewhere. Demanding 403 everywhere tested the plumbing
+	 * rather than the behaviour.
+	 *
+	 * The MESSAGE is the part worth pinning, because it is the part the user sees.
 	 */
 	private function assertRefused(string $gesture, int $status): void {
-		if ($status !== 403) {
-			throw new \RuntimeException(
-				"the $gesture came back HTTP $status, not 403 — "
-				. ($status < 300 ? 'it was allowed' : 'it was stopped by something other than this app'),
-			);
+		if ($status < 300) {
+			throw new \RuntimeException("the $gesture came back HTTP $status — it was allowed, not refused");
 		}
 		if (trim($this->lastRefusalMessage) === '') {
-			throw new \RuntimeException("the $gesture was refused with no message, so the user is told nothing");
+			throw new \RuntimeException(
+				"the $gesture was refused with HTTP $status and no message, so the user is told nothing",
+			);
 		}
 	}
 
