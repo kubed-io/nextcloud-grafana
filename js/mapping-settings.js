@@ -6,14 +6,15 @@
  * n8n master so the two apps look the same:
  *
  *   col 1: Grafana folder (picker) · Nextcloud folder
- *   col 2: Mode · Format · Team Folder
+ *   col 2: Mode · Team Folder
  *   col 3: Groups
  *   row 4: Save / Sync / Delete
  *
  * The Grafana folder list is fetched once on init and merged into every card's
- * <select>. Team Folder, Groups, mode and format all persist with the mapping;
- * the per-folder Sync button and the folder-provisioning those groups/team-folder
- * describe arrive with the (not-yet-built) sync engine.
+ * <select>. Mode and Team Folder persist WITH the mapping; GROUPS DO NOT — they
+ * are applied to the mapped Nextcloud folder and read back from it, never stored
+ * in the mapping row (see MappingService::add and Mapping::toArray, which has no
+ * groups key).
  */
 (function () {
 	'use strict';
@@ -129,7 +130,6 @@
 
 	function readCard(card) {
 		var mode = fieldValue(card, '.js-mode') === 'link' ? 'link' : 'sync';
-		var format = fieldValue(card, '.js-format') === 'yaml' ? 'yaml' : 'json';
 		var folderEl = card.querySelector('.js-grafana-folder');
 		var uid = fieldValue(card, '.js-grafana-folder');
 		var title = folderEl && folderEl.dataset ? (folderEl.dataset.title || '') : '';
@@ -149,7 +149,6 @@
 			grafana_folder_title: title,
 			nc_folder: fieldValue(card, '.js-nc-folder'),
 			mode: mode,
-			format: format,
 			nc_groups: groups,
 			use_team_folder: tfEl ? tfEl.checked : true,
 		};
@@ -231,7 +230,6 @@
 		folder: t('grafana_sync', 'The Grafana folder to mirror. Its dashboards become the files in the Nextcloud folder. Bound by uid, so a rename in Grafana never breaks the mapping.'),
 		nc: t('grafana_sync', 'Name of the Nextcloud folder the dashboards appear in.'),
 		mode: t('grafana_sync', 'Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
-		format: t('grafana_sync', 'JSON: the classic Grafana dashboard model. YAML: the newer k8s-style dashboard schema. Both are written as .grafana files.'),
 		tf: t('grafana_sync', 'On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 		groups: t('grafana_sync', 'Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 	};
@@ -273,11 +271,6 @@
 			+     '<select class="js-mode">'
 			+       '<option value="sync" selected>' + t('grafana_sync', 'Sync') + '</option>'
 			+       '<option value="link">' + t('grafana_sync', 'Link') + '</option>'
-			+     '</select></div>'
-			+   '<div class="grafana-sync-field gf-format"><label>' + t('grafana_sync', 'Format') + info(DESC.format) + '</label>'
-			+     '<select class="js-format">'
-			+       '<option value="json" selected>' + t('grafana_sync', 'JSON') + '</option>'
-			+       '<option value="yaml">' + t('grafana_sync', 'YAML') + '</option>'
 			+     '</select></div>'
 			+   '<div class="grafana-sync-field gf-tf"><label class="grafana-sync-checkbox">'
 			+     '<input type="checkbox" class="js-use-team-folder"' + tfAttrs + ' /> ' + t('grafana_sync', 'Team Folder') + info(DESC.tf) + '</label></div>'

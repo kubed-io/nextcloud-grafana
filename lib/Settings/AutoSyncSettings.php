@@ -18,16 +18,13 @@ use OCP\Settings\IDeclarativeSettingsFormWithHandlers;
 
 /**
  * "Sync Settings" — the Grafana→Nextcloud scheduled pull, plus the
- * recycle-bin switch that selects which delete model {@see \OCA\GrafanaSync\Service\DeleteService}
- * follows. (User-facing title "Sync Settings"; persistence is keyed by the form id
+ * (User-facing title "Sync Settings"; persistence is keyed by the form id
  * `data_sync`, not the class name.) The always-available bulk buttons live in their
  * own dedicated panel ({@see SyncSettings}); this form is config only.
  *
  * Values live in appconfig under each field id, read elsewhere by:
  *   - `schedule_enabled`  → the scheduled-pull background job (Grafana→NC)
  *   - `schedule_interval` → that job's TimedJob interval (seconds)
- *   - `bin_enabled`       → {@see \OCA\GrafanaSync\Service\RecycleBin::isEnabled}
- *   - `bin_folder`        → {@see \OCA\GrafanaSync\Service\RecycleBin::folderTitle}
  *
  * NC schedules by **interval** (TimedJob), not cron expressions.
  *
@@ -52,14 +49,9 @@ use OCP\Settings\IDeclarativeSettingsFormWithHandlers;
  * Both spellings are therefore broken, in opposite directions, and the toggle
  * springs back on reload with nothing shown to the admin.
  *
- * THIS APP CARRIES TWO CHECKBOXES, AND THE SECOND ONE IS THE EXPENSIVE ONE.
- * `schedule_enabled` failing means the scheduled pull quietly never runs, which is
- * annoying. `bin_enabled` failing means the admin opts into **id-preserving deletes,
- * the toggle springs back, and every subsequent trash is a true, permanent Grafana
- * delete** — the aggressive model they explicitly turned off. Grafana has no undo
- * (proven live: the service account cannot reach any soft-delete), so that is the
- * difference between a recoverable dashboard and a destroyed one. The n8n sibling
- * found the core limitation first, but it had only the cheap checkbox to lose.
+ * `schedule_enabled` failing means the scheduled pull quietly never runs. The app's
+ * other checkbox is far more expensive to get wrong and now lives in its own card —
+ * see {@see RecycleBinSettings}, which inherits this reading.
  *
  * `STORAGE_TYPE_EXTERNAL` + {@see IDeclarativeSettingsFormWithHandlers} hands the
  * two operations back to this class, which coerces each value to the type its field
@@ -85,8 +77,6 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 
 	private const FIELD_SCHEDULE_ENABLED = 'schedule_enabled';
 	private const FIELD_SCHEDULE_INTERVAL = 'schedule_interval';
-	private const FIELD_BIN_ENABLED = 'bin_enabled';
-	private const FIELD_BIN_FOLDER = 'bin_folder';
 
 	public function __construct(
 		private readonly IAppConfig $config,
@@ -125,23 +115,6 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 					'placeholder' => self::DEFAULT_INTERVAL,
 					'default' => self::DEFAULT_INTERVAL,
 				],
-				[
-					'id' => self::FIELD_BIN_ENABLED,
-					'title' => 'Deleting: preserve dashboards in a Grafana recycle-bin folder',
-					'description' => 'Off (default): trashing a synced dashboard file deletes its dashboard in Grafana right then; restoring re-creates it with a new id (its full JSON is safe in the file). On: trashing instead moves the dashboard into the Grafana folder named below (keeping its id), restoring moves it back, and only emptying the Nextcloud trash deletes it for good. Grafana has no native trash, so this folder is it.',
-					'type' => DeclarativeSettingsTypes::CHECKBOX,
-					// Real bool — and the one whose failure destroys dashboards. See
-					// the class docblock.
-					'default' => false,
-				],
-				[
-					'id' => self::FIELD_BIN_FOLDER,
-					'title' => 'Recycle-bin folder (Grafana folder name)',
-					'description' => 'The name of an existing Grafana folder to use as the recycle bin (e.g. nextcloud-trash). Used only when the option above is on. This folder must not be one you map — it has special meaning.',
-					'type' => DeclarativeSettingsTypes::TEXT,
-					'placeholder' => 'nextcloud-trash',
-					'default' => '',
-				],
 			],
 		];
 	}
@@ -155,8 +128,6 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 		return match ($fieldId) {
 			self::FIELD_SCHEDULE_ENABLED => $this->reader->bool(self::FIELD_SCHEDULE_ENABLED),
 			self::FIELD_SCHEDULE_INTERVAL => $this->reader->string(self::FIELD_SCHEDULE_INTERVAL, self::DEFAULT_INTERVAL),
-			self::FIELD_BIN_ENABLED => $this->reader->bool(self::FIELD_BIN_ENABLED),
-			self::FIELD_BIN_FOLDER => $this->reader->string(self::FIELD_BIN_FOLDER, ''),
 			default => null,
 		};
 	}
@@ -166,19 +137,13 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 	 * verbatim-but-trimmed because the scheduled-pull job
 	 * already owns parsing it (and falls back to hourly on anything it cannot read).
 	 *
-	 * `bin_folder` is trimmed but NOT validated against Grafana here: a settings save
-	 * must not depend on Grafana being reachable, and {@see \OCA\GrafanaSync\Service\RecycleBin::activeFolderUid}
-	 * already throws — aborting the delete — when bin mode is on and the folder cannot
-	 * be resolved. Failing at use-time is the safe direction; failing at save-time
-	 * would leave the admin unable to record their intent while Grafana is down.
 	 */
 	#[\Override]
 	public function setValue(string $fieldId, mixed $value, IUser $user): void {
 		switch ($fieldId) {
 			case self::FIELD_SCHEDULE_ENABLED:
-			case self::FIELD_BIN_ENABLED:
-				// setValueBool (not a '1'/'0' string) so the readers' primary
-				// getValueBool() read succeeds instead of falling through their
+				// setValueBool (not a '1'/'0' string) so the reader's primary
+				// getValueBool() read succeeds instead of falling through its
 				// AppConfigTypeConflict rescue path.
 				$this->config->setValueBool(Application::APP_ID, $fieldId, AppConfigReader::coerceBool($value));
 				break;
@@ -188,13 +153,6 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 					Application::APP_ID,
 					self::FIELD_SCHEDULE_INTERVAL,
 					$raw === '' ? self::DEFAULT_INTERVAL : $raw,
-				);
-				break;
-			case self::FIELD_BIN_FOLDER:
-				$this->config->setValueString(
-					Application::APP_ID,
-					self::FIELD_BIN_FOLDER,
-					is_string($value) ? trim($value) : '',
 				);
 				break;
 		}

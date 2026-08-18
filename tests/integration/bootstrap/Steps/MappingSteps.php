@@ -182,7 +182,6 @@ trait MappingSteps {
 		Assert::assertSame($ncFolder, (string)($m['nc_folder'] ?? ''), 'nc folder');
 
 		Assert::assertSame($expected['mode'] ?? '', (string)($m['mode'] ?? ''), 'mode');
-		Assert::assertSame($expected['format'] ?? 'json', (string)($m['format'] ?? ''), 'format');
 		Assert::assertSame(
 			$this->storageToModel($expected['storage'] ?? ''),
 			(bool)($m['use_team_folder'] ?? false),
@@ -386,9 +385,6 @@ trait MappingSteps {
 		}
 		if (array_key_exists('mode', $form)) {
 			$data['mode'] = $form['mode'];
-		}
-		if (array_key_exists('format', $form)) {
-			$data['format'] = $form['format'];
 		}
 		if (array_key_exists('groups', $form)) {
 			$data['nc_groups'] = $this->groupList($form['groups']);

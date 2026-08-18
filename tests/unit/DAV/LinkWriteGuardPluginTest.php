@@ -79,7 +79,7 @@ final class LinkWriteGuardPluginTest extends TestCase {
 	}
 
 	private function managed(string $mode): ManagedFile {
-		return new ManagedFile('dash-1', $mode, '1', 'hash', 'm-1', '', '');
+		return new ManagedFile('dash-1', $mode, '1', 'hash', 'm-1', '');
 	}
 
 	/** Invoke the Sabre hook with throwaway by-ref args. */

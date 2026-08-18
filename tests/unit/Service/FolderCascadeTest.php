@@ -141,7 +141,7 @@ final class FolderCascadeTest extends TestCase {
 	public function testLinkFilesAreNotParked(): void {
 		$this->binUid = 'gf-bin';
 		$folder = $this->tree(['A.grafana' => 11]);
-		$this->managed[11] = new ManagedFile('d11', Mapping::MODE_LINK, '', '', 'm-demo', '', '');
+		$this->managed[11] = new ManagedFile('d11', Mapping::MODE_LINK, '', '', 'm-demo', '');
 		$this->deleteService->expects(self::never())->method('softDelete');
 
 		$this->cascade()->trash($folder, 'gf-team');
@@ -216,7 +216,7 @@ final class FolderCascadeTest extends TestCase {
 		$this->metadata->method('read')->willReturnCallback(
 			fn (int $id): ?ManagedFile => array_key_exists($id, $this->managed)
 				? $this->managed[$id]
-				: new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', '', ''),
+				: new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', ''),
 		);
 
 		return new FolderCascade(

@@ -61,7 +61,6 @@ trait SyncSteps {
 			'grafana_folder_title' => $uid,
 			'nc_folder' => $folder,
 			'mode' => 'sync',
-			'format' => 'json',
 			'use_team_folder' => false,
 		], JSON_THROW_ON_ERROR);
 		$res = $this->occ('grafana_sync:add-mapping ' . escapeshellarg($json));

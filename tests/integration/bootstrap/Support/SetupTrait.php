@@ -138,7 +138,6 @@ trait SetupTrait {
 			'grafana_folder_title' => $name,
 			'nc_folder' => $ncFolder,
 			'mode' => $mode,
-			'format' => 'json',
 			'use_team_folder' => false,
 		], JSON_THROW_ON_ERROR);
 		$res = $this->occ('grafana_sync:add-mapping ' . escapeshellarg($json));

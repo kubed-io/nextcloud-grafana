@@ -89,11 +89,12 @@ Grafana Labs, used here only to identify the service this app integrates with.
   <settings>
     <!-- Section order (by priority): Instance (5, base URL + token in one card —
          Grafana has one API + one credential, so no split) → Sync Settings (20,
-         push timing + scheduled pull) → Folder mappings (30) → Sync Actions (45,
-         all the buttons). Instance + Sync Settings are declarative forms registered
-         in AppInfo\Application::register(). AdminTest is NOT rendered as its own
-         panel — it stays only as the #[AuthorizedAdminSetting] target for the test
-         endpoint; the Test-connection button lives in the Sync Actions panel. -->
+         the scheduled pull) → Recycle Bin (25, what a delete means) → Folder
+         mappings (30) → Sync Actions (45, all the buttons). The first three are
+         declarative forms registered in AppInfo\Application::register(). AdminTest
+         is NOT rendered as its own panel — it stays only as the
+         #[AuthorizedAdminSetting] target for the test endpoint; the
+         Test-connection button lives in the Sync Actions panel. -->
     <admin>OCA\GrafanaSync\Settings\MappingSettings</admin>
     <admin>OCA\GrafanaSync\Settings\SyncSettings</admin>
     <admin-section>OCA\GrafanaSync\Settings\AdminSection</admin-section>

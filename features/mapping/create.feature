@@ -12,7 +12,6 @@ Feature: Admin configures folder mappings
     And an unset field on the mapping form defaults to:
       | nc folder  | the Grafana folder's name |
       | mode       | link                      |
-      | format     | json                      |
       | groups     |                           |
       | storage    | admin folder              |
 
@@ -25,25 +24,24 @@ Feature: Admin configures folder mappings
     When the admin maps the Grafana folder "<uid>" with:
       | nc folder  | <nc folder>  |
       | mode       | <mode>       |
-      | format     | <format>     |
       | groups     | <groups>     |
       | storage    | <storage>    |
     Then the mapping matches the form, unset fields at their defaults
 
-    # The mode x format matrix, one row per combination.
+    # Every mode against every storage backend — the two axes that survive.
 
-    Examples: every mode, and every serialization format
-      | uid     | nc folder | mode | format | groups | storage      |
-      | observe | observe   | sync | json   |        | team folder  |
-      | secrets | secrets   | link | json   |        | team folder  |
-      | network | network   | sync | yaml   |        | admin folder |
-      | build   | build     | link | yaml   |        | admin folder |
+    Examples: every mode, on both storage backends
+      | uid     | nc folder | mode | groups | storage      |
+      | observe | observe   | sync |        | team folder  |
+      | secrets | secrets   | link |        | team folder  |
+      | network | network   | sync |        | admin folder |
+      | build   | build     | link |        | admin folder |
 
     Examples: and the fields that have a default
-      | uid       | nc folder | mode | format | groups | storage |
-      | defaulted |           |      |        |        |         |
-      | grouped   | grouped   | sync |        | admin  |         |
-      | nested    | nested    | sync |        |        |         |
+      | uid       | nc folder | mode | groups | storage |
+      | defaulted |           |      |        |         |
+      | grouped   | grouped   | sync | admin  |         |
+      | nested    | nested    | sync |        |         |
 
     # notes: ../AGENTS.md#creating-a-mapping-saves-the-form
 
@@ -53,16 +51,14 @@ Feature: Admin configures folder mappings
     When the admin maps the Grafana folder "<uid>" with:
       | nc folder | <nc folder> |
       | mode      | <mode>      |
-      | format    | <format>    |
     Then the mapping is rejected
     And the refusal explains "<reason>"
     And there are exactly 0 configured mappings
 
     Examples: every field that carries a rule of its own
-      | uid     | nc folder | mode  | format | reason             |
-      |         | observe   | sync  | json   | grafana_folder_uid |
-      | observe | observe   | bogus | json   | mode must be       |
-      | observe | observe   | sync  | toml   | format must be     |
+      | uid     | nc folder | mode  | reason             |
+      |         | observe   | sync  | grafana_folder_uid |
+      | observe | observe   | bogus | mode must be       |
 
     # notes: ../AGENTS.md#a-mapping-the-app-cannot-honour-is-refused-and-says-why
 

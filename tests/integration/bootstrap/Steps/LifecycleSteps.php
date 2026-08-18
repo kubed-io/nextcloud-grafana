@@ -25,6 +25,14 @@ use PHPUnit\Framework\Assert;
  * this trait is the vocabulary the specs speak.
  */
 trait LifecycleSteps {
+	/**
+	 * The name the app's own "New dashboard" menu entry gives a new file, and the
+	 * `title` its starter body carries — one string, kept in step with
+	 * `src/files.js`'s STARTER_DASHBOARD so the arrange is the real gesture rather
+	 * than a lookalike.
+	 */
+	private const NEW_DASHBOARD_NAME = 'New dashboard';
+
 	// ── arrangement ───────────────────────────────────────────────────────────
 
 	/** @Given a folder mapped as :mode to the Grafana folder :name */
@@ -193,6 +201,35 @@ trait LifecycleSteps {
 		$got = (string)$this->dashboardFolderUid($this->lastUid);
 		if ($got !== $folder) {
 			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder'");
+		}
+	}
+
+	/**
+	 * THE APP'S OWN "New dashboard" GESTURE, which is what creating actually is.
+	 *
+	 * The user picks a folder and nothing else: `src/files.js` writes
+	 * `New dashboard.grafana` (uniquified against the folder) holding the starter
+	 * body, whose `title` is the same string. There is no name to type and no
+	 * contents to supply — a file that arrives already named and full came from a
+	 * move, a copy, or an edit, and those are different gestures with their own
+	 * features.
+	 *
+	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
+	 * server cannot tell the two apart, and it is the PUT that fires the listener.
+	 *
+	 * @When I create a new dashboard in :folder via the Files "New" menu
+	 */
+	public function iCreateANewDashboardIn(string $folder): void {
+		$this->currentFolder = $folder;
+		$this->putDashboardFile($folder, self::NEW_DASHBOARD_NAME);
+
+		// CAPTURE THE UID THE APP MINTED. Creating is the one gesture where the
+		// dashboard did not exist until now, so nothing else in the scenario can know
+		// its id — and every later "the dashboard ..." assertion resolves through it.
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($uid !== '') {
+			$this->lastUid = $uid;
+			$this->createdDashboardUids[] = $uid;
 		}
 	}
 

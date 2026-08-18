@@ -97,15 +97,14 @@ final class DashboardMetadataTest extends TestCase {
 		self::assertSame('7', $this->manager->records[1]->data[DashboardMetadata::KEY_VERSION]);
 	}
 
-	public function testStampSyncedWritesTheFiveCoreKeysAndLeavesBankedOnesUnset(): void {
+	public function testStampSyncedWritesTheFiveCoreKeysAndLeavesTheBankedOneUnset(): void {
 		$this->meta->stampSynced(1, 'kel4vkt', Mapping::MODE_SYNC, '7', 'body', 'map-a');
 		$mf = $this->meta->read(1);
 		self::assertNotNull($mf);
 		self::assertSame('kel4vkt', $mf->uid);
 		self::assertSame('map-a', $mf->mappingId);
-		// Banked keys are registered but not stamped by the pull yet → read back as ''.
+		// The banked key is registered but not stamped by the pull yet → reads back as ''.
 		self::assertSame('', $mf->folderUid);
-		self::assertSame('', $mf->apiVersion);
 	}
 
 	public function testLinkModeIsStoredAsReferenceAndReadsBackAsLink(): void {

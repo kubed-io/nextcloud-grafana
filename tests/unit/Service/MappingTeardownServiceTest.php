@@ -55,7 +55,7 @@ final class MappingTeardownServiceTest extends TestCase {
 	}
 
 	private function managed(string $mappingId, string $uid = 'dash'): ManagedFile {
-		return new ManagedFile($uid, 'sync', '1', 'h', $mappingId, '', '');
+		return new ManagedFile($uid, 'sync', '1', 'h', $mappingId, '');
 	}
 
 	public function testTrashesOnlyConnectedFilesThenDropsTheBinding(): void {

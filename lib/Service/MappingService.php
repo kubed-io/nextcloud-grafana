@@ -133,7 +133,7 @@ final class MappingService {
 	 *
 	 * This replaced an `update(string $id, Mapping $mapping)` that took a whole
 	 * mapping and then rejected changes to four fields one by one. Guarding is
-	 * weaker than not offering: it left `mode` and `format` editable by omission,
+	 * weaker than not offering: it left `mode` editable by omission,
 	 * and it meant the admin card PUT every field on every save whether or not any
 	 * of them could change. Now no caller can EXPRESS a change to anything but the
 	 * groups, so there is no path to check.
@@ -150,7 +150,7 @@ final class MappingService {
 	 *     flattens mirrored Grafana subfolders and re-parents their dashboards;
 	 *     off→on lazily grows them).
 	 *
-	 * `mode` and `format` join them: both decide how every existing file under the
+	 * `mode` joins them: it decides how every existing file under the
 	 * mapping was written, so changing one silently invalidates what is on disk.
 	 *
 	 * To change any of it: delete the mapping and add a new one. That makes the

@@ -33,6 +33,7 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Settings\AutoSyncSettings;
 use OCA\GrafanaSync\Settings\InstanceSettings;
+use OCA\GrafanaSync\Settings\RecycleBinSettings;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -48,11 +49,12 @@ use OCP\SystemTag\MapperEvent;
 /**
  * App bootstrap.
  *
- * Admin scope: register the two declarative admin forms — the Instance card (base
+ * Admin scope: register the three declarative admin forms — the Instance card (base
  * URL + service-account token; Grafana has one API and one credential, so it's one
- * card, unlike n8n's split) and the Sync Settings card (scheduled
- * pull). The AdminSection sidebar entry, the Folder-mappings + Sync Actions panels
- * are wired through info.xml's <settings> block.
+ * card, unlike n8n's split), the Sync Settings card (the scheduled pull) and the
+ * Recycle Bin card (what a delete means). The AdminSection sidebar entry, the
+ * Folder-mappings + Sync Actions panels are wired through info.xml's <settings>
+ * block.
  *
  * Writeback (Course 3): the {@see NodeWrittenListener} pushes a saved sync-mode
  * `.grafana` back to Grafana, and the {@see Notifier} renders its failure notices.
@@ -85,11 +87,14 @@ final class Application extends App implements IBootstrap {
 	public function register(IRegistrationContext $context): void {
 		// Declarative admin cards, top of the grafana_sync section:
 		//   Instance (5)  — base URL + service-account token
-		//   Sync Settings (20) — scheduled pull + recycle bin (config only)
+		//   Sync Settings (20) — the scheduled pull (config only)
+		//   Recycle Bin (25) — what a delete means; its own card because the
+		//     checkbox there decides whether a delete is reversible
 		// The Folder-mappings (30) and Sync Actions (45) panels — the latter holding
 		// the action buttons — are classic panels registered via info.xml.
 		$context->registerDeclarativeSettings(InstanceSettings::class);
 		$context->registerDeclarativeSettings(AutoSyncSettings::class);
+		$context->registerDeclarativeSettings(RecycleBinSettings::class);
 
 		// Writeback (Course 3): a save of a managed sync-mode .grafana pushes back
 		// to Grafana. NodeWrittenEvent covers the text editor, WebDAV PUTs, and desktop

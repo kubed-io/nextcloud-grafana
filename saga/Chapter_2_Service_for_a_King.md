@@ -2196,6 +2196,77 @@ The Gherkin came out the way the argument said it would: **not one new scenario,
 one new Examples column.** Every feature file changed by exactly the length of a
 string.
 
+## Round 8 — JSON only, a bin of its own, and an error state we have never cooked
+
+Three things went, and one thing got named for later.
+
+**THE FORMAT OPTION WAS A QUESTION WITH NO ANSWER BEHIND IT.** A mapping carried
+`format` — `json` or `yaml` — for the App Platform v2 cut. Nothing in `lib/` ever
+branched on it: no serializer, no extension switch, no reader. It was stored,
+validated, round-tripped, and consumed by nobody, and the only thing the suite could
+prove was that the string survived a config round trip. Four admin-visible fields
+became three, and the mode × storage matrix in the Gherkin got *stronger* for it —
+with `format` gone, the four Examples rows stopped being near-duplicates and started
+being a real 2×2. The banked `grafana_apiVersion` metadata key went with it: it
+existed only to record which cut a file was written in, so with the cut abandoned it
+was a registered key held against a decision nobody is going to make.
+
+**THE RECYCLE BIN EARNED ITS OWN CARD.** `bin_enabled` + `bin_folder` had been
+sitting at the bottom of Sync Settings, under a heading about how often Nextcloud
+pulls. They are not sync settings. Sync is two sides staying equal on a schedule;
+this is whether **deleting is reversible** — and it is the one setting in this app
+that can cost a dashboard. The EXTERNAL-storage workaround the sibling found is
+merely annoying for a schedule and destructive here: if that checkbox silently
+springs back, every subsequent trash becomes a permanent Grafana delete, and Grafana
+has no undo. A setting with that consequence does not belong as a footnote to the
+thing above it.
+
+**AND THE PART WORTH REMEMBERING: WE FOUND AN ERROR STATE WE HAVE NEVER DEALT WITH —
+AND THEN FOUND IT WAS FILED UNDER THE WRONG GESTURE.**
+
+`create.feature` carried `A body that cannot become a dashboard leaves a plain file`,
+`@todo`, describing what happens when a file's JSON is invalid. It has been
+**deleted**, and the reason is worth more than the scenario was.
+
+**YOU CANNOT CREATE AN INVALID DASHBOARD.** Creating is the app's own gesture: the
+user picks a folder, hits *New dashboard*, and `src/files.js` writes
+`New dashboard.grafana` holding a starter body it wrote itself. There is no name to
+mistype and no contents to get wrong. If the app ever minted a broken dashboard from
+that path it would be a bug in `CreateService`, not a scenario — and a spec that
+describes a bug as an outcome has stopped being a spec.
+
+A file that arrives already NAMED and already FULL did not come from creating. It
+came from a move, a copy, an edit, or a hand-written file dropped into a mapped
+folder — and each of those is a different gesture with its own feature file. That is
+where an invalid body actually lives.
+
+Which is what the whole exercise rewrote about the create spec. The scenarios had
+been saying `I create "CPU Load.grafana" in "Demo"` — a named file with contents,
+which is not the gesture the menu offers. They now say `I create a new dashboard in
+"Demo" via the Files "New" menu`, the arrange writes the app's own default name and
+starter body, and the assertion is the rule (*the dashboard is named after the file*)
+rather than a string somebody typed. The same correction applies to the link-mapping
+refusal: you cannot "try to create `CPU Load.grafana`" either.
+
+**THE ERROR STATE ITSELF IS REAL AND STILL UNCLAIMED.** Every failure either app
+handles today is a failure of the REMOTE side — Grafana unreachable, a token
+rejected, a dashboard gone — and the answer is always the same shape: log it, notify,
+leave Nextcloud alone, let the next sync settle it. An invalid body is different: the
+USER'S OWN FILE is the thing that is wrong, and there is no next sync that fixes it
+because the file will be just as invalid then. Open questions, none of them create's:
+
+  - Is the file left on disk (they wrote it; it is theirs) or removed? Leaving it
+    means a `.grafana` file in a mapped folder that is not managed — a state the mode
+    vocabulary has no word for.
+  - Is the failure a notification, or does it abort the save the way a link-mode
+    write does?
+  - Grafana rejecting a body and our own parser rejecting it are the same outcome to
+    a user and completely different events to us. Do they read the same?
+
+Named here rather than answered, and filed against **move / copy / edit** where it
+belongs. The n8n sibling has the identical hole, so whatever is settled should be
+settled in one conversation across both apps.
+
 ---
 
 Sources / cross-links:

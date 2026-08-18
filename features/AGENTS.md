@@ -888,12 +888,25 @@ backup. Minting a second dashboard for it would fork the two copies apart.
 stale — from a deleted dashboard or another instance — and the file's content is
 the thing worth keeping.
 
-### A failed creation leaves an unstamped file, not a half-managed one
+### RETIRED — a body that cannot become a dashboard
 
-The file exists in Nextcloud before Grafana is called, so a failed create cannot
-be rolled back into "nothing happened". Leaving it unstamped is what lets a later
-save or pull retry it, rather than leaving a file that claims a dashboard it does
-not have.
+`create.feature` used to carry `A body that cannot become a dashboard leaves a
+plain file`, describing what happens when a file's JSON is invalid. It is gone,
+and not because it was hard.
+
+YOU CANNOT CREATE AN INVALID DASHBOARD. Creating is the app's own gesture: the
+user picks a folder, hits *New dashboard*, and the app writes the name and the
+starter body itself. There is nothing for the user to get wrong. If that path
+ever minted a broken dashboard it would be a bug in `CreateService`, not a
+scenario — and a spec describing a bug as an outcome has stopped being a spec.
+
+A file that arrives already NAMED and already FULL did not come from creating. It
+came from a move, a copy, an edit, or a hand-written file dropped into a mapped
+folder, and each of those is a different gesture with its own feature file. The
+invalid-body question is real and still unanswered — it is the first error state
+that is about the USER'S OWN FILE rather than about Grafana being unreachable, so
+none of the log-notify-leave-alone answers fit it — but it belongs there, not
+here. Saga Ch2 Round 8 records the open questions.
 
 ## folders/create
 

@@ -26,7 +26,6 @@ final class MappingTest extends TestCase {
 			'grafana_folder_title' => 'observe',
 			'nc_folder' => 'dashboards/observe',
 			'mode' => 'sync',
-			'format' => 'yaml',
 			'use_team_folder' => false,
 			'nc_folder_id' => 4242,
 		]);
@@ -36,7 +35,6 @@ final class MappingTest extends TestCase {
 		self::assertSame('observe', $m->grafanaFolderTitle);
 		self::assertSame('dashboards/observe', $m->ncFolder);
 		self::assertSame('sync', $m->mode);
-		self::assertSame('yaml', $m->format);
 		self::assertFalse($m->useTeamFolder);
 		self::assertSame(4242, $m->ncFolderId);
 	}
@@ -159,25 +157,6 @@ final class MappingTest extends TestCase {
 		self::assertNotSame($m->id, $other->id);
 	}
 
-	public function testFormatDefaultsToJsonWhenAbsent(): void {
-		$m = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid1',
-			'nc_folder' => 'observe',
-			'mode' => 'sync',
-		]);
-		self::assertSame('json', $m->format);
-	}
-
-	public function testFormatDefaultsToJsonWhenEmptyString(): void {
-		$m = Mapping::fromArray([
-			'grafana_folder_uid' => 'uid1',
-			'nc_folder' => 'observe',
-			'mode' => 'sync',
-			'format' => '',
-		]);
-		self::assertSame('json', $m->format);
-	}
-
 	public function testTitleDefaultsToEmptyWhenAbsent(): void {
 		$m = Mapping::fromArray([
 			'grafana_folder_uid' => 'uid1',
@@ -230,7 +209,7 @@ final class MappingTest extends TestCase {
 	 *
 	 * It used to be a refusal, which made the shortest useful call — a Grafana
 	 * folder and nothing else — impossible to write, and forced every caller to
-	 * name a mode it had no opinion about. `format` in this same method had always
+	 * name a mode it had no opinion about. `useTeamFolder` in this same method had always
 	 * defaulted; mode was the odd one out.
 	 *
 	 * `link` is the conservative choice: it downloads nothing and pushes nothing
@@ -253,16 +232,6 @@ final class MappingTest extends TestCase {
 	public function testRejectsAnUnknownMode(): void {
 		$this->expectException(\InvalidArgumentException::class);
 		Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'nc_folder' => 'observe', 'mode' => 'backup']);
-	}
-
-	public function testRejectsAnUnknownFormat(): void {
-		$this->expectException(\InvalidArgumentException::class);
-		Mapping::fromArray([
-			'grafana_folder_uid' => 'uid1',
-			'nc_folder' => 'observe',
-			'mode' => 'sync',
-			'format' => 'toml',
-		]);
 	}
 
 	public function testNormalisesTheNcFolder(): void {
@@ -289,7 +258,6 @@ final class MappingTest extends TestCase {
 			'grafana_folder_title' => 'observe',
 			'nc_folder' => 'observe',
 			'mode' => 'link',
-			'format' => 'json',
 			'use_team_folder' => false,
 		]);
 		$round = Mapping::fromArray($original->toArray());

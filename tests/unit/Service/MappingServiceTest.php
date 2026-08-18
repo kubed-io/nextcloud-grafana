@@ -101,13 +101,12 @@ final class MappingServiceTest extends TestCase {
 		return $bin;
 	}
 
-	private function mapping(string $uid, string $ncFolder, string $mode = 'sync', string $format = 'json'): Mapping {
+	private function mapping(string $uid, string $ncFolder, string $mode = 'sync'): Mapping {
 		return Mapping::fromArray([
 			'grafana_folder_uid' => $uid,
 			'grafana_folder_title' => $uid,
 			'nc_folder' => $ncFolder,
 			'mode' => $mode,
-			'format' => $format,
 		]);
 	}
 
@@ -167,7 +166,7 @@ final class MappingServiceTest extends TestCase {
 	// assert. Testing a guard that cannot be reached would be testing nothing.
 	//
 	// The old guard list was also incomplete in a way the tests hid: it checked
-	// four fields and left `mode` and `format` editable, and both decide how every
+	// four fields and left `mode` editable, and it decides how every
 	// already-mirrored file was written. Seven passing tests, and the gap between
 	// them was the bug.
 	//
@@ -192,7 +191,7 @@ final class MappingServiceTest extends TestCase {
 		// A stored list with one good row and one invalid row (bad mode) must yield
 		// only the good one, never a blank panel.
 		$this->store['mappings'] = json_encode([
-			['grafana_folder_uid' => 'uid-a', 'nc_folder' => 'alpha', 'mode' => 'sync', 'format' => 'json'],
+			['grafana_folder_uid' => 'uid-a', 'nc_folder' => 'alpha', 'mode' => 'sync'],
 			['grafana_folder_uid' => 'uid-b', 'nc_folder' => 'bravo', 'mode' => 'bogus'],
 			'not-even-an-array',
 		]);

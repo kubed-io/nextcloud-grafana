@@ -103,7 +103,7 @@ final class RestoreFromTrashListener implements IEventListener {
 			return; // restored outside any mapping — leave it as a plain document
 		}
 		// A synthetic unmanaged marker so DeleteService takes the re-create branch.
-		$unmanaged = new ManagedFile('', '', '', '', '', '', '');
+		$unmanaged = new ManagedFile('', '', '', '', '', '');
 		$this->tryRestore($target, $unmanaged, $mapping);
 	}
 

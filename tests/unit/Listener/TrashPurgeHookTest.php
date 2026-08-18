@@ -122,7 +122,7 @@ final class TrashPurgeHookTest extends TestCase {
 		$metadata = $this->createStub(DashboardMetadata::class);
 		$metadata->method('read')->willReturnCallback(
 			fn (int $id): ?ManagedFile => $id > 0
-				? new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', '', '')
+				? new ManagedFile('d' . $id, Mapping::MODE_SYNC, '', '', 'm-demo', '')
 				: null,
 		);
 
