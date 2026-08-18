@@ -8,13 +8,15 @@ Feature: Trashing a dashboard file
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
@@ -99,6 +101,16 @@ Feature: Trashing a dashboard file
 
     # The Grafana bin setting has no say here: it governs what Nextcloud does to
     # Grafana, and this comes the other way.
+
+  # notes: ../AGENTS.md#a-link-leaves-when-its-dashboard-does
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Delete a link's dashboard in Grafana
+    Given a dashboard file in "Pointers"
+    When someone deletes the dashboard in Grafana
+    Then the file is gone from "Pointers"
+    And the file is not in the Nextcloud trash
+
+    # A pointer restored from the trash would reconnect to nothing.
 
     # ── RULE: a trash that cannot finish leaves the file where it was ──────────
 

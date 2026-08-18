@@ -8,9 +8,16 @@ Feature: Emptying the trash
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
+    And a mapping with the following values:
+      | grafana folder | Shared      |
+      | nc folder      | Shared      |
+      | mode           | sync        |
+      | storage        | team folder |
+      | groups         | admin       |
     And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
@@ -40,6 +47,19 @@ Feature: Emptying the trash
     When I purge it from the trash
     Then that file's dashboard is permanently deleted from Grafana
     And the file is gone from the Nextcloud trash
+
+  # notes: ../AGENTS.md#a-purge-has-to-work-on-both-trashes
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  Scenario: Empty a Team Folder's trash with the recycle bin on
+    Given the Grafana recycle bin is on
+    And a dashboard file in "Shared"
+    And the file is in the Nextcloud trash
+    And its dashboard is parked in "nextcloud-trash"
+    When I purge it from the trash
+    Then that file's dashboard is permanently deleted from Grafana
+    And the file is gone from the Nextcloud trash
+
+    # A Team Folder's trash emits no purge signal at all, so nothing runs today.
 
     # ── RULE: a purge reaches exactly one dashboard — the purged file's ───────
 

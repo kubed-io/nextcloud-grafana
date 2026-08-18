@@ -8,9 +8,16 @@ Feature: Restoring a dashboard file from the trash
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
+    And a mapping with the following values:
+      | grafana folder | Shared      |
+      | nc folder      | Shared      |
+      | mode           | sync        |
+      | storage        | team folder |
+      | groups         | admin       |
     And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
@@ -44,6 +51,17 @@ Feature: Restoring a dashboard file from the trash
       | grafana_uid     | its own, not the one it arrived with |
       | grafana_mapping | the mapping's id                     |
       | grafana_mode    | the mapping's mode                   |
+
+  # notes: ../AGENTS.md#a-purge-has-to-work-on-both-trashes
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  Scenario: Restore a file from a Team Folder's trash
+    Given the Grafana recycle bin is on
+    And a dashboard file in "Shared"
+    And the file is in the Nextcloud trash
+    And its dashboard is parked in "nextcloud-trash"
+    When I restore it from the trash
+    Then the file is back in "Shared"
+    And the dashboard is in the "Shared" Grafana folder
 
     # ── RULE: the world may have moved while the file sat in the trash ───────
 

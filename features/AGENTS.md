@@ -1920,6 +1920,54 @@ which its own comment calls "the second of exactly two ways a Grafana folder is
 born from Nextcloud, which is why it lives here and not with the other move
 gestures."
 
+### A purge has to work on both trashes
+
+FOUND IN THE n8n SIBLING, IN LIVE USE, AND THIS APP HAS THE SAME HOLE. `TrashPurgeHook`
+stands on the legacy `\OCP\Trashbin` `preDelete` hook, and `Files_Trashbin\Trashbin` is
+the only class in Nextcloud that emits it. A Team Folder has its own trash backend:
+groupfolders' `removeItem()` unlinks the file and drops its cache entry, emitting no hook
+and no typed event. So a sync dashboard purged out of a Team Folder's trash leaves its
+dashboard parked in the recycle-bin folder permanently, silently, with nothing in the log
+because nothing ran.
+
+WE DO NOT HAVE THE OTHER HALF. n8n added `TeamFolderPurgeListener` on
+`CacheEntryRemovedEvent` for exactly this, and there is no equivalent here — `lib/Listener`
+has no team-folder purge at all. That listener is the port, and it carries a trap worth
+reading before writing one: it must be registered at a NON-DEFAULT PRIORITY, because on
+Nextcloud 32 and 33 core registers its own `FilesMetadata` cleanup on the same event at
+the default priority and during boot, so it runs first and deletes the metadata stamp
+before the listener can read it.
+
+AND THE LESSON IS NOT "ADD MORE TESTS". n8n's note is blunt about how a fully-tested
+feature file missed it: the purge scenarios named one folder, that folder was admin-owned,
+and the storage axis had been added to `restore.feature` when a different bug was being
+chased. So the suite covered the axis in one direction and only the home storage in the
+other, and every scenario passed while the case the app is actually deployed on had never
+once been exercised. An axis discovered to matter belongs on EVERY scenario that crosses
+it, not on the ones being edited that day.
+
+OUR THREE TRASH FILES HAD NO STORAGE AXIS AT ALL — one admin-folder mapping between them,
+while `create.feature` has mapped a Team Folder since Course 3. The Backgrounds now carry
+both kinds. `delete.feature` deliberately gains only the key and not a second scenario:
+trashing fires the typed event on either backend, so the split does not bite there, and
+the sibling's delete has no team-folder axis either. It is the PURGE and the RESTORE that
+are backend-specific.
+
+### A link leaves when its dashboard does
+
+THE MIRROR OF `A link cannot be deleted from Nextcloud`, and the reason both hold at once:
+a link is Nextcloud's to SHOW, never to own. The user may not delete it, and it disappears
+by itself the moment its dashboard leaves the mirrored Grafana folder.
+
+NO TRASH ENTRY, AND THAT IS THE POINT. A sync file goes to the trash because the file IS
+the dashboard's content and restoring it restores the dashboard. A link has nothing to
+restore FROM, so a trashed pointer would offer a recovery that reconnects to nothing. Same
+fork as `A mirror that loses its dashboard goes to the trash, unless it was a link`, seen
+through the delete gesture instead of the pull — and @unbuilt for the same reason: this app
+has no trash-suppression seam. n8n reaches for `ITrashManager::pauseTrash()`, which is the
+only public one that makes a delete permanent AND is backend-agnostic, so it covers a Team
+Folder's trash exactly as it covers a home.
+
 ### Keeping one version of a duplicate leaves one file and one dashboard
 
 PORTED FROM THE n8n SIBLING, WHERE IT IS BUILT. A file carrying a uid is moved into
