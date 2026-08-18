@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Integration\Steps;
 
+use Behat\Gherkin\Node\TableNode;
 use PHPUnit\Framework\Assert;
 
 /**
@@ -253,6 +254,58 @@ trait SyncSteps {
 			throw new \RuntimeException(
 				"the mirror's panels are [" . implode(', ', $titles) . "], without '{$this->editedPanelTitle}'",
 			);
+		}
+	}
+
+	/**
+	 * @Then the file holds a pointer:
+	 *
+	 * A LINK'S BODY, SAID OUT LOUD. The negative — "does not hold the dashboard" — never
+	 * names what IS there, and what is there is a specific documented shape: a
+	 * `grafana.reference/v1` payload carrying the uid, the title and a deep link
+	 * ({@see \OCA\GrafanaSync\Service\DashboardBody::encodeReference}). Ported from the
+	 * n8n master's step of the same name.
+	 *
+	 * `panels` is asserted ABSENT first, because that is the whole distinction between
+	 * the two modes and the one a pull could plausibly get wrong: a link that gained the
+	 * dashboard body would still satisfy every key below.
+	 */
+	public function theFileHoldsAPointer(TableNode $table): void {
+		$body = json_decode($this->davGet($this->currentFilePath), true);
+		if (!is_array($body)) {
+			throw new \RuntimeException('the link is not JSON');
+		}
+		if (array_key_exists('panels', $body)) {
+			throw new \RuntimeException('a link carries the dashboard body; it should hold only a pointer');
+		}
+
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			throw new \RuntimeException("Grafana has no dashboard '$uid'");
+		}
+
+		foreach ($table->getRowsHash() as $key => $expected) {
+			$key = trim($key);
+			$actual = (string)($body[$key] ?? '');
+			$want = match (trim($expected)) {
+				"the dashboard's uid" => $uid,
+				"the dashboard's title" => (string)($record['dashboard']['title'] ?? ''),
+				'a deep link to it in Grafana' => null,
+				default => trim($expected),
+			};
+			// A deep link is only ever asserted to NAME the dashboard: pinning Grafana's
+			// URL shape would break on an upgrade that changed it, and the claim is that
+			// the link points here, not that it is spelled a particular way.
+			if ($want === null) {
+				if (!str_contains($actual, $uid)) {
+					throw new \RuntimeException("the pointer's $key ('$actual') is not a deep link to '$uid'");
+				}
+				continue;
+			}
+			if ($actual !== $want) {
+				throw new \RuntimeException("the pointer's $key is '$actual', expected '$want'");
+			}
 		}
 	}
 

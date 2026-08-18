@@ -59,7 +59,7 @@ Feature: Editing a dashboard
       | grafana_syncedHash | set                                        |
       | Modified           | when the dashboard last changed in Grafana |
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Edit a dashboard in Grafana that a link mirrors
     Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone edits the dashboard's panels in Grafana
