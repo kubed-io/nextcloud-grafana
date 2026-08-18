@@ -61,7 +61,7 @@ Feature: Creating a dashboard
 
     Examples: one gesture, and the mapping decides what the file is
       | grafana folder | nc folder | mode | version | contents                   |
-      | demo           | Demo      | sync | set     | the dashboard's full JSON  |
+      | Demo           | Demo      | sync | set     | the dashboard's full JSON  |
       | links          | Pointers  | link | absent  | a pointer to the dashboard |
       | Shared         | Shared    | sync | set     | the dashboard's full JSON  |
 

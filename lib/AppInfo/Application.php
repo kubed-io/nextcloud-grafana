@@ -274,8 +274,17 @@ final class Application extends App implements IBootstrap {
 			$restoreHook = $context->injectFn(static fn (TrashRestoreHook $hook): TrashRestoreHook => $hook);
 			if ($restoreHook instanceof TrashRestoreHook) {
 				self::$restoreHookRegistered = true;
+				// THE SIGNAL CLASS IS NOT THE ONE ABOVE. The trashbin emits its two hooks
+				// under two DIFFERENT names: `preDelete` under `\OCP\Trashbin`
+				// (Trashbin::emitTrashbinPreDelete) and `post_restore` under
+				// `\OCA\Files_Trashbin\Trashbin` (Trashbin::restore, and groupfolders'
+				// TrashBackend::restoreItem verbatim). OC_Hook keys on the literal string,
+				// so registering this one beside its neighbour under `\OCP\Trashbin` — as
+				// it was — connected a handler that could never fire, for either backend.
+				// Nothing reports that: a legacy hook nobody emits is indistinguishable
+				// from one whose slot decided not to act.
 				/** @psalm-suppress DeprecatedMethod */
-				\OCP\Util::connectHook('\OCP\Trashbin', 'post_restore', $restoreHook, 'postRestore');
+				\OCP\Util::connectHook('\OCA\Files_Trashbin\Trashbin', 'post_restore', $restoreHook, 'postRestore');
 			}
 		}
 	}

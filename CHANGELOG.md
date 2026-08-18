@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Restoring a dashboard file with the recycle bin off rebuilt the dashboard at the id the delete had just destroyed, rather than making a new one — the file's body carries that id inside it.
 - Dragging a dashboard back out of the recycle-bin folder in Grafana now brings its trashed file back, instead of leaving a second copy beside a trash entry for the original.
 - Restoring a dashboard file from a Team Folder's trash never reached Grafana: with the recycle bin on the dashboard stayed parked, and the next sync trashed the file again — restore, wait, watch it vanish. It comes back properly now.
 - A dashboard deleted out of the Grafana recycle-bin folder now clears its trashed file in Nextcloud too, instead of leaving a trash entry that could not be restored to anything.

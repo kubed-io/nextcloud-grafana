@@ -257,6 +257,14 @@ trait MirrorSteps {
 	 * @Then /^"([^"]*)" holds:$/
 	 */
 	public function theMirrorHolds(string $path, TableNode $table): void {
+		// THE FILE THIS SCENARIO IS TALKING ABOUT, for whatever says `the file` next. A
+		// gesture performed in GRAFANA cannot set that antecedent — nothing on the
+		// Nextcloud side was touched by a hand — so `create.feature`'s "someone creates
+		// the dashboard in Grafana" had to name the path here, and the very next line,
+		// `the file holds "<contents>"`, read an empty cursor and reported the root
+		// listing as a mirror that is not JSON.
+		$this->currentFilePath = $path;
+
 		$failures = [];
 		foreach ($table->getRowsHash() as $property => $expected) {
 			// `Modified` IS NOT A METADATA KEY, and it belongs in this table anyway: it

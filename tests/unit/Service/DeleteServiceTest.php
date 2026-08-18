@@ -156,9 +156,15 @@ final class DeleteServiceTest extends TestCase {
 	public function testRestoreBinOffRecreatesFromTheFile(): void {
 		// The id was stripped at trash-time, so the restored file is unmanaged → create-on-land
 		// re-creates it (a fresh dashboard, new uid) because it landed back in a sync mapping.
+		//
+		// THE THIRD ARGUMENT IS THE ASSERTION. Stripping the stamp does not make the dashboard
+		// new: the file's body still carries `uid`, so without `asNewDashboard` the upsert keyed
+		// on it and rebuilt the dashboard at the id the trashing had destroyed. This test read
+		// `->with($file, $mapping)` while that was happening and stayed green — PHPUnit only
+		// constrains the arguments you name — which is why the flag is named here now.
 		$mapping = $this->mapping();
 		$unmanaged = new ManagedFile('', '', '', '', '', '');
-		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping);
+		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping, true);
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		$this->grafana->expects(self::never())->method('deleteDashboard');
 

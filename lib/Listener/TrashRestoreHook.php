@@ -36,10 +36,16 @@ use Psr\Log\LoggerInterface;
  *
  * ## `post_restore` IS THE ONE SIGNAL BOTH TRASHES EMIT
  *
- * Both backends emit the legacy `\OCP\Trashbin` `post_restore` hook — `Trashbin::restore()`
- * and groupfolders' `TrashBackend::restoreItem()` — carrying the RESTORED path. Reading it
+ * Both backends emit the legacy `post_restore` hook — `Trashbin::restore()` and
+ * groupfolders' `TrashBackend::restoreItem()` — carrying the RESTORED path. Reading it
  * here is what makes one code path cover both, so the deprecation is as unavoidable as
  * {@see TrashPurgeHook}'s.
+ *
+ * UNDER A DIFFERENT SIGNAL CLASS FROM ITS NEIGHBOUR, though, and that is a real trap:
+ * `preDelete` is emitted under `\OCP\Trashbin`, `post_restore` under
+ * `\OCA\Files_Trashbin\Trashbin`. Registered beside the purge hook under `\OCP\Trashbin`
+ * — the obvious thing to do — this class was connected and never once called, and the
+ * only visible symptom was the Team Folder restore it exists to fix still not working.
  *
  * ## BOTH ENTRY POINTS ARE KEPT, ON PURPOSE
  *
@@ -69,7 +75,7 @@ final class TrashRestoreHook {
 	}
 
 	/**
-	 * Slot for the legacy `\OCP\Trashbin` `post_restore` hook.
+	 * Slot for the legacy `\OCA\Files_Trashbin\Trashbin` `post_restore` hook.
 	 *
 	 * `$params['filePath']` is the path the file was restored TO, relative to the user's
 	 * files root — `/Shared/Fleet Health.grafana` for a Team Folder, because groupfolders

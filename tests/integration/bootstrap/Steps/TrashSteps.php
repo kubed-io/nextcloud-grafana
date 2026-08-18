@@ -144,9 +144,17 @@ trait TrashSteps {
 	 */
 	public function theFileIsInTheTrash(): void {
 		$this->iMoveItToTheTrash();
-		if ($this->trashbinPathFor($this->trashedFrom) === null) {
+		$entry = $this->trashbinPathFor($this->trashedFrom);
+		if ($entry === null) {
 			throw new \RuntimeException('setup: the file is not in the Nextcloud trash');
 		}
+		// REMEMBERED HERE, not only in requireTrashEntry(). That helper runs inside the
+		// Nextcloud-side gestures — purge, restore — so a scenario whose gesture happens in
+		// GRAFANA ("someone empties the bin folder") reached `the file is gone from the
+		// Nextcloud trash` with no entry resolved, and failed as though the trashing had
+		// never happened. The entry exists the moment this Given returns, so this is where
+		// it is knowable.
+		$this->lastTrashEntry = $entry;
 	}
 
 	/**
