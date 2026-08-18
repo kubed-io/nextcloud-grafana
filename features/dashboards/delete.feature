@@ -103,7 +103,7 @@ Feature: Trashing a dashboard file
     # Grafana, and this comes the other way.
 
   # notes: ../AGENTS.md#a-link-leaves-when-its-dashboard-does
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui
   Scenario: Delete a link's dashboard in Grafana
     Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone deletes the dashboard in Grafana

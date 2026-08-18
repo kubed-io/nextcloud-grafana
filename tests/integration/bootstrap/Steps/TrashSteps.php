@@ -171,6 +171,26 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @Then the file is not in the Nextcloud trash
+	 *
+	 * THE NEGATIVE OF THE RULE ABOVE, AND IT IS THE WHOLE POINT OF A LINK. A sync
+	 * mirror goes to the trash because the file IS the dashboard's content and a
+	 * restore restores it; a link has nothing to restore FROM, so a trashed pointer
+	 * would offer the user a recovery that reconnects to nothing.
+	 *
+	 * Asserted against the trash listing rather than the file's absence, because the
+	 * two failures look identical from the mapped folder: a link removed properly and
+	 * a link removed into the trash both leave the folder empty. Only the trash tells
+	 * them apart, and only one of them is right.
+	 */
+	public function theFileIsNotInTheNextcloudTrash(): void {
+		Assert::assertNull(
+			$this->trashbinPathFor($this->trashedFrom),
+			"'{$this->trashedFrom}' landed in the Nextcloud trash — a pointer restored from there reconnects to nothing",
+		);
+	}
+
+	/**
 	 * @Then it still holds no Grafana metadata
 	 *
 	 * The honest post-condition for trashing a file outside every mapping. It
