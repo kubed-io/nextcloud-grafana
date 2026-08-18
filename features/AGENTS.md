@@ -711,15 +711,79 @@ is gone entirely — see the nesting model, which retired it.
 ### A copy never changes a file's mode
 
 A `link` folder is a read-only projection of Grafana. That is the ONLY thing a
-link is for, so a copy may not cross the boundary in either direction: not into a
-link folder (there is nothing a local file could become there) and not out of one
-into a mapping (that would promote a read-only pointer into an authored
-dashboard). Both directions end in the same refusal, so they are two rows of one
-scenario rather than two scenarios.
+link is for, so a gesture may not carry a file across the boundary in either
+direction: not into a link folder (there is nothing a local file could become
+there) and not out of one into a mapping (that would promote a read-only pointer
+into an authored dashboard). Both directions end in the same refusal, so they are
+two rows of one scenario rather than two scenarios.
 
-The sibling n8n and penpot apps support no such crossing either. Copying a link
-file OUT to an unmapped folder is still fine — the result is a plain document,
-not a mode change.
+The sibling n8n and penpot apps support no such crossing either.
+
+THIS IS THE UMBRELLA, AND `dashboards/copy` OUTGREW IT. It still states the rule
+for a MOVE and for a FOLDER copy, which is what `dashboards/move.feature`,
+`folders/copy.feature` and `folders/move.feature` cite it for. For copying a
+dashboard the rule is now stronger than "may not change a mode" — see
+`A link is not copyable, and a link mapping is not a destination` below, which
+also explains why the sentence "copying a link out to an unmapped folder is still
+fine" used to live here and had to go.
+
+THOSE THREE SIBLINGS STILL CARRY TWO ROWS EACH (`Demo → Pointers`,
+`Pointers → Demo`) where the dashboard-copy rule now carries four. The missing
+rows are the same ones: a link going somewhere unmapped, and a link going nowhere
+at all. They are left alone deliberately — the folder engine is unbuilt, so
+widening them would be specifying two things at once.
+
+### A link is not copyable, and a link mapping is not a destination
+
+Two halves of one rule, and copy was the hole left in a rule the rest of the app
+already states. A link is a read-only projection of a dashboard that lives in
+Grafana: editing one is refused, creating one beside it is refused — and copying
+one was allowed, producing a second file claiming the same dashboard and
+duplicating nothing. The other direction is the same rule seen from the folder: a
+`link` mapping is filled from its Grafana folder and from nowhere else, so a file
+put there by hand is at best ignored and at worst minted as a dashboard the mirror
+does not select, which the next pull then deletes.
+
+**Two Examples blocks, because the two halves are independent.** The first is the
+source rule and it is TOTAL — there is no destination that makes copying a link
+meaningful, so `Pointers → Demo`, `Pointers → Scratch` and `Pointers → Pointers`
+are all rows of the same sentence rather than three cases. The second block is the
+destination rule, which only needs a source the first has not already refused.
+
+**THIS REPLACES `A copy never changes a file's mode`, AND IT WIDENS IT.** That note
+ended by saying copying a link OUT to an unmapped folder was "still fine — the
+result is a plain document, not a mode change", and `A copy landing outside every
+mapping is a plain document` carried a `Pointers` row asserting exactly that, live.
+So a passing scenario claimed the opposite of the rule sitting above it, and the
+rule was the `@unbuilt` one — the app agreed with the passing scenario. "A link is
+not copyable" does not acquire an exception from where the copy was going, so the
+row is gone and the refusal grew from two rows to four.
+
+**And it takes two mechanisms, not one.** A Sabre `method:COPY` guard answers
+**403 with a reason**, which is what a person needs, but it only sees WebDAV — an
+`occ` command, another app, or a script using the Files API never touches Sabre.
+So {@see \OCA\GrafanaSync\Listener\CopyGuardListener} carries the same rule on
+`BeforeNodeCopiedEvent`, where the SOURCE node is still available: by the time
+{@see \OCA\GrafanaSync\Service\CopyService} runs on `NodeCopiedEvent` the copy's
+inherited metadata has been stripped and nothing left on disk says the source was
+a link.
+
+**The refusal has to be a 403, and the typed event cannot give one.** Throwing
+`AbortedEventException` from `BeforeNodeCopiedEvent` DOES stop the copy, but
+`View::copy()` swallows it and Sabre still answers 201 — the user is told it
+worked and no file exists, which is worse than either outcome on its own. Measured
+in a pod on the n8n sibling, whose guard this is ported from; the mechanism is
+core's, not the app's, so it holds here identically.
+
+### A copy landing outside every mapping is a plain document
+
+WHAT NEXTCLOUD WOULD DO decides the body: it copies BYTES. It does not read them,
+edit them, or strip anything out of them. So the app's whole contribution to a copy
+landing outside every mapping is what it takes OFF — the identity in the metadata,
+which stopped being true the instant the copy existed.
+
+The two sources are a managed file leaving its mapping (`Demo`) and a file that was
+never ours (`Scratch`). `Pointers` was a third until the rule above reclaimed it.
 
 ### RETIRED — a copy whose dashboard cannot be created
 
@@ -2324,8 +2388,14 @@ is not.
 ### Renaming a link never renames the dashboard
 
 A link is a read-only pointer with no dashboard JSON to rewrite and nothing to
-push. Renaming the pointer file is a local act; the dashboard keeps its name and
-the next pull re-derives the filename from Grafana.
+push. Renaming the pointer file is a purely local act; the dashboard keeps its
+name and the next pull re-derives the filename from Grafana.
+
+AND THAT IS WHY THE SCENARIO SPECIFIES A REFUSAL, which this note used to stop
+short of saying. A rename that survives until the next pull and is then silently
+undone is the worst of both — the user is not told no, and does not get to keep
+the name either. Refusing at the gesture is the same answer edit, delete and copy
+already give a link; letting it through was the odd one out.
 
 ### Renaming a dashboard in Grafana renames the mirrored file
 
