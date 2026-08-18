@@ -1939,6 +1939,28 @@ it cannot resolve to "mapped" or "unmapped" — must NOT be read as "left every
 mapping". Treating unknown as unmapped would turn an unreadable path into a
 permanent Grafana delete. Unknown means do nothing.
 
+### A mirror that loses its dashboard goes to the trash, unless it was a link
+
+PORTED FROM THE n8n SIBLING, WHERE IT IS CODE AND NOT SPEC. `SyncService::removeMirror`
+there splits the prune on the mapping's MODE, and the reasoning holds identically here:
+
+  sync → the Nextcloud trash. The file IS the dashboard's content, and the thing that
+         happened on the far side is itself reversible, so the local gesture must be.
+  link → gone, with no trash entry. A link is a read-only projection; once the dashboard
+         is out of the mirrored folder there is nothing for a restore to reconnect to,
+         and a trashed pointer would offer the user exactly that.
+
+OUR `pruneStale` CALLS `$node->delete()` UNCONDITIONALLY, so the link half is @unbuilt —
+a pointer currently lands in the trash like anything else. n8n suppresses it with a
+`TrashControl::withoutTrash()` wrapper, which this app has no equivalent of at all; that
+helper is the shape of the fix.
+
+THE SYNC HALF WAS ALREADY RIGHT, and worth saying because it looked like the odd one out
+next to n8n's gherkin. n8n's untag scenarios assert only *the file is gone from the mapped
+folder* and never mention the trash in either mode — so the mode split is reasoned about
+carefully in its code and stated in neither app's spec. Ours now states one half and owes
+the other.
+
 ### A dashboard moved to another mapped folder in Grafana relocates its mirror
 
 Both folders are mapped, so the dashboard should end up in the other mapping's

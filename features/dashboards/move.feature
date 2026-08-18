@@ -111,13 +111,27 @@ Feature: Moving a dashboard file
       | grafana_mapping | the mapping's id              |
       | grafana_mode    | the mapping's mode            |
 
+  # notes: ../AGENTS.md#a-mirror-that-loses-its-dashboard-goes-to-the-trash-unless-it-was-a-link
   @grafana @in-grafana @gesture @ui
-  Scenario: Move a dashboard to an unmapped folder in Grafana
+  Scenario: Move a dashboard out of a sync mapping in Grafana
     Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone moves the dashboard into the "Archive" Grafana folder
     Then the file is gone from "Demo"
     And the file is recoverable from the Nextcloud trash
     And the dashboard still exists in Grafana
+
+    # The file IS the dashboard's content, and what happened in Grafana is reversible,
+    # so the local gesture must be too.
+
+  # notes: ../AGENTS.md#a-mirror-that-loses-its-dashboard-goes-to-the-trash-unless-it-was-a-link
+  @grafana @in-grafana @gesture @ui @unbuilt
+  Scenario: Move a dashboard out of a link mapping in Grafana
+    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
+    When someone moves the dashboard into the "Archive" Grafana folder
+    Then the file is gone from "Pointers", leaving no trash entry
+    And the dashboard still exists in Grafana
+
+    # A pointer restored from the trash would point at nothing this mapping mirrors.
 
     # ── RULE: a link belongs to Grafana — it may re-home, but never leave ──────
 
