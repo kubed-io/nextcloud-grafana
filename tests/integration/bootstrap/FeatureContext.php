@@ -171,6 +171,19 @@ final class FeatureContext implements Context {
 	 * @var array<string,string>
 	 */
 	private array $trashedMetadata = [];
+
+	/**
+	 * The uid the file carried INTO the gesture under test — the baseline for
+	 * `its own, not the one it arrived with`.
+	 *
+	 * ITS OWN FIELD BECAUSE `lastUid` CANNOT BE ONE. Twelve steps assign `lastUid`,
+	 * several of them Thens: `a matching dashboard is created in Grafana` reads the
+	 * file's uid back and stores it, so by the time the table beneath it is checked
+	 * the "before" and the "after" are the same variable. The comparison could not
+	 * fail, and the bin-off restore spent two CI runs being blamed for it. Only
+	 * arrange steps write this one.
+	 */
+	private string $arrivedWithUid = '';
 	private int $lastMoveStatus = 0;
 
 	/** Raw status of the last deliberately-refused COPY / DELETE, for the guard scenarios. */
@@ -230,6 +243,7 @@ final class FeatureContext implements Context {
 	public function stampScenarioStart(): void {
 		$this->scenarioStartedAt = time();
 		$this->lastTrashEntry = '';
+		$this->arrivedWithUid = '';
 	}
 
 	/**

@@ -43,6 +43,10 @@ trait TrashSteps {
 				$this->trashedMetadata[$key] = (string)$value;
 			}
 		}
+		// THE BASELINE FOR `its own, not the one it arrived with`, captured here because
+		// here is the last moment it is true. See FeatureContext::$arrivedWithUid for why
+		// `lastUid` cannot serve — a Then reassigns it before the table is read.
+		$this->arrivedWithUid = $this->trashedMetadata[self::META_UID] ?? '';
 		$this->davDelete($this->currentFilePath);
 	}
 

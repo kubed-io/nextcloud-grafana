@@ -489,10 +489,24 @@ trait MirrorSteps {
 				// A MINT, NOT A RESTORE: the file carried an id in and the app decided it
 				// was not usable, so the answer is a fresh one. Asserting "different from
 				// what it arrived with" is what tells the two apart.
+				//
+				// AGAINST `arrivedWithUid`, NOT `lastUid`. The uid the file arrived with is
+				// gone from `lastUid` by the time this runs: `a matching dashboard is
+				// created in Grafana` — the Then directly above this table in
+				// `restore.feature` — reads the uid back off the file and stores it there.
+				// So the comparison was the new uid against itself, always equal, and the
+				// scenario failed no matter what the app did.
 				if (($actual ?? '') === '') {
 					return 'expected a uid of its own, found nothing';
 				}
-				return $actual !== $this->lastUid
+				if ($this->arrivedWithUid === '') {
+					// LOUD, because the alternative is this claim quietly weakening to
+					// `set` for any scenario whose arrange forgot to capture the uid.
+					throw new \RuntimeException(
+						"'{$expected}' needs the uid the file arrived with; no arrange step captured one",
+					);
+				}
+				return $actual !== $this->arrivedWithUid
 					? null
 					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
 			case 'the uid it had before it was trashed':
