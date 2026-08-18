@@ -184,9 +184,13 @@ trait TrashSteps {
 	 * them apart, and only one of them is right.
 	 */
 	public function theFileIsNotInTheNextcloudTrash(): void {
-		Assert::assertNull(
-			$this->trashbinPathFor($this->trashedFrom),
-			"'{$this->trashedFrom}' landed in the Nextcloud trash — a pointer restored from there reconnects to nothing",
+		// SINCE THIS SCENARIO STARTED. Nothing was trashed here, so there is no entry to
+		// name — and an identically-named leftover from an earlier scenario would
+		// otherwise read as this link having been trashed.
+		$entry = $this->trashbinPathFor($this->trashedFrom, $this->scenarioStartedAt);
+		Assert::assertTrue(
+			$entry === null,
+			"'{$this->trashedFrom}' landed in the Nextcloud trash as '$entry' — a pointer restored from there reconnects to nothing",
 		);
 	}
 
@@ -619,9 +623,20 @@ trait TrashSteps {
 		}
 	}
 
-	/** @Then the file is gone from the Nextcloud trash */
+	/**
+	 * @Then the file is gone from the Nextcloud trash
+	 *
+	 * THE ENTRY THIS SCENARIO ACTED ON, not "any entry with this name". The trash is
+	 * shared across the whole suite and every scenario names its dashboard the same
+	 * thing, so a basename lookup finds an earlier scenario's leftover the moment the
+	 * real one is destroyed — reporting a purge that worked as a purge that did nothing.
+	 */
 	public function theFileIsGoneFromTheTrash(): void {
-		Assert::assertNull($this->trashbinPathFor($this->trashedFrom), 'the file is still in the Nextcloud trash');
+		Assert::assertTrue($this->lastTrashEntry !== '', 'no trash entry was resolved — the gesture never reached the trash');
+		Assert::assertFalse(
+			$this->trashEntryExists($this->lastTrashEntry),
+			"'{$this->lastTrashEntry}' is still in the Nextcloud trash",
+		);
 	}
 
 	/** @Then no dashboard is deleted in Grafana */
@@ -649,6 +664,10 @@ trait TrashSteps {
 	private function requireTrashEntry(): string {
 		$entry = $this->trashbinPathFor($this->trashedFrom);
 		Assert::assertNotNull($entry, "no trashbin entry for '{$this->trashedFrom}' — was it actually deleted?");
+		// REMEMBERED, because "the file is gone from the trash" has to name WHICH entry.
+		// A basename search would find an earlier scenario's leftover and report the
+		// purge as having done nothing.
+		$this->lastTrashEntry = $entry;
 		return $entry;
 	}
 }

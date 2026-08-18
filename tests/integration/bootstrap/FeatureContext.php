@@ -177,6 +177,17 @@ final class FeatureContext implements Context {
 	private int $lastCopyStatus = 0;
 	private int $lastDeleteStatus = 0;
 
+	/**
+	 * When this scenario began, and the exact trash entry its gesture acted on.
+	 *
+	 * BOTH EXIST BECAUSE THE TRASH IS SHARED AND NAMES REPEAT. Every scenario names its
+	 * dashboard the same thing, nothing empties the trash between them (emptying it is
+	 * itself a gesture that finishes deletes in Grafana), so a basename lookup can always
+	 * find somebody else's leftover. A claim about the trash has to name WHICH entry.
+	 */
+	private int $scenarioStartedAt = 0;
+	private string $lastTrashEntry = '';
+
 	/** What the destination held before a refused copy, so the refusal can prove nothing landed. */
 	private string $attemptedCopyFolder = '';
 
@@ -197,6 +208,18 @@ final class FeatureContext implements Context {
 	}
 
 	// ── per-scenario lifecycle (teardown) ─────────────────────────────────────
+
+	/**
+	 * Stamp the scenario's start, so a trash claim can tell this scenario's entries from
+	 * the ones already sitting there. The trash spells entries `<name>.d<unix timestamp>`,
+	 * which is the only thing distinguishing them when the names are identical.
+	 *
+	 * @BeforeScenario
+	 */
+	public function stampScenarioStart(): void {
+		$this->scenarioStartedAt = time();
+		$this->lastTrashEntry = '';
+	}
 
 	/**
 	 * After every scenario, delete the NC folders we made and clear the mappings

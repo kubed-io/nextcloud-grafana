@@ -163,7 +163,7 @@ trait WebDavTrait {
 	 * `.dNNNN` deletion-time suffix, so we match on the original basename prefix.
 	 * Returns the trashbin entry filename (e.g. "Old Name.grafana.d171...") or null.
 	 */
-	private function trashbinPathFor(string $originalPath): ?string {
+	private function trashbinPathFor(string $originalPath, int $notBefore = 0): ?string {
 		$base = basename($originalPath);
 		$href = $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash';
 		$res = $this->davClient()->request('PROPFIND', $href, [
@@ -195,12 +195,38 @@ trait WebDavTrait {
 			}
 			$entry = basename(rtrim($rawHref, '/'));
 			$stamp = preg_match('/\.d(\d+)$/', $entry, $m) === 1 ? (int)$m[1] : 0;
+			// $notBefore lets a caller ask "was this trashed DURING my scenario?" — the
+			// only way to tell one scenario's entry from an earlier one's when the names
+			// are identical, which since the naming sweep they always are.
+			if ($stamp < $notBefore) {
+				continue;
+			}
 			if ($stamp >= $bestStamp) {
 				$bestStamp = $stamp;
 				$best = $entry;
 			}
 		}
 		return $best;
+	}
+
+	/** Is this exact trash entry still there? Named, not searched — see its callers. */
+	private function trashEntryExists(string $entry): bool {
+		$href = $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash';
+		$res = $this->davClient()->request('PROPFIND', $href, [
+			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+		]);
+		if ($res->getStatusCode() !== 207) {
+			return false; // no trash to be in
+		}
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		foreach ($doc->xpath('//d:href') ?: [] as $href) {
+			if (basename(rtrim(rawurldecode(trim((string)$href)), '/')) === $entry) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Full trashbin href for a trash entry filename. */

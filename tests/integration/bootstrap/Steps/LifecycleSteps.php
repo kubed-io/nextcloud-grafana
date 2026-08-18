@@ -255,9 +255,8 @@ trait LifecycleSteps {
 	 * looking managed, and never being.
 	 */
 	public function theCreationIsRefused(): void {
-		Assert::assertNotContains(
-			$this->lastCreateStatus,
-			[201, 204],
+		Assert::assertFalse(
+			in_array($this->lastCreateStatus, [201, 204], true),
 			"the file was created (HTTP {$this->lastCreateStatus}) but should have been refused",
 		);
 		Assert::assertFalse(
@@ -817,11 +816,23 @@ trait LifecycleSteps {
 		$this->lastCopyStatus = $this->davCopyStatus($this->currentFilePath, $dest);
 	}
 
+	// ── WHY THESE THROW INSTEAD OF USING Assert::assertSame/assertNull ──────────
+	//
+	// A PHPUnit assertion that fails inside Behat and needs to EXPORT a value dies
+	// with `PHPUnit\TextUI\Configuration\Registry::get(): Return value must be of
+	// type Configuration, null returned` — the exporter reads a configuration
+	// registry that only a PHPUnit run initialises. Behat then prints that TypeError
+	// instead of the assertion message, so the failure says nothing at all.
+	//
+	// Measured the expensive way: three CI cycles on these very steps, each one
+	// reporting a type error where the reason should have been. `assertTrue` and
+	// `assertFalse` never export, so they are safe; anything that compares VALUES is
+	// not. These carry their own messages instead.
+
 	/** @Then the copy is refused with a message */
 	public function theCopyIsRefused(): void {
-		Assert::assertNotContains(
-			$this->lastCopyStatus,
-			[201, 204],
+		Assert::assertFalse(
+			in_array($this->lastCopyStatus, [201, 204], true),
 			"the copy succeeded (HTTP {$this->lastCopyStatus}) but should have been refused",
 		);
 	}
@@ -835,9 +846,8 @@ trait LifecycleSteps {
 	public function noFileIsAddedTo(string $folder): void {
 		$after = $this->davListDashboardFiles($folder);
 		$added = array_values(array_diff($after, $this->filesBeforeCopy));
-		Assert::assertSame(
-			[],
-			$added,
+		Assert::assertTrue(
+			$added === [],
 			"'$folder' gained " . implode(', ', $added) . ' despite the refusal',
 		);
 	}
@@ -849,9 +859,8 @@ trait LifecycleSteps {
 
 	/** @Then the trash is refused with a message */
 	public function theTrashIsRefused(): void {
-		Assert::assertNotContains(
-			$this->lastDeleteStatus,
-			[200, 204],
+		Assert::assertFalse(
+			in_array($this->lastDeleteStatus, [200, 204], true),
 			"the delete succeeded (HTTP {$this->lastDeleteStatus}) but should have been refused",
 		);
 	}
@@ -878,18 +887,16 @@ trait LifecycleSteps {
 
 	/** @Then the rename is refused with a message */
 	public function theRenameIsRefused(): void {
-		Assert::assertNotContains(
-			$this->lastMoveStatus,
-			[201, 204],
+		Assert::assertFalse(
+			in_array($this->lastMoveStatus, [201, 204], true),
 			"the rename succeeded (HTTP {$this->lastMoveStatus}) but should have been refused",
 		);
 	}
 
 	/** @Then the move is refused with a message */
 	public function theMoveIsRefused(): void {
-		Assert::assertNotContains(
-			$this->lastMoveStatus,
-			[201, 204],
+		Assert::assertFalse(
+			in_array($this->lastMoveStatus, [201, 204], true),
 			"the move succeeded (HTTP {$this->lastMoveStatus}) but should have been refused",
 		);
 	}
