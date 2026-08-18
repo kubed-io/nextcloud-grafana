@@ -30,6 +30,7 @@ use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
 use OCA\GrafanaSync\Listener\TagChangeListener;
 use OCA\GrafanaSync\Listener\TeamFolderPurgeListener;
 use OCA\GrafanaSync\Listener\TrashPurgeHook;
+use OCA\GrafanaSync\Listener\TrashRestoreHook;
 use OCA\GrafanaSync\Notification\Notifier;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMetadata;
@@ -82,6 +83,9 @@ final class Application extends App implements IBootstrap {
 
 	/** Guards the legacy preDelete hook registration so a repeated boot() can't stack it. */
 	private static bool $purgeHookRegistered = false;
+
+	/** Same guard as above: connectHook appends with no de-duplication. */
+	private static bool $restoreHookRegistered = false;
 
 	public function __construct(array $params = []) {
 		parent::__construct(self::APP_ID, $params);
@@ -246,6 +250,20 @@ final class Application extends App implements IBootstrap {
 			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
 			/** @psalm-suppress DeprecatedMethod */
 			\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+		}
+
+		// AND THE RESTORE, for the trashes the typed event never fires for. Its sibling
+		// {@see RestoreFromTrashListener} keys on `NodeRestoredEvent`, which
+		// `Files_Trashbin\Trashbin` emits and groupfolders' backend does not — so
+		// restoring a dashboard out of a TEAM FOLDER's trash reached Grafana never, and
+		// with the recycle bin on the next pull trashed the file straight back. Both
+		// backends DO emit the legacy `post_restore` hook, so that is the one signal
+		// covering both. See {@see TrashRestoreHook}; same guard, same reason.
+		if (!self::$restoreHookRegistered) {
+			self::$restoreHookRegistered = true;
+			$restoreHook = $context->injectFn(static fn (TrashRestoreHook $hook): TrashRestoreHook => $hook);
+			/** @psalm-suppress DeprecatedMethod */
+			\OCP\Util::connectHook('\OCP\Trashbin', 'post_restore', $restoreHook, 'postRestore');
 		}
 	}
 }

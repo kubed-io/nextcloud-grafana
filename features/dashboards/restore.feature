@@ -53,7 +53,7 @@ Feature: Restoring a dashboard file from the trash
       | grafana_mode    | the mapping's mode                   |
 
   # notes: ../AGENTS.md#a-purge-has-to-work-on-both-trashes
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a file from a Team Folder's trash
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Shared"

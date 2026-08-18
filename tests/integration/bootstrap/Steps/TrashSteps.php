@@ -308,7 +308,28 @@ trait TrashSteps {
 
 	/** @Then the file is back in its mapped folder */
 	public function theFileIsBackInItsMappedFolder(): void {
-		Assert::assertTrue($this->davExists($this->currentFilePath), 'the file did not come back from the trash');
+		if (!$this->davExists($this->currentFilePath)) {
+			throw new \RuntimeException("'{$this->currentFilePath}' did not come back from the trash");
+		}
+	}
+
+	/**
+	 * @Then the file is back in :folder
+	 *
+	 * The same claim, NAMING the folder. A restore can land a file under a `(1)` name if
+	 * something took its original one, and it can land in the wrong place entirely if the
+	 * trash backend composed the path differently — which is precisely what a Team Folder
+	 * restore does compared with a home one. Asserting the path only proves it exists;
+	 * asserting the FOLDER is what says it came back where the user left it.
+	 */
+	public function theFileIsBackIn(string $folder): void {
+		$name = basename($this->currentFilePath);
+		$here = $this->davListDashboardFiles($folder);
+		if (!in_array($name, $here, true)) {
+			throw new \RuntimeException(
+				"'$name' is not in '$folder' after the restore — it holds [" . implode(', ', $here) . ']',
+			);
+		}
 	}
 
 	/** @Then the dashboard is moved out of :folder back into its mapped folder */
