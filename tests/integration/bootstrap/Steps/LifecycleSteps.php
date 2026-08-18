@@ -255,14 +255,12 @@ trait LifecycleSteps {
 	 * looking managed, and never being.
 	 */
 	public function theCreationIsRefused(): void {
-		Assert::assertFalse(
-			in_array($this->lastCreateStatus, [201, 204], true),
-			"the file was created (HTTP {$this->lastCreateStatus}) but should have been refused",
-		);
-		Assert::assertFalse(
-			$this->davExists($this->attemptedCreatePath),
-			"a file arrived at {$this->attemptedCreatePath} despite the refusal",
-		);
+		if (in_array($this->lastCreateStatus, [201, 204], true)) {
+			throw new \RuntimeException("the file was created (HTTP {$this->lastCreateStatus}) but should have been refused");
+		}
+		if ($this->davExists($this->attemptedCreatePath)) {
+			throw new \RuntimeException("a file arrived at {$this->attemptedCreatePath} despite the refusal");
+		}
 	}
 
 	/** @When I create a new :ext file in that folder via the Files "New" menu */
@@ -816,25 +814,28 @@ trait LifecycleSteps {
 		$this->lastCopyStatus = $this->davCopyStatus($this->currentFilePath, $dest);
 	}
 
-	// ── WHY THESE THROW INSTEAD OF USING Assert::assertSame/assertNull ──────────
+	// ── WHY THESE THROW INSTEAD OF USING PHPUnit\Framework\Assert ──────────────
 	//
-	// A PHPUnit assertion that fails inside Behat and needs to EXPORT a value dies
-	// with `PHPUnit\TextUI\Configuration\Registry::get(): Return value must be of
-	// type Configuration, null returned` — the exporter reads a configuration
-	// registry that only a PHPUnit run initialises. Behat then prints that TypeError
-	// instead of the assertion message, so the failure says nothing at all.
+	// A FAILING PHPUnit ASSERTION CANNOT RENDER ITSELF IN BEHAT. Every constraint
+	// exports the actual value to build its failure description, and the exporter
+	// reads `PHPUnit\TextUI\Configuration\Registry`, which only a PHPUnit RUN
+	// initialises. Under Behat it is null, so the assertion dies with
+	// "Registry::get(): Return value must be of type Configuration, null returned"
+	// and Behat prints that TypeError where the reason should have been.
 	//
-	// Measured the expensive way: three CI cycles on these very steps, each one
-	// reporting a type error where the reason should have been. `assertTrue` and
-	// `assertFalse` never export, so they are safe; anything that compares VALUES is
-	// not. These carry their own messages instead.
+	// This is true of assertTrue and assertFalse as well, which is worth writing down
+	// because it is not obvious and I got it wrong once: `Constraint::fail()` exports
+	// `$other` whatever the constraint is. There is no safe assertion, only no
+	// assertion. Four CI cycles were spent reading type errors instead of messages.
+	//
+	// So these throw. The message is the whole point of a refusal step: "it was not
+	// refused" is worth nothing without the status that came back.
 
 	/** @Then the copy is refused with a message */
 	public function theCopyIsRefused(): void {
-		Assert::assertFalse(
-			in_array($this->lastCopyStatus, [201, 204], true),
-			"the copy succeeded (HTTP {$this->lastCopyStatus}) but should have been refused",
-		);
+		if (in_array($this->lastCopyStatus, [201, 204], true)) {
+			throw new \RuntimeException("the copy succeeded (HTTP {$this->lastCopyStatus}) but should have been refused");
+		}
 	}
 
 	/**
@@ -846,10 +847,9 @@ trait LifecycleSteps {
 	public function noFileIsAddedTo(string $folder): void {
 		$after = $this->davListDashboardFiles($folder);
 		$added = array_values(array_diff($after, $this->filesBeforeCopy));
-		Assert::assertTrue(
-			$added === [],
-			"'$folder' gained " . implode(', ', $added) . ' despite the refusal',
-		);
+		if ($added !== []) {
+			throw new \RuntimeException("'$folder' gained " . implode(', ', $added) . ' despite the refusal');
+		}
 	}
 
 	/** @When I try to move it to the trash */
@@ -859,10 +859,9 @@ trait LifecycleSteps {
 
 	/** @Then the trash is refused with a message */
 	public function theTrashIsRefused(): void {
-		Assert::assertFalse(
-			in_array($this->lastDeleteStatus, [200, 204], true),
-			"the delete succeeded (HTTP {$this->lastDeleteStatus}) but should have been refused",
-		);
+		if (in_array($this->lastDeleteStatus, [200, 204], true)) {
+			throw new \RuntimeException("the delete succeeded (HTTP {$this->lastDeleteStatus}) but should have been refused");
+		}
 	}
 
 	/**
@@ -887,18 +886,16 @@ trait LifecycleSteps {
 
 	/** @Then the rename is refused with a message */
 	public function theRenameIsRefused(): void {
-		Assert::assertFalse(
-			in_array($this->lastMoveStatus, [201, 204], true),
-			"the rename succeeded (HTTP {$this->lastMoveStatus}) but should have been refused",
-		);
+		if (in_array($this->lastMoveStatus, [201, 204], true)) {
+			throw new \RuntimeException("the rename succeeded (HTTP {$this->lastMoveStatus}) but should have been refused");
+		}
 	}
 
 	/** @Then the move is refused with a message */
 	public function theMoveIsRefused(): void {
-		Assert::assertFalse(
-			in_array($this->lastMoveStatus, [201, 204], true),
-			"the move succeeded (HTTP {$this->lastMoveStatus}) but should have been refused",
-		);
+		if (in_array($this->lastMoveStatus, [201, 204], true)) {
+			throw new \RuntimeException("the move succeeded (HTTP {$this->lastMoveStatus}) but should have been refused");
+		}
 	}
 
 	/** @Then the file stays in the :mapping folder */

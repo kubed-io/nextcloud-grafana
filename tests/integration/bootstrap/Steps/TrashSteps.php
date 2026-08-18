@@ -188,10 +188,11 @@ trait TrashSteps {
 		// name — and an identically-named leftover from an earlier scenario would
 		// otherwise read as this link having been trashed.
 		$entry = $this->trashbinPathFor($this->trashedFrom, $this->scenarioStartedAt);
-		Assert::assertTrue(
-			$entry === null,
-			"'{$this->trashedFrom}' landed in the Nextcloud trash as '$entry' — a pointer restored from there reconnects to nothing",
-		);
+		if ($entry !== null) {
+			throw new \RuntimeException(
+				"'{$this->trashedFrom}' landed in the Nextcloud trash as '$entry' — a pointer restored from there reconnects to nothing",
+			);
+		}
 	}
 
 	/**
@@ -632,11 +633,12 @@ trait TrashSteps {
 	 * real one is destroyed — reporting a purge that worked as a purge that did nothing.
 	 */
 	public function theFileIsGoneFromTheTrash(): void {
-		Assert::assertTrue($this->lastTrashEntry !== '', 'no trash entry was resolved — the gesture never reached the trash');
-		Assert::assertFalse(
-			$this->trashEntryExists($this->lastTrashEntry),
-			"'{$this->lastTrashEntry}' is still in the Nextcloud trash",
-		);
+		if ($this->lastTrashEntry === '') {
+			throw new \RuntimeException('no trash entry was resolved — the gesture never reached the trash');
+		}
+		if ($this->trashEntryExists($this->lastTrashEntry)) {
+			throw new \RuntimeException("'{$this->lastTrashEntry}' is still in the Nextcloud trash");
+		}
 	}
 
 	/** @Then no dashboard is deleted in Grafana */
