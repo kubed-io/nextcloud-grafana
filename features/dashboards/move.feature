@@ -93,12 +93,11 @@ Feature: Moving a dashboard file
     Then a matching dashboard is created in Grafana
     And the dashboard is named after the file, in the "Demo" Grafana folder
     And the file holds:
-      | grafana_uid     | its own, not the one it arrived with |
-      | grafana_mapping | the mapping's id                 |
-      | grafana_mode    | the mapping's mode               |
+      | grafana_uid     | set                |
+      | grafana_mapping | the mapping's id   |
+      | grafana_mode    | the mapping's mode |
 
-    # With the bin off the identity is gone, so a file coming back is indistinguishable
-    # from one that was never ours — and becomes a brand-new dashboard either way.
+  # notes: ../AGENTS.md#a-bin-off-return-reuses-the-uid-in-the-body-rather-than-minting-one
 
   @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
   Scenario: Move a parked file back into a mapping with the recycle bin on

@@ -1939,6 +1939,33 @@ the APPCONFIG path; `config:system:get backgroundjobs_mode` does not resolve at 
 setting the system key instead writes something nothing reads, which is a no-op
 precondition wearing the costume of a test.
 
+### A bin-off return reuses the uid in the body rather than minting one
+
+FOUND BY CI, AGAINST A CLAIM I WROTE. The scenario asserted `its own, not the one it
+arrived with` and the run answered: *it reused the uid it arrived with
+(06a745c3-…), but this gesture should mint a new one*. The assertion was aspirational
+and the app does something else.
+
+WHAT ACTUALLY HAPPENS. Moving out with the bin off deletes the dashboard and strips the
+FILE'S METADATA — it does not touch the body, and a real mirror carries its uid inside
+the body (see `captureOriginal`). So the file sitting in an unmapped folder still names
+the dead dashboard, and create-on-land upserts with that uid. Grafana mints it fresh,
+because a deleted uid is free again, and the dashboard returns at the same URL.
+
+THE DESIGN NOTE AT THE TOP OF THIS SECTION SAYS OTHERWISE — "a brand-new dashboard, same
+content, a NEW uid (the old one is gone forever)". Both cannot be true, and the code is
+the one that ships. The note is describing an intent nothing implements.
+
+IS THE BEHAVIOUR WRONG? Not obviously, and that is why this is written down rather than
+fixed. Reusing a free uid is harmless and arguably better — the dashboard comes back
+where its bookmarks pointed. But it is the SAME mechanism `copy.feature` calls a hijack:
+an upsert keys on the body's uid, so if the dashboard still existed the return would
+overwrite it rather than create anything. Bin-off move-out guarantees it does not exist;
+nothing else on this path does.
+
+The scenario now asserts `set`, which is what the gesture provably delivers. Tightening
+it either way is a decision about the app, not about the test.
+
 ### A purge has to work on both trashes
 
 FOUND IN THE n8n SIBLING, IN LIVE USE, AND THIS APP HAS THE SAME HOLE. `TrashPurgeHook`
