@@ -19,7 +19,7 @@ Feature: Renaming a mapped folder
 
   @admin @in-nextcloud @gesture @ui @todo
   Scenario: Rename the mapped Nextcloud folder
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When I rename "Demo" to "Dashboards"
     Then the mapping's Nextcloud folder is "Dashboards"
     And the file holds:
@@ -34,7 +34,7 @@ Feature: Renaming a mapped folder
   # notes: ../AGENTS.md#renaming-the-mapped-folder-in-grafana-does-not-break-the-mapping
   @grafana @in-grafana @gesture @ui @todo
   Scenario: Rename the mapped Grafana folder
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone renames the "Demo" Grafana folder to "metrics"
     Then the mapping's Grafana folder is still the one it was created with
     And the file holds:

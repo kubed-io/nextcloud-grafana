@@ -42,6 +42,19 @@ trait RenameSteps {
 		// mirror ever really appears: the dashboard is made in Grafana and pulled.
 		if (($this->mappingModes[$folder] ?? '') === 'link') {
 			$this->seedMirrorViaPull($folder, $stem);
+			// THE SAME PRE-STATE THE UNNAMED ARRANGE CAPTURED, because the two are one
+			// fixture now and a scenario that chose its file's name is no less entitled
+			// to prove the original survived. Without it, every "unchanged" claim on a
+			// link compared against nothing.
+			$this->originalBody = $this->davGet($this->originalPath);
+			$this->grafanaBefore = ['folder' => '', 'title' => ''];
+			$record = $this->grafanaGetDashboard($this->lastUid);
+			if ($record !== null) {
+				$this->grafanaBefore = [
+					'folder' => (string)($record['meta']['folderUid'] ?? ''),
+					'title' => (string)($record['dashboard']['title'] ?? ''),
+				];
+			}
 			return;
 		}
 

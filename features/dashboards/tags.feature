@@ -8,13 +8,15 @@ Feature: Changing a dashboard's tags
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Flows |
-      | nc folder      | Flows |
-      | mode           | sync  |
+      | grafana folder | Flows        |
+      | nc folder      | Flows        |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | Reports |
-      | nc folder      | Reports |
-      | mode           | link    |
+      | grafana folder | Reports      |
+      | nc folder      | Reports      |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -24,7 +26,7 @@ Feature: Changing a dashboard's tags
 
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Changing a dashboard's tags in Nextcloud changes them in Grafana
-    Given a dashboard file in "Flows" whose tags are "<tags before>"
+    Given a dashboard file named "Fleet Health.grafana" in "Flows" whose tags are "<tags before>"
     When I change the Nextcloud tags to "<tags after>"
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
@@ -44,7 +46,7 @@ Feature: Changing a dashboard's tags
 
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Changing a dashboard's tags in the file changes them in Grafana
-    Given a dashboard file in "Flows" whose tags are "<tags before>"
+    Given a dashboard file named "Fleet Health.grafana" in "Flows" whose tags are "<tags before>"
     When I change the tags in the file to "<tags after>"
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
@@ -62,7 +64,7 @@ Feature: Changing a dashboard's tags
 
   @grafana @in-grafana @occ @ui
   Scenario Outline: Changing a dashboard's tags in Grafana changes them in Nextcloud
-    Given a dashboard file in "Flows" whose tags are "<tags before>"
+    Given a dashboard file named "Fleet Health.grafana" in "Flows" whose tags are "<tags before>"
     When the dashboard's tags are changed to "<tags after>" in Grafana
     Then the dashboard's tags are "<tags after>" in Nextcloud
     And the dashboard's tags are "<tags after>" in the file
@@ -84,7 +86,7 @@ Feature: Changing a dashboard's tags
   # notes: ../AGENTS.md#changing-the-tags-on-a-link-does-not-change-them-in-grafana
   @user @in-nextcloud @gesture @ui
   Scenario: Changing the tags on a link does not change them in Grafana
-    Given a dashboard file in "Reports" whose tags are "prod, dns"
+    Given a dashboard file named "Fleet Health.grafana" in "Reports" whose tags are "prod, dns"
     When I change the Nextcloud tags to "prod, dns, mine"
     Then the dashboard's tags are still "prod, dns" in Grafana
     And the file's tags settle back to "prod, dns"
@@ -93,7 +95,7 @@ Feature: Changing a dashboard's tags
   # notes: ../AGENTS.md#changing-the-tags-on-a-file-the-mapping-does-not-own
   @user @in-nextcloud @gesture @ui
   Scenario: Changing the tags on an unmapped file keeps them local
-    Given a dashboard file in "Scratch" whose tags are "dns"
+    Given a dashboard file named "Fleet Health.grafana" in "Scratch" whose tags are "dns"
     When I change the Nextcloud tags to "mine"
     Then the dashboard's tags are "mine" in Nextcloud
     And the dashboard's tags are "mine" in the file

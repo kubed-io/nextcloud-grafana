@@ -20,7 +20,7 @@ Feature: Moving a mapped folder
 
   @admin @in-nextcloud @gesture @ui @todo
   Scenario: Move the mapped Nextcloud folder
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When I move "Demo" into "Archive"
     Then the mapping's Nextcloud folder is "Archive/Demo"
     And the file holds:
@@ -35,7 +35,7 @@ Feature: Moving a mapped folder
   # notes: ../AGENTS.md#moving-the-mapped-folder-in-grafana-does-not-break-the-mapping
   @grafana @in-grafana @gesture @ui @todo
   Scenario: Move the mapped Grafana folder
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And a Grafana folder "Retired" that is not mapped
     When someone moves the "Demo" Grafana folder under "Retired"
     Then the mapping's Grafana folder is still the one it was created with
@@ -52,7 +52,7 @@ Feature: Moving a mapped folder
   # notes: ../AGENTS.md#a-mapped-folder-that-was-deleted-is-not-re-adopted-by-name
   @admin @in-nextcloud @gesture @ui @unbuilt
   Scenario: A new folder reusing the mapped folder's name is not adopted
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And "Demo" is in the Nextcloud trash
     When I create the folder "Demo"
     Then the mapping does not resolve to the new "Demo"

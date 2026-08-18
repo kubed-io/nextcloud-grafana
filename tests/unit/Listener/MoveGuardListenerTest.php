@@ -12,10 +12,12 @@ namespace OCA\GrafanaSync\Tests\Unit\Listener;
 use OCA\GrafanaSync\Listener\MoveGuardListener;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMetadata;
+use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCP\Exceptions\AbortedEventException;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
+use OCP\Files\File;
 use OCP\Files\Folder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -120,6 +122,74 @@ final class MoveGuardListenerTest extends TestCase {
 		self::assertTrue(true, 'not refused');
 	}
 
+	// ── the FILE branch ────────────────────────────────────────────────────────
+
+	/**
+	 * THE REGRESSION THIS FILE EXISTS TO HOLD. A link moved between two link mappings
+	 * used to be allowed and re-stamped onto the destination, which reads like a
+	 * re-home and is not one: a pointer's membership is decided by which GRAFANA
+	 * folder its dashboard sits in, so the stamp simply disagreed with Grafana until
+	 * the next pull deleted it from the destination and wrote it back at the source.
+	 */
+	public function testALinkMayNotMoveToAnotherLinkMapping(): void {
+		$this->mapped = ['Pointers' => Mapping::MODE_LINK, 'Mirrors' => Mapping::MODE_LINK];
+
+		$this->expectException(AbortedEventException::class);
+		$this->expectExceptionMessageMatches('/only a pointer/');
+		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Mirrors/Fleet.grafana', Mapping::MODE_LINK);
+	}
+
+	public function testALinkMayNotMoveIntoASyncMapping(): void {
+		$this->mapped = ['Pointers' => Mapping::MODE_LINK, 'Demo' => Mapping::MODE_SYNC];
+
+		$this->expectException(AbortedEventException::class);
+		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Demo/Fleet.grafana', Mapping::MODE_LINK);
+	}
+
+	public function testALinkMayNotLeaveForAnUnmappedFolder(): void {
+		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
+
+		$this->expectException(AbortedEventException::class);
+		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Scratch/Fleet.grafana', Mapping::MODE_LINK);
+	}
+
+	public function testASyncFileMayNotMoveIntoALinkMapping(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC, 'Pointers' => Mapping::MODE_LINK];
+
+		$this->expectException(AbortedEventException::class);
+		$this->expectExceptionMessageMatches('/Grafana’s to place/u');
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Pointers/Fleet.grafana', Mapping::MODE_SYNC);
+	}
+
+	/**
+	 * THE INVARIANT ABOUT NOT REFUSING, which is the one worth breaking a build over.
+	 * A link may be renamed and filed into a subfolder like anything else — nothing
+	 * about its membership changes, so the guard must key on the mapping, not the folder.
+	 */
+	public function testALinkMayMoveWithinItsOwnMapping(): void {
+		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
+
+		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Pointers/Sub/Fleet.grafana', Mapping::MODE_LINK);
+
+		self::assertTrue(true, 'not refused');
+	}
+
+	public function testASyncFileMayLeaveItsMapping(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Scratch/Fleet.grafana', Mapping::MODE_SYNC);
+
+		self::assertTrue(true, 'not refused');
+	}
+
+	public function testASyncFileMayMoveToAnotherSyncMapping(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC, 'Reports' => Mapping::MODE_SYNC];
+
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Reports/Fleet.grafana', Mapping::MODE_SYNC);
+
+		self::assertTrue(true, 'not refused');
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	private function guard(string $from, string $to, int $id): void {
@@ -153,6 +223,44 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getName')->willReturn(basename($to));
 
 		$listener = new MoveGuardListener($folders, $mappings, $this->createStub(DashboardMetadata::class));
+		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
+	}
+
+	/**
+	 * The file branch. $mode is the file's own stamp, which is what the listener reads
+	 * in preference to the source mapping's mode.
+	 */
+	private function guardFile(string $from, string $to, string $mode): void {
+		$mappings = $this->createStub(MappingService::class);
+		$mappings->method('resolveForPath')->willReturnCallback(
+			function (string $path): ?Mapping {
+				foreach ($this->mapped as $folder => $m) {
+					if (str_contains($path, '/files/' . $folder . '/')) {
+						return Mapping::fromArray([
+							'id' => 'm-' . $folder,
+							'grafana_folder_uid' => 'gf-' . $folder,
+							'nc_folder' => $folder,
+							'mode' => $m,
+						]);
+					}
+				}
+				return null;
+			},
+		);
+
+		$metadata = $this->createStub(DashboardMetadata::class);
+		$metadata->method('read')->willReturn(new ManagedFile('dash-1', $mode, '1', 'h', 'm-src', 'gf-src'));
+
+		$source = $this->createStub(File::class);
+		$source->method('getPath')->willReturn($from);
+		$source->method('getName')->willReturn(basename($from));
+		$source->method('getId')->willReturn(42);
+
+		$target = $this->createStub(File::class);
+		$target->method('getPath')->willReturn($to);
+		$target->method('getName')->willReturn(basename($to));
+
+		$listener = new MoveGuardListener($this->createStub(FolderMetadata::class), $mappings, $metadata);
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 }

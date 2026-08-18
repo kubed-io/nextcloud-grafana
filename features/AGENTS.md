@@ -539,7 +539,7 @@ a file copied out of a mapping into `Scratch` is a plain document, and a file
 copied out of `Scratch` into a mapping is a new dashboard. So the source is an
 Examples column and the destination is the scenario.
 
-That is why there is one arrange for every source. `a dashboard file in "<folder>"`
+That is why there is one arrange for every source. `a dashboard file named "…" in "<folder>"`
 makes a file wherever the scenario says, and the Background says what that folder
 is; the arrange asserts nothing about a uid, because outside a mapping there
 isn't one and that is the point rather than a failure.
@@ -711,15 +711,79 @@ is gone entirely — see the nesting model, which retired it.
 ### A copy never changes a file's mode
 
 A `link` folder is a read-only projection of Grafana. That is the ONLY thing a
-link is for, so a copy may not cross the boundary in either direction: not into a
-link folder (there is nothing a local file could become there) and not out of one
-into a mapping (that would promote a read-only pointer into an authored
-dashboard). Both directions end in the same refusal, so they are two rows of one
-scenario rather than two scenarios.
+link is for, so a gesture may not carry a file across the boundary in either
+direction: not into a link folder (there is nothing a local file could become
+there) and not out of one into a mapping (that would promote a read-only pointer
+into an authored dashboard). Both directions end in the same refusal, so they are
+two rows of one scenario rather than two scenarios.
 
-The sibling n8n and penpot apps support no such crossing either. Copying a link
-file OUT to an unmapped folder is still fine — the result is a plain document,
-not a mode change.
+The sibling n8n and penpot apps support no such crossing either.
+
+THIS IS THE UMBRELLA, AND `dashboards/copy` OUTGREW IT. It still states the rule
+for a MOVE and for a FOLDER copy, which is what `dashboards/move.feature`,
+`folders/copy.feature` and `folders/move.feature` cite it for. For copying a
+dashboard the rule is now stronger than "may not change a mode" — see
+`A link is not copyable, and a link mapping is not a destination` below, which
+also explains why the sentence "copying a link out to an unmapped folder is still
+fine" used to live here and had to go.
+
+THOSE THREE SIBLINGS STILL CARRY TWO ROWS EACH (`Demo → Pointers`,
+`Pointers → Demo`) where the dashboard-copy rule now carries four. The missing
+rows are the same ones: a link going somewhere unmapped, and a link going nowhere
+at all. They are left alone deliberately — the folder engine is unbuilt, so
+widening them would be specifying two things at once.
+
+### A link is not copyable, and a link mapping is not a destination
+
+Two halves of one rule, and copy was the hole left in a rule the rest of the app
+already states. A link is a read-only projection of a dashboard that lives in
+Grafana: editing one is refused, creating one beside it is refused — and copying
+one was allowed, producing a second file claiming the same dashboard and
+duplicating nothing. The other direction is the same rule seen from the folder: a
+`link` mapping is filled from its Grafana folder and from nowhere else, so a file
+put there by hand is at best ignored and at worst minted as a dashboard the mirror
+does not select, which the next pull then deletes.
+
+**Two Examples blocks, because the two halves are independent.** The first is the
+source rule and it is TOTAL — there is no destination that makes copying a link
+meaningful, so `Pointers → Demo`, `Pointers → Scratch` and `Pointers → Pointers`
+are all rows of the same sentence rather than three cases. The second block is the
+destination rule, which only needs a source the first has not already refused.
+
+**THIS REPLACES `A copy never changes a file's mode`, AND IT WIDENS IT.** That note
+ended by saying copying a link OUT to an unmapped folder was "still fine — the
+result is a plain document, not a mode change", and `A copy landing outside every
+mapping is a plain document` carried a `Pointers` row asserting exactly that, live.
+So a passing scenario claimed the opposite of the rule sitting above it, and the
+rule was the `@unbuilt` one — the app agreed with the passing scenario. "A link is
+not copyable" does not acquire an exception from where the copy was going, so the
+row is gone and the refusal grew from two rows to four.
+
+**And it takes two mechanisms, not one.** A Sabre `method:COPY` guard answers
+**403 with a reason**, which is what a person needs, but it only sees WebDAV — an
+`occ` command, another app, or a script using the Files API never touches Sabre.
+So {@see \OCA\GrafanaSync\Listener\CopyGuardListener} carries the same rule on
+`BeforeNodeCopiedEvent`, where the SOURCE node is still available: by the time
+{@see \OCA\GrafanaSync\Service\CopyService} runs on `NodeCopiedEvent` the copy's
+inherited metadata has been stripped and nothing left on disk says the source was
+a link.
+
+**The refusal has to be a 403, and the typed event cannot give one.** Throwing
+`AbortedEventException` from `BeforeNodeCopiedEvent` DOES stop the copy, but
+`View::copy()` swallows it and Sabre still answers 201 — the user is told it
+worked and no file exists, which is worse than either outcome on its own. Measured
+in a pod on the n8n sibling, whose guard this is ported from; the mechanism is
+core's, not the app's, so it holds here identically.
+
+### A copy landing outside every mapping is a plain document
+
+WHAT NEXTCLOUD WOULD DO decides the body: it copies BYTES. It does not read them,
+edit them, or strip anything out of them. So the app's whole contribution to a copy
+landing outside every mapping is what it takes OFF — the identity in the metadata,
+which stopped being true the instant the copy existed.
+
+The two sources are a managed file leaving its mapping (`Demo`) and a file that was
+never ours (`Scratch`). `Pointers` was a third until the rule above reclaimed it.
 
 ### RETIRED — a copy whose dashboard cannot be created
 
@@ -1810,26 +1874,242 @@ of every mapping and trashing it both run through the bin decision. They live in
 because the gestures differ, so whenever either changes, check the rules still agree.
 Every scenario whose outcome depends on that setting carries @recycle-bin.
 
-### Moving a dashboard into a tagged subfolder re-parents it in Grafana
+### What move still owes the n8n sibling
 
-── into a TAGGED subfolder — a real Grafana folder ───────────────────────────────
-A subfolder that carries the `grafana` tag is a Grafana folder in its own right
-(create-folder.feature owns how it gets there). Moving a dashboard into one is
-therefore a re-parent, not local organisation. @unbuilt: GrafanaClient has no folder
-write operations, so there is nothing to re-parent into yet.
+Compared scenario by scenario against `workflows/move.feature`. Three gaps are
+CODE, not spec, and are written here rather than invented as scenarios:
 
-### Moving into an untagged subfolder is local-only (stays bound to the parent)
+**Conflict answers.** n8n specifies what happens when a file lands on a name that
+is already taken — keep the existing version, keep the new one, or keep both — as
+one Outline over six rows (the answer × whether the arrival carried the same id, a
+different id, or none) plus a `keep both` scenario. This app has no conflict
+handling at all, so there is nothing to state yet. It is the largest single gap.
 
-An UNTAGGED subfolder is ordinary local NC organisation, invisible to Grafana — the
-dashboard stays bound to the PARENT mapped folder and keeps all its metadata. A file
-only leaves the mapping when it leaves every mapped folder. A subfolder becomes a
-Grafana folder by carrying the `grafana` tag; see create-folder.feature.
+**The storage axis.** n8n's Background carries five mappings across both storage
+kinds so its rebind Outline can run "between the two storage kinds, in both
+directions" and "between two folders of the same kind". Ours deliberately does not:
+per the SCOPE note above, a move into or out of a Team Folder crosses a storage
+boundary and rides the delete/create lifecycle rather than this engine. Adding the
+rows would specify a fast-follow, not this one.
 
-### Moving a link from one mapped folder to another only re-homes the pointer
+**A destination that was hard-deleted on the far side.** n8n falls back to create
+when the workflow a returning file names is gone. Our `@recycle-bin` scenarios
+cover the parked case; the truly-gone case is unstated.
 
-Unit-tested (testALinkMoveIntoADifferentMappingOnlyRehomesThePointer) and never
-written down. A link owns no dashboard, so a mapped→mapped move re-stamps which
-mapping the pointer belongs to and stops there — Grafana is not called at all.
+AND ONE THING WE STATE THAT n8n CANNOT. Membership here is a FOLDER, so a dashboard
+moved in Grafana relocates its mirror and a subfolder is a real re-parent. In n8n
+membership is a tag, so its move file has no in-n8n direction at all and its subtree
+rule is simply "nothing happens". Neither file is a superset of the other.
+
+### RETIRED — the two "tagged subfolder" notes
+
+Both described the design where a subfolder became a Grafana folder by carrying a
+`grafana` TAG, and split the move on whether the destination was tagged. That
+design is gone. A folder is in Grafana when a DASHBOARD IS IN IT — see
+`folders/create.feature` and `A subfolder is in Grafana when a dashboard is in it`
+— so there is no tagged/untagged axis for a move to split on.
+
+They were the last two places in the repo still speaking that vocabulary, and they
+outlived it precisely because nothing pointed at them: an orphaned note is not
+proof that a scenario is owed, it can equally be proof the rule is dead. Both
+readings have now happened here, so check which one it is before writing one.
+
+The behaviour they were reaching for is already stated and already runs, one file
+over: `folders/create.feature`'s *Move a dashboard into a folder of a mapping*,
+which its own comment calls "the second of exactly two ways a Grafana folder is
+born from Nextcloud, which is why it lives here and not with the other move
+gestures."
+
+### An edit reaches Grafana even where background jobs never run
+
+THE SCENARIO THE SIBLING HAS AND WE NEVER WROTE, for a mechanism this app already
+carries. `WritebackStrategy` derives the push timing from `backgroundjobs_mode` in
+appconfig under `core` — on an instance set to `ajax`, cron never runs unattended, so
+a queued job would sit there until somebody happened to load a page. The strategy
+answers "can this be queued?" with no, and the write goes out inline instead.
+
+IT IS THE DEFAULT ON A FRESH INSTALL, which is what makes it worth a scenario rather
+than a footnote: the configuration where deferring is broken is the one most people
+start on, and every other edit scenario runs on an instance where cron works, so none
+of them can tell the difference.
+
+@todo rather than live: the code is here and unit-tested, the arrange is not — the step
+has to set `config:app:set core backgroundjobs_mode --value=ajax` and put it back. Note
+the APPCONFIG path; `config:system:get backgroundjobs_mode` does not resolve at all, and
+setting the system key instead writes something nothing reads, which is a no-op
+precondition wearing the costume of a test.
+
+### A bin-off return reuses the uid in the body rather than minting one
+
+FOUND BY CI, AGAINST A CLAIM I WROTE. The scenario asserted `its own, not the one it
+arrived with` and the run answered: *it reused the uid it arrived with
+(06a745c3-…), but this gesture should mint a new one*. The assertion was aspirational
+and the app does something else.
+
+WHAT ACTUALLY HAPPENS. Moving out with the bin off deletes the dashboard and strips the
+FILE'S METADATA — it does not touch the body, and a real mirror carries its uid inside
+the body (see `captureOriginal`). So the file sitting in an unmapped folder still names
+the dead dashboard, and create-on-land upserts with that uid. Grafana mints it fresh,
+because a deleted uid is free again, and the dashboard returns at the same URL.
+
+THE DESIGN NOTE AT THE TOP OF THIS SECTION SAYS OTHERWISE — "a brand-new dashboard, same
+content, a NEW uid (the old one is gone forever)". Both cannot be true, and the code is
+the one that ships. The note is describing an intent nothing implements.
+
+IS THE BEHAVIOUR WRONG? Not obviously, and that is why this is written down rather than
+fixed. Reusing a free uid is harmless and arguably better — the dashboard comes back
+where its bookmarks pointed. But it is the SAME mechanism `copy.feature` calls a hijack:
+an upsert keys on the body's uid, so if the dashboard still existed the return would
+overwrite it rather than create anything. Bin-off move-out guarantees it does not exist;
+nothing else on this path does.
+
+The scenario now asserts `set`, which is what the gesture provably delivers. Tightening
+it either way is a decision about the app, not about the test.
+
+### A purge has to work on both trashes
+
+FOUND IN THE n8n SIBLING, IN LIVE USE, AND THIS APP HAS THE SAME HOLE. `TrashPurgeHook`
+stands on the legacy `\OCP\Trashbin` `preDelete` hook, and `Files_Trashbin\Trashbin` is
+the only class in Nextcloud that emits it. A Team Folder has its own trash backend:
+groupfolders' `removeItem()` unlinks the file and drops its cache entry, emitting no hook
+and no typed event. So a sync dashboard purged out of a Team Folder's trash leaves its
+dashboard parked in the recycle-bin folder permanently, silently, with nothing in the log
+because nothing ran.
+
+WE DO NOT HAVE THE OTHER HALF. n8n added `TeamFolderPurgeListener` on
+`CacheEntryRemovedEvent` for exactly this, and there is no equivalent here — `lib/Listener`
+has no team-folder purge at all. That listener is the port, and it carries a trap worth
+reading before writing one: it must be registered at a NON-DEFAULT PRIORITY, because on
+Nextcloud 32 and 33 core registers its own `FilesMetadata` cleanup on the same event at
+the default priority and during boot, so it runs first and deletes the metadata stamp
+before the listener can read it.
+
+AND THE LESSON IS NOT "ADD MORE TESTS". n8n's note is blunt about how a fully-tested
+feature file missed it: the purge scenarios named one folder, that folder was admin-owned,
+and the storage axis had been added to `restore.feature` when a different bug was being
+chased. So the suite covered the axis in one direction and only the home storage in the
+other, and every scenario passed while the case the app is actually deployed on had never
+once been exercised. An axis discovered to matter belongs on EVERY scenario that crosses
+it, not on the ones being edited that day.
+
+OUR THREE TRASH FILES HAD NO STORAGE AXIS AT ALL — one admin-folder mapping between them,
+while `create.feature` has mapped a Team Folder since Course 3. The Backgrounds now carry
+both kinds. `delete.feature` deliberately gains only the key and not a second scenario:
+trashing fires the typed event on either backend, so the split does not bite there, and
+the sibling's delete has no team-folder axis either. It is the PURGE and the RESTORE that
+are backend-specific.
+
+### A link leaves when its dashboard does
+
+THE MIRROR OF `A link cannot be deleted from Nextcloud`, and the reason both hold at once:
+a link is Nextcloud's to SHOW, never to own. The user may not delete it, and it disappears
+by itself the moment its dashboard leaves the mirrored Grafana folder.
+
+NO TRASH ENTRY, AND THAT IS THE POINT. A sync file goes to the trash because the file IS
+the dashboard's content and restoring it restores the dashboard. A link has nothing to
+restore FROM, so a trashed pointer would offer a recovery that reconnects to nothing. Same
+fork as `A mirror that loses its dashboard goes to the trash, unless it was a link`, seen
+through the delete gesture instead of the pull — and @unbuilt for the same reason: this app
+has no trash-suppression seam. n8n reaches for `ITrashManager::pauseTrash()`, which is the
+only public one that makes a delete permanent AND is backend-agnostic, so it covers a Team
+Folder's trash exactly as it covers a home.
+
+### Keeping one version of a duplicate leaves one file and one dashboard
+
+PORTED FROM THE n8n SIBLING, WHERE IT IS BUILT. A file carrying a uid is moved into
+a mapping that already mirrors that dashboard — an unmapped copy sat outside while
+the folder re-synced. This is not the same file relocating; it is a duplicate.
+
+**Nextcloud asks the person, and the answer IS the behaviour.** `apps/files`
+PROPFINDs the destination, finds the collision, and opens the "Which files do you
+want to keep?" picker before a single request goes out. Its answer splits three ways:
+*existing version* filters the node out and sends nothing at all; *both versions*
+renames via `getUniqueName()` and sends one MOVE; *new version* sends one MOVE to the
+original name and sabre deletes the destination first. So the `When` has two halves —
+the move announces the collision, the selection performs it — and a step that moved
+first and "resolved" afterwards would be modelling a client that does not exist.
+
+**THE DESTINATION'S UID SURVIVES EVERY ANSWER.** That is the whole rule. The person
+is choosing which CONTENT to keep; the identity is never theirs to pick, because
+picking it breaks the link between the file and the dashboard it names. The row reads
+`the uid the destination already had` rather than "the uid both files carried", which
+is what the arrange happens to produce and not what the app promises.
+
+**Why it matters is only visible when the two files are different dashboards.** The
+folder holds `foo.grafana` bound to **A**; an unmapped `foo.grafana` bound to **B** is
+moved in over it. If the arrival keeps B, then A is still live in the mapped Grafana
+folder with no file — and the next pull finds a dashboard with no mirror and writes
+one, so `foo (1).grafana` reappears beside the file that replaced it. One overwrite,
+and the mapping has forked.
+
+**AND HERE IT IS SHARPER THAN IN n8n, WHICH IS THE PART THAT DOES NOT PORT.** "Keep
+the new version" makes sabre DELETE the destination before the arrival lands, and our
+delete listener acts on that. n8n's delete ARCHIVES, so its `moveIn` can unarchive and
+the mistake is recoverable. Grafana has no archive: with the recycle bin off a delete
+is permanent and proven so, so the destination's dashboard — and the uid this rule
+exists to preserve — is simply gone. The delete has to be SUPPRESSED, not compensated
+for afterwards, which is a stronger requirement than the sibling's. n8n's
+`ReplacedByMovePlugin` records the destination's id from sabre's `beforeMove`, the only
+hook that fires while both halves are still one gesture; that is the shape, but the
+suppression is ours to add.
+
+**The arrival's uid is a column with three values,** because the rule does not depend
+on it and varying it is the only way to show the app is not just keeping whatever
+arrived: the same uid (both files mirror one dashboard), a different uid (two
+dashboards, one name — the case the rule exists for), and none at all (the copy case,
+since a copy carries no metadata row). The `Given` saying the panels DIFFER is what
+makes the body column discriminating; without it the rows grade nothing.
+
+**Not asserted, deliberately:** what else is in the folder, the trash, and where the
+arrival went when it was not kept — the picker filtered it out before any request, so
+it never moved.
+
+### Keeping both versions of a duplicate makes the arrival its own dashboard
+
+A `Then` PER FILE, which is why this is a scenario and not a third row. The two files
+end in genuinely different states and the interesting claim is the CONTRAST:
+`Turnbuckle.grafana` keeps the uid the destination already had and the panels it always
+had, while `Turnbuckle (1).grafana` gets *its own, not the one it arrived with* and the
+panels that arrived. Folded into an Outline that must speak about "each file", the one
+thing worth asserting — that these are now two different dashboards — can only be said
+sideways.
+
+The rename is Nextcloud's own `getUniqueName()`, not a name anybody typed.
+
+IT STAYS ON `the same grafana_uid` WHILE ITS SIBLING VARIES THE COLUMN, and the sibling
+note explains why: with a different uid there is no duplicate at all, so nothing is
+minted and the arrival simply restores under a name Nextcloud picked. The claim here is
+that a SECOND COPY OF THE DESTINATION'S DASHBOARD is minted, and only one value of the
+column produces one.
+
+### A link is not movable, and a link mapping is not a destination
+
+THE SAME RULE COPY STATES, AND THE SAME SHAPE — one Outline, two Examples blocks,
+because the two halves are independent. The first is the SOURCE rule and it is
+TOTAL: there is nowhere a link may go. The second is the DESTINATION rule, which
+only needs a source the first has not already refused.
+
+RETIRES `Moving a link from one mapped folder to another only re-homes the pointer`,
+which was wrong and had a unit test holding it in place. A pointer's membership is
+decided by which GRAFANA folder its dashboard sits in, not by where the file sits in
+Nextcloud — so re-stamping `grafana_mapping` on a link moved from one link mapping to
+another is fiction. Follow it through the next pull: `indexByUid` walks the
+destination mapping and finds the re-homed file (its stamp now says it belongs
+there), its uid is not among that Grafana folder's `seenUids`, so `pruneStale`
+deletes it — and the source mapping's pull then sees a dashboard with no mirror and
+writes the file back where it started. The move is undone, silently, one sync later.
+
+That is the exact failure the rename rule already refuses by name: a gesture that
+survives until the next pull and is then quietly reversed is worse than a refusal,
+because the user is neither told no nor allowed to keep it.
+
+WITHIN one mapping a link still moves freely — rename, subfolder, anywhere under the
+same mapping — because nothing about its membership changes. The guard keys on the
+mapping ID, not on the folder.
+
+MotionService keeps its re-home branch as a defensive path, the way it keeps the
+link move-out strip: the guard refuses first, and a service that is reached anyway
+should still do the least surprising thing.
 
 ### A failed Grafana delete on move-out never strips the file's identity
 
@@ -1843,6 +2123,28 @@ A destination the app cannot classify — outside the user's file tree, or a pat
 it cannot resolve to "mapped" or "unmapped" — must NOT be read as "left every
 mapping". Treating unknown as unmapped would turn an unreadable path into a
 permanent Grafana delete. Unknown means do nothing.
+
+### A mirror that loses its dashboard goes to the trash, unless it was a link
+
+PORTED FROM THE n8n SIBLING, WHERE IT IS CODE AND NOT SPEC. `SyncService::removeMirror`
+there splits the prune on the mapping's MODE, and the reasoning holds identically here:
+
+  sync → the Nextcloud trash. The file IS the dashboard's content, and the thing that
+         happened on the far side is itself reversible, so the local gesture must be.
+  link → gone, with no trash entry. A link is a read-only projection; once the dashboard
+         is out of the mirrored folder there is nothing for a restore to reconnect to,
+         and a trashed pointer would offer the user exactly that.
+
+OUR `pruneStale` CALLS `$node->delete()` UNCONDITIONALLY, so the link half is @unbuilt —
+a pointer currently lands in the trash like anything else. n8n suppresses it with a
+`TrashControl::withoutTrash()` wrapper, which this app has no equivalent of at all; that
+helper is the shape of the fix.
+
+THE SYNC HALF WAS ALREADY RIGHT, and worth saying because it looked like the odd one out
+next to n8n's gherkin. n8n's untag scenarios assert only *the file is gone from the mapped
+folder* and never mention the trash in either mode — so the mode split is reasoned about
+carefully in its code and stated in neither app's spec. Ours now states one half and owes
+the other.
 
 ### A dashboard moved to another mapped folder in Grafana relocates its mirror
 
@@ -2324,8 +2626,14 @@ is not.
 ### Renaming a link never renames the dashboard
 
 A link is a read-only pointer with no dashboard JSON to rewrite and nothing to
-push. Renaming the pointer file is a local act; the dashboard keeps its name and
-the next pull re-derives the filename from Grafana.
+push. Renaming the pointer file is a purely local act; the dashboard keeps its
+name and the next pull re-derives the filename from Grafana.
+
+AND THAT IS WHY THE SCENARIO SPECIFIES A REFUSAL, which this note used to stop
+short of saying. A rename that survives until the next pull and is then silently
+undone is the worst of both — the user is not told no, and does not get to keep
+the name either. Refusing at the gesture is the same answer edit, delete and copy
+already give a link; letting it through was the odd one out.
 
 ### Renaming a dashboard in Grafana renames the mirrored file
 

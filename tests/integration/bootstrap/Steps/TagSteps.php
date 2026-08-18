@@ -125,6 +125,15 @@ trait TagSteps {
 	// ── dashboards ─────────────────────────────────────────────────────────────
 
 	/**
+	 * The same arrange, for a scenario that chose its file's name.
+	 *
+	 * @Given a dashboard file named :filename in :folder whose tags are :tags
+	 */
+	public function aDashboardFileNamedInWhoseTagsAre(string $filename, string $folder, string $tags): void {
+		$this->aDashboardFileInWhoseTagsAre($folder, $tags, $filename);
+	}
+
+	/**
 	 * @Given a dashboard file in :folder whose tags are :tags
 	 *
 	 * Seeded through the FILE, not through Grafana, because that is the pre-state the
@@ -132,8 +141,18 @@ trait TagSteps {
 	 * DAV so the app's own push carries it to Grafana, which means the arrange also
 	 * proves the plumbing the scenario is about to exercise actually exists.
 	 */
-	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags): void {
-		$this->aDashboardFileIn($folder);
+	public function aDashboardFileInWhoseTagsAre(string $folder, string $tags, string $filename = ''): void {
+		// TWO ANNOTATIONS ON ONE METHOD WAS THE BUG, and it is not worth being clever
+		// about: the named form spells its placeholders (filename, folder, tags) and this
+		// signature reads (folder, tags, filename), so the two only agree if Behat binds
+		// by NAME. It does — but a reader cannot see that from here, and a reviewer read
+		// it as broken, which is reason enough. The named form is its own step below and
+		// passes its arguments explicitly.
+		if ($filename !== '') {
+			$this->aDashboardFileNamedIn($filename, $folder);
+		} else {
+			$this->aDashboardFileIn($folder);
+		}
 
 		// A LINK's tags are Grafana's, so they are seeded THERE and pulled — writing
 		// into a link folder is refused by design. aDashboardFileIn() already arranged

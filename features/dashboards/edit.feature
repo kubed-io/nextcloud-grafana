@@ -8,13 +8,15 @@ Feature: Editing a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -24,7 +26,7 @@ Feature: Editing a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario: Edit a dashboard file
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When I edit the file's panels and save
     Then the dashboard in Grafana holds the file's panels
     And the file holds:
@@ -37,7 +39,7 @@ Feature: Editing a dashboard
 
   @user @in-nextcloud @gesture @ui @todo
   Scenario: Edit a dashboard file outside every mapping
-    Given a dashboard file in "Scratch"
+    Given a dashboard file named "Fleet Health.grafana" in "Scratch"
     When I edit the file's panels and save
     Then the file holds no Grafana metadata at all
 
@@ -46,7 +48,7 @@ Feature: Editing a dashboard
 
   @grafana @in-grafana @gesture @ui @todo
   Scenario: Edit a dashboard in Grafana that a sync mirrors
-    Given a dashboard file in "Demo"
+    Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone edits the dashboard's panels in Grafana
     Then the file holds the dashboard's panels as Grafana has them
     And the file holds:
@@ -59,7 +61,7 @@ Feature: Editing a dashboard
 
   @grafana @in-grafana @gesture @ui @todo
   Scenario: Edit a dashboard in Grafana that a link mirrors
-    Given a dashboard file in "Pointers"
+    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone edits the dashboard's panels in Grafana
     Then the file holds a pointer:
       | uid   | the dashboard's uid           |
@@ -73,19 +75,3 @@ Feature: Editing a dashboard
 
     # A link holds a pointer, so an edit in Grafana moves its dates and its title
     # without ever putting the dashboard's panels in the file.
-
-    # ── RULE: the metadata is the app's record, and nobody else may edit it ───
-    # notes: ../AGENTS.md#what-the-app-manages-only-the-app-changes
-
-  @user @dav @todo
-  Scenario: A client cannot edit the metadata the app stamps
-    Given a dashboard file in "Demo"
-    When a client tries to change every property the app stamps via PROPPATCH
-    Then every change is refused
-    And the file holds:
-      | grafana_uid     | the dashboard's uid |
-      | grafana_mapping | the mapping's id    |
-      | grafana_mode    | the mapping's mode  |
-
-    # It moved here from view.feature: a client attempting a change is an edit
-    # gesture that gets refused, and nothing about it is viewing.

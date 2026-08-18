@@ -8,13 +8,15 @@ Feature: Renaming a dashboard
   Background:
     Given the app is connected to Grafana
     And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+      | grafana folder | Demo         |
+      | nc folder      | Demo         |
+      | mode           | sync         |
+      | storage        | admin folder |
     And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+      | grafana folder | links        |
+      | nc folder      | Pointers     |
+      | mode           | link         |
+      | storage        | admin folder |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -107,6 +109,19 @@ Feature: Renaming a dashboard
     And both dashboards are titled "Alpha" in Grafana
 
     # The file that held the name keeps it; the arriving one takes the suffix.
+
+    # ── RULE: a dashboard always has a name, so the app never invents one ─────
+    # Two halves from opposite ends: refused on the way out, fallen back on the way in.
+
+  # notes: ../AGENTS.md#a-rename-to-an-empty-or-whitespace-only-name-is-refused
+  @user @in-nextcloud @gesture @ui @unbuilt
+  Scenario: Rename a dashboard file to a blank name
+    Given a dashboard file named "Old Name.grafana" in "Demo"
+    When I try to rename the file to a name that is only whitespace
+    Then the rename is refused with a message
+    And the file is named "Old Name.grafana"
+    And the JSON title is "Old Name"
+    And the dashboard is named "Old Name" in Grafana
 
   # notes: ../AGENTS.md#the-app-never-invents-a-substitute-name
   # BLOCKED: Grafana refuses to store an empty title — "Dashboard title cannot be
