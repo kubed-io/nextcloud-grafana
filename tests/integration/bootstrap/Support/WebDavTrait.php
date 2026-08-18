@@ -175,35 +175,32 @@ trait WebDavTrait {
 		$doc = new \SimpleXMLElement((string)$res->getBody());
 		$doc->registerXPathNamespace('d', 'DAV:');
 		$doc->registerXPathNamespace('nc', 'http://nextcloud.org/ns');
+		// THE NEWEST MATCH, NOT THE FIRST. Every scenario names its dashboard the same
+		// thing and nothing empties the trash between them — emptying it is itself a
+		// gesture that finishes deletes in Grafana, so teardown must not — which left
+		// this returning a STALE entry from an earlier scenario. The purge steps then
+		// destroyed that one and reported the current file still in the trash.
+		//
+		// The trash spells its entries `<name>.d<unix timestamp>`, so the largest
+		// suffix is the most recent deletion, which is always this scenario's.
+		$best = null;
+		$bestStamp = -1;
 		foreach ($doc->xpath('//d:response') ?: [] as $resp) {
 			$resp->registerXPathNamespace('d', 'DAV:');
 			$resp->registerXPathNamespace('nc', 'http://nextcloud.org/ns');
 			$origName = trim((string)($resp->xpath('.//nc:trashbin-filename')[0] ?? ''));
 			$rawHref = rawurldecode(trim((string)($resp->xpath('d:href')[0] ?? '')));
-			if ($origName === $base && $rawHref !== '') {
-				return basename(rtrim($rawHref, '/'));
+			if ($origName !== $base || $rawHref === '') {
+				continue;
+			}
+			$entry = basename(rtrim($rawHref, '/'));
+			$stamp = preg_match('/\.d(\d+)$/', $entry, $m) === 1 ? (int)$m[1] : 0;
+			if ($stamp >= $bestStamp) {
+				$bestStamp = $stamp;
+				$best = $entry;
 			}
 		}
-		return null;
-	}
-
-	/**
-	 * Destroy every entry in the user's trash. Best-effort, like the rest of teardown.
-	 *
-	 * A DELETE on the trashbin ROOT is the documented "empty trash" call, and it is one
-	 * request rather than one per entry — which matters because this runs after every
-	 * scenario in the suite.
-	 */
-	private function emptyNextcloudTrash(): void {
-		try {
-			$this->davClient()->request(
-				'DELETE',
-				$this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash',
-			);
-		} catch (\Throwable) {
-			// An empty trash answers 404 on some versions; either way there is nothing
-			// left to isolate the next scenario from.
-		}
+		return $best;
 	}
 
 	/** Full trashbin href for a trash entry filename. */

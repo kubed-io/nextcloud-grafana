@@ -223,17 +223,15 @@ final class FeatureContext implements Context {
 			}
 		}
 		$this->createdGrafanaFolders = [];
-		// EMPTY THE NEXTCLOUD TRASH, and it is not housekeeping — it is isolation.
+		// THE TRASH IS DELIBERATELY LEFT ALONE, and the attempt to empty it here is
+		// worth recording. Purging a trashed mirror is a REAL GESTURE: it fires the
+		// purge hooks, which finish the delete in Grafana. Teardown doing that
+		// destroyed the PRELOADED fixtures (`nc-alpha`'s dashboard, seeded once by
+		// bin/preload-grafana.sh), and the next scenario to pull that folder mirrored
+		// nothing — failing three scenarios later with an empty folder and no clue why.
 		//
-		// The trash is looked up BY BASENAME (`trashbinPathFor`), and since every
-		// scenario names its dashboard the same thing, a leftover entry from an
-		// earlier scenario answers first. The purge scenarios then destroyed the
-		// STALE entry, left their own in place, and failed on "the file is gone from
-		// the Nextcloud trash" — a failure with nothing in the diff to explain it.
-		//
-		// Deleting the scenario's folders above puts them here too, so this has to
-		// run after that loop rather than before it.
-		$this->emptyNextcloudTrash();
+		// Isolation between scenarios is `trashbinPathFor` picking the NEWEST matching
+		// entry instead, which costs nothing and triggers no app behaviour.
 		// Reset the mapping list so the next scenario starts from zero mappings.
 		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
 		$this->createdFolders = [];
