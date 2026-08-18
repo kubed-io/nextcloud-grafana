@@ -93,7 +93,7 @@ Feature: Moving a dashboard file
     Then a matching dashboard is created in Grafana
     And the dashboard is named after the file, in the "Demo" Grafana folder
     And the file holds:
-      | grafana_uid     | its own, not one it arrived with |
+      | grafana_uid     | its own, not the one it arrived with |
       | grafana_mapping | the mapping's id                 |
       | grafana_mode    | the mapping's mode               |
 
@@ -188,7 +188,7 @@ Feature: Moving a dashboard file
     When I try to move the file into "<destination>"
     Then the move is refused with a message
     And the file stays in "<source>"
-    And Grafana is not contacted
+    And the original file and its dashboard are unchanged
 
     Examples: a link is read-only in Nextcloud, and there is nowhere it may go
       | source   | destination |

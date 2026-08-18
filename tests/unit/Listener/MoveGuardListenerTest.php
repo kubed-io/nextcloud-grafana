@@ -122,7 +122,6 @@ final class MoveGuardListenerTest extends TestCase {
 		self::assertTrue(true, 'not refused');
 	}
 
-
 	// ── the FILE branch ────────────────────────────────────────────────────────
 
 	/**
