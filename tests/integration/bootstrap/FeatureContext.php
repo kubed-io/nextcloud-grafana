@@ -174,6 +174,14 @@ final class FeatureContext implements Context {
 	private int $lastMoveStatus = 0;
 
 	/** Raw status of the last deliberately-refused COPY / DELETE, for the guard scenarios. */
+	/**
+	 * The `<s:message>` from the last refused DAV call. "Refused with a message" is two
+	 * claims and this is the second — a 403 with an empty body renders in the Files app
+	 * as nothing at all, which is the same thing the user sees when a gesture silently
+	 * fails. The n8n master has asserted both halves since its delete guard shipped.
+	 */
+	private string $lastRefusalMessage = '';
+
 	private int $lastCopyStatus = 0;
 	private int $lastDeleteStatus = 0;
 

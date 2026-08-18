@@ -98,7 +98,9 @@ trait WebDavTrait {
 
 	/** PUT a file, returning the raw status (so create-refused scenarios can inspect it). */
 	private function davPutStatus(string $path, string $body): int {
-		return $this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body])->getStatusCode();
+		$res = $this->davClient()->request('PUT', $this->davEncode($path), ['body' => $body]);
+		$this->lastRefusalMessage = self::davErrorMessage((string)$res->getBody());
+		return $res->getStatusCode();
 	}
 
 	/** GET a file's content. */
@@ -125,9 +127,11 @@ trait WebDavTrait {
 	/** MOVE a file, returning the raw status (so move-refused scenarios can inspect it). */
 	private function davMoveStatus(string $from, string $to): int {
 		$dest = $this->ncBaseUrl . '/remote.php/dav/files/' . rawurlencode($this->ncUser) . '/' . $this->davEncode($to);
-		return $this->davClient()->request('MOVE', $this->davEncode($from), [
+		$res = $this->davClient()->request('MOVE', $this->davEncode($from), [
 			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
-		])->getStatusCode();
+		]);
+		$this->lastRefusalMessage = self::davErrorMessage((string)$res->getBody());
+		return $res->getStatusCode();
 	}
 
 	/** COPY a file within the user's files root (fires NodeCopiedEvent in NC). */
@@ -142,9 +146,11 @@ trait WebDavTrait {
 	/** COPY a file, returning the raw status (so copy-refused scenarios can inspect it). */
 	private function davCopyStatus(string $from, string $to): int {
 		$dest = $this->ncBaseUrl . '/remote.php/dav/files/' . rawurlencode($this->ncUser) . '/' . $this->davEncode($to);
-		return $this->davClient()->request('COPY', $this->davEncode($from), [
+		$res = $this->davClient()->request('COPY', $this->davEncode($from), [
 			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
-		])->getStatusCode();
+		]);
+		$this->lastRefusalMessage = self::davErrorMessage((string)$res->getBody());
+		return $res->getStatusCode();
 	}
 
 	/** DELETE a file (asserting success → trash). */
@@ -154,7 +160,9 @@ trait WebDavTrait {
 
 	/** DELETE a file, returning the raw status (so abort scenarios can inspect it). */
 	private function davDeleteStatus(string $path): int {
-		return $this->davClient()->request('DELETE', $this->davEncode($path))->getStatusCode();
+		$res = $this->davClient()->request('DELETE', $this->davEncode($path));
+		$this->lastRefusalMessage = self::davErrorMessage((string)$res->getBody());
+		return $res->getStatusCode();
 	}
 
 	/**
@@ -227,6 +235,26 @@ trait WebDavTrait {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * The human-readable half of a Sabre error body.
+	 *
+	 * Nextcloud answers a refused DAV call with `<d:error><s:message>…</s:message>`, and
+	 * that message is the only thing the Files app can show the user. A refusal carrying
+	 * none is indistinguishable, in the UI, from a gesture that quietly did not happen —
+	 * so a refusal step reads it rather than trusting the status code alone. Ported from
+	 * the n8n master, whose delete refusal has asserted both halves from the start.
+	 *
+	 * Parsed with a regex rather than SimpleXML because the body is not guaranteed to be
+	 * XML at all (a proxy error page, an empty 403), and a parse failure here would blame
+	 * the assertion instead of the app.
+	 */
+	private static function davErrorMessage(string $body): string {
+		if (preg_match('~<s:message>(.*?)</s:message>~s', $body, $m) === 1) {
+			return html_entity_decode(trim($m[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+		}
+		return '';
 	}
 
 	/** Full trashbin href for a trash entry filename. */
