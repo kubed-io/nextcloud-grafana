@@ -151,29 +151,6 @@ namespace OCP\Files\Cache {
 		}
 	}
 
-	// The signal {@see OCA\GrafanaSync\Listener\TeamFolderPurgeListener} rides, because
-	// dropping the cache entry is the one thing NO trash backend can skip — groupfolders
-	// emits neither the legacy hook nor a typed event, so this is all there is.
-	// Constructor mirrors the real `AbstractCacheEvent`: storage, path, fileId, storageId.
-	if (!class_exists(CacheEntryRemovedEvent::class, false)) {
-		class CacheEntryRemovedEvent extends \OCP\EventDispatcher\Event {
-			public function __construct(
-				private \OCP\Files\Storage\IStorage $storage,
-				private string $path,
-				private int $fileId,
-				private int $storageId,
-			) {
-			}
-
-			public function getPath(): string {
-				return $this->path;
-			}
-
-			public function getFileId(): int {
-				return $this->fileId;
-			}
-		}
-	}
 }
 
 namespace OCP\BackgroundJob {
@@ -295,6 +272,35 @@ namespace OCP\Exceptions {
 	// could not be before, which is why its folder branch shipped without one.
 	if (!class_exists(AbortedEventException::class, false)) {
 		class AbortedEventException extends \Exception {
+		}
+	}
+}
+
+namespace OCP\Files\Cache {
+	// DECLARED HERE, NOT WITH ICache ABOVE, because it extends `OCP\EventDispatcher\Event`
+	// and this file is read top to bottom — the Cache block above runs before the
+	// EventDispatcher one, so the parent would not exist yet.
+	// The signal {@see OCA\GrafanaSync\Listener\TeamFolderPurgeListener} rides, because
+	// dropping the cache entry is the one thing NO trash backend can skip — groupfolders
+	// emits neither the legacy hook nor a typed event, so this is all there is.
+	// Constructor mirrors the real `AbstractCacheEvent`: storage, path, fileId, storageId.
+	if (!class_exists(CacheEntryRemovedEvent::class, false)) {
+		class CacheEntryRemovedEvent extends \OCP\EventDispatcher\Event {
+			public function __construct(
+				private \OCP\Files\Storage\IStorage $storage,
+				private string $path,
+				private int $fileId,
+				private int $storageId,
+			) {
+			}
+
+			public function getPath(): string {
+				return $this->path;
+			}
+
+			public function getFileId(): int {
+				return $this->fileId;
+			}
 		}
 	}
 }
