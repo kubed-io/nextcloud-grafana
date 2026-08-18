@@ -1901,20 +1901,24 @@ moved in Grafana relocates its mirror and a subfolder is a real re-parent. In n8
 membership is a tag, so its move file has no in-n8n direction at all and its subtree
 rule is simply "nothing happens". Neither file is a superset of the other.
 
-### Moving a dashboard into a tagged subfolder re-parents it in Grafana
+### RETIRED — the two "tagged subfolder" notes
 
-── into a TAGGED subfolder — a real Grafana folder ───────────────────────────────
-A subfolder that carries the `grafana` tag is a Grafana folder in its own right
-(create-folder.feature owns how it gets there). Moving a dashboard into one is
-therefore a re-parent, not local organisation. @unbuilt: GrafanaClient has no folder
-write operations, so there is nothing to re-parent into yet.
+Both described the design where a subfolder became a Grafana folder by carrying a
+`grafana` TAG, and split the move on whether the destination was tagged. That
+design is gone. A folder is in Grafana when a DASHBOARD IS IN IT — see
+`folders/create.feature` and `A subfolder is in Grafana when a dashboard is in it`
+— so there is no tagged/untagged axis for a move to split on.
 
-### Moving into an untagged subfolder is local-only (stays bound to the parent)
+They were the last two places in the repo still speaking that vocabulary, and they
+outlived it precisely because nothing pointed at them: an orphaned note is not
+proof that a scenario is owed, it can equally be proof the rule is dead. Both
+readings have now happened here, so check which one it is before writing one.
 
-An UNTAGGED subfolder is ordinary local NC organisation, invisible to Grafana — the
-dashboard stays bound to the PARENT mapped folder and keeps all its metadata. A file
-only leaves the mapping when it leaves every mapped folder. A subfolder becomes a
-Grafana folder by carrying the `grafana` tag; see create-folder.feature.
+The behaviour they were reaching for is already stated and already runs, one file
+over: `folders/create.feature`'s *Move a dashboard into a folder of a mapping*,
+which its own comment calls "the second of exactly two ways a Grafana folder is
+born from Nextcloud, which is why it lives here and not with the other move
+gestures."
 
 ### Moving a link from one mapped folder to another only re-homes the pointer
 
