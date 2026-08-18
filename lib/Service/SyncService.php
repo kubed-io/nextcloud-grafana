@@ -581,7 +581,12 @@ final class SyncService {
 			$body = DashboardBody::encodeSync($read->spec);
 		}
 
-		$existing = $existingByUid[$uid] ?? null;
+		// A MIRROR IN THE TRASH IS STILL THIS DASHBOARD'S MIRROR. `indexByUid` walks the
+		// mapped FOLDER, so a file the user trashed is invisible to it — and without this
+		// the pull would reasonably create a second one the moment the dashboard came back
+		// out of the recycle-bin folder, leaving a restored dashboard, a fresh file, and a
+		// trash entry for the file they actually had.
+		$existing = $existingByUid[$uid] ?? $this->trashReconcile->restoreMirror($mapping, $uid);
 		if ($existing instanceof File) {
 			// THE SUFFIX IS PART OF THE NAME THIS FILE IS ENTITLED TO KEEP. Grafana
 			// permits two dashboards in one folder to share a title and Nextcloud does

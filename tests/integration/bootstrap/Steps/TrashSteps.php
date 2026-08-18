@@ -399,6 +399,27 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @Given the mapping has since been removed
+	 *
+	 * THE WORLD MOVED WHILE THE FILE SAT IN THE TRASH, which is the rule this whole
+	 * section is about. Removing the mapping is an ADMIN gesture with its own teardown
+	 * (`mapping/delete.feature` owns what it does to live files); what matters here is
+	 * only that by restore time there is no mapping to restore INTO.
+	 *
+	 * Done through occ rather than by editing config, so the removal runs the app's own
+	 * teardown exactly as the admin panel would — a hand-edited mapping list would leave
+	 * whatever else that teardown touches in a state no real removal produces.
+	 */
+	public function theMappingHasSinceBeenRemoved(): void {
+		foreach ($this->listMappingsForSync() as $mapping) {
+			$id = (string)($mapping['id'] ?? '');
+			if ($id !== '') {
+				$this->occ('grafana_sync:remove-mapping ' . escapeshellarg($id));
+			}
+		}
+	}
+
+	/**
 	 * The rescue. The "bin" is an ordinary Grafana folder, so a colleague can simply
 	 * move a parked dashboard back where it belongs — done here through Grafana's own
 	 * API, with no involvement from this app, exactly as it would happen in the UI.

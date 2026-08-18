@@ -244,12 +244,23 @@ final class Application extends App implements IBootstrap {
 		// in the same PHP process (tests, repeated loadApp) stacking the handler — which would
 		// fire TrashPurgeHook::preDelete more than once per purge (repeated deletes / log spam).
 		if (!self::$purgeHookRegistered) {
-			self::$purgeHookRegistered = true;
 			$purgeHook = $context->injectFn(static fn (TrashPurgeHook $hook): TrashPurgeHook => $hook);
-			// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete signal
-			// (there is no typed event for a trash purge), so its deprecation is unavoidable here.
-			/** @psalm-suppress DeprecatedMethod */
-			\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+			// INSTANCEOF, NOT A SUPPRESSION. `injectFn` is typed `mixed`, so nothing proves
+			// the container built anything — and `connectHook` takes the OBJECT, so a null
+			// here registers a handler that can never fire. Silently: the legacy hook system
+			// has no way to complain, so the purge would simply stop happening. Checking is
+			// one line and turns an invisible failure into a boot that registers nothing.
+			//
+			// The flag moves inside the check for the same reason: a boot that failed to
+			// build the hook must not mark it registered and skip the next attempt.
+			if ($purgeHook instanceof TrashPurgeHook) {
+				self::$purgeHookRegistered = true;
+				// connectHook is the only entry point for the legacy \OCP\Trashbin preDelete
+				// signal (there is no typed event for a trash purge), so its deprecation is
+				// unavoidable here.
+				/** @psalm-suppress DeprecatedMethod */
+				\OCP\Util::connectHook('\OCP\Trashbin', 'preDelete', $purgeHook, 'preDelete');
+			}
 		}
 
 		// AND THE RESTORE, for the trashes the typed event never fires for. Its sibling
@@ -260,10 +271,12 @@ final class Application extends App implements IBootstrap {
 		// backends DO emit the legacy `post_restore` hook, so that is the one signal
 		// covering both. See {@see TrashRestoreHook}; same guard, same reason.
 		if (!self::$restoreHookRegistered) {
-			self::$restoreHookRegistered = true;
 			$restoreHook = $context->injectFn(static fn (TrashRestoreHook $hook): TrashRestoreHook => $hook);
-			/** @psalm-suppress DeprecatedMethod */
-			\OCP\Util::connectHook('\OCP\Trashbin', 'post_restore', $restoreHook, 'postRestore');
+			if ($restoreHook instanceof TrashRestoreHook) {
+				self::$restoreHookRegistered = true;
+				/** @psalm-suppress DeprecatedMethod */
+				\OCP\Util::connectHook('\OCP\Trashbin', 'post_restore', $restoreHook, 'postRestore');
+			}
 		}
 	}
 }

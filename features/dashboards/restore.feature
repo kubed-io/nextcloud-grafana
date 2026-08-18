@@ -79,7 +79,7 @@ Feature: Restoring a dashboard file from the trash
       | grafana_mapping | the mapping's id                     |
 
   # notes: ../AGENTS.md#restoring-a-file-whose-dashboard-is-already-back-in-place-is-not-a-conflict
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a file whose dashboard is already back in place
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Demo"
@@ -90,7 +90,7 @@ Feature: Restoring a dashboard file from the trash
     And there is exactly one file for that dashboard
 
   # notes: ../AGENTS.md#restoring-into-a-mapping-that-no-longer-exists-leaves-a-plain-file
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Restore a file whose mapping has since been removed
     Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And the file is in the Nextcloud trash
@@ -102,7 +102,7 @@ Feature: Restoring a dashboard file from the trash
     # ── RULE: a dashboard coming back in Grafana brings its file with it ──────
 
   # notes: ../AGENTS.md#moving-a-dashboard-out-of-the-bin-in-grafana-brings-its-file-back-out-of-the-trash
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  @grafana @in-grafana @gesture @ui @recycle-bin
   Scenario: Move a dashboard out of the bin in Grafana
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Demo"
