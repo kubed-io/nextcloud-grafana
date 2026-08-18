@@ -23,7 +23,6 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\Files\Node;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 

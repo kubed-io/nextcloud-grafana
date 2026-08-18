@@ -258,11 +258,18 @@ trait SetupTrait {
 	 * Pin the push to run inside the request, so assertions do not race a background
 	 * job — see the trait docblock for why this is the mode and not a `timing` key.
 	 *
-	 * `drainJobs()` still works under this mode: it runs jobs by id with
-	 * `--force-execute`, which bypasses the worker's gating entirely.
+	 * APPCONFIG UNDER `core`, NOT SYSTEM CONFIG. `backgroundjobs_mode` lives in
+	 * appconfig — `occ config:system:get backgroundjobs_mode` does not even resolve —
+	 * and {@see \OCA\GrafanaSync\Service\WritebackStrategy} reads it there. Writing
+	 * the system key instead would set something nothing reads: a no-op precondition,
+	 * which is the exact fault this helper replaced.
+	 *
+	 * It is instance-wide and deliberately not restored: every arrange that depends on
+	 * inline writeback calls this, and `drainJobs()` still works under it — that runs
+	 * jobs by id with `--force-execute`, bypassing the worker's gating entirely.
 	 */
 	private function forceInlineWriteback(): void {
-		$this->occ('config:system:set backgroundjobs_mode --value=ajax');
+		$this->occ('config:app:set core backgroundjobs_mode --value=ajax');
 	}
 
 	/** Turn the Grafana recycle-bin folder off (the default), explicitly. */

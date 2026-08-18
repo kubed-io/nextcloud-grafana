@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin panels for the connection, folder mappings, sync settings and sync actions.
 - Headless setup with `occ`: the token, the connection test, and mappings.
 
+### Removed
+
+- **The "when you save a dashboard file" timing option is gone.** Nextcloud → Grafana writeback now runs in the background where that works and during the save where it does not, decided per instance. Nothing to configure, and no setting to get wrong.
+- **The admin "Purge Nextcloud files" button is gone.** It was disabled and had no implementation behind it, so it read as a feature that was merely switched off. Purge means one thing now: emptying the Nextcloud trash, which finishes the delete the trash gesture started.
+
 ### Changed
 
 - **BREAKING:** dashboard files are named `.grafana`, not `.grafana.json`. Nextcloud only ever reads one file extension, so the compound one meant every save wrote the wrong file type for the app to correct afterwards, and a copy made beside its source was named something the app could not recognise at all. Outside Nextcloud a `.grafana` file needs telling once which editor opens it.

@@ -35,8 +35,8 @@ use Psr\Log\LoggerInterface;
  * **all** hold:
  *   - guard not active (i.e. not our own pull/push write),
  *   - name ends in `.grafana` (cheap bail for everything else),
- *   - the file is ours (`grafana_uid` set) and its mode is `sync` (link/unmapped/
- *     never push),
+ *   - the file is ours (`grafana_uid` set) and its mode is `sync` (link and
+ *     unmapped never push),
  *   - the content actually changed since the last sync (sha1 ≠ `grafana_syncedHash`) —
  *     the loop guard against re-pushing our own / unchanged content.
  *
