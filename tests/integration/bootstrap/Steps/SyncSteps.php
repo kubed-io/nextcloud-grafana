@@ -190,6 +190,72 @@ trait SyncSteps {
 		}
 	}
 
+	/**
+	 * The mirror image of the gesture above, performed on the far side.
+	 *
+	 * THE PULL IS FOLDED IN, exactly as the push is for the local edit: nobody edits a
+	 * dashboard in Grafana in order to run a sync. The n8n master states the same rule
+	 * for the same reason — a scenario naming the sync describes the plumbing rather
+	 * than the behaviour.
+	 *
+	 * The whole spec is re-sent rather than patched: Grafana's `dashboards/db` takes a
+	 * complete dashboard, and `overwrite` keys on the uid, so re-posting the record we
+	 * just read with new panels is the smallest edit the API actually supports.
+	 *
+	 * @When someone edits the dashboard's panels in Grafana
+	 */
+	public function someoneEditsTheDashboardsPanelsInGrafana(): void {
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($uid === '') {
+			throw new \RuntimeException('no dashboard behind the file under test');
+		}
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			throw new \RuntimeException("Grafana has no dashboard '$uid'");
+		}
+
+		$this->editedPanelTitle = 'EditedInGrafana-' . bin2hex(random_bytes(3));
+		$spec = (array)($record['dashboard'] ?? []);
+		$spec['panels'] = [['type' => 'text', 'title' => $this->editedPanelTitle]];
+		$res = $this->grafanaClient()->request('POST', 'dashboards/db', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode([
+				'dashboard' => $spec,
+				'folderUid' => (string)($record['meta']['folderUid'] ?? ''),
+				'overwrite' => true,
+				'message' => 'integration: edited in Grafana',
+			], JSON_THROW_ON_ERROR),
+		]);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException("editing '$uid' in Grafana failed: " . (string)$res->getBody());
+		}
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
+	 * @Then the file holds the dashboard's panels as Grafana has them
+	 *
+	 * The SYNC half of the mode fork. A sync mirror carries the dashboard's real body,
+	 * so the panel Grafana just gained has to be in the file — its absence is the pull
+	 * having stamped metadata without writing anything, which looks identical from the
+	 * metadata alone.
+	 */
+	public function theFileHoldsTheDashboardsPanels(): void {
+		$body = json_decode($this->davGet($this->currentFilePath), true);
+		if (!is_array($body)) {
+			throw new \RuntimeException('the mirror is not JSON');
+		}
+		$titles = array_map(
+			static fn ($p): string => is_array($p) ? (string)($p['title'] ?? '') : '',
+			(array)($body['panels'] ?? []),
+		);
+		if (!in_array($this->editedPanelTitle, $titles, true)) {
+			throw new \RuntimeException(
+				"the mirror's panels are [" . implode(', ', $titles) . "], without '{$this->editedPanelTitle}'",
+			);
+		}
+	}
+
 	/** @return list<array<string,mixed>> */
 	private function listMappingsForSync(): array {
 		$res = $this->occ('grafana_sync:list-mappings');
@@ -435,6 +501,60 @@ trait SyncSteps {
 	 *
 	 * @return list<string>
 	 */
+	// ── view.feature: what the Files app shows, and what a client can read ─────
+
+	/**
+	 * @When I open :folder in the Files app
+	 *
+	 * Opening a folder in the Files app IS a Depth-1 PROPFIND — the same request the
+	 * browser makes — so this lists it for real and remembers what came back. The
+	 * assertion is in the matching Then. Ported from the n8n master's ViewWorkflowSteps.
+	 */
+	public function iOpenTheFolderInTheFilesApp(string $folder): void {
+		$this->currentFolder = $folder;
+		$this->viewedFiles = array_map(
+			static fn (string $name): string => $folder . '/' . $name,
+			$this->davListDashboardFiles($folder),
+		);
+	}
+
+	/**
+	 * @Then the mapped folder shows the dashboards with the Grafana icon
+	 *
+	 * THE ICON IS A CONSEQUENCE OF THE MIMETYPE, and the mimetype is the testable half.
+	 * {@see \OCA\GrafanaSync\Migration\RegisterMimetype} maps `application/grafana+json`
+	 * to the app's glyph, so a file carrying that type renders as a dashboard and one
+	 * carrying `application/json` renders as a generic document. Behat cannot read
+	 * pixels; it can read the type that decides them.
+	 *
+	 * EVERY FILE THE USER JUST SAW, not merely the last one arranged — a folder where
+	 * ONE row falls back to the generic glyph is exactly the failure this catches, and
+	 * checking a single file would miss it.
+	 */
+	public function theMappedFolderShowsTheGrafanaIcon(): void {
+		if ($this->viewedFiles === []) {
+			throw new \RuntimeException("'{$this->currentFolder}' listed no dashboard files at all");
+		}
+		foreach ($this->viewedFiles as $path) {
+			$type = $this->davContentType($path);
+			if ($type !== 'application/grafana+json') {
+				throw new \RuntimeException(
+					"$path is served as '$type', not application/grafana+json — its icon would be the generic glyph",
+				);
+			}
+		}
+	}
+
+	/**
+	 * @When a WebDAV client requests the file's properties
+	 *
+	 * Performs nothing: every property is read back by the matching `the file holds:`
+	 * through a Depth-0 PROPFIND. The step exists so the scenario can name the gesture
+	 * a client actually makes, rather than asserting metadata out of nowhere.
+	 */
+	public function aWebdavClientRequestsTheProperties(): void {
+	}
+
 	private function davListDashboardFiles(string $folder): array {
 		$res = $this->davClient()->request('PROPFIND', $this->davEncode($folder), [
 			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],

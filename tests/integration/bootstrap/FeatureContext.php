@@ -182,6 +182,9 @@ final class FeatureContext implements Context {
 	 */
 	private string $lastRefusalMessage = '';
 
+	/** What a Files-app listing just returned, so the icon claim covers all of it. @var list<string> */
+	private array $viewedFiles = [];
+
 	private int $lastCopyStatus = 0;
 	private int $lastDeleteStatus = 0;
 
