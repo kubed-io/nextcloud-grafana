@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A linked dashboard could be dragged into another mapped folder. Nothing said no, and the next sync moved it back — the move is now refused with a message, as moving one out already was.
 - Copying a dashboard file overwrote the dashboard it was copied from, instead of making a new one. The copy's contents landed on the original as a new version, and no second dashboard was ever created.
 - A dashboard file could be dated a second before its dashboard existed: Grafana's created and modified clocks can come back either side of a second boundary right after a write, and the app believed the earlier one.
 - Internal: a Background could only ever declare one folder mapping — a second one silently replaced the first (no behaviour change; test harness only).
