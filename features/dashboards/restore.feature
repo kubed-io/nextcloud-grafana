@@ -40,7 +40,7 @@ Feature: Restoring a dashboard file from the trash
       | grafana_mode    | the mapping's mode                   |
 
   # notes: ../AGENTS.md#restoring-a-sync-file-re-creates-the-dashboard-with-a-new-id-bin-off
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a file whose dashboard was deleted at trash time
     Given the Grafana recycle bin is off
     And a dashboard file named "Fleet Health.grafana" in "Demo"

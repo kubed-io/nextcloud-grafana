@@ -97,7 +97,7 @@ Feature: Emptying the trash
     # ── RULE: emptying the bin in Grafana finishes the delete from that side ──
     # notes: ../AGENTS.md#emptying-the-bin-in-grafana-finishes-the-delete
 
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
+  @grafana @in-grafana @gesture @ui @recycle-bin
   Scenario: Empty the bin folder in Grafana
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Demo"

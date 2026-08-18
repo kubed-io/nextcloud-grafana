@@ -322,8 +322,16 @@ trait SyncSteps {
 	 * re-mirrored into every later scenario that maps the same folder and pulls.
 	 */
 	public function someoneCreatesTheDashboardIn(string $title, string $folder): void {
+		// `grafanaFolderUidByTitle` lives in TrashSteps and answers null for an unknown
+		// folder. Both traits compose into one FeatureContext, so a SECOND copy here was
+		// not a helper but a fatal: PHP refuses two traits contributing the same method
+		// name, and it takes the whole suite down before a single scenario runs.
+		$folderUid = $this->grafanaFolderUidByTitle($folder);
+		if ($folderUid === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$folder'");
+		}
 		$uid = 'nc-made-' . bin2hex(random_bytes(3));
-		$this->grafanaCreateDashboard($uid, $title, $this->grafanaFolderUidByTitle($folder));
+		$this->grafanaCreateDashboard($uid, $title, $folderUid);
 		$this->createdDashboardUids[] = $uid;
 		$this->lastUid = $uid;
 		$this->theAdminPullsFromGrafana();
@@ -360,16 +368,6 @@ trait SyncSteps {
 			default:
 				throw new \RuntimeException("'$contents' is not a body this vocabulary knows");
 		}
-	}
-
-	/** A Grafana folder's uid from its title, for scenarios that name folders the way a person does. */
-	private function grafanaFolderUidByTitle(string $title): string {
-		foreach ($this->grafanaListFolders() as $folder) {
-			if ((string)($folder['title'] ?? '') === $title) {
-				return (string)($folder['uid'] ?? '');
-			}
-		}
-		throw new \RuntimeException("Grafana has no folder titled '$title'");
 	}
 
 	/** @return list<array<string,mixed>> */

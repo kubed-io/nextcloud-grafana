@@ -648,6 +648,29 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @When someone empties the :folder folder in Grafana
+	 *
+	 * THE OTHER SIDE OF THE SAME PURGE. The recycle bin is an ORDINARY Grafana folder —
+	 * visible in Grafana's UI, browsable by anyone with access — so emptying it there is
+	 * a gesture a person really performs, and it is the second deliberate step of the
+	 * same two-step delete the Nextcloud trash spells out.
+	 *
+	 * Done through Grafana's own API with no involvement from this app, exactly as it
+	 * would happen in the UI. The pull that follows is folded in for the same reason it
+	 * is everywhere else: nobody empties a folder in order to run a sync.
+	 */
+	public function someoneEmptiesTheFolderInGrafana(string $folder): void {
+		$folderUid = $this->grafanaFolderUidByTitle($folder);
+		if ($folderUid === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$folder' to empty");
+		}
+		foreach ($this->grafanaDashboardsInFolder($folderUid) as $uid) {
+			$this->grafanaDeleteDashboard($uid);
+		}
+		$this->theAdminPullsFromGrafana();
+	}
+
+	/**
 	 * @Then the file is gone from :folder, leaving no trash entry
 	 *
 	 * BOTH HALVES, BECAUSE THE FOLDER ALONE CANNOT TELL THEM APART. A link removed
