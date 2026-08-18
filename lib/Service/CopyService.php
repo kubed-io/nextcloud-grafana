@@ -87,6 +87,8 @@ use Psr\Log\LoggerInterface;
  * failed to register is just an untracked `.grafana` the user can re-save to retry.
  */
 final class CopyService {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private CreateService $createService,
 		private MappingService $mappings,
@@ -141,7 +143,7 @@ final class CopyService {
 	private function settleName(File $node): void {
 		// The job resolves the file per-user, because team-folder files are mounted that
 		// way — same reason the async push job takes one.
-		$uid = $this->userSession->getUser()?->getUID() ?? $node->getOwner()?->getUID() ?? '';
+		$uid = $this->actingUserUid($node);
 		if ($uid === '') {
 			return;
 		}

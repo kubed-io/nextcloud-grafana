@@ -12,13 +12,13 @@ namespace OCA\GrafanaSync\Listener;
 use OCA\GrafanaSync\BackgroundJob\ReconcileNameJob;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\Files\Node;
 use OCP\IUserSession;
 
 /**
@@ -45,12 +45,14 @@ use OCP\IUserSession;
  * the counter is stripped before comparing. {@see FilenameCodec} carries both names for this.
  *
  * Gate mirrors the writeback listener (metadata-only, survives moves): a `grafana_uid` + `sync`
- * file. link/unmapped/ignored stay Grafana-driven (a pull renames them). Bails under
+ * file. link/unmapped stay Grafana-driven (a pull renames them). Bails under
  * {@see SyncGuard::active()} so pull/create writes don't reshuffle.
  *
  * @implements IEventListener<NodeWrittenEvent|NodeRenamedEvent>
  */
 final class NameSyncListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
@@ -64,7 +66,7 @@ final class NameSyncListener implements IEventListener {
 		if ($this->guard->active()) {
 			return;
 		}
-		$node = $this->resolveNode($event);
+		$node = EventNode::of($event);
 		if (!FilenameCodec::isDashboardFile($node)) {
 			return;
 		}
@@ -103,7 +105,7 @@ final class NameSyncListener implements IEventListener {
 
 		// The acting user resolves the file in the job (team-folder files are mounted per-user) —
 		// same approach as the writeback's async push job.
-		$uid = $this->userSession->getUser()?->getUID() ?? $node->getOwner()?->getUID() ?? '';
+		$uid = $this->actingUserUid($node);
 		if ($uid === '') {
 			return;
 		}
@@ -139,13 +141,4 @@ final class NameSyncListener implements IEventListener {
 		]);
 	}
 
-	private function resolveNode(Event $event): ?Node {
-		if ($event instanceof NodeWrittenEvent) {
-			return $event->getNode();
-		}
-		if ($event instanceof NodeRenamedEvent) {
-			return $event->getTarget();
-		}
-		return null;
-	}
 }

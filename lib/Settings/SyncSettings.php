@@ -24,11 +24,10 @@ use OCP\Util;
  * house rule (settled on n8n) is **one classic panel for every button, rendered
  * last**: connection cards → Sync Settings → Folder mappings → **Sync Actions**.
  *
- * Holds the master's full button layout — **Sync to Grafana** / **Sync from
- * Grafana** / **Purge** (rendered disabled until the sync engine lands, Course 2/3)
- * plus **Test connection** (live today; handler in `admin-test.js`, endpoint gated
- * by {@see AdminTest}). Enabling the bulk buttons later is deleting a `disabled`
- * attribute + porting the master's `sync-settings.js` — the panel already matches.
+ * Holds the button layout — **Sync to Grafana** / **Sync from Grafana** plus
+ * **Test connection** (handler in `admin-test.js`, endpoint gated by
+ * {@see AdminTest}). Every button here is live; a disabled "Purge Nextcloud files"
+ * button used to sit alongside them promising a bulk delete that was never built.
  */
 final class SyncSettings implements IDelegatedSettings {
 	#[\Override]
@@ -37,8 +36,7 @@ final class SyncSettings implements IDelegatedSettings {
 		// styles. Loaded via Util so they pick up the CSP nonce — inline
 		// <script>/<style> in templates is blocked by NC's strict CSP.
 		Util::addStyle(Application::APP_ID, 'sync-settings');
-		// The pull button's handler (Course 2). Push + Purge stay disabled until
-		// their engines land, so no extra handler is loaded for them yet.
+		// Both bulk buttons share one handler, bound by the `.js-run` class.
 		Util::addScript(Application::APP_ID, 'sync-settings');
 		Util::addScript(Application::APP_ID, 'admin-test');
 		Util::addStyle(Application::APP_ID, 'admin-test');

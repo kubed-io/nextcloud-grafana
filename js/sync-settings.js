@@ -2,15 +2,13 @@
  * SPDX-FileCopyrightText: 2026 Kelly Ferrone
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Sync Actions handlers (vanilla JS, no build step) — saga Ch2 Course 2.
+ * Sync Actions handlers (vanilla JS, no build step).
  *
- * Only "Sync from Grafana" (pull) is wired here: it is a synchronous, local-scale
- * run (homelab instances finish in one request), so the click POSTs
- * /apps/grafana_sync/sync/pull, disables the button while in flight, and flashes the
- * run counts. "Sync to Grafana" (push) + "Purge" are rendered disabled in the
- * template until the writeback release, so they carry no handler yet — this file
- * grows a branch each when its engine lands (mirroring the n8n master's
- * sync-settings.js, which also gains the async status-poll then).
+ * Both bulk directions are wired here through one `.js-run` click handler, which
+ * reads its direction off the row's `data-direction`. Each is a synchronous,
+ * local-scale run (homelab instances finish in one request), so the click POSTs
+ * /apps/grafana_sync/sync/{pull,push}, disables the button while in flight, and
+ * flashes the run counts.
  */
 (function () {
 	'use strict';

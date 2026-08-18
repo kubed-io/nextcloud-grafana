@@ -10,11 +10,11 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\BackgroundJob;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Service\AppConfigReader;
 use OCA\GrafanaSync\Service\ScheduleInterval;
 use OCA\GrafanaSync\Service\SyncService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
-use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -45,12 +45,12 @@ use Psr\Log\LoggerInterface;
 final class ScheduledPullJob extends TimedJob {
 	public function __construct(
 		ITimeFactory $time,
-		private IAppConfig $appConfig,
+		private AppConfigReader $config,
 		private SyncService $sync,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
-		$this->setInterval(ScheduleInterval::seconds($this->safeString('schedule_interval', '1h')));
+		$this->setInterval(ScheduleInterval::seconds($this->config->string('schedule_interval', '1h')));
 	}
 
 	/**
@@ -102,20 +102,6 @@ final class ScheduledPullJob extends TimedJob {
 	 * silent failure this job exists to end.
 	 */
 	private function isEnabled(): bool {
-		try {
-			return $this->appConfig->getValueBool(Application::APP_ID, 'schedule_enabled', false);
-		} catch (\Throwable) {
-			$raw = strtolower($this->safeString('schedule_enabled', ''));
-
-			return in_array($raw, ['1', 'true', 'yes', 'on'], true);
-		}
-	}
-
-	private function safeString(string $key, string $default): string {
-		try {
-			return $this->appConfig->getValueString(Application::APP_ID, $key, $default);
-		} catch (\Throwable) {
-			return $default;
-		}
+		return $this->config->bool('schedule_enabled');
 	}
 }

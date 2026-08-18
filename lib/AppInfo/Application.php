@@ -50,7 +50,7 @@ use OCP\SystemTag\MapperEvent;
  *
  * Admin scope: register the two declarative admin forms — the Instance card (base
  * URL + service-account token; Grafana has one API and one credential, so it's one
- * card, unlike n8n's split) and the Sync Settings card (push timing + scheduled
+ * card, unlike n8n's split) and the Sync Settings card (scheduled
  * pull). The AdminSection sidebar entry, the Folder-mappings + Sync Actions panels
  * are wired through info.xml's <settings> block.
  *
@@ -85,7 +85,7 @@ final class Application extends App implements IBootstrap {
 	public function register(IRegistrationContext $context): void {
 		// Declarative admin cards, top of the grafana_sync section:
 		//   Instance (5)  — base URL + service-account token
-		//   Sync Settings (20) — push timing + scheduled pull (config only)
+		//   Sync Settings (20) — scheduled pull + recycle bin (config only)
 		// The Folder-mappings (30) and Sync Actions (45) panels — the latter holding
 		// the action buttons — are classic panels registered via info.xml.
 		$context->registerDeclarativeSettings(InstanceSettings::class);

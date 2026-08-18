@@ -20,7 +20,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Async writeback path (Course 3). Enqueued by {@see \OCA\GrafanaSync\Listener\NodeWrittenListener}
- * when the Course-1 `timing` setting is `async` (the default), so a save returns to the
+ * whenever {@see \OCA\GrafanaSync\Service\WritebackStrategy} says the queue drains, so a save returns to the
  * user immediately and the push to Grafana runs on the next cron tick.
  *
  * Looks the node up by file id (re-resolved through the saving user's Files view) and

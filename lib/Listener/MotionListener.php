@@ -13,6 +13,7 @@ use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\MotionService;
+use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;
@@ -36,6 +37,8 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<NodeRenamedEvent>
  */
 final class MotionListener implements IEventListener {
+	use ResolvesActingUser;
+
 	public function __construct(
 		private MotionService $motionService,
 		private SyncGuard $guard,
@@ -68,7 +71,7 @@ final class MotionListener implements IEventListener {
 				'path' => $target->getPath(),
 				'exception' => $e,
 			]);
-			$uid = $this->userSession->getUser()?->getUID() ?? $target->getOwner()?->getUID() ?? '';
+			$uid = $this->actingUserUid($target);
 			if ($uid !== '') {
 				$this->notifier->failed($uid, $target->getId(), $target->getName(), GrafanaClient::describeConnectionError($e));
 			}

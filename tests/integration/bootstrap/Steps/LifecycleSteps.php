@@ -29,7 +29,7 @@ trait LifecycleSteps {
 
 	/** @Given a folder mapped as :mode to the Grafana folder :name */
 	public function aFolderMappedAsToTheGrafanaFolder(string $mode, string $name): void {
-		$this->forceSyncTiming();
+		$this->forceInlineWriteback();
 		$this->setupMapping($name, $mode);
 	}
 

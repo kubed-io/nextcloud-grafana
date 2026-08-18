@@ -25,13 +25,21 @@ use PHPUnit\Framework\Assert;
  * that translation happens; anything not preloaded is created on demand, which is
  * what lets a scenario name a bin folder or a fresh mapping target inline.
  *
- * ── WHY PUSH TIMING IS FORCED TO `sync` ──────────────────────────────────────────
+ * ── WHY THE WRITEBACK IS FORCED INLINE ───────────────────────────────────────────
  *
- * The app defaults to pushing asynchronously, which is right in production and
- * wrong in a test: the assertion would race the job. {@see forceSyncTiming} pins it
+ * The app prefers to push in the background, which is right in production and wrong
+ * in a test: the assertion would race the job. {@see forceInlineWriteback} pins it
  * so the push completes inside the WebDAV request. Where a scenario is specifically
- * about the async path, {@see drainJobs} runs the queued job instead — the two are
+ * about the queued path, {@see drainJobs} runs the job instead — the two are
  * different behaviours and the specs keep them apart.
+ *
+ * IT SETS THE LEVER THE APP ACTUALLY READS. This used to write a `timing` appconfig
+ * key, back when an admin radio chose inline-vs-queued. That option is gone: the
+ * choice is derived by {@see \OCA\GrafanaSync\Service\WritebackStrategy}, which
+ * runs inline when nothing would drain the queue. `backgroundjobs_mode=ajax` is
+ * exactly that condition, so it is what the arrange sets now. Writing the retired
+ * key instead would be a no-op dressed as a precondition — the assertions would
+ * still pass, for a reason that is no longer true.
  */
 trait SetupTrait {
 	/**
@@ -246,9 +254,22 @@ trait SetupTrait {
 		}
 	}
 
-	/** Pin the push to run inside the request, so assertions do not race a background job. */
-	private function forceSyncTiming(): void {
-		$this->occ('config:app:set ' . self::APP_ID . ' timing --value=sync');
+	/**
+	 * Pin the push to run inside the request, so assertions do not race a background
+	 * job — see the trait docblock for why this is the mode and not a `timing` key.
+	 *
+	 * APPCONFIG UNDER `core`, NOT SYSTEM CONFIG. `backgroundjobs_mode` lives in
+	 * appconfig — `occ config:system:get backgroundjobs_mode` does not even resolve —
+	 * and {@see \OCA\GrafanaSync\Service\WritebackStrategy} reads it there. Writing
+	 * the system key instead would set something nothing reads: a no-op precondition,
+	 * which is the exact fault this helper replaced.
+	 *
+	 * It is instance-wide and deliberately not restored: every arrange that depends on
+	 * inline writeback calls this, and `drainJobs()` still works under it — that runs
+	 * jobs by id with `--force-execute`, bypassing the worker's gating entirely.
+	 */
+	private function forceInlineWriteback(): void {
+		$this->occ('config:app:set core backgroundjobs_mode --value=ajax');
 	}
 
 	/** Turn the Grafana recycle-bin folder off (the default), explicitly. */
@@ -327,6 +348,5 @@ trait SetupTrait {
 		// Leave no bin setting behind for the next scenario.
 		$this->occ('config:app:delete ' . self::APP_ID . ' bin_enabled');
 		$this->occ('config:app:delete ' . self::APP_ID . ' bin_folder');
-		$this->occ('config:app:delete ' . self::APP_ID . ' timing');
 	}
 }

@@ -77,16 +77,18 @@ final class SyncService {
 	 *
 	 * @param string $direction self::DIR_PULL | self::DIR_PUSH
 	 * @param string|null $mappingId a specific mapping id, or null = every mapping
-	 * @param bool $async reserved for the future background-job path; inline for now
 	 * @return array<string,mixed>
 	 */
-	public function dispatch(string $direction, ?string $mappingId, bool $async): array {
-		if ($direction !== self::DIR_PULL && $direction !== self::DIR_PUSH) {
+	public function dispatch(string $direction, ?string $mappingId): array {
+		if (!self::isDirection($direction)) {
 			throw new \InvalidArgumentException('direction must be "pull" or "push"');
 		}
-		// $async is intentionally ignored until the background-job course; see docblock.
-		unset($async);
 		return $this->runInline($direction, $mappingId);
+	}
+
+	/** The one place that knows what a valid direction is. */
+	public static function isDirection(string $direction): bool {
+		return $direction === self::DIR_PULL || $direction === self::DIR_PUSH;
 	}
 
 	/**
@@ -221,7 +223,7 @@ final class SyncService {
 			if (!$managed?->isManaged()) {
 				continue;
 			}
-			// Push only files that are themselves `sync`. A `link`/`ignored` file must not
+			// Push only files that are themselves `sync`. A `link` file must not
 			// push even in a sync mapping; a legacy file with no recorded mode is treated
 			// as sync for backward compatibility.
 			if ($managed->mode !== '' && !$managed->isSync()) {

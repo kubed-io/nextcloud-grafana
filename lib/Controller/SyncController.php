@@ -26,13 +26,11 @@ use Psr\Log\LoggerInterface;
  * every mapping's folder is provisioned and reconciled against the dashboards in its
  * Grafana folder, files are matched by uid, and stale mirrors are pruned. It runs
  * **inline** — homelab-scale instances finish in one request, and the counts come
- * straight back to the toast. (Push + purge, and an async background-job path, ride
- * this same controller in later courses; the panel already renders their buttons,
- * disabled.)
+ * straight back to the toast.
  *
- * Push (Grafana ← Nextcloud, Course 3) is wired the same way through
+ * Push (Grafana ← Nextcloud) is wired the same way through
  * {@see SyncService::pushAll}: every mapping's sync files are sent up as upserts on
- * their uid. (Purge stays out until Course 4's delete machine.)
+ * their uid.
  *
  * Routes:
  *   POST /apps/grafana_sync/sync/pull → Grafana → NC (bulk populate)
@@ -56,7 +54,7 @@ final class SyncController extends Controller {
 		try {
 			// Through dispatch (inline, all mappings) — the same entry point the master's
 			// controller uses, so the async branch drops in here later without a change.
-			$res = $this->sync->dispatch(SyncService::DIR_PULL, null, false);
+			$res = $this->sync->dispatch(SyncService::DIR_PULL, null);
 		} catch (\Throwable $e) {
 			// Per-mapping failures are caught + curated inside pullAll (it returns
 			// status=error with a friendly message, never throws). Reaching here means
@@ -77,7 +75,7 @@ final class SyncController extends Controller {
 	#[AuthorizedAdminSetting(settings: SyncSettings::class)]
 	public function push(): JSONResponse {
 		try {
-			$res = $this->sync->dispatch(SyncService::DIR_PUSH, null, false);
+			$res = $this->sync->dispatch(SyncService::DIR_PUSH, null);
 		} catch (\Throwable $e) {
 			// Per-mapping/per-file failures are caught + curated inside pushAll (it
 			// returns status=error with a friendly message, never throws). Reaching here
