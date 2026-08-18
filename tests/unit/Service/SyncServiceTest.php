@@ -25,6 +25,7 @@ use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncService;
 use OCA\GrafanaSync\Service\TagSyncService;
 use OCA\GrafanaSync\Service\TrashControl;
+use OCA\GrafanaSync\Service\TrashReconcileService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\IUserManager;
@@ -121,6 +122,10 @@ final class SyncServiceTest extends TestCase {
 				$this->createStub(IUserSession::class),
 				new NullLogger(),
 			),
+			// The reconcile is a pass INSIDE the pull, not the point of it — these tests
+			// are about what the pull writes, so it is stubbed to do nothing. Its own
+			// behaviour has its own tests.
+			$this->createStub(TrashReconcileService::class),
 			new NullLogger(),
 		);
 	}

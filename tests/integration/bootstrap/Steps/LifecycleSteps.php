@@ -239,6 +239,13 @@ trait LifecycleSteps {
 	 * @When I try to create a new dashboard in :folder via the Files "New" menu
 	 */
 	public function iTryToCreateANewDashboardIn(string $folder): void {
+		// THE FOLDER HAS TO EXIST FIRST, and this step did not make it. A link mapping's
+		// Nextcloud folder is written by the PULL, so before one runs there is nothing
+		// there — and a PUT into a missing collection is a 409, which is Nextcloud
+		// declining rather than this app refusing. The scenario passed its "not created"
+		// half for entirely the wrong reason and failed the "with a message" half.
+		// `I try to copy the file into` has always done this; this step was the odd one.
+		$this->davMkdir($folder);
 		$this->currentFolder = $folder;
 		$this->attemptedCreatePath = $folder . '/' . self::NEW_DASHBOARD_NAME . '.grafana';
 		$this->lastCreateStatus = $this->davPutStatus(
@@ -255,9 +262,7 @@ trait LifecycleSteps {
 	 * looking managed, and never being.
 	 */
 	public function theCreationIsRefused(): void {
-		if (in_array($this->lastCreateStatus, [201, 204], true)) {
-			throw new \RuntimeException("the file was created (HTTP {$this->lastCreateStatus}) but should have been refused");
-		}
+		$this->assertRefused('creation', $this->lastCreateStatus);
 		if ($this->davExists($this->attemptedCreatePath)) {
 			throw new \RuntimeException("a file arrived at {$this->attemptedCreatePath} despite the refusal");
 		}
@@ -833,8 +838,34 @@ trait LifecycleSteps {
 
 	/** @Then the copy is refused with a message */
 	public function theCopyIsRefused(): void {
-		if (in_array($this->lastCopyStatus, [201, 204], true)) {
-			throw new \RuntimeException("the copy succeeded (HTTP {$this->lastCopyStatus}) but should have been refused");
+		$this->assertRefused('copy', $this->lastCopyStatus);
+	}
+
+	/**
+	 * BOTH HALVES OF THE SENTENCE. A refusal with an empty body renders in the Files app
+	 * as nothing at all — the same thing the user sees when a gesture silently fails — so
+	 * "refused WITH A MESSAGE" is not satisfied by the status alone. Ported from the n8n
+	 * master, whose delete refusal has asserted the message since it shipped.
+	 *
+	 * NOT PINNED TO 403, AND THAT WAS MEASURED. The status depends on WHICH LAYER
+	 * refuses, which is an implementation detail the sentence does not claim: a Sabre
+	 * plugin throwing `Forbidden` answers 403, while `AbortedEventException` from
+	 * `BeforeNodeRenamedEvent` surfaces as **412** — both the link rename and the link
+	 * move came back 412 on a run where the guards worked perfectly. The master pins 403
+	 * only for the DELETE, whose guard is the one that genuinely renders Forbidden, and
+	 * accepts any non-success elsewhere. Demanding 403 everywhere tested the plumbing
+	 * rather than the behaviour.
+	 *
+	 * The MESSAGE is the part worth pinning, because it is the part the user sees.
+	 */
+	private function assertRefused(string $gesture, int $status): void {
+		if ($status < 300) {
+			throw new \RuntimeException("the $gesture came back HTTP $status — it was allowed, not refused");
+		}
+		if (trim($this->lastRefusalMessage) === '') {
+			throw new \RuntimeException(
+				"the $gesture was refused with HTTP $status and no message, so the user is told nothing",
+			);
 		}
 	}
 
@@ -859,9 +890,7 @@ trait LifecycleSteps {
 
 	/** @Then the trash is refused with a message */
 	public function theTrashIsRefused(): void {
-		if (in_array($this->lastDeleteStatus, [200, 204], true)) {
-			throw new \RuntimeException("the delete succeeded (HTTP {$this->lastDeleteStatus}) but should have been refused");
-		}
+		$this->assertRefused('delete', $this->lastDeleteStatus);
 	}
 
 	/**
@@ -886,16 +915,12 @@ trait LifecycleSteps {
 
 	/** @Then the rename is refused with a message */
 	public function theRenameIsRefused(): void {
-		if (in_array($this->lastMoveStatus, [201, 204], true)) {
-			throw new \RuntimeException("the rename succeeded (HTTP {$this->lastMoveStatus}) but should have been refused");
-		}
+		$this->assertRefused('rename', $this->lastMoveStatus);
 	}
 
 	/** @Then the move is refused with a message */
 	public function theMoveIsRefused(): void {
-		if (in_array($this->lastMoveStatus, [201, 204], true)) {
-			throw new \RuntimeException("the move succeeded (HTTP {$this->lastMoveStatus}) but should have been refused");
-		}
+		$this->assertRefused('move', $this->lastMoveStatus);
 	}
 
 	/** @Then the file stays in the :mapping folder */

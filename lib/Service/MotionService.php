@@ -52,6 +52,7 @@ final class MotionService {
 		private DashboardMetadata $metadata,
 		private GrafanaClient $grafana,
 		private FolderMirror $folderMirror,
+		private RecycleBin $recycleBin,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -172,8 +173,14 @@ final class MotionService {
 		$folderUid = $this->folderMirror->folderUidFor($node, $to);
 		$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
 
+		// THE MODE COMES BACK TOO. A file that left with the bin on is stamped `unmapped`,
+		// and re-adopting it without re-stating the mode left a live mirror in a sync
+		// mapping still claiming to be unmapped — which every later gesture reads to
+		// decide what it may do. The upsert above already moved the dashboard out of the
+		// bin folder and into this mapping's; the stamp has to agree with it.
 		$update = [
 			DashboardMetadata::KEY_MAPPING => $to->id,
+			DashboardMetadata::KEY_MODE => $to->mode,
 			DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? '',
 		];
 		$version = isset($resp['version']) ? (string)$resp['version'] : '';
@@ -190,11 +197,40 @@ final class MotionService {
 	 * strip the pointer (a link never owned the dashboard, so nothing is deleted).
 	 */
 	private function onLeaveMapping(File $node, ManagedFile $managed): void {
-		if (!$managed->isLink()) {
-			// Delete FIRST; if Grafana can't confirm it, the exception propagates and we do
-			// NOT strip — the file keeps its identity and stays reconcilable (no data lost).
-			$this->grafana->deleteDashboard($managed->uid);
+		if ($managed->isLink()) {
+			// MoveGuardListener refuses a link move-out, so this is only reached
+			// defensively. A link never owned the dashboard, so nothing is deleted.
+			$this->stripIdentity($node);
+			return;
 		}
+
+		// THE SAME FORK THE TRASH GESTURE ALREADY MAKES, and it belongs here for the same
+		// reason: moving a file out of every mapping and trashing it are one Grafana
+		// operation chosen by one setting ({@see DeleteService::softDelete}). This path
+		// used to delete unconditionally, so the bin was honoured when you deleted a file
+		// and ignored when you dragged it out — the same gesture, two answers.
+		$binUid = $this->recycleBin->activeFolderUid();
+		if ($binUid !== null) {
+			// BIN ON: park it, keeping the uid. Grafana has no archive, so an ordinary
+			// folder move is the only reversible removal there is — and because nothing
+			// was destroyed, the file KEEPS its uid and can restore to the same dashboard.
+			// It stops belonging to a mapping, which is what `unmapped` means.
+			$spec = $this->decodeSpec($node->getContent());
+			$spec->uid = $managed->uid;
+			$this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $binUid, $node->getName()));
+			$this->guard->run(fn () => $this->metadata->write($node->getId(), [
+				DashboardMetadata::KEY_MAPPING => '',
+				DashboardMetadata::KEY_MODE => DashboardMetadata::MODE_UNMAPPED,
+				DashboardMetadata::KEY_FOLDER_UID => $binUid,
+			]));
+			return;
+		}
+
+		// BIN OFF: the file holds the full JSON, so the content is safe in Nextcloud before
+		// Grafana is touched. Delete FIRST; if Grafana can't confirm it, the exception
+		// propagates and we do NOT strip — the file keeps its identity and stays
+		// reconcilable (no data lost).
+		$this->grafana->deleteDashboard($managed->uid);
 		$this->stripIdentity($node);
 	}
 

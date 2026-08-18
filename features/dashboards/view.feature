@@ -24,7 +24,7 @@ Feature: Looking at a dashboard file
     # ── RULE: a mirror reads as a dashboard, not as the JSON it happens to be ─
 
   # notes: ../AGENTS.md#a-mapped-folder-shows-its-dashboards-as-dashboards
-  @user @ui @todo
+  @user @ui
   Scenario: A mapped folder shows its dashboards as dashboards
     Given a dashboard file named "Fleet Health.grafana" in "Demo"
     And a dashboard file named "Cluster Load.grafana" in "Demo"
@@ -34,7 +34,7 @@ Feature: Looking at a dashboard file
     # ── RULE: a client can read what the app knows about the file ────────────
 
   # notes: ../AGENTS.md#viewing-the-dav-properties-on-a-file-shows-grafana-specific-details
-  @user @dav @todo
+  @user @dav
   Scenario Outline: Viewing the DAV properties on a file shows Grafana specific details
     Given a dashboard file named "Fleet Health.grafana" in "<folder>"
     When a WebDAV client requests the file's properties
@@ -42,13 +42,16 @@ Feature: Looking at a dashboard file
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | the mapping's id    |
       | grafana_mode       | the mapping's mode  |
-      | grafana_version    | set                 |
+      | grafana_version    | <version>           |
       | grafana_syncedHash | set                 |
 
-    Examples: both modes a mapping can hold
-      | folder   |
-      | Demo     |
-      | Pointers |
+    Examples: both modes a mapping can hold, and only one of them has a version
+      | folder   | version |
+      | Demo     | set     |
+      | Pointers | absent  |
+
+    # A version records what a push last sent, and a link never pushes — so it is
+    # deliberately left empty rather than being a value nobody maintains.
 
   # notes: ../AGENTS.md#finding-dashboards-by-their-mode
   @user @dav @blocked

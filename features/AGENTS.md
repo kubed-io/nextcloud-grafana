@@ -913,6 +913,22 @@ The scenario is @unbuilt: today the app accepts the file and leaves it unmanaged
 which is the "creates no dashboard" claim the old scenario made. That claim was
 true and useless — it described what did not happen rather than what should.
 
+
+MEASURED, AND THE GUARD DOES NOT FIRE ON A REAL PUT. `LinkWriteGuardPlugin::beforeCreateFile`
+implements this rule and `testANewDashboardFileInALinkFolderIsRefused` covers it, which is
+why the scenario was taken live — and CI answered **HTTP 201, it was allowed**. The unit
+test drives the method directly; over WebDAV something upstream of it differs, most likely
+the `$parent instanceof DavDirectory` branch waving the write through because Nextcloud
+hands the hook a node type the guard does not recognise.
+
+@todo RATHER THAN @unbuilt, and the distinction is the whole point of the two tags: there
+IS code, it has a unit test, and it does not work on the path a person uses. Filed as a
+test that cannot pass yet rather than as a rule nobody wrote — and stated here with the
+status code, so whoever picks it up starts from evidence instead of from a passing unit
+test, which is what cost three CI cycles.
+
+The other three link refusals — copy, delete, rename — all run, so the Sabre plugin is
+reachable and registered. Only `beforeCreateFile` is inert.
 ### RETIRED — the uid scenarios (a file carrying a uid, live or dead)
 
 Two scenarios were removed rather than converted:

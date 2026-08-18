@@ -37,7 +37,7 @@ Feature: Editing a dashboard
       | grafana_syncedHash | set                                        |
       | Modified           | when the dashboard last changed in Grafana |
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Edit a dashboard file outside every mapping
     Given a dashboard file named "Fleet Health.grafana" in "Scratch"
     When I edit the file's panels and save
@@ -46,7 +46,7 @@ Feature: Editing a dashboard
     # ── RULE: an edit made in Grafana reaches the mirror, dates and all ───────
     # notes: ../AGENTS.md#an-edit-in-grafana-reaches-the-mirrored-file
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Edit a dashboard in Grafana that a sync mirrors
     Given a dashboard file named "Fleet Health.grafana" in "Demo"
     When someone edits the dashboard's panels in Grafana
@@ -59,7 +59,7 @@ Feature: Editing a dashboard
       | grafana_syncedHash | set                                        |
       | Modified           | when the dashboard last changed in Grafana |
 
-  @grafana @in-grafana @gesture @ui @todo
+  @grafana @in-grafana @gesture @ui
   Scenario: Edit a dashboard in Grafana that a link mirrors
     Given a dashboard file named "Fleet Health.grafana" in "Pointers"
     When someone edits the dashboard's panels in Grafana
