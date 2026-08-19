@@ -326,15 +326,10 @@ trait TrashSteps {
 		// folders only — a nested one like "Drafts" is absent from it entirely, so the
 		// scan below would report a perfectly healthy subfolder as missing. Steps that
 		// locate a nested folder record what they found, and this reads that first.
-		$want = $this->createdGrafanaFolders[$title] ?? null;
-		if ($want === null) {
-			foreach ($this->grafanaListFolders() as $folder) {
-				if ((string)($folder['title'] ?? '') === $title) {
-					$want = (string)($folder['uid'] ?? '');
-					break;
-				}
-			}
-		}
+		// The fallback used to scan `GET /api/folders`, which lists TOP-LEVEL folders
+		// only, so a nested one was reported missing however healthy Grafana was.
+		// `grafanaFolderUidByTitle` walks the deep listing now and takes a path too.
+		$want = $this->createdGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
 		if ($want === null) {
 			throw new \RuntimeException("Grafana has no folder titled '$title'");
 		}

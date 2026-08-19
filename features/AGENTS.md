@@ -1514,6 +1514,49 @@ and no dashboards simply never appears; a dashboard three folders deep creates a
 three. Grafana 13 has native nested folders (`/api/folders` carries `parentUid`),
 so the shape is expressible on the far side.
 
+### The parents come with it
+
+A dashboard five folders deep needs all five, and the app makes every level it is
+missing — `FolderMirror` walks UP from the file to the mapped folder, reverses,
+and creates on the way back down. So the interesting case is not the leaf, it is
+the **middle**: `Demo/Team/Drafts/Deep/Deeper` where `Team`, `Drafts` and `Deep`
+are all Nextcloud-only too. Nothing about the rule changes with depth, which is
+exactly why the depth is an Examples column rather than a scenario.
+
+**And the assertion had the depth baked into its sentence.** It used to read
+`Grafana holds "Team" under "Demo", and "Drafts" under "Team"` — two levels,
+spelled out, so a scenario could not vary how deep it went without a new step.
+`Grafana mirrors the folder "…"` walks whatever chain the scenario named and
+checks each level TWICE: the Grafana folder exists under the one before it, and
+the Nextcloud folder at that level carries its uid. Either alone is satisfied by
+a half-made mirror — a tree built in Grafana that Nextcloud cannot find again, or
+a stamp pointing at a folder that was never created.
+
+`no part of "…" exists in Grafana yet` is the other half. Without it the scenario
+passes just as well against a Grafana that already had the tree, which is the
+opposite of the claim being made.
+
+### Wherever it came from
+
+Three ways a dashboard arrives in a folder that does not exist in Grafana yet, and
+they are three Examples rows rather than three scenarios because the END STATE is
+identical — the chain is created, and the dashboard is in the innermost folder:
+
+| the file was | and moving it means |
+|---|---|
+| outside every mapping | it becomes a dashboard for the first time, in a folder made for it |
+| in this same mapping | it moves down a level, and the level is made on the way |
+| in another mapping | it changes hands, and the new owner builds the chain |
+
+The first row is the one that decides the assertion's shape: a file from outside
+every mapping had NO dashboard until it landed, so the uid cannot come from the
+scenario's cursor — it has to be read off the file afterwards.
+
+**The third row may yet earn its own scenario.** A cross-mapping move is a change
+of ownership as well as a change of folder, and ownership has rules of its own
+(`dashboards/move.feature`). It sits here for now because from this feature's
+point of view — does the folder get made? — it is the same gesture.
+
 ### A Grafana folder outlives its last dashboard
 
 When the last dashboard leaves a folder — trashed, moved out, or deleted in Grafana
