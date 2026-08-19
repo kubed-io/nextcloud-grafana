@@ -9,20 +9,20 @@ Feature: Syncing one mapping from its card
     Given the app is connected to Grafana
     And Grafana holds these resources:
       | path                  | type      | tags       |
-      | /alpha/Overview       | dashboard | dns, linux |
-      | /alpha/Region         | folder    |            |
-      | /alpha/Region/Latency | dashboard | latency    |
+      | /Alpha/Overview       | dashboard | dns, linux |
+      | /Alpha/Region         | folder    |            |
+      | /Alpha/Region/Latency | dashboard | latency    |
       | /links/Pinned         | dashboard | dns, linux |
       | /links/Region         | folder    |            |
       | /links/Region/Deeper  | dashboard | latency    |
-      | /shared/Coastline     | dashboard | dns, linux |
-      | /shared/Region        | folder    |            |
-      | /shared/Region/Tides  | dashboard | latency    |
+      | /Shared/Coastline     | dashboard | dns, linux |
+      | /Shared/Region        | folder    |            |
+      | /Shared/Region/Tides  | dashboard | latency    |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
-      | alpha          | Alpha     | sync | admin folder |        |
+      | Alpha          | Alpha     | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | shared         | Shared    | sync | team folder  | admin  |
+      | Shared         | Shared    | sync | team folder  | admin  |
 
   # notes: ../AGENTS.md#three-mappings-shaped-alike
   # None has been synced, so all three mapped folders start empty.

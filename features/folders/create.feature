@@ -12,15 +12,17 @@ Feature: Creating a folder
       | /nextcloud-trash | folder |
       | /Demo/Existing   | folder |
       | /links/Existing  | folder |
-      | /shared/Existing | folder |
+      | /Shared/Existing | folder |
     And Nextcloud holds these resources:
-      | path     |
-      | /Scratch |
+      | path              |
+      | /Scratch          |
+      | /Shared           |
+      | /Shared/notes.txt |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | shared         | Shared    | sync | team folder  | admin  |
+      | Shared         | Shared    | sync | team folder  | admin  |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
     And Grafana and Nextcloud are in sync
 
@@ -89,7 +91,7 @@ Feature: Creating a folder
       | Demo/Existing/Nubs  | Demo/Existing/Nubs     |
       | links/Bubbles       | Pointers/Bubbles       |
       | links/Existing/Nubs | Pointers/Existing/Nubs |
-      | shared/Deep/Down    | Shared/Deep/Down       |
+      | Shared/Deep/Down    | Shared/Deep/Down       |
 
     # notes: ../AGENTS.md#grafana-owns-the-tree
 

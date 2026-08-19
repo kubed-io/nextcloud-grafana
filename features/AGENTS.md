@@ -1470,6 +1470,39 @@ stamp is what `SyncService::isManagedFolder` reads before it will move a mirror,
 and an unstamped folder is left alone — with a unit test for each half. The rule
 is load-bearing there, in a way it never was in a Gherkin `Then`.
 
+### A folder that was already there when the mapping was made
+
+`folders/create.feature` declares `/Shared` and a `notes.txt` inside it BEFORE the
+mapping that claims that name — and the mapping is a Team Folder, which mounts at
+a path rather than living in the admin's home. So the Background states a real and
+awkward situation rather than a convenient one: *I already had a folder called
+Shared, and then I mapped a Team Folder to that name.*
+
+It costs nothing to describe and it is the sort of thing an instance actually
+looks like. If it turns out the two cannot coexist — a groupfolder mounting beside
+an existing folder of the same name rather than over it — then the Background has
+found something worth knowing, and the place to decide what should happen is
+`mapping/create.feature`, which owns what saving a mapping does.
+
+The `notes.txt` is there because a mapped folder is still a folder: the one
+concession every mode makes is that other file types may live alongside the
+dashboards, and a Background that only ever shows `.grafana` files quietly forgets
+it.
+
+### Case is not a meaning, and I broke that rule
+
+The mapping tables said `alpha` → `Alpha` and `shared` → `Shared` for a while,
+which is exactly what
+[a subfolder shares its name with Grafana exactly](#a-subfolder-shares-its-name-with-grafana-exactly-case-included)
+was written to stop. Twenty files once paired `demo` with `Demo`, a reader could
+not tell a deliberate difference from a typo, and the fix was to leave exactly one
+differing pair in the suite — `links` ↔ `Pointers` — where the difference is
+obviously on purpose.
+
+Writing new Backgrounds in `connection/sync-now`, `mapping/sync-now` and
+`folders/create` put the case-only pairs straight back. They are identical strings
+again. The rule survives contact only if it is applied to new work as well as old.
+
 ### Grafana owns the tree
 
 The mirror image of [the parents come with it](#the-parents-come-with-it), and it
