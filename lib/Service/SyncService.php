@@ -338,6 +338,12 @@ final class SyncService {
 		$this->guard->enter();
 		try {
 			$targetFolder = $this->storage->ensureFolder($mapping);
+			// PROVISIONING IS WHERE THE ID BECOMES KNOWABLE, and a re-provisioned folder
+			// has a NEW one. Without this the mapping keeps pointing at the folder that
+			// used to be there, `resolveForPath` can no longer place it, and every
+			// path-based question — the link guards above all — silently stops finding
+			// the mapping at all.
+			$this->mappings->bankFolderId($mapping->id, $targetFolder->getId());
 
 			// Bring the Nextcloud folder tree into agreement with Grafana's BEFORE
 			// placing anything, so every dashboard has a folder to land in. The map it

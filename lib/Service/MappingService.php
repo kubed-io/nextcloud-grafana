@@ -347,6 +347,41 @@ final class MappingService {
 	 *
 	 * @param callable(Mapping): Mapping $change
 	 */
+	/**
+	 * Re-bank a mapping's folder id, for a folder this app has just PROVISIONED for it.
+	 *
+	 * ## WHY THIS IS NOT NAME-ADOPTION
+	 *
+	 * {@see resolveForPath} deliberately refuses to fall back to the stored name when
+	 * the banked id names nothing —
+	 * {@see \OCA\GrafanaSync\Tests\Unit\Service\MappingServiceTest::testAMappingWhoseFolderIsGoneMatchesNothing}
+	 * pins that: a new folder that happens to reuse the name is a DIFFERENT folder,
+	 * and adopting it would point the mapping somewhere nobody chose. That rule is
+	 * the folder-level twin of the dashboard one — only the id counts.
+	 *
+	 * This is the other case. `StorageService::ensureFolder()` did not FIND a folder
+	 * by name, it created one for this mapping on this mapping's behalf; nobody else
+	 * has a claim on it. Banking that id is recording a fact, not guessing at one.
+	 *
+	 * ## AND WITHOUT IT THE MAPPING GOES SILENT
+	 *
+	 * A mapped folder that is deleted and then re-provisioned by the pull leaves the
+	 * mapping holding a dead id, and `resolveForPath` skips a mapping whose folder it
+	 * cannot place — so no link guard fires, no gesture syncs, and nothing says why.
+	 * Measured on a live instance: a link mapping in that state accepted a WebDAV PUT
+	 * of a dashboard file with 201.
+	 */
+	public function bankFolderId(string $mappingId, int $folderId): void {
+		if ($folderId <= 0) {
+			return;
+		}
+		$current = $this->getById($mappingId);
+		if ($current === null || $current->ncFolderId === $folderId) {
+			return;
+		}
+		$this->rewrite($mappingId, static fn (Mapping $m): Mapping => $m->withNcFolderId($folderId));
+	}
+
 	private function rewrite(string $id, callable $change): void {
 		$all = $this->list();
 		foreach ($all as $i => $existing) {

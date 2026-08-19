@@ -352,6 +352,56 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	/**
+	 * The other half of that rule, and the reason it needs one.
+	 *
+	 * A mapping whose folder is gone matches nothing, so the mapping goes SILENT —
+	 * no link guard, no gesture, and no explanation. That is correct while nobody has
+	 * provisioned a replacement, and wrong the moment this app creates one ITSELF: a
+	 * folder `ensureFolder()` made for this mapping is not a folder that happens to
+	 * share a name, it is this mapping's folder, and recording its id is a fact
+	 * rather than a guess.
+	 */
+	public function testProvisioningRebanksTheFolderIdSoTheMappingWorksAgain(): void {
+		$svc = $this->service();
+		$this->folderPaths[900] = 'Demo';
+		$saved = $svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-demo',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 900,
+		]));
+
+		// The folder is deleted and re-provisioned somewhere with a new id.
+		unset($this->folderPaths[900]);
+		self::assertNull($svc->resolveForPath('/admin/files/Demo/cpu.grafana'));
+
+		$this->folderPaths[901] = 'Demo';
+		$svc->bankFolderId($saved->id, 901);
+
+		$hit = $svc->resolveForPath('/admin/files/Demo/cpu.grafana');
+		self::assertNotNull($hit);
+		self::assertSame($saved->id, $hit->id);
+		self::assertSame(901, $hit->ncFolderId);
+	}
+
+	/** A banked id is never replaced by "unknown". */
+	public function testBankingRefusesAnIdThatIsNotOne(): void {
+		$svc = $this->service();
+		$this->folderPaths[900] = 'Demo';
+		$saved = $svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-demo',
+			'nc_folder' => 'Demo',
+			'mode' => 'sync',
+			'nc_folder_id' => 900,
+		]));
+
+		$svc->bankFolderId($saved->id, 0);
+
+		self::assertSame(900, $svc->getById($saved->id)?->ncFolderId);
+	}
+
+	/**
+	 * A folder that is genuinely gone matches nothing.	/**
 	 * A folder that is genuinely gone matches nothing. It is NOT repaired by falling
 	 * back to the stored name: a new folder that happens to reuse the name is a
 	 * different folder, and adopting it would point the mapping somewhere nobody
