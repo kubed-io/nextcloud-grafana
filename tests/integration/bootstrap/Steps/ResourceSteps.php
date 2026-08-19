@@ -562,7 +562,9 @@ trait ResourceSteps {
 					. 'created all the way down',
 				);
 			}
-			$this->createdGrafanaFolders[$segment] = $childUid;
+			// REMEMBERED, NOT ADOPTED. This step finds folders; it never makes one, so
+			// nothing it sees belongs on the teardown queue.
+			$this->knownGrafanaFolders[$segment] = $childUid;
 
 			$stamped = (string)$this->davReadMetadata($ncWalked, 'grafana_folder_uid');
 			Assert::assertSame(
@@ -586,7 +588,7 @@ trait ResourceSteps {
 	 */
 	public function theDashboardIsInTheFolderMirroring(string $ncPath): void {
 		$leaf = $this->leafOf($ncPath);
-		$want = $this->createdGrafanaFolders[$leaf] ?? null;
+		$want = $this->knownGrafanaFolders[$leaf] ?? null;
 		if ($want === null) {
 			throw new \RuntimeException(
 				"nothing has located the Grafana folder mirroring '$ncPath'; assert `Grafana mirrors the folder` first",
@@ -661,9 +663,15 @@ trait ResourceSteps {
 			// means "under the one Grafana already has", not "make a second folder
 			// called Existing" — and Grafana would happily do the latter, since it
 			// permits duplicate titles in one parent.
-			$uid = $this->grafanaChildUid($parentUid, $segment)
-				?? $this->grafanaCreateFolder($segment, $parentUid);
-			$this->createdGrafanaFolders[$segment] = $uid;
+			$uid = $this->grafanaChildUid($parentUid, $segment);
+			if ($uid === null) {
+				$uid = $this->grafanaCreateFolder($segment, $parentUid);
+				// ONLY WHAT THIS STEP MADE. A folder that was already there is the
+				// Background's or somebody else's, and deleting it at teardown would
+				// take its dashboards with it.
+				$this->createdGrafanaFolders[] = $uid;
+			}
+			$this->knownGrafanaFolders[$segment] = $uid;
 			$parentUid = $uid;
 		}
 		$this->pullEveryMapping();

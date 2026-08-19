@@ -329,7 +329,7 @@ trait TrashSteps {
 		// The fallback used to scan `GET /api/folders`, which lists TOP-LEVEL folders
 		// only, so a nested one was reported missing however healthy Grafana was.
 		// `grafanaFolderUidByTitle` walks the deep listing now and takes a path too.
-		$want = $this->createdGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
+		$want = $this->knownGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
 		if ($want === null) {
 			throw new \RuntimeException("Grafana has no folder titled '$title'");
 		}

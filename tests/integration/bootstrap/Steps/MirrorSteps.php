@@ -390,7 +390,7 @@ trait MirrorSteps {
 		// with itself: the only way to know that uid is to have really created the
 		// folder, and the only way to match it is for the pull to have really read it.
 		if (preg_match('/^the uid of the "([^"]+)" Grafana folder$/', $expected, $m) === 1) {
-			$want = $this->createdGrafanaFolders[$m[1]] ?? '';
+			$want = $this->knownGrafanaFolders[$m[1]] ?? '';
 			if ($want === '') {
 				throw new \RuntimeException("no Grafana folder named '{$m[1]}' was created by this scenario");
 			}

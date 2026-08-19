@@ -110,6 +110,18 @@ final class FeatureContext implements Context {
 	private array $unmanagedInBin = [];
 	/** @var array<string,string> Grafana folders this scenario created: title → uid */
 	private array $createdGrafanaFolders = [];
+
+	/**
+	 * Grafana folder title ⇒ uid, for steps that need to name a folder the app minted.
+	 *
+	 * SEPARATE FROM {@see $createdGrafanaFolders}, WHICH IS A DELETION LIST. The two
+	 * were one array doing both jobs, and the jobs disagree: a step that FINDS a
+	 * folder wants to remember its uid and must not put it on the teardown queue.
+	 * Conflated, an assertion that merely walked a chain signed every folder in it up
+	 * for deletion — including ones the scenario never made, and on a real instance
+	 * that means someone's folder and every dashboard under it.
+	 */
+	private array $knownGrafanaFolders = [];
 	/** The folder uid the arrange captured, for "the uid it had before the delete". */
 	private string $lastFolderUid = '';
 	private string $currentFilePath = '';
@@ -275,6 +287,7 @@ final class FeatureContext implements Context {
 			}
 		}
 		$this->createdGrafanaFolders = [];
+		$this->knownGrafanaFolders = [];
 		// THE TRASH IS DELIBERATELY LEFT ALONE, and the attempt to empty it here is
 		// worth recording. Purging a trashed mirror is a REAL GESTURE: it fires the
 		// purge hooks, which finish the delete in Grafana. Teardown doing that

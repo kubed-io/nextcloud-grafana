@@ -1158,7 +1158,7 @@ trait LifecycleSteps {
 		if ($record === null) {
 			throw new \RuntimeException("the copy claims dashboard '$copyUid', which does not exist in Grafana");
 		}
-		$want = $this->createdGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
+		$want = $this->knownGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
 		$got = (string)($record['meta']['folderUid'] ?? '');
 		if ($got !== $want) {
 			throw new \RuntimeException("the copy's dashboard is in '$got', expected '$want'");
