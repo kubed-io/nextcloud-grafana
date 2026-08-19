@@ -263,9 +263,24 @@ final class SyncService {
 	 */
 	private function pushableFiles(Folder $folder, Mapping $mapping): array {
 		$out = [];
+		$this->collectPushable($folder, $mapping, $out);
+		return $out;
+	}
+
+	/**
+	 * The walk itself, accumulating BY REFERENCE.
+	 *
+	 * `array_merge` on the way back up copies everything gathered so far at every
+	 * level, which turns a deep tree quadratic — and a whole-instance mapping is
+	 * exactly where that bites. Same shape as {@see collectManaged} for the same
+	 * reason.
+	 *
+	 * @param list<File> $out
+	 */
+	private function collectPushable(Folder $folder, Mapping $mapping, array &$out): void {
 		foreach ($folder->getDirectoryListing() as $node) {
 			if ($node instanceof Folder) {
-				$out = array_merge($out, $this->pushableFiles($node, $mapping));
+				$this->collectPushable($node, $mapping, $out);
 				continue;
 			}
 			if (!$node instanceof File || !FilenameCodec::isDashboardFile($node)) {
@@ -286,11 +301,9 @@ final class SyncService {
 			}
 			$out[] = $node;
 		}
-		return $out;
 	}
 
 	/**
-	 * Pull a single mapping into its Nextcloud folder.	/**
 	 * Pull a single mapping into its Nextcloud folder.
 	 *
 	 * `unchanged` counts the succeeded dashboards whose mirror already matched Grafana

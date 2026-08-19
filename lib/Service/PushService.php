@@ -175,7 +175,6 @@ final class PushService {
 	}
 
 	/**
-	 * Give the file the dashboard's clock, by asking Grafana what it just recorded.	/**
 	 * Give the file the dashboard's clock, by asking Grafana what it just recorded.
 	 *
 	 * ## WHY A SECOND REQUEST, AND WHY THERE IS NO CHEAPER WAY

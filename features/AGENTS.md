@@ -2760,9 +2760,20 @@ be pushed into a folder where Grafana already has a dashboard titled `Alpha Demo
 | the file | what the push does |
 |---|---|
 | carries a uid that exists in Grafana | upserts onto it — an overwrite, which is what the button asked for |
-| carries a uid that no longer exists | created fresh; a dead id is not an identity |
+| carries a uid that no longer exists | the upsert creates it, reusing that id — a create, not a failure |
 | carries no uid, name matches nothing | created fresh |
 | carries no uid, name matches a dashboard | **created fresh — a second dashboard with the same title** |
+
+**There is no existence check, and none is needed.** The second row is not a
+branch in this app's code: the upsert is keyed on `dashboard.uid`, so Grafana
+creates the dashboard when that id names nothing. The observable rule
+[was already settled for create-on-land](#a-file-carrying-a-uid-that-no-longer-exists-is-created-fresh)
+— *"a create, not a failure"* — and the file's content, which is the thing worth
+keeping, survives either way. Reusing the stale id is a bonus rather than a
+decision: any saved link to it starts working again.
+
+An earlier draft of this table said "created fresh; a dead id is not an identity",
+which reads like an existence check nobody wrote. Caught in review.
 
 The last row is the uncomfortable one and it is right. Adopting by name would
 overwrite a dashboard whose contents nobody compared, and Grafana has no undelete —
