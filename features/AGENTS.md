@@ -84,8 +84,10 @@ scenario's business, not the Background's.
 
 ### The tree is the assertion
 
-`Then Nextcloud holds these resources:` is exhaustive, folders included, and that
-is the entire point.
+`Then Nextcloud holds exactly these resources:` is exhaustive, folders included,
+and that is the entire point. The arrange drops the `exactly` — Behat matches a
+step by its text and not by its keyword, so the two jobs need two sentences, and
+the word that separates them is the one that states the claim.
 
 A misplaced mirror is invisible to every weaker form. `holds exactly 3 dashboard
 files` passes with all three flattened onto the mapping's root. `Latency.grafana

@@ -338,6 +338,7 @@ trait ResourceSteps {
 	 * mapping happens to be first cannot express that.
 	 */
 	public function theAdminSyncsTheMappingFromGrafana(string $ncFolder): void {
+		// {@see MirrorSteps::mappingIdForNcFolder} — one lookup, not a second copy of it.
 		$id = $this->mappingIdForNcFolder($ncFolder);
 		$res = $this->occ('grafana_sync:sync pull --mapping=' . escapeshellarg($id));
 		Assert::assertSame(0, $res['exit'], "syncing the '$ncFolder' mapping failed:\n{$res['output']}");
@@ -686,18 +687,4 @@ trait ResourceSteps {
 		], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
-	/** The id of the mapping whose Nextcloud folder is named, or a failure naming what exists. */
-	private function mappingIdForNcFolder(string $ncFolder): string {
-		$seen = [];
-		foreach ($this->listMappings() as $mapping) {
-			$folder = (string)($mapping['nc_folder'] ?? '');
-			$seen[] = $folder;
-			if ($folder === $ncFolder) {
-				return (string)($mapping['id'] ?? '');
-			}
-		}
-		throw new \RuntimeException(
-			"no mapping targets the Nextcloud folder '$ncFolder'; the mappings are: " . implode(', ', $seen),
-		);
-	}
 }

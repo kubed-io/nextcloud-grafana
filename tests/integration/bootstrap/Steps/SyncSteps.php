@@ -478,7 +478,12 @@ trait SyncSteps {
 	}
 
 	/**
-	 * @When the admin pushes to Grafana
+	 * @When the admin syncs every mapping to Grafana
+	 *
+	 * NAMED FOR ITS DIRECTION, like its `from Grafana` twin. It was `the admin pushes
+	 * to Grafana`, which no feature said any more — and a section with two buttons
+	 * where only one of them names its direction is how "sync" came to mean "pull"
+	 * everywhere except here.
 	 */
 	public function theAdminPushesToGrafana(): void {
 		$res = $this->occ('grafana_sync:sync push');
