@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\Listener;
 use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\GrafanaSync\DAV\LinkWriteGuardPlugin;
 use OCA\GrafanaSync\DAV\ReplacedByMovePlugin;
+use OCA\GrafanaSync\DAV\TrashRestorePlugin;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 
@@ -41,6 +42,7 @@ final class RegisterDavPluginsListener implements IEventListener {
 	public function __construct(
 		private LinkWriteGuardPlugin $linkWriteGuard,
 		private ReplacedByMovePlugin $replacedByMove,
+		private TrashRestorePlugin $trashRestore,
 	) {
 	}
 
@@ -52,5 +54,6 @@ final class RegisterDavPluginsListener implements IEventListener {
 		$server = $event->getServer();
 		$server->addPlugin($this->linkWriteGuard);
 		$server->addPlugin($this->replacedByMove);
+		$server->addPlugin($this->trashRestore);
 	}
 }

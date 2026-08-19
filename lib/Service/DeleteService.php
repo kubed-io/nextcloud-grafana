@@ -28,9 +28,12 @@ use Psr\Log\LoggerInterface;
  *        dashboard in Grafana and **strip the file's identity** (its uid is dead).
  *      · sync, bin ON → **move the dashboard into the bin folder** (id kept); metadata is left
  *        intact so restore knows the uid + mapping.
- *  - **hardDelete** — the final purge from the trash, OR a trash-bypassed direct delete. Only a
- *    still-managed sync file reaches here (bin OFF stripped the id at softDelete, so its purge is
- *    a no-op the listener bails on): **permanently delete** the dashboard. This is the one
+ *  - **hardDelete** — the final purge from the trash. Reached from {@see TrashPurgeHook} (the
+ *    legacy `preDelete` hook), {@see TeamFolderPurgeListener} and the folder cascade — never
+ *    from a typed delete event, because the only OTHER thing that unlinks a node inside the
+ *    trashbin is a restore. Only a still-managed sync file reaches here (bin OFF stripped the id
+ *    at softDelete, so its purge is a no-op the caller bails on): **permanently delete** the
+ *    dashboard. This is the one
  *    irreversible moment when the bin is ON — and it deletes ONLY while the dashboard is still
  *    sitting in the bin folder, because that "bin" is an ordinary Grafana folder anyone can
  *    rescue a dashboard out of. See {@see hardDelete} for the full reasoning.

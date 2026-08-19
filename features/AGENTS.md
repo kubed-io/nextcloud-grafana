@@ -3137,6 +3137,49 @@ Bin ON, but someone deleted the parked dashboard in Grafana directly. The kept
 uid now names nothing. The restore is an idempotent upsert on that uid, so it
 re-creates rather than failing — the file's JSON is the surviving copy.
 
+### A WebDAV restore is performed as a purge, and CI cannot see it
+
+**The worst bug this app has had, and every restore scenario in this suite passed
+while it was live.** Found by driving the real instance, not by a test.
+
+Restoring from the trash in a browser is `MOVE /remote.php/dav/trashbin/…` to
+`files/…`. The two ends are different collections, so `Sabre\DAV\Tree::move()`
+cannot rename and falls back to **copy-then-delete** — and the delete half is
+`AbstractTrash::delete()` → `TrashManager::removeItem()` → `Trashbin::delete()`,
+*the same function emptying the trash calls*, emitting the same `\OCP\Trashbin`
+`preDelete` hook. Captured live:
+
+    #1 TrashPurgeHook.php(125): DeleteService->hardDelete(…)
+    #3 Trashbin.php(726):      OC_Hook::emit('\OCP\Trashbin', 'preDelete', …)
+    #7 AbstractTrash.php(90):  TrashManager->removeItem(…)
+    #9 CorePlugin.php(612):    Sabre\DAV\Tree->move('trashbin/…', 'files/…')
+
+So a restore permanently deleted the dashboard it was restoring. Nothing at that
+depth can tell the two gestures apart, because down there they ARE the same
+operation — only the HTTP request knows, which is why the mark is set from a Sabre
+plugin ({@see OCA\GrafanaSync\DAV\TrashRestorePlugin}).
+
+**And no restore signal fires on that path at all.** Because Sabre performs the
+copy and the delete itself, `Trashbin::restore()` never runs — so neither
+`NodeRestoredEvent` nor `post_restore` is emitted, and `RestoreFromTrashListener`
+and `TrashRestoreHook` are both dead on the one path a person actually uses. The
+file reappeared only because the copy looked brand new and create-on-land minted a
+replacement, which is where the new uid, new URL and empty history came from.
+
+**WHY NO SCENARIO HERE CAN CATCH IT.** CI runs on local storage, where the same
+MOVE is a rename: no copy, no delete, no purge hook, no mint. The behaviour is
+correct there and wrong everywhere else, so no assertion added to these features
+would fail. The regression test is a UNIT test on `TrashPurgeHook`. If a future
+change to restore looks green here, that is not evidence.
+
+**The correction has two halves, and the second one bit back.** Suppressing the
+purge alone left the dashboard parked forever beside a freshly minted one, so the
+plugin carries the stamp across the move as well. But suppressing create-on-land
+for EVERY restore then broke the bin-OFF case, where the trashing really did
+delete the dashboard and strip the file — there the mint is correct, and the spec
+above asks for it. The suppression is scoped to restores that actually carried an
+identity.
+
 ### Restoring a file whose dashboard is already back in place is not a conflict
 
 The race the scheduled pull makes easy to hit: someone moves the dashboard back

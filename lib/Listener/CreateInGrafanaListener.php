@@ -19,6 +19,7 @@ use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MotionService;
 use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\ResolvesActingUser;
+use OCA\GrafanaSync\Service\RestoreInProgress;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\EventDispatcher\Event;
@@ -67,6 +68,7 @@ final class CreateInGrafanaListener implements IEventListener {
 		private MappingService $mappings,
 		private MotionService $motion,
 		private ReplacedByMoveStore $replaced,
+		private RestoreInProgress $restoring,
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
 		private IUserSession $userSession,
@@ -98,6 +100,26 @@ final class CreateInGrafanaListener implements IEventListener {
 		$managed = $this->metadata->read($node->getId());
 		if ($managed?->isManaged()) {
 			return; // already tracked — the writeback listener owns it
+		}
+
+		// A RESTORE IS NOT AN AUTHORING GESTURE. Over WebDAV a restore is a copy out of
+		// the trash, and a copy carries no metadata row — so the file that lands here
+		// looks exactly like a brand new one, and create-on-land minted a SECOND
+		// dashboard beside the one being restored. {@see \OCA\GrafanaSync\DAV\TrashRestorePlugin}
+		// re-attaches the real identity once the move completes; this is what keeps the
+		// two from racing to define what the file is.
+		// ONLY WHEN THE RESTORE ACTUALLY BROUGHT AN IDENTITY. With the recycle bin OFF the
+		// trashing deleted the dashboard and stripped the file, so a restore has nothing
+		// to re-attach and this listener is exactly what should run — the spec asks for a
+		// fresh dashboard there. Standing down for every restore left a bin-off restore
+		// with no dashboard at all.
+		if ($this->restoring->active() && $this->restoring->carriedAnything()) {
+			$this->logger->info('grafana_sync create-on-land: a restore is under way; the file keeps the dashboard it had', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'path' => $node->getPath(),
+			]);
+			return;
 		}
 
 		// AN OVERWRITE INHERITS, IT DOES NOT CREATE — even from a file that arrived

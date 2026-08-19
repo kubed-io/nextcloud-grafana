@@ -343,7 +343,16 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		);
 	}
 
-	public function beforeWriteContent(string $path, INode $node, &$data, &$modified): bool {
+	/**
+	 * @param resource|string|null $data the body Sabre is about to write, untouched here
+	 * @param bool|null $modified Sabre's out-parameter; this guard never sets it
+	 *
+	 * TYPED BECAUSE PSALM ASKED, and the types are Sabre's rather than ours: `httpPut`
+	 * hands a stream for a normal request and a string for a small one, and `$modified`
+	 * is an out-parameter a plugin sets only when it rewrites the body. Widening either
+	 * would be wrong; narrowing would break the signature Sabre calls.
+	 */
+	public function beforeWriteContent(string $path, INode $node, mixed &$data, mixed &$modified): bool {
 		if (!$node instanceof DavFile) {
 			return true; // not a file node we care about
 		}
