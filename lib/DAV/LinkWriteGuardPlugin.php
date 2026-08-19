@@ -90,6 +90,15 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// — an untyped public property psalm will not resolve. The priority runs it ahead
 		// of Sabre's own `httpCopy` (100).
 		$server->on('method:COPY', [$this, 'onCopy'], 10);
+		// AND `method:PUT`, FOR THE SAME REASON `method:COPY` IS HERE. `beforeCreateFile`
+		// is the hook that ought to catch a new dashboard file landing in a link folder,
+		// and three CI runs measured a live PUT through the Files "New" menu answering
+		// 201 with that handler in place — it is never emitted on this route. Measured,
+		// not deduced: the app's own listener on `BeforeNodeWrittenEvent` DID fire on the
+		// same request and DID abort, and Sabre still answered 201, because the storage
+		// layer swallows AbortedEventException exactly as `View::copy()` does. Refusing
+		// from the method handler is the one place a 403 actually reaches the client.
+		$server->on('method:PUT', [$this, 'onPut'], 10);
 	}
 
 	/**
@@ -130,6 +139,32 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		return true;
 	}
 
+	/**
+	 * Refuse a PUT that would author a dashboard file into a link mapping.
+	 *
+	 * @param ResponseInterface $response unused; part of Sabre's `method:*` signature
+	 * @return bool always true — this handler either throws or hands the request on
+	 *
+	 * ONLY THE DESTINATION IS JUDGED, because a PUT has one end. Overwriting an EXISTING
+	 * link file is refused too, by {@see beforeWriteContent}, which does fire on that
+	 * route — the node exists there, so Sabre takes its other branch. This handler is the
+	 * missing half: the branch where the file does not exist yet.
+	 */
+	public function onPut(RequestInterface $request, ResponseInterface $response): bool {
+		$path = $request->getPath();
+		// DASHBOARD FILES ONLY, unlike the COPY end of this plugin, which refuses anything
+		// bound into a link mapping. A link mapping's one concession is that other file
+		// types may live alongside the mirrored dashboards, and a PUT is how they get
+		// there — every upload, every editor save, every desktop-client sync of an
+		// unrelated file passes through here. Refusing on the folder alone would turn a
+		// link mapping into a read-only folder, which is not the rule.
+		if (!FilenameCodec::isDashboardName(basename($path))) {
+			return true;
+		}
+		$this->refuseIfDestinationIsALinkMapping($path);
+		return true;
+	}
+
 	/** The source of the COPY — the path the request was made against. */
 	private function refuseIfSourceIsALink(string $source): void {
 		try {
@@ -155,7 +190,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	}
 
 	/**
-	 * The destination the copy is binding to. The node does not exist yet, so the
+	 * The destination a COPY or a PUT is binding to. The node does not exist yet, so the
 	 * mapping is resolved from the PATH — built the way the rest of the app spells an
 	 * internal path (`/<uid>/files/<relative>`), which is what
 	 * {@see MappingService::resolveForPath} is given everywhere else.
@@ -178,7 +213,9 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			return;
 		}
 
-		$this->logger->warning('grafana_sync: refused a WebDAV copy into a link mapping', [
+		// NEUTRAL WORDING: shared by the COPY and PUT ends, which are the same refusal
+		// about the same destination.
+		$this->logger->warning('grafana_sync: refused a WebDAV write into a link mapping', [
 			'app' => Application::APP_ID,
 			'path' => $relative,
 			'mapping' => $mapping->id,
