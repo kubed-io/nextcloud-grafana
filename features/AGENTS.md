@@ -803,7 +803,7 @@ What belongs in each:
 | the mappings, varied across mode and storage | the folder about to be copied |
 | dashboards and folders NOBODY touches | the dashboards inside it |
 | a non-dashboard file, because a mapped folder is still a folder | |
-| an unmapped folder to copy out to | |
+| an unmapped folder to copy out to — a row in the table, not a sentence of its own | |
 
 The test of a Background row: *would deleting this change what any scenario
 asserts?* If yes it is the subject and belongs in the scenario. If no it is the

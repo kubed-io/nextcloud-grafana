@@ -16,13 +16,13 @@ Feature: Copying a folder
     And Nextcloud holds these resources:
       | path            |
       | /Demo/notes.txt |
+      | /Scratch        |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | metrics        | Shared    | sync | team folder  | admin  |
       | links          | Pointers  | link | admin folder |        |
     And Grafana and Nextcloud are in sync
-    And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-background-is-the-neighbourhood-not-the-subject
   # notes: ../AGENTS.md#the-mappings-in-the-background
