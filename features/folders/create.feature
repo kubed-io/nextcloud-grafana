@@ -9,6 +9,7 @@ Feature: Creating a folder
     Given the app is connected to Grafana
     And Grafana holds these resources:
       | path             | type   |
+      | /nextcloud-trash | folder |
       | /Demo/Existing   | folder |
       | /links/Existing  | folder |
       | /shared/Existing | folder |
