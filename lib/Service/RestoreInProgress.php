@@ -51,7 +51,8 @@ namespace OCA\GrafanaSync\Service;
  * Every restore scenario in the suite passes. They run against CI's local storage,
  * where the same MOVE is a rename: no copy, no delete, no purge hook, no mint. The
  * behaviour is correct there and wrong on every instance whose files live anywhere
- * else. Measured on the live instance; see `features/AGENTS.md`.
+ * else. Measured on the live instance; the full account is in
+ * `features/AGENTS.md#a-webdav-restore-is-performed-as-a-purge-and-ci-cannot-see-it`.
  */
 final class RestoreInProgress {
 	private bool $active = false;
