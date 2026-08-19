@@ -399,6 +399,11 @@ final class SyncService {
 			// so a mirror it sees mid-flight is simply left for the next tick.
 			$this->trashReconcile->reap($mapping);
 
+			// AND THE FOLDERS, last of all. A folder whose Grafana counterpart is gone
+			// must stop claiming it, and it can only be judged empty once the prune
+			// above has taken the mirrors it held.
+			$this->tree->reapOrphans($targetFolder, $mapping);
+
 			return [
 				'processed' => $processed,
 				'succeeded' => $succeeded,
