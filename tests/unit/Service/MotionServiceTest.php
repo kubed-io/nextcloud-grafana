@@ -392,6 +392,83 @@ final class MotionServiceTest extends TestCase {
 		self::assertSame('dash-arrived', $pushed['dashboard']->uid ?? null);
 	}
 
+	// ── an overwrite INSIDE one mapping ───────────────────────────────────────────
+	//
+	// The case a human found by dragging a file between two subfolders of `observe`.
+	// Every scenario in move.feature arrives from an UNMAPPED folder, so the adoption
+	// used to sit inside onEnterMapping — which a same-mapping move never reaches. The
+	// arrival kept its own uid, the destination's dashboard was left behind, and one
+	// Grafana folder held two dashboards with one file between them.
+
+	public function testAnOverwriteBetweenSubfoldersOfOneMappingStillAdopts(): void {
+		$same = $this->mapping('m-obs', 'gf-obs', 'observe');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			['/alice/files/observe/blurn/Dash.grafana', $same],
+			[self::DST_PATH, $same],
+		]);
+		$this->replaced->mark(7, 42, 'dash-kept');
+
+		$pushed = null;
+		$this->grafana->method('upsertDashboard')
+			->willReturnCallback(function (array $body) use (&$pushed): array {
+				$pushed ??= $body;
+				return ['version' => 3];
+			});
+		// BIN OFF (the default here), so the superseded dashboard is deleted outright —
+		// its file now points somewhere else, and a pull would otherwise mirror it back.
+		$this->grafana->expects(self::once())->method('deleteDashboard')->with('dash-arrived');
+
+		$this->service->onMove($this->file(self::DST_PATH), '/alice/files/observe/blurn/Dash.grafana');
+
+		self::assertSame('dash-kept', $pushed['dashboard']->uid ?? null, 'the push went to the wrong dashboard');
+	}
+
+	public function testAnOverwriteCarriesTheArrivalsTagsOntoTheAdoptedDashboard(): void {
+		// TAGS TRAVEL WITH THE BODY, which is the whole of what "keep the new version"
+		// chose. The destination's tags go with the bytes they belonged to; asserting it
+		// here because tags reach three surfaces and a silent divergence between them is
+		// the hardest kind of bug to see.
+		$same = $this->mapping('m-obs', 'gf-obs', 'observe');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			['/alice/files/observe/blurn/Dash.grafana', $same],
+			[self::DST_PATH, $same],
+		]);
+		$this->replaced->mark(7, 42, 'dash-kept');
+
+		$pushed = null;
+		$this->grafana->method('upsertDashboard')
+			->willReturnCallback(function (array $body) use (&$pushed): array {
+				$pushed ??= $body;
+				return ['version' => 3];
+			});
+
+		$arrival = '{"title":"Dash","uid":"stale","tags":["mustard","cookie"],"panels":[]}';
+		$this->service->onMove($this->file(self::DST_PATH, $arrival), '/alice/files/observe/blurn/Dash.grafana');
+
+		self::assertSame('dash-kept', $pushed['dashboard']->uid ?? null);
+		self::assertSame(['mustard', 'cookie'], $pushed['dashboard']->tags ?? null, 'the arrival’s tags did not travel with its body');
+	}
+
+	public function testAnOverwriteFromOUTSIDEEveryMappingLeavesTheOldDashboardAlone(): void {
+		// THE LINE BETWEEN THE TWO. A file arriving from an unmapped folder leaves nothing
+		// behind that this app mirrors, so its old dashboard is not ours to remove — the
+		// rule move.feature already states. Only a file that came FROM a mapping leaves a
+		// file-less dashboard sitting where a pull would find it.
+		$to = $this->mapping('m-dst', 'gf-dst', 'dst');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::UNMAPPED_PATH, null],
+			[self::DST_PATH, $to],
+		]);
+		$this->replaced->mark(7, 42, 'dash-kept');
+		$this->grafana->method('upsertDashboard')->willReturn(['version' => 3]);
+		$this->grafana->expects(self::never())->method('deleteDashboard');
+
+		$this->service->onMove($this->file(self::DST_PATH), self::UNMAPPED_PATH);
+	}
+
 	/** Rebuild with whatever the test just stubbed the bin to answer. */
 	private function rebuildWithBin(): void {
 		$this->service = new MotionService(

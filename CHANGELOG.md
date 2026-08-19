@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dragging a dashboard file onto one that already exists **inside the same mapping** left two dashboards in Grafana with one file between them — and the tags you had put on the destination stayed with the copy that no longer had a file. The overwrite now keeps one dashboard, whichever folders the two files were in.
 - **Restoring a dashboard file from the trash permanently deleted the dashboard it was restoring**, then silently replaced it with a new one — a different URL, and no history. Restoring now brings back the dashboard you had.
 - Deleting a dashboard file on an instance with the Nextcloud trash turned off now deletes the dashboard, instead of hiding it in the recycle-bin folder behind a file that can never come back for it.
 - Restoring a file whose parked dashboard was deleted in Grafana meanwhile now builds a new dashboard, instead of quietly re-creating one at an id that names nothing — or overwriting whatever someone else had since put there.

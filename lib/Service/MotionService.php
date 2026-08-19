@@ -73,6 +73,42 @@ final class MotionService {
 		}
 		$from = $this->mappings->resolveForPath($fromPath);
 		$to = $this->mappings->resolveForPath($node->getPath());
+
+		// AN OVERWRITE IS ANSWERED BEFORE ANY OF THE BRANCHES BELOW, because it is not a
+		// KIND of move — it can be any of them. This used to live inside onEnterMapping,
+		// which is only reached when the mapping CHANGES, so dragging a file onto an
+		// existing name between two subfolders of ONE mapping skipped the adoption
+		// entirely: the same-mapping branch reparented the arrival under its own uid and
+		// the destination's dashboard, correctly not deleted, was simply left behind.
+		// Two dashboards in one Grafana folder, one file — and the tags the user had put
+		// on the destination stayed with the orphan.
+		//
+		// Found by a human dragging a file between `observe/blurn` and `observe/morton`;
+		// every scenario in move.feature arrives from an UNMAPPED folder, so none of them
+		// could reach this. See `features/AGENTS.md#an-overwrite-can-happen-inside-one-mapping`.
+		$adopted = $this->replaced->adoptedUid($node->getId());
+		if ($to !== null && !$managed->isLink() && $adopted !== null && $adopted !== $managed->uid) {
+			$superseded = $managed->uid;
+			$this->logger->info('grafana_sync motion: an overwrite inherits the dashboard it replaced', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'arrivedWith' => $superseded,
+				'adopted' => $adopted,
+			]);
+			$this->bindTo($node, $adopted, $to);
+
+			// AND THE ARRIVAL'S OWN DASHBOARD IS NOW FILE-LESS. It only needs disposing of
+			// when it is sitting somewhere this app mirrors — which is exactly when the
+			// file came FROM a mapping. Left there it has no mirror, so the next pull
+			// writes one, and the overwrite the user performed grows a duplicate back a
+			// few minutes later. A file arriving from outside every mapping leaves nothing
+			// behind to clean up, which is why that case is still left alone.
+			if ($from !== null) {
+				$this->disposeSuperseded($node, $superseded);
+			}
+			return;
+		}
+
 		if (($from?->id) === ($to?->id)) {
 			// SAME MAPPING, BUT NOT NECESSARILY THE SAME FOLDER. This used to return
 			// outright, which made a drag into a subfolder a purely local act — the
@@ -168,24 +204,9 @@ final class MotionService {
 			return;
 		}
 
-		// AN OVERWRITE INHERITS THE IDENTITY IT LANDED ON, rather than imposing its own.
-		// See {@see ReplacedByMoveStore} for why: letting the arrival keep its uid leaves
-		// the destination's dashboard live in this mapping's Grafana folder with no file —
-		// so the next pull writes it back as `foo (1).grafana` beside the file that
-		// replaced it, and one overwrite has forked the mapping. Replacing a file's
-		// CONTENTS is what the user asked for; replacing what it points at is not.
+		// The overwrite adoption is NOT here any more — {@see onMove} answers it before it
+		// picks a branch, because an overwrite can arrive down any of them.
 		$uid = $managed->uid;
-		$adopted = $this->replaced->adoptedUid($node->getId());
-		if ($adopted !== null && $adopted !== $uid) {
-			$this->logger->info('grafana_sync motion: an overwrite inherits the dashboard it replaced', [
-				'app' => Application::APP_ID,
-				'fileId' => $node->getId(),
-				'arrivedWith' => $uid,
-				'adopted' => $adopted,
-			]);
-			$this->bindTo($node, $adopted, $to);
-			return;
-		}
 
 		// TWO FILES, ONE UID, IS NOT A STATE THIS MAPPING MAY REACH. Answer "keep both
 		// versions" and the Files app moves the arrival in under a FREE name — an
@@ -316,6 +337,68 @@ final class MotionService {
 		// reconcilable (no data lost).
 		$this->grafana->deleteDashboard($managed->uid);
 		$this->stripIdentity($node);
+	}
+
+	/**
+	 * Get rid of the dashboard an overwrite superseded — the one the ARRIVING file was
+	 * bound to before it inherited the destination's identity.
+	 *
+	 * Its file is gone: the same node now points at the dashboard it landed on. So this
+	 * dashboard is sitting in a folder this app mirrors with nothing mirroring it, which
+	 * is precisely the state a pull reads as "a dashboard with no file" and answers by
+	 * WRITING ONE. Without this the overwrite grows its duplicate back on the next tick,
+	 * a few minutes after the user thought they had merged two files into one.
+	 *
+	 * THE SAME FORK AS EVERY OTHER REMOVAL IN THIS APP, and deliberately so: the bin is
+	 * the difference between a removal you can undo and one you cannot, and a gesture
+	 * that quietly ignored it would be the third place this app has had to learn that
+	 * lesson. Bin ON parks it; bin OFF deletes it, which is what "keep the new version"
+	 * already means for the bytes.
+	 *
+	 * Failures are logged and swallowed. The overwrite itself has already happened and is
+	 * correct; a leftover dashboard is a duplicate an admin can remove, and throwing here
+	 * would abort a rename event whose file has already moved.
+	 */
+	private function disposeSuperseded(File $node, string $uid): void {
+		if ($uid === '') {
+			return;
+		}
+		try {
+			$binUid = $this->recycleBin->activeFolderUid();
+			if ($binUid === null) {
+				$this->grafana->deleteDashboard($uid);
+				$this->logger->info('grafana_sync motion: deleted the dashboard the overwrite superseded', [
+					'app' => Application::APP_ID,
+					'uid' => $uid,
+				]);
+				return;
+			}
+			// PARKED WITH ITS OWN BODY, read back from Grafana rather than taken from the
+			// file — the file now holds the ARRIVAL's bytes, and parking those under this
+			// uid would overwrite the very thing the bin exists to preserve.
+			$record = $this->grafana->readDashboard($uid);
+			$body = $record['dashboard'] ?? null;
+			if (!is_array($body)) {
+				return;
+			}
+			$spec = json_decode(json_encode($body, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+			if (!$spec instanceof \stdClass) {
+				return;
+			}
+			$spec->uid = $uid;
+			$this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $binUid, $node->getName()));
+			$this->logger->info('grafana_sync motion: parked the dashboard the overwrite superseded', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'binUid' => $binUid,
+			]);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync motion: could not dispose of the superseded dashboard; it may reappear as a duplicate', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+		}
 	}
 
 	/** Wipe the file's managed metadata + ownership pill under the guard. */
