@@ -307,10 +307,6 @@ trait ResourceSteps {
 				}
 			}
 			$this->declareMapping($form);
-			$this->trackMappedFolder(
-				(string)($form['nc folder'] ?? ''),
-				(string)($form['storage'] ?? ''),
-			);
 		}
 	}
 
@@ -320,20 +316,6 @@ trait ResourceSteps {
 	/**
 	 * Remember a mapped folder so the scenario does not hand its leftovers to the next
 	 * one.
-	 *
-	 * ## WHY THIS IS HERE AND NOT IN THE MAPPING ARRANGE
-	 *
-	 * Saving a mapping PROVISIONS its Nextcloud folder, and nothing tears that down.
-	 * A Background naming a fixed folder therefore inherits whatever the last scenario
-	 * mirrored into it, and the pull writes `Pinned (1)`, `Pinned (2)`, `Pinned (3)`
-	 * beside the leftovers — one per Examples row.
-	 *
-	 * The obvious place for the fix is `declareMapping`, shared by both mapping
-	 * arranges. Putting it there broke `motion` and `trash`: the older features name
-	 * fixed folders too, and deleting one out from under them changes what they were
-	 * written against. They do not NEED it — an assertion that names one file at a
-	 * time cannot see the debris — so the cleanup belongs to the arrange whose
-	 * assertions look at whole trees, and the wider fix is its own change.
 	 *
 	 * ## A TEAM FOLDER IS NOT A FOLDER YOU CAN DELETE
 	 *

@@ -162,6 +162,20 @@ trait MappingSteps {
 		}
 		$res = $this->addMappingFromForm($uid, $form);
 		Assert::assertSame(0, $res['exit'], "the pre-state mapping could not be created:\n{$res['output']}");
+
+		// TEAR THE MAPPED FOLDER DOWN AFTERWARDS, from BOTH arranges.
+		//
+		// Saving a mapping provisions its Nextcloud folder and nothing removed it, so a
+		// feature naming a fixed folder handed the next one whatever it had mirrored —
+		// `mapping/delete.feature` left `Pointers` behind and `connection/sync-now`
+		// inherited it, then wrote `Pinned (1).grafana`, then `(2)`.
+		//
+		// This was tried once before, in this same method, and regressed `motion` and
+		// `trash`: teardown deleted mapped folders while their mappings still existed,
+		// so the delete cascaded into Grafana and — once the link guard learned to
+		// refuse a link folder — could not run at all. Teardown unmaps FIRST now, which
+		// is what makes this safe rather than merely tidier.
+		$this->trackMappedFolder($ncFolder, (string)($form['storage'] ?? ''));
 	}
 
 	/** @When the admin maps the Grafana folder :uid with: */

@@ -283,7 +283,23 @@ final class MappingService {
 				$this->pathMemo[$mapping->ncFolderId] = $memo;
 			}
 			if ($memo === false) {
-				return '';
+				// THE BANKED ID NO LONGER NAMES A FOLDER, and returning '' here made the
+				// resolver skip the mapping entirely — so the mapping went SILENT. No
+				// guard fired, no gesture synced, and nothing said why: delete a mapped
+				// folder and let the pull re-provision it, and the app simply stopped
+				// having an opinion about that folder for good.
+				//
+				// Measured on a live instance: a link mapping whose folder had been
+				// deleted and re-created accepted a WebDAV PUT of a dashboard file with
+				// 201, because `refuseIfDestinationIsALinkMapping` resolved no mapping to
+				// refuse on. The file delete guard still worked, because it reads the
+				// FILE's own stamp rather than the path.
+				//
+				// So fall through to the name, which is what this method already does for
+				// a mapping whose folder was never provisioned — and re-bank the id it
+				// finds, since self-healing a stale id is the whole point of looking.
+				unset($this->pathMemo[$mapping->ncFolderId]);
+				return $this->folderByName($mapping);
 			}
 			$path = $memo;
 			// The stored name is a LABEL, so when the folder has been renamed or moved
@@ -296,6 +312,16 @@ final class MappingService {
 			return $path;
 		}
 
+		return $this->folderByName($mapping);
+	}
+
+	/**
+	 * Where a mapping's folder is, found by NAME — for a mapping that has no id
+	 * banked yet, or whose banked id has stopped naming anything.
+	 *
+	 * Re-banks whatever it finds, so the id route works again next time.
+	 */
+	private function folderByName(Mapping $mapping): string {
 		$name = trim($mapping->ncFolder, '/');
 		if ($name === '') {
 			return '';
@@ -307,7 +333,7 @@ final class MappingService {
 			return $name;
 		}
 		$id = $found->getId();
-		if ($id > 0) {
+		if ($id > 0 && $id !== $mapping->ncFolderId) {
 			$this->rewrite($mapping->id, static fn (Mapping $m): Mapping => $m->withNcFolderId($id));
 		}
 		return $name;
