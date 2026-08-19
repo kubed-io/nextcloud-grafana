@@ -99,16 +99,3 @@ Feature: Syncing every mapping
 
     # A file that has never been pushed is not a dashboard yet, and the button that
     # declares Nextcloud the source of truth is where it becomes one.
-
-  @admin @occ @ui
-  Scenario: A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
-    Given Grafana and Nextcloud are in sync
-    And these dashboards were changed in Grafana after their files were written:
-      | path                  |
-      | /Alpha/Alpha Demo     |
-      | /Alpha/Region/Latency |
-      | /metrics/Coast/Tides  |
-    When the admin syncs every mapping to Grafana
-    Then each of those dashboards in Grafana holds its file's panels
-
-    # notes: ../AGENTS.md#a-sync-to-grafana-makes-grafana-match-nextcloud-however-deep-the-file-sits

@@ -2815,16 +2815,26 @@ first push is what makes them dashboards.
 Grafana had no such folder, so the push had to make it. `/links` is untouched
 because a link never pushes.
 
-### RETIRED — the first draft of this pair
+### RETIRED — A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
 
-There was one push scenario, and it arranged divergence by changing dashboards in
-Grafana after their files were written. That is a fine test of "Nextcloud wins
-where the two disagree" and it is kept — but it was standing in for the first-push
-case as well, and it cannot: every dashboard it names already exists on both
-sides, so nothing it does can show what happens to a file that has never been
-pushed at all.
+**Replaced by the scenario above, not kept beside it.** Asked to make this
+scenario accurate, I wrote a second one and argued the old one still earned its
+place. It did not: two scenarios for one button, both pressing it, differing only
+in how elaborately the pre-state was arranged. The one that survives uses the
+Background as it stands — nothing has synced, files are sitting in a
+just-mapped folder — which is the situation this feature's Background was always
+describing.
 
-### A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
+What it did assert, and what happened to it: it changed dashboards IN GRAFANA
+after their files were written, so that "Grafana holds its file's panels"
+afterwards could only be true if Nextcloud won where the two disagreed. That is a
+real claim about a LATER run, and it is `dashboards/edit.feature`'s to make about
+one file — a whole-instance scenario was never the right size for it. The steps
+that served it are deleted rather than parked.
+
+The original account of the surviving behaviour follows.
+
+
 
 THE PUSH COULD NOT SEE PAST THE FIRST LEVEL. `pushOne` walked
 `getDirectoryListing()` on the mapping's folder and stopped, while the pull walked
