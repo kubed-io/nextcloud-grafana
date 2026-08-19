@@ -218,19 +218,13 @@ final class SyncService {
 		$succeeded = 0;
 		$failed = 0;
 		$errors = [];
-		// EVERY MIRROR THE MAPPING OWNS, AT EVERY DEPTH. `indexByUid` walks the tree
-		// and this used to walk one level, so a dashboard in a Grafana subfolder had a
-		// mirror the pull maintained and the push could not see. "Sync to Grafana"
-		// silently skipped it — and the deeper the file, the more certainly the button
-		// that exists to declare Nextcloud the source of truth left it out.
-		foreach ($this->indexByUid($folder, $mapping) as $node) {
-			$managed = $this->metadata->read($node->getId());
-			// Push only files that are themselves `sync`. A `link` file must not
-			// push even in a sync mapping; a legacy file with no recorded mode is treated
-			// as sync for backward compatibility.
-			if ($managed !== null && $managed->mode !== '' && !$managed->isSync()) {
-				continue;
-			}
+		// EVERY DASHBOARD FILE THE MAPPING OWNS, AT EVERY DEPTH — and `indexByUid` is
+		// not that. It keys by uid, so it answers with MANAGED files only, and a file
+		// that has never been pushed has no uid to be keyed by. The push therefore
+		// could not see the very files "Sync to Grafana" exists to make real: map a
+		// folder that already holds dashboard files, press the button, and nothing
+		// happens.
+		foreach ($this->pushableFiles($folder, $mapping) as $node) {
 			$processed++;
 			try {
 				if ($this->push->push($node)) {
@@ -258,6 +252,45 @@ final class SyncService {
 	}
 
 	/**
+	 * Every dashboard file under a mapping that the push may send, at any depth.
+	 *
+	 * A file qualifies when it is a `.grafana` file that is either UNMANAGED — never
+	 * pushed, and the whole point of a first sync — or managed by THIS mapping in sync
+	 * mode. A `link` file is a read-only pointer and never pushes, even inside a sync
+	 * mapping; a legacy file with no recorded mode is treated as sync.
+	 *
+	 * @return list<File>
+	 */
+	private function pushableFiles(Folder $folder, Mapping $mapping): array {
+		$out = [];
+		foreach ($folder->getDirectoryListing() as $node) {
+			if ($node instanceof Folder) {
+				$out = array_merge($out, $this->pushableFiles($node, $mapping));
+				continue;
+			}
+			if (!$node instanceof File || !FilenameCodec::isDashboardFile($node)) {
+				continue;
+			}
+			$managed = $this->metadata->read($node->getId());
+			if ($managed === null || !$managed->isManaged()) {
+				$out[] = $node; // never pushed — the first sync is where it becomes one
+				continue;
+			}
+			if ($managed->mode !== '' && !$managed->isSync()) {
+				continue;
+			}
+			// A file explicitly owned by ANOTHER mapping, in an overlapping or nested
+			// subtree, is that mapping's to push.
+			if ($managed->mappingId !== '' && $managed->mappingId !== $mapping->id) {
+				continue;
+			}
+			$out[] = $node;
+		}
+		return $out;
+	}
+
+	/**
+	 * Pull a single mapping into its Nextcloud folder.	/**
 	 * Pull a single mapping into its Nextcloud folder.
 	 *
 	 * `unchanged` counts the succeeded dashboards whose mirror already matched Grafana

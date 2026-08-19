@@ -72,6 +72,34 @@ Feature: Syncing every mapping
 
     # ── RULE: the other direction — Nextcloud is declared the source of truth ──
 
+  # notes: ../AGENTS.md#the-first-sync-to-grafana-makes-dashboards-of-the-files-already-there
+  @admin @occ @ui
+  Scenario: The first sync to Grafana makes dashboards of the files already there
+    When the admin syncs every mapping to Grafana
+    Then Grafana holds exactly these resources:
+      | path                       | type      |
+      | /Alpha/Alpha Demo          | dashboard |
+      | /Alpha/Local Only          | dashboard |
+      | /Alpha/Drafts              | folder    |
+      | /Alpha/Drafts/Sketch       | dashboard |
+      | /Alpha/Region              | folder    |
+      | /Alpha/Region/Latency      | dashboard |
+      | /Alpha/Region/Deep         | folder    |
+      | /Alpha/Region/Deep/Traffic | dashboard |
+      | /links/Pinned              | dashboard |
+      | /links/Nested              | folder    |
+      | /links/Nested/Deeper       | dashboard |
+      | /metrics/Metrics Demo      | dashboard |
+      | /metrics/Coast             | folder    |
+      | /metrics/Coast/Tides       | dashboard |
+    And "Alpha/Local Only.grafana" holds:
+      | grafana_uid     | set              |
+      | grafana_mapping | the mapping's id |
+      | grafana_mode    | "sync"           |
+
+    # A file that has never been pushed is not a dashboard yet, and the button that
+    # declares Nextcloud the source of truth is where it becomes one.
+
   @admin @occ @ui
   Scenario: A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
     Given Grafana and Nextcloud are in sync

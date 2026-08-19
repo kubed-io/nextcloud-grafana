@@ -2749,6 +2749,81 @@ step definitions are kept with their docblocks, so re-adding it is one line if i
 ever earns a home. The behaviours that DO rewrite a mirror assert their own end
 states, which is where the guarantee belongs.
 
+### The id decides, and a name decides nothing
+
+The question the first push forces: a file called `Alpha Demo.grafana` is about to
+be pushed into a folder where Grafana already has a dashboard titled `Alpha Demo`.
+**Are they the same dashboard, or two things that happen to share a name?**
+
+**Decided: only the id counts.**
+
+| the file | what the push does |
+|---|---|
+| carries a uid that exists in Grafana | upserts onto it — an overwrite, which is what the button asked for |
+| carries a uid that no longer exists | created fresh; a dead id is not an identity |
+| carries no uid, name matches nothing | created fresh |
+| carries no uid, name matches a dashboard | **created fresh — a second dashboard with the same title** |
+
+The last row is the uncomfortable one and it is right. Adopting by name would
+overwrite a dashboard whose contents nobody compared, and Grafana has no undelete —
+one wrong guess and the original is gone. Minting a duplicate is untidy and
+completely recoverable: Grafana permits two dashboards with one title in a folder,
+the pull already handles that (the second mirror takes a `(1)` suffix), and a
+person can merge or delete at leisure. **Untidy beats destructive**, which is the
+rule this app already follows for
+[a folder that outlives its last dashboard](#a-grafana-folder-outlives-its-last-dashboard)
+and for [a mirror it cannot name](#the-suffix-is-nextclouds-alone).
+
+**It is not a push-only question, either.** Pull first instead and the same folder
+produces `Alpha Demo (1).grafana` beside the user's file, for exactly the same
+reason. The collision belongs to "a mapped folder that already had files in it",
+not to a direction.
+
+### And a uid may be claimed once per run
+
+A real sequence: unmap a folder, copy a dashboard file inside it, map it back,
+push. **The copy's bytes are the original's, `uid` included** — a copy only loses
+its uid when the copy gesture happens inside a mapping, where `CopyService` strips
+it. So both files name one dashboard, both would upsert onto it, and the mapping
+would end up holding two files claiming the same dashboard with nothing to tell
+them apart.
+
+The first file to claim a uid keeps it; any later one in the same run is BORN.
+That is the same answer `dashboards/copy.feature` gives to the same question — a
+copy is always a birth — reached from the other side.
+
+### The first sync to Grafana makes dashboards of the files already there
+
+**The push used to skip them entirely.** `PushService::push()` read the file's
+`grafana_uid`, found none, logged *"new-dashboard create not implemented"* and
+returned — so the most obvious first use of "Sync to Grafana" (I already had
+dashboard files in this folder, now make them real) did nothing at all, silently.
+It was recorded as a future step and stayed one.
+
+It mints now, through the same `CreateService::createForFile()` that a file
+landing in a mapped folder goes through, so a file that predates its mapping ends
+up indistinguishable from one created after it.
+
+**And this is the scenario the Background was always describing.** The other push
+scenario has to say `Given Grafana and Nextcloud are in sync` before it can do
+anything, because it is about a LATER run — files that already have dashboards,
+where Grafana has since drifted. This one uses the Background as it stands: no
+sync has ever run, two files sit in a folder that has just been mapped, and the
+first push is what makes them dashboards.
+
+`/Alpha/Drafts` is the row worth reading twice: the file is one folder deep, and
+Grafana had no such folder, so the push had to make it. `/links` is untouched
+because a link never pushes.
+
+### RETIRED — the first draft of this pair
+
+There was one push scenario, and it arranged divergence by changing dashboards in
+Grafana after their files were written. That is a fine test of "Nextcloud wins
+where the two disagree" and it is kept — but it was standing in for the first-push
+case as well, and it cannot: every dashboard it names already exists on both
+sides, so nothing it does can show what happens to a file that has never been
+pushed at all.
+
 ### A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
 
 THE PUSH COULD NOT SEE PAST THE FIRST LEVEL. `pushOne` walked
