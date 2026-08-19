@@ -40,6 +40,7 @@ Feature: Tagging a folder
       | Demo/Team | quarterly      | archived       |
       | Demo/Team | quarterly      |                |
 
+  # this is only possible through API with annotations
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Tag a folder in Grafana
     Given the folder "<folder>" whose tags are "<tags before>"
