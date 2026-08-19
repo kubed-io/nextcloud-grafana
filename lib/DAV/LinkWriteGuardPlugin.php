@@ -20,6 +20,7 @@ use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\Forbidden;
+use Sabre\DAV\ICollection;
 use Sabre\DAV\INode;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -172,6 +173,18 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return;
 		}
+		if ($node !== null && $this->holdsLinkedDashboards($node)) {
+			$name = $node->getName();
+			$this->logger->warning('grafana_sync: refused a WebDAV copy of a folder holding linked dashboards', [
+				'app' => Application::APP_ID,
+				'folder' => $name,
+			]);
+			throw new Forbidden(
+				'“' . $name . '” holds linked Grafana dashboards — pointers to dashboards that live in Grafana, '
+				. 'so there is nothing here to copy. Duplicate them in Grafana instead, and they will appear here '
+				. 'on the next sync.',
+			);
+		}
 		if (!$this->isLinkFile($node)) {
 			return;
 		}
@@ -258,6 +271,49 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			. 'so it can’t be deleted here. Delete the dashboard in Grafana, '
 			. 'or remove the mapping itself.',
 		);
+	}
+
+	/**
+	 * Is this a FOLDER whose dashboards are links?
+	 *
+	 * ## THE SOURCE GUARD ONLY EVER LOOKED AT FILES
+	 *
+	 * `refuseIfSourceIsALink` asked `isLinkFile`, so copying a link-mapped FOLDER out
+	 * of its mapping was waved through — the destination half caught a copy INTO a
+	 * link mapping, and nothing caught a copy out of one. A WebDAV COPY of a
+	 * collection is one request that Sabre satisfies recursively on the server, so
+	 * the per-file guard never fires for the files inside it either. Three pointers
+	 * would have landed in a sync mapping as if they were authored there.
+	 *
+	 * ## AND A FOLDER WITH NO DASHBOARDS IS NOT OURS TO REFUSE
+	 *
+	 * A folder is mirrored into Grafana only when something in it is, so a
+	 * dashboard-less folder under a link mapping is not in Grafana at all — it merely
+	 * sits beneath a mapped one. Nextcloud owns it outright and copying it is an
+	 * ordinary file-manager gesture. Refusing that would be this app taking over a
+	 * folder it has never touched, which is the same line
+	 * {@see \OCA\GrafanaSync\Service\SyncService::isManagedFolder} draws on the
+	 * pull side.
+	 */
+	private function holdsLinkedDashboards(INode $node): bool {
+		if (!$node instanceof ICollection) {
+			return false;
+		}
+		try {
+			foreach ($node->getChildren() as $child) {
+				if ($this->isLinkFile($child) || ($child instanceof ICollection && $this->holdsLinkedDashboards($child))) {
+					return true;
+				}
+			}
+		} catch (\Throwable $e) {
+			// CANNOT LOOK → DO NOT REFUSE. A guard that blocks a copy because a
+			// listing failed would take ordinary folders down with it.
+			$this->logger->debug('grafana_sync: could not inspect a folder being copied; allowing', [
+				'app' => Application::APP_ID,
+				'exception' => $e,
+			]);
+		}
+		return false;
 	}
 
 	/**

@@ -412,6 +412,18 @@ trait MirrorSteps {
 				? null
 				: "expected the folder uid it already had ({$this->lastFolderUid}), found '{$actual}'";
 		}
+		// The same pair the dashboard rows have, asked of the folder: one says the
+		// gesture LEFT the identity alone, the other says it made a new one. A copy
+		// asserts both at once — the original kept its uid, the copy has its own —
+		// which is the whole of "a copied folder is a new folder".
+		if ($property === self::META_FOLDER_UID && $expected === "its own, not the original's") {
+			if (($actual ?? '') === '') {
+				return 'expected a folder uid of its own, found nothing';
+			}
+			return $actual !== $this->lastFolderUid
+				? null
+				: "it reused the original's folder uid ({$actual}) — two folders would claim one Grafana folder";
+		}
 
 		// `link` is stored as `reference` — the literal string "link" is
 		// is_callable(), which crashes core's PROPFIND. A table reads in the

@@ -781,6 +781,37 @@ checks that neither the titles nor the names moved. A scenario saying "and sync
 again" out loud would be narrating the app's plumbing; `still` already means the
 state held.
 
+### Copying a folder inside a link mapping is refused
+
+**Two situations get here and only one of them is ours.**
+
+*The folder holds linked dashboards.* Copying it would have to author three
+dashboards into a mapping that never writes back — Grafana owns that state, and a
+link mirrors it. Refused, and that is the scenario.
+
+*The folder holds no dashboards.* Then it is not in Grafana at all, because a
+folder is mirrored only when something in it is
+([a subfolder is in Grafana when a dashboard is in it](#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it)).
+It merely happens to sit beneath a mapped folder. Nextcloud owns it outright, the
+copy is an ordinary file-manager gesture, and this app has no opinion — **there is
+nothing to test, because there is nothing we do.** Writing a scenario for it would
+be asserting the absence of behaviour, which is the fault
+[the retired negative tests](#retired--the-holiday-photos-half) all shared.
+
+So one scenario, and this note for the case that needs none.
+
+### RETIRED — A folder duplicated in Grafana arrives as a new folder
+
+**Grafana has no duplicate-folder call.** There is create, rename/move, delete —
+and nothing that copies. The closest anyone can get is exporting the dashboards,
+making a folder, and importing them back in one at a time, which is a create
+followed by creates and is already covered by
+[a folder made in Grafana arrives as a folder](#grafana-owns-the-tree).
+
+The scenario was `@decision` — a question parked rather than an answer — and the
+answer is that the gesture does not exist. A spec earns its place by describing
+something a person can do.
+
 ### A folder copied in Grafana is indistinguishable from a new one
 
 `folders/copy.feature` has no ordinary Grafana-side scenario, and that is a

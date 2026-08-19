@@ -178,6 +178,115 @@ trait FolderSteps {
 		$this->theMirrorHolds($folder . '/' . $files[0], $table);
 	}
 
+	// ── copying ───────────────────────────────────────────────────────────────
+
+	/** The source folder's Grafana uid and its dashboards' uids, captured before a copy. */
+	private array $originalDashboardUids = [];
+
+	/** @BeforeScenario */
+	public function resetOriginalDashboardUids(): void {
+		$this->originalDashboardUids = [];
+	}
+
+	/**
+	 * @When /^I copy "([^"]*)" to "([^"]*)"$/
+	 *
+	 * BOTH SETS OF UIDS ARE READ FIRST, because the whole claim is that the copy did
+	 * not take them — and after the gesture there is nothing to compare against. A
+	 * value read afterwards would only agree with itself.
+	 */
+	public function iCopyTo(string $from, string $to): void {
+		$this->pinOriginalsOf($from);
+		$this->davCopy($from, $to);
+		$this->currentFolder = $to;
+	}
+
+	/** @When /^I try to copy "([^"]*)" to "([^"]*)"$/ */
+	public function iTryToCopyTo(string $from, string $to): void {
+		$this->pinOriginalsOf($from);
+		$this->lastCopyStatus = $this->davCopyStatus($from, $to);
+	}
+
+	/**
+	 * @Then /^"([^"]*)" holds the same files "([^"]*)" does$/
+	 *
+	 * By NAME, which is all a copy owes: the identities are the subject of the next
+	 * assertion and must be different, so comparing anything else here would be
+	 * asking the copy to be the original.
+	 */
+	public function holdsTheSameFilesAs(string $copy, string $original): void {
+		$want = $this->davListDashboardFiles($original);
+		$got = $this->davListDashboardFiles($copy);
+		sort($want);
+		sort($got);
+		Assert::assertSame(
+			implode(', ', $want),
+			implode(', ', $got),
+			"'$copy' does not hold the same files as '$original'",
+		);
+		Assert::assertNotSame([], $got, "'$original' holds no dashboard files, so the copy proves nothing");
+	}
+
+	/**
+	 * @Then /^the dashboards in "([^"]*)" are new, not the originals$/
+	 *
+	 * THE ANTI-HIJACK CLAIM, and the reason this feature exists. Every copied file
+	 * carries a uid, and not one of them is a uid the source folder held — two files
+	 * claiming one dashboard is precisely what a copy must never produce.
+	 */
+	public function theDashboardsInAreNewNotTheOriginals(string $folder): void {
+		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the original uids');
+		$files = $this->davListDashboardFiles($folder);
+		Assert::assertNotSame([], $files, "'$folder' holds no dashboard files");
+
+		foreach ($files as $name) {
+			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+			Assert::assertNotSame('', $uid, "'$folder/$name' carries no uid, so the copy never became a dashboard");
+			Assert::assertNotContains(
+				$uid,
+				$this->originalDashboardUids,
+				"'$folder/$name' reused the original's uid ($uid) — two files would claim one dashboard",
+			);
+		}
+	}
+
+	/** @Then /^the dashboards in "([^"]*)" hold no Grafana metadata at all$/ */
+	public function theDashboardsInHoldNoGrafanaMetadata(string $folder): void {
+		$files = $this->davListDashboardFiles($folder);
+		Assert::assertNotSame([], $files, "'$folder' holds no dashboard files");
+		foreach ($files as $name) {
+			foreach ([self::META_UID, self::META_MAPPING, self::META_MODE] as $key) {
+				Assert::assertSame(
+					'',
+					(string)$this->davReadMetadata($folder . '/' . $name, $key),
+					"'$folder/$name' carries $key, but nothing outside a mapping is managed",
+				);
+			}
+		}
+	}
+
+	/** @Then /^"([^"]*)" holds no folder named "([^"]*)"$/ */
+	public function holdsNoFolderNamed(string $parent, string $name): void {
+		Assert::assertFalse(
+			$this->davExists(trim($parent, '/') . '/' . $name),
+			"'$parent' holds a folder named '$name' — the refusal let it through",
+		);
+	}
+
+	/**
+	 * Pin what the source holds, so the copy can be compared against it afterwards.
+	 */
+	private function pinOriginalsOf(string $folder): void {
+		$this->lastFolderUid = (string)$this->davReadMetadata($folder, self::META_FOLDER_UID);
+		$this->originalDashboardUids = [];
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+			if ($uid !== '') {
+				$this->originalDashboardUids[] = $uid;
+			}
+		}
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**
