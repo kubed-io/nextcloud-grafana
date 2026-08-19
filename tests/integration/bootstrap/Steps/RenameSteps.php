@@ -314,6 +314,18 @@ trait RenameSteps {
 	private string $renamedUid = '';
 
 	/**
+	 * @BeforeScenario
+	 *
+	 * Same reason as {@see MoveConflictSteps::resetTheConflictArrange}: one context serves
+	 * the whole run, and a stale uid here would answer `the uid of the renamed dashboard`
+	 * for a scenario that never renamed anything — passing against a value from minutes
+	 * ago rather than failing.
+	 */
+	public function resetTheRenameArrange(): void {
+		$this->renamedUid = '';
+	}
+
+	/**
 	 * @When someone renames the :which dashboard to :title in Grafana
 	 *
 	 * THE NAMED TWIN of the cursor form below, and it exists because a collision needs

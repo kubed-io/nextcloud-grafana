@@ -47,6 +47,25 @@ trait MoveConflictSteps {
 	private string $existingPanelTitle = '';
 
 	/**
+	 * @BeforeScenario
+	 *
+	 * EVERY FIELD ABOVE, because Behat reuses one context for the whole run and
+	 * {@see MirrorSteps} reads `destinationUidBefore` to answer `the uid the destination
+	 * already had`. A scenario that never arranged a collision would otherwise be
+	 * compared against the LAST one that did — and the empty-value guards in that
+	 * vocabulary catch a missing baseline, not a stale one, so the failure would be a
+	 * quiet pass rather than an error. This suite has been bitten by exactly that twice.
+	 */
+	public function resetTheConflictArrange(): void {
+		$this->collisionSyncedPath = '';
+		$this->collisionIncomingPath = '';
+		$this->destinationUidBefore = '';
+		$this->conflictDestination = '';
+		$this->arrivedPanelTitle = '';
+		$this->existingPanelTitle = '';
+	}
+
+	/**
 	 * A duplicate of the file already in the mapping, sitting outside every mapping.
 	 *
 	 * WHICH UID IT CARRIES IS A COLUMN, because the rule does not depend on it. An

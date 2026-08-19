@@ -25,6 +25,7 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
+use OCP\Files\File;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -126,6 +127,13 @@ final class CreateInGrafanaListener implements IEventListener {
 					'uid' => $adopted,
 					'exception' => $e,
 				]);
+				// AND THE USER IS TOLD, exactly as the create below tells them. This branch
+				// is reached by a gesture the person is watching — they answered a conflict
+				// dialog — and it is the branch where silence costs the most: the file is
+				// sitting in the mapped folder looking synced while the dashboard it
+				// replaced still holds the old body. A log line nobody reads is how that
+				// becomes a mystery a week later.
+				$this->notifyFailure($node, $e);
 			}
 			return;
 		}
@@ -139,10 +147,15 @@ final class CreateInGrafanaListener implements IEventListener {
 				'path' => $node->getPath(),
 				'exception' => $e,
 			]);
-			$uid = $this->actingUserUid($node);
-			if ($uid !== '') {
-				$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
-			}
+			$this->notifyFailure($node, $e);
+		}
+	}
+
+	/** Tell whoever performed the gesture that the Grafana half of it did not happen. */
+	private function notifyFailure(File $node, \Throwable $e): void {
+		$uid = $this->actingUserUid($node);
+		if ($uid !== '') {
+			$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
 		}
 	}
 

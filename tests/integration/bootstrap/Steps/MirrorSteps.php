@@ -54,6 +54,21 @@ trait MirrorSteps {
 	private array $seededDashboards = [];
 
 	/**
+	 * @BeforeScenario
+	 *
+	 * NOW LOAD-BEARING, WHERE IT USED TO BE MERELY UNTIDY. This map only ever fed `the
+	 * dashboard's uid`, which falls back to the cursor — so a leftover entry from an
+	 * earlier scenario was unlikely to be consulted. It is now the FIRST answer for `the
+	 * uid it had before …` and the roster `both dashboards are titled …` counts, and every
+	 * `a dashboard file named X in Y` writes to it. Left uncleared, a second scenario
+	 * arranging a file under a name an earlier one used would check its claims against a
+	 * dashboard that no longer exists.
+	 */
+	public function resetSeededDashboards(): void {
+		$this->seededDashboards = [];
+	}
+
+	/**
 	 * The Grafana side of the pre-state, as one table.
 	 *
 	 * @Given /^the Grafana folder "([^"]*)" already contains:$/
