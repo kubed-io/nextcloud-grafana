@@ -540,7 +540,6 @@ trait FolderSteps {
 		}
 	}
 
-
 	// ── what became of the dashboards ─────────────────────────────────────────
 
 	/** @Then /^none of those dashboards exists in Grafana$/ */
