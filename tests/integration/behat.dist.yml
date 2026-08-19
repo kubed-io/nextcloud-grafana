@@ -81,11 +81,22 @@ default:
       contexts: &contexts
       - OCA\GrafanaSync\Tests\Integration\FeatureContext
 
+    # authoring / copying / naming were one `authoring` suite until it reached
+    # 6.5 minutes — the slowest leg in the matrix, and the whole run waits on the
+    # slowest leg. Split by GESTURE, so each name still says what it covers.
     authoring:
       paths:
       - '%paths.base%/../../features/dashboards/create.feature'
-      - '%paths.base%/../../features/dashboards/copy.feature'
       - '%paths.base%/../../features/dashboards/edit.feature'
+      contexts: *contexts
+
+    copying:
+      paths:
+      - '%paths.base%/../../features/dashboards/copy.feature'
+      contexts: *contexts
+
+    naming:
+      paths:
       - '%paths.base%/../../features/dashboards/rename.feature'
       contexts: *contexts
 
@@ -106,16 +117,36 @@ default:
       - '%paths.base%/../../features/dashboards/tags.feature'
       contexts: *contexts
 
-    core:
+    # `folders` was inside `core` while folders/* was mostly @todo. It is not any
+    # more — the folder specs carry more runnable scenarios than any other noun —
+    # so it is its own suite, and `core` goes back to meaning the app itself.
+    #
+    # AND THEN IT REACHED 6m47s IN ONE GO, which is where `authoring` was before it
+    # was split. Same treatment, by gesture, and deliberately keeping `create` and
+    # `tags` apart: they are 26 of the 38 runnable scenarios between them, so any
+    # split leaving them together barely moves the slowest leg.
+    folders:
       paths:
       - '%paths.base%/../../features/folders/create.feature'
-      - '%paths.base%/../../features/folders/copy.feature'
       - '%paths.base%/../../features/folders/delete.feature'
-      - '%paths.base%/../../features/folders/move.feature'
-      - '%paths.base%/../../features/folders/rename.feature'
       - '%paths.base%/../../features/folders/restore.feature'
       - '%paths.base%/../../features/folders/purge.feature'
+      contexts: *contexts
+
+    folder-tags:
+      paths:
       - '%paths.base%/../../features/folders/tags.feature'
+      contexts: *contexts
+
+    folder-motion:
+      paths:
+      - '%paths.base%/../../features/folders/copy.feature'
+      - '%paths.base%/../../features/folders/move.feature'
+      - '%paths.base%/../../features/folders/rename.feature'
+      contexts: *contexts
+
+    core:
+      paths:
       - '%paths.base%/../../features/dashboards/view.feature'
       - '%paths.base%/../../features/dashboards/open-with.feature'
       - '%paths.base%/../../features/lifecycle.feature'

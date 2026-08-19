@@ -178,6 +178,211 @@ trait FolderSteps {
 		$this->theMirrorHolds($folder . '/' . $files[0], $table);
 	}
 
+	// ── the state both sides are already in ───────────────────────────────────
+
+	/**
+	 * @Given /^the following items in the mappings:$/
+	 *
+	 * ## NEXTCLOUD PATHS ONLY, AND THAT IS THE POINT
+	 *
+	 * An item inside a mapping is on BOTH sides — that is what a mapping means — so
+	 * spelling out the Grafana half as well would be saying the same thing twice and
+	 * inviting the two halves to drift apart in the spec. A `.grafana` file in a
+	 * mapped folder implies its dashboard; a folder implies the Grafana folder
+	 * mirroring it. Only the mapping's own folder is ever named differently, and that
+	 * translation is this step's job rather than the reader's.
+	 *
+	 * ## AND IT REPLACED `Grafana and Nextcloud are in sync`
+	 *
+	 * Which was a `Given` that ran a sync — an ACTION dressed as a state, and the same
+	 * sync-now the features are meant to be testing elsewhere. Every Background that
+	 * used it was quietly performing behaviour before the `When`. This declares the
+	 * state instead; how it becomes true is the harness's business, and the scenario
+	 * says nothing about a sync ever having run.
+	 *
+	 * SEEDED IN GRAFANA, because a link mapping refuses authoring from Nextcloud. An
+	 * arrange that wrote the files locally would work in a sync mapping and be refused
+	 * in a link one, for reasons that have nothing to do with what the scenario tests.
+	 *
+	 * Columns: `path` (required) and `tags` (optional).
+	 */
+	public function theFollowingItemsInTheMappings(TableNode $table): void {
+		$touchedMapping = false;
+		foreach ($table->getHash() as $row) {
+			$path = ltrim($this->requirePath($row), '/');
+			$tags = $this->parseTags(trim((string)($row['tags'] ?? '')));
+
+			if (!$this->looksLikeFolder($path) && !str_ends_with($path, '.grafana')) {
+				// An ordinary file is nobody's mirror; it just lives there.
+				$this->davMkdir(ltrim($this->parentOf($path), '/'));
+				$this->davPut($path, "declared by a Background, and not a dashboard\n");
+				continue;
+			}
+
+			$touchedMapping = true;
+			if ($this->looksLikeFolder($path)) {
+				$uid = $this->grafanaFolderUidForNcPath($path, true);
+				if ($tags !== []) {
+					$this->grafanaSetFolderTags($uid, $tags);
+				}
+				continue;
+			}
+
+			$title = substr($this->leafOf($path), 0, -strlen('.grafana'));
+			$folderUid = $this->grafanaFolderUidForNcPath($this->parentOf($path), true);
+			$uid = 'gs-' . substr(sha1($path), 0, 16);
+			if ($tags !== []) {
+				$this->grafanaCreateTaggedDashboard($uid, $title, $folderUid, $tags);
+			} else {
+				$this->grafanaCreateDashboard($uid, $title, $folderUid);
+			}
+			$this->createdDashboardUids[] = $uid;
+			$this->seededDashboards[$title] = $uid;
+		}
+
+		if ($touchedMapping) {
+			$this->pullEveryMapping();
+		}
+	}
+
+	/**
+	 * @Then /^the mappings hold:$/
+	 *
+	 * ONE TABLE FOR AN ARBITRARY SET, rather than an `And … holds:` per item. A copy
+	 * of a folder holding three dashboards makes four claims of the same shape, and
+	 * four near-identical blocks read as four ideas when they are one.
+	 *
+	 * `identity` is asked of whichever key the path implies — `grafana_folder_uid`
+	 * for a folder, `grafana_uid` for a file — because the path already says which it
+	 * is and a `type` column would only repeat it.
+	 */
+	public function theMappingsHold(TableNode $table): void {
+		foreach ($table->getHash() as $row) {
+			$path = ltrim($this->requirePath($row), '/');
+			$want = trim((string)($row['identity'] ?? ''));
+			if ($want === '') {
+				throw new \RuntimeException("the row for '$path' has no identity to check");
+			}
+			Assert::assertTrue($this->davExists($path), "'$path' does not exist");
+			$key = $this->looksLikeFolder($path) ? self::META_FOLDER_UID : self::META_UID;
+
+			// A FILE'S "a new id" IS ABOUT A SET, not about the cursor. The shared
+			// vocabulary compares against the ONE uid a scenario last touched, which is
+			// the right question when one file was copied and the wrong one when a
+			// folder of them was: each copy must differ from EVERY original, and there
+			// is no single original to be the answer.
+			if ($key === self::META_UID && $want === 'a new id') {
+				Assert::assertNotSame(
+					[],
+					$this->originalDashboardUids,
+					'the arrange captured no original uids to differ from',
+				);
+				$uid = (string)$this->davReadMetadata($path, self::META_UID);
+				Assert::assertNotSame('', $uid, "'$path' carries no uid, so the copy never became a dashboard");
+				Assert::assertNotContains(
+					$uid,
+					$this->originalDashboardUids,
+					"'$path' reused an original's uid ($uid) — two files would claim one dashboard",
+				);
+				continue;
+			}
+
+			$this->theMirrorHolds($path, new TableNode([[$key, $want]]));
+		}
+	}
+
+	// ── copying ───────────────────────────────────────────────────────────────
+
+	/** The source folder's Grafana uid and its dashboards' uids, captured before a copy. */
+	private array $originalDashboardUids = [];
+
+	/** @BeforeScenario */
+	public function resetOriginalDashboardUids(): void {
+		$this->originalDashboardUids = [];
+	}
+
+	/**
+	 * @When /^I copy "([^"]*)" to "([^"]*)"$/
+	 *
+	 * BOTH SETS OF UIDS ARE READ FIRST, because the whole claim is that the copy did
+	 * not take them — and after the gesture there is nothing to compare against. A
+	 * value read afterwards would only agree with itself.
+	 */
+	public function iCopyTo(string $from, string $to): void {
+		$this->pinOriginalsOf($from);
+		$this->davCopy($from, $to);
+		$this->currentFolder = $to;
+	}
+
+	/** @When /^I try to copy "([^"]*)" to "([^"]*)"$/ */
+	public function iTryToCopyTo(string $from, string $to): void {
+		$this->pinOriginalsOf($from);
+		$this->lastCopyStatus = $this->davCopyStatus($from, $to);
+	}
+
+	/**
+	 * @Then /^"([^"]*)" holds the same files "([^"]*)" does$/
+	 *
+	 * By NAME, which is all a copy owes: the identities are the subject of the next
+	 * assertion and must be different, so comparing anything else here would be
+	 * asking the copy to be the original.
+	 */
+	public function holdsTheSameFilesAs(string $copy, string $original): void {
+		$want = $this->davListDashboardFiles($original);
+		$got = $this->davListDashboardFiles($copy);
+		sort($want);
+		sort($got);
+		// COMPARED AS TEXT, NOT AS ARRAYS, and joined on a newline rather than a
+		// comma. PHPUnit shortens an array longer than ten entries when it builds a
+		// failure diff and reads that threshold from a registry that is unconfigured
+		// outside a PHPUnit run — measured, and it reports the registry error INSTEAD
+		// of the assertion. A newline is the separator because a filename can contain
+		// a comma and cannot contain one of these.
+		Assert::assertSame(
+			implode("\n", $want),
+			implode("\n", $got),
+			"'$copy' does not hold the same files as '$original'",
+		);
+		Assert::assertNotSame([], $got, "'$original' holds no dashboard files, so the copy proves nothing");
+	}
+
+	/** @Then /^the dashboards in "([^"]*)" hold no Grafana metadata at all$/ */
+	public function theDashboardsInHoldNoGrafanaMetadata(string $folder): void {
+		$files = $this->davListDashboardFiles($folder);
+		Assert::assertNotSame([], $files, "'$folder' holds no dashboard files");
+		foreach ($files as $name) {
+			foreach ([self::META_UID, self::META_MAPPING, self::META_MODE] as $key) {
+				Assert::assertSame(
+					'',
+					(string)$this->davReadMetadata($folder . '/' . $name, $key),
+					"'$folder/$name' carries $key, but nothing outside a mapping is managed",
+				);
+			}
+		}
+	}
+
+	/** @Then /^"([^"]*)" holds no folder named "([^"]*)"$/ */
+	public function holdsNoFolderNamed(string $parent, string $name): void {
+		Assert::assertFalse(
+			$this->davExists(trim($parent, '/') . '/' . $name),
+			"'$parent' holds a folder named '$name' — the refusal let it through",
+		);
+	}
+
+	/**
+	 * Pin what the source holds, so the copy can be compared against it afterwards.
+	 */
+	private function pinOriginalsOf(string $folder): void {
+		$this->lastFolderUid = (string)$this->davReadMetadata($folder, self::META_FOLDER_UID);
+		$this->originalDashboardUids = [];
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+			if ($uid !== '') {
+				$this->originalDashboardUids[] = $uid;
+			}
+		}
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**

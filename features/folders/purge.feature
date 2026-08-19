@@ -7,10 +7,15 @@ Feature: Emptying the trash of a folder
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | metrics        | Shared    | sync | team folder  | admin  |
+      | links          | Pointers  | link | admin folder |        |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Shared/Coast/Tides.grafana |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
   # notes: ../AGENTS.md#the-mappings-in-the-background

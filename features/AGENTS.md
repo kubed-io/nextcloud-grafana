@@ -781,6 +781,134 @@ checks that neither the titles nor the names moved. A scenario saying "and sync
 again" out loud would be narrating the app's plumbing; `still` already means the
 state held.
 
+### Two words for an id, not six phrasings
+
+`the original id` and `a new id`. That is the whole vocabulary for identity in a
+metadata table, and both are asked of a folder or of a file depending on which
+the path names.
+
+They replaced `the uid it had before the copy`, `… the move`, `… the rename`,
+`… the delete`, `… it was trashed`, `… it left` — six spellings of ONE question,
+each named after whichever gesture happened to be nearby, so a reader had to check
+every one to be sure they meant the same thing. They did. And
+`its own, not the original's` said in five words what "new" says in one.
+
+Two phrases are deliberately left alone, because they are different questions with
+different answers rather than different spellings of this one:
+
+- `its own, not the one it arrived with` — compares against the uid a file ARRIVED
+  carrying, which is not the same as the one it was copied from.
+- `the uid the destination already had` — an overwrite ADOPTS an identity, so the
+  claim names whose.
+
+### The two sides already agree
+
+`the following items in the mappings:` names Nextcloud paths, and every one of
+them exists on BOTH sides. That is what a mapping means — a `.grafana` file
+implies its dashboard, a folder implies the Grafana folder mirroring it — so
+spelling the far side out as well would say the same thing twice and invite the
+two halves to drift apart in the spec. Only the mapping's own folder is ever named
+differently, and translating it is the step's job rather than the reader's.
+
+**It replaced `Grafana and Nextcloud are in sync`, which was a violation.** That
+line was a `Given` that RAN A SYNC: an action dressed as a state, and the very
+sync-now that `connection/sync-now.feature` exists to test. Every Background using
+it was performing behaviour before the `When`, and a scenario about copying a
+folder should no more run a sync in its arrange than a scenario about deleting one
+should.
+
+The tell was how it spread. It was allowed once, as a convenience in one
+Background, and turned up in five files inside two days — because "just sync it"
+is always the easiest way to arrange anything, which is exactly why it must not be
+available. **The state is declarable; how it came to be true is nobody's business
+in a spec.**
+
+`connection/sync-now.feature` is the one file that legitimately shows the two
+sides disagreeing, because there the sync IS the behaviour.
+
+### The Background is the neighbourhood, not the subject
+
+`folders/copy.feature` went through both mistakes before landing here, and the
+pair of them is the lesson.
+
+**First everything was in the Background** — the mappings AND the `Team` folder
+each scenario copies, three dashboards apiece, twelve rows. Every scenario then
+opened on a bare `When`, which reads as though nothing had been arranged, and the
+thing under test was buried in setup a reader had to go looking for.
+
+**Then nothing was.** Stripped back to mappings alone, the Background stopped
+describing an instance at all: three mappings over an empty Grafana, which is not
+what anybody's Grafana looks like and gives the gesture nothing to happen
+alongside.
+
+What belongs in each:
+
+| the Background | the scenario's own `Given` |
+|---|---|
+| the mappings, varied across mode and storage | the folder about to be copied |
+| dashboards and folders NOBODY touches | the dashboards inside it |
+| a non-dashboard file, because a mapped folder is still a folder | |
+| an unmapped folder to copy out to — a row in the table, not a sentence of its own | |
+
+The test of a Background row: *would deleting this change what any scenario
+asserts?* If yes it is the subject and belongs in the scenario. If no it is the
+neighbourhood, and a spec with no neighbourhood is testing a laboratory.
+
+### A folder copy fires once, for the folder
+
+Nextcloud satisfies a recursive copy SERVER-SIDE and raises a single
+`NodeCopiedEvent` for the node the user named. The files inside it get no event of
+their own — and `CopyListener` only ever recognised dashboard FILES, so
+duplicating a folder did **nothing at all**: the copies kept the originals'
+inherited stamps, no new dashboards were made, and no Grafana folder was created
+to hold them.
+
+Nothing said so. `folders/copy.feature` was `@unbuilt` from the day it was
+written, so the first time anything asked the question was the first time it ran —
+`expected a folder uid of its own, found nothing`, which is the copy that never
+happened.
+
+The listener walks the copied tree now, and each file goes through the same
+`onCopy` a single-file copy uses. **The Grafana folder appears as a consequence**
+of the first dashboard landing in it rather than needing a step of its own, which
+is the rule `folders/create.feature` already states: a folder is in Grafana when a
+dashboard is in it. Nothing in `CopyService` changed.
+
+It is also why the same walk is needed on the guard side — see
+[copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
+One recursive gesture, one event, two places that have to look inside it.
+
+### Copying a folder inside a link mapping is refused
+
+**Two situations get here and only one of them is ours.**
+
+*The folder holds linked dashboards.* Copying it would have to author three
+dashboards into a mapping that never writes back — Grafana owns that state, and a
+link mirrors it. Refused, and that is the scenario.
+
+*The folder holds no dashboards.* Then it is not in Grafana at all, because a
+folder is mirrored only when something in it is
+([a subfolder is in Grafana when a dashboard is in it](#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it)).
+It merely happens to sit beneath a mapped folder. Nextcloud owns it outright, the
+copy is an ordinary file-manager gesture, and this app has no opinion — **there is
+nothing to test, because there is nothing we do.** Writing a scenario for it would
+be asserting the absence of behaviour, which is the fault
+[the retired negative tests](#retired--the-holiday-photos-half) all shared.
+
+So one scenario, and this note for the case that needs none.
+
+### RETIRED — A folder duplicated in Grafana arrives as a new folder
+
+**Grafana has no duplicate-folder call.** There is create, rename/move, delete —
+and nothing that copies. The closest anyone can get is exporting the dashboards,
+making a folder, and importing them back in one at a time, which is a create
+followed by creates and is already covered by
+[a folder made in Grafana arrives as a folder](#grafana-owns-the-tree).
+
+The scenario was `@decision` — a question parked rather than an answer — and the
+answer is that the gesture does not exist. A spec earns its place by describing
+something a person can do.
+
 ### A folder copied in Grafana is indistinguishable from a new one
 
 `folders/copy.feature` has no ordinary Grafana-side scenario, and that is a

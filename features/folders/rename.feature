@@ -11,6 +11,11 @@ Feature: Renaming a subfolder
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | metrics        | Shared    | sync | team folder  | admin  |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Demo/notes.txt             |
+      | /Shared/Coast/Tides.grafana |
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
   # notes: ../AGENTS.md#a-subfolder-shares-its-name-with-grafana-exactly
@@ -24,9 +29,9 @@ Feature: Renaming a subfolder
     When I rename "<from>" to "<to>"
     Then Grafana mirrors the folder "<to>"
     And "<to>" holds:
-      | grafana_folder_uid | the uid it had before the rename |
+      | grafana_folder_uid | the original id |
     And the dashboard inside "<to>" holds:
-      | grafana_uid | the uid it had before the rename |
+      | grafana_uid | the original id |
 
     Examples: however deep it sits, in either kind of storage
       | from               | to                   |
@@ -43,9 +48,9 @@ Feature: Renaming a subfolder
     Then Grafana mirrors the folder "<to>"
     And "<from>" is gone from Nextcloud
     And "<to>" holds:
-      | grafana_folder_uid | the uid it had before the rename |
+      | grafana_folder_uid | the original id |
     And the dashboard inside "<to>" holds:
-      | grafana_uid | the uid it had before the rename |
+      | grafana_uid | the original id |
 
     Examples: read by name this is a folder vanishing; read by uid it is a rename
       | from               | name     | to                   |
@@ -64,4 +69,4 @@ Feature: Renaming a subfolder
     Then "Demo/Team B" exists in Nextcloud
     And the failure is reported to the user
     And "Demo/Team B" holds:
-      | grafana_folder_uid | the uid it had before the rename |
+      | grafana_folder_uid | the original id |

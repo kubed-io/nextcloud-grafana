@@ -7,18 +7,18 @@ Feature: Moving a folder
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
-    And a mapping with the following values:
-      | grafana folder | Reports |
-      | nc folder      | Reports |
-      | mode           | sync    |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | Reports        | Reports   | sync | admin folder |        |
+      | metrics        | Shared    | sync | team folder  | admin  |
+      | links          | Pointers  | link | admin folder |        |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Reports/Quarterly.grafana  |
+      | /Shared/Coast/Tides.grafana |
+      | /Pointers/Pinned.grafana    |
     And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 
@@ -34,7 +34,7 @@ Feature: Moving a folder
     Then "Demo/Archive/Team" holds the same files it held before the move
     And the Grafana folder "Team" is under "Archive", holding the same dashboards
     And "Demo/Archive/Team" holds:
-      | grafana_folder_uid | the uid it had before the move |
+      | grafana_folder_uid | the original id |
 
     # Without the uid this reads as a folder disappearing and another appearing, and
     # three dashboards would be deleted and re-created under new ones.
@@ -46,7 +46,7 @@ Feature: Moving a folder
     Then "Reports/Team" holds the same files it held before the move
     And the Grafana folder "Team" is under "Reports", holding the same dashboards
     And "Reports/Team" holds:
-      | grafana_folder_uid | the uid it had before the move |
+      | grafana_folder_uid | the original id |
 
     # ── RULE: leaving the mapped set is leaving it, dashboard by dashboard ────
     # notes: ../AGENTS.md#the-recycle-bin-folder
@@ -116,7 +116,7 @@ Feature: Moving a folder
     Then "Demo/Archive/Team" holds the same files "Demo/Team" did
     And "Demo/Team" is gone from Nextcloud
     And "Demo/Archive/Team" holds:
-      | grafana_folder_uid | the uid it had before the move |
+      | grafana_folder_uid | the original id |
 
     # Read by name this is one folder vanishing and another appearing; read by uid
     # it is one folder with a new parent.
@@ -130,7 +130,7 @@ Feature: Moving a folder
     Then "Demo/Archive/Squad" holds the same files "Demo/Team" did
     And "Demo/Team" is gone from Nextcloud
     And "Demo/Archive/Squad" holds:
-      | grafana_folder_uid | the uid it had before the move |
+      | grafana_folder_uid | the original id |
 
     # Grafana can do both in one go where a Files gesture cannot. The uid makes it
     # one move to a new place under a new name, not a delete and a create.

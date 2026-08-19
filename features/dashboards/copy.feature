@@ -39,7 +39,7 @@ Feature: Copying a dashboard
       | filename           | "<copy>"                                  |
       | title in the file  | "<named>"                                 |
       | title in Grafana   | "<named>"                                 |
-      | grafana_uid        | its own, not the original's               |
+      | grafana_uid        | a new id               |
       | grafana_mapping    | the mapping's id                          |
       | grafana_mode       | the mapping's mode                        |
       | grafana_version    | set                                       |
@@ -68,7 +68,7 @@ Feature: Copying a dashboard
       | filename          | "Fleet Health (1).grafana"  |
       | title in the file | "Fleet Health"              |
       | title in Grafana  | "Fleet Health"              |
-      | grafana_uid       | its own, not the original's |
+      | grafana_uid       | a new id |
       | grafana_mapping   | the mapping's id            |
       | grafana_mode      | the mapping's mode          |
     And the original file and its dashboard are unchanged

@@ -7,17 +7,16 @@ Feature: Creating a dashboard
 
   Background:
     Given the app is connected to Grafana
-    And Grafana holds these resources:
-      | path              | type   |
-      | /Demo/Team        | folder |
-      | /links/Nested     | folder |
-      | /Shared/Quarterly | folder |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
       | Shared         | Shared    | sync | team folder  | admin  |
-    And Grafana and Nextcloud are in sync
+    And the following items in the mappings:
+      | path              |
+      | /Demo/Team        |
+      | /Pointers/Nested  |
+      | /Shared/Quarterly |
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background

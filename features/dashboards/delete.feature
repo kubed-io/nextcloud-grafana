@@ -73,7 +73,7 @@ Feature: Trashing a dashboard file
     Then the Grafana folder "Team" is still under "Demo"
     And it holds no dashboards
     And "Demo/Team" holds:
-      | grafana_folder_uid | the uid it had before the delete |
+      | grafana_folder_uid | the original id |
 
     # Emptying is not deleting. A dashboard made here later lands in the folder both
     # sides already agree on, instead of minting a second one beside it.

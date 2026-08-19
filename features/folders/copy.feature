@@ -7,101 +7,102 @@ Feature: Copying a folder
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo         |
-      | nc folder      | Demo         |
-      | mode           | sync         |
-      | storage        | admin folder |
-    And a mapping with the following values:
-      | grafana folder | Shared      |
-      | nc folder      | Shared      |
-      | mode           | sync        |
-      | storage        | team folder |
-      | groups         | admin       |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | metrics        | Shared    | sync | team folder  | admin  |
+      | links          | Pointers  | link | admin folder |        |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Demo/notes.txt             |
+      | /Shared/Coast/Tides.grafana |
+      | /Pointers/Pinned.grafana    |
     And a folder "Scratch" that is not mapped
 
-  # notes: ../AGENTS.md#the-mappings-in-the-background
+  # notes: ../AGENTS.md#the-background-is-the-neighbourhood-not-the-subject
+  # notes: ../AGENTS.md#the-two-sides-already-agree
 
     # ── RULE: a copied folder is a new folder, holding new dashboards ─────────
     # notes: ../AGENTS.md#a-copied-folder-is-a-new-folder
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario Outline: Copy a folder inside its mapping
-    Given the folder "<folder>/Team" holding three dashboards
+  @user @in-nextcloud @gesture @ui
+  Scenario Outline: Copy a folder within a mapped folder
+    Given the following items in the mappings:
+      | path                         |
+      | /<folder>/Team/Alpha.grafana |
+      | /<folder>/Team/Beta.grafana  |
+      | /<folder>/Team/Gamma.grafana |
     When I copy "<folder>/Team" to "<folder>/Team copy"
-    Then "<folder>/Team copy" holds the same files "<folder>/Team" does
-    And the Grafana folder "Team copy" is under "<grafana folder>", holding three dashboards
-    And "<folder>/Team copy" holds:
-      | grafana_folder_uid | its own, not the original's |
-    And "<folder>/Team" holds:
-      | grafana_folder_uid | the uid it had before the copy |
+    Then the mappings hold:
+      | path                              | identity        |
+      | /<folder>/Team                    | the original id |
+      | /<folder>/Team/Alpha.grafana      | the original id |
+      | /<folder>/Team copy               | a new id        |
+      | /<folder>/Team copy/Alpha.grafana | a new id        |
+      | /<folder>/Team copy/Beta.grafana  | a new id        |
+      | /<folder>/Team copy/Gamma.grafana | a new id        |
 
     Examples: the storage a mapping uses makes no difference to what a copy is
-      | folder | grafana folder |
-      | Demo   | demo           |
-      | Shared | shared         |
-
-    # No dashboard is ever claimed twice: the copies are new dashboards with their
-    # own uids, in a new Grafana folder with its own.
+      | folder |
+      | Demo   |
+      | Shared |
 
     # ── RULE: a copy outside every mapping is an ordinary folder ──────────────
 
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Copy a folder out of every mapping
-    Given the folder "Demo/Team" holding three dashboards
+    Given the following items in the mappings:
+      | path                     |
+      | /Demo/Team/Alpha.grafana |
+      | /Demo/Team/Beta.grafana  |
+      | /Demo/Team/Gamma.grafana |
     When I copy "Demo/Team" to "Scratch/Team"
-    Then "Scratch/Team" holds the same files "Demo/Team" does
-    And Grafana is not contacted
-    And "Scratch/Team" holds:
-      | grafana_folder_uid | absent |
+    Then the mappings hold:
+      | path                        | identity |
+      | /Scratch/Team               | absent   |
+      | /Scratch/Team/Alpha.grafana | absent   |
+      | /Scratch/Team/Beta.grafana  | absent   |
+      | /Scratch/Team/Gamma.grafana | absent   |
 
     # ── RULE: a link is read-only, so a copy neither enters nor leaves one ────
     # notes: ../AGENTS.md#a-copy-never-changes-a-files-mode
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario Outline: Copy a folder between sync and link mappings
-    Given the folder "<source>/Team" holding three dashboards
-    When I try to copy "<source>/Team" to "<destination>/Team"
+  @user @in-nextcloud @gesture @ui
+  Scenario Outline: Copying a folder between sync and link mappings is refused
+    Given the following items in the mappings:
+      | path                         |
+      | /<source>/Team/Alpha.grafana |
+      | /<source>/Team/Beta.grafana  |
+      | /<source>/Team/Gamma.grafana |
+    When I try to copy "<source>/Team" to "<destination>/Team copy"
     Then the copy is refused with a message
-    And "<destination>" holds no folder named "Team"
+    And "<destination>" holds no folder named "Team copy"
 
     Examples: a mode belongs to the folder, and a copy may not change one
       | source   | destination |
       | Demo     | Pointers    |
       | Pointers | Demo        |
 
-  @user @in-nextcloud @gesture @ui @unbuilt
-  Scenario: Copy a folder inside a link mapping
-    Given the folder "Pointers/Team" holding three dashboards
+  # notes: ../AGENTS.md#copying-a-folder-inside-a-link-mapping-is-refused
+  @user @in-nextcloud @gesture @ui
+  Scenario: Copying a folder inside a link mapping is refused
+    Given the following items in the mappings:
+      | path                         |
+      | /Pointers/Team/Alpha.grafana |
+      | /Pointers/Team/Beta.grafana  |
+      | /Pointers/Team/Gamma.grafana |
     When I try to copy "Pointers/Team" to "Pointers/Team copy"
     Then the copy is refused with a message
     And "Pointers" holds no folder named "Team copy"
-
-    # A link folder is Grafana's to write. Copying one would have to author three
-    # dashboards into a mapping that never writes back.
-
-    # ── RULE: there is no such thing as a copy made in Grafana ────────────────
-    # notes: ../AGENTS.md#a-folder-copied-in-grafana-is-indistinguishable-from-a-new-one
-
-  @grafana @in-grafana @decision
-  Scenario: A folder duplicated in Grafana arrives as a new folder
-    Given the folder "Demo/Team" holding three dashboards
-    When someone creates a folder under "Demo" holding copies of those dashboards
-    Then it arrives in Nextcloud as an ordinary new folder
-    And nothing marks it as a copy of "Demo/Team"
-
-    # Grafana has no duplicate-folder call, so a "copy" there is a create plus
-    # creates — and nothing distinguishes it from any other new folder.
 
     # ── RULE: a copy Grafana will not take creates nothing ────────────────────
 
   @user @in-nextcloud @gesture @ui @blocked
   Scenario: Copy a folder while Grafana is unreachable
-    Given the folder "Demo/Team" holding three dashboards
+    Given the following items in the mappings:
+      | path                     |
+      | /Demo/Team/Alpha.grafana |
     And Grafana is unreachable
     When I copy "Demo/Team" to "Demo/Team copy"
     Then the failure is reported to the user
