@@ -854,6 +854,30 @@ The test of a Background row: *would deleting this change what any scenario
 asserts?* If yes it is the subject and belongs in the scenario. If no it is the
 neighbourhood, and a spec with no neighbourhood is testing a laboratory.
 
+### A folder copy fires once, for the folder
+
+Nextcloud satisfies a recursive copy SERVER-SIDE and raises a single
+`NodeCopiedEvent` for the node the user named. The files inside it get no event of
+their own — and `CopyListener` only ever recognised dashboard FILES, so
+duplicating a folder did **nothing at all**: the copies kept the originals'
+inherited stamps, no new dashboards were made, and no Grafana folder was created
+to hold them.
+
+Nothing said so. `folders/copy.feature` was `@unbuilt` from the day it was
+written, so the first time anything asked the question was the first time it ran —
+`expected a folder uid of its own, found nothing`, which is the copy that never
+happened.
+
+The listener walks the copied tree now, and each file goes through the same
+`onCopy` a single-file copy uses. **The Grafana folder appears as a consequence**
+of the first dashboard landing in it rather than needing a step of its own, which
+is the rule `folders/create.feature` already states: a folder is in Grafana when a
+dashboard is in it. Nothing in `CopyService` changed.
+
+It is also why the same walk is needed on the guard side — see
+[copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
+One recursive gesture, one event, two places that have to look inside it.
+
 ### Copying a folder inside a link mapping is refused
 
 **Two situations get here and only one of them is ours.**

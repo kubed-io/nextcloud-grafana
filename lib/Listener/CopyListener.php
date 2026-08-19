@@ -16,6 +16,9 @@ use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeCopiedEvent;
+use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\Node;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -44,22 +47,62 @@ final class CopyListener implements IEventListener {
 			return; // our own writes never re-enter
 		}
 		$node = $event->getTarget();
-		if (!FilenameCodec::isDashboardFile($node)) {
-			return;
-		}
-		/** @var \OCP\Files\File $node — isDashboardFile guarantees a File */
 
+		// A FOLDER COPY FIRES ONCE, FOR THE FOLDER. Nextcloud satisfies a recursive
+		// copy server-side and raises a single `NodeCopiedEvent` for the node the user
+		// named — the files inside it get no event of their own. So this listener,
+		// which only ever recognised dashboard FILES, did nothing at all when someone
+		// duplicated a folder: the copies kept the originals' inherited stamps, no new
+		// dashboards were made, and no Grafana folder was created to hold them.
+		//
+		// Walking is the whole fix. Each file goes through the same `onCopy` a
+		// single-file copy uses, and the Grafana folder appears as a CONSEQUENCE of the
+		// first dashboard landing in it ({@see \OCA\GrafanaSync\Service\FolderMirror})
+		// rather than needing a step of its own — which is the same rule
+		// `folders/create.feature` states: a folder is in Grafana when a dashboard is.
+		foreach ($this->dashboardFilesIn($node) as $file) {
+			try {
+				$this->copyService->onCopy($file);
+			} catch (\Throwable $e) {
+				// The NC copy already happened; a failed registration is just an untracked
+				// .grafana the user can re-save to retry. Log, never rethrow — and never
+				// let one file stop the rest of a copied folder from registering.
+				$this->logger->warning('grafana_sync copy handling failed', [
+					'app' => Application::APP_ID,
+					'fileId' => $file->getId(),
+					'path' => $file->getPath(),
+					'exception' => $e,
+				]);
+			}
+		}
+	}
+
+	/**
+	 * The dashboard files a copy produced: the node itself, or every one beneath it.
+	 *
+	 * @return list<File>
+	 */
+	private function dashboardFilesIn(Node $node): array {
+		if ($node instanceof File) {
+			return FilenameCodec::isDashboardFile($node) ? [$node] : [];
+		}
+		if (!$node instanceof Folder) {
+			return [];
+		}
+		$out = [];
 		try {
-			$this->copyService->onCopy($node);
+			foreach ($node->getDirectoryListing() as $child) {
+				$out = [...$out, ...$this->dashboardFilesIn($child)];
+			}
 		} catch (\Throwable $e) {
-			// The NC copy already happened; a failed registration is just an untracked
-			// .grafana the user can re-save to retry. Log, never rethrow.
-			$this->logger->warning('grafana_sync copy handling failed', [
+			// A folder we cannot list leaves its copies untracked, which is the same
+			// outcome as before this walk existed — never a failed copy.
+			$this->logger->warning('grafana_sync: could not walk a copied folder', [
 				'app' => Application::APP_ID,
-				'fileId' => $node->getId(),
 				'path' => $node->getPath(),
 				'exception' => $e,
 			]);
 		}
+		return $out;
 	}
 }
