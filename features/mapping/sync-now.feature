@@ -15,14 +15,14 @@ Feature: Syncing one mapping from its card
       | /links/Pinned         | dashboard | dns, linux |
       | /links/Region         | folder    |            |
       | /links/Region/Deeper  | dashboard | latency    |
-      | /Shared/Coastline     | dashboard | dns, linux |
-      | /Shared/Region        | folder    |            |
-      | /Shared/Region/Tides  | dashboard | latency    |
+      | /metrics/Coastline    | dashboard | dns, linux |
+      | /metrics/Region       | folder    |            |
+      | /metrics/Region/Tides | dashboard | latency    |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Alpha          | Alpha     | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | Shared         | Shared    | sync | team folder  | admin  |
+      | metrics        | Shared    | sync | team folder  | admin  |
 
   # notes: ../AGENTS.md#three-mappings-shaped-alike
   # None has been synced, so all three mapped folders start empty.

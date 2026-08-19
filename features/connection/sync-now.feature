@@ -18,9 +18,9 @@ Feature: Syncing every mapping
       | /links/Pinned              | dashboard | reference  |
       | /links/Nested              | folder    |            |
       | /links/Nested/Deeper       | dashboard |            |
-      | /Shared/Shared Demo        | dashboard | ops        |
-      | /Shared/Coast              | folder    |            |
-      | /Shared/Coast/Tides        | dashboard |            |
+      | /metrics/Metrics Demo      | dashboard | ops        |
+      | /metrics/Coast             | folder    |            |
+      | /metrics/Coast/Tides       | dashboard |            |
     And Nextcloud holds these resources:
       | path                         | tags    |
       | /Alpha/notes.txt             | reading |
@@ -32,7 +32,7 @@ Feature: Syncing every mapping
       | grafana folder | nc folder | mode | storage      | groups |
       | Alpha          | Alpha     | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | Shared         | Shared    | sync | team folder  | admin  |
+      | metrics        | Shared    | sync | team folder  | admin  |
 
   # notes: ../AGENTS.md#a-background-is-a-picture-not-a-story
   # The two sides do not agree yet, and the Background never says why they don't.
@@ -58,7 +58,7 @@ Feature: Syncing every mapping
       | /Pointers/Pinned.grafana           | reference  |
       | /Pointers/Nested                   |            |
       | /Pointers/Nested/Deeper.grafana    |            |
-      | /Shared/Shared Demo.grafana        | ops        |
+      | /Shared/Metrics Demo.grafana       | ops        |
       | /Shared/Coast                      |            |
       | /Shared/Coast/Tides.grafana        |            |
 
@@ -79,7 +79,7 @@ Feature: Syncing every mapping
       | path                  |
       | /Alpha/Alpha Demo     |
       | /Alpha/Region/Latency |
-      | /Shared/Coast/Tides   |
+      | /metrics/Coast/Tides  |
     When the admin syncs every mapping to Grafana
     Then each of those dashboards in Grafana holds its file's panels
 

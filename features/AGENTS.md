@@ -1489,19 +1489,29 @@ concession every mode makes is that other file types may live alongside the
 dashboards, and a Background that only ever shows `.grafana` files quietly forgets
 it.
 
-### Case is not a meaning, and I broke that rule
+### A mapping may rename its folder, and should be seen doing it
 
-The mapping tables said `alpha` → `Alpha` and `shared` → `Shared` for a while,
-which is exactly what
-[a subfolder shares its name with Grafana exactly](#a-subfolder-shares-its-name-with-grafana-exactly-case-included)
-was written to stop. Twenty files once paired `demo` with `Demo`, a reader could
-not tell a deliberate difference from a typo, and the fix was to leave exactly one
-differing pair in the suite — `links` ↔ `Pointers` — where the difference is
-obviously on purpose.
+**Renaming is a feature, not an exception.** A mapping pairs a Grafana folder with
+a Nextcloud one and the two names are free to differ — that is half of what a
+mapping IS, and a suite where every pair is identical quietly teaches the opposite.
+So the Backgrounds show it in both modes and both storages: `links` → `Pointers`
+in link mode on an admin folder, `metrics` → `Shared` in sync mode on a Team
+Folder. The third mapping pairs identical names, because that is also normal.
 
-Writing new Backgrounds in `connection/sync-now`, `mapping/sync-now` and
-`folders/create` put the case-only pairs straight back. They are identical strings
-again. The rule survives contact only if it is applied to new work as well as old.
+**What is forbidden is a difference that means nothing.** `alpha` → `Alpha` and
+`shared` → `Shared` are not demonstrating the feature, they are noise a reader has
+to stop and squint at — is that deliberate, or did someone typo the Background? —
+directly above subfolders that must agree exactly. Twenty files once paired `demo`
+with `Demo` and this was the fix; writing new Backgrounds put case-only pairs
+straight back in, and they are gone again.
+
+Say it as one rule rather than two: **if two names differ, the difference must
+carry information.** `metrics` → `Shared` does. `shared` → `Shared` does not.
+
+And below the mapping, nothing renames at all —
+[a subfolder shares its name with Grafana exactly](#a-subfolder-shares-its-name-with-grafana-exactly-case-included).
+`/metrics/Coast/Tides` mirrors to `/Shared/Coast/Tides.grafana`: the mapped folder
+is renamed, `Coast` and `Tides` are not.
 
 ### Grafana owns the tree
 

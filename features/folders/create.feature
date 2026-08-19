@@ -8,11 +8,11 @@ Feature: Creating a folder
   Background:
     Given the app is connected to Grafana
     And Grafana holds these resources:
-      | path             | type   |
-      | /nextcloud-trash | folder |
-      | /Demo/Existing   | folder |
-      | /links/Existing  | folder |
-      | /Shared/Existing | folder |
+      | path              | type   |
+      | /nextcloud-trash  | folder |
+      | /Demo/Existing    | folder |
+      | /links/Existing   | folder |
+      | /metrics/Existing | folder |
     And Nextcloud holds these resources:
       | path              |
       | /Scratch          |
@@ -22,7 +22,7 @@ Feature: Creating a folder
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | Shared         | Shared    | sync | team folder  | admin  |
+      | metrics        | Shared    | sync | team folder  | admin  |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
     And Grafana and Nextcloud are in sync
 
@@ -91,7 +91,7 @@ Feature: Creating a folder
       | Demo/Existing/Nubs  | Demo/Existing/Nubs     |
       | links/Bubbles       | Pointers/Bubbles       |
       | links/Existing/Nubs | Pointers/Existing/Nubs |
-      | Shared/Deep/Down    | Shared/Deep/Down       |
+      | metrics/Deep/Down   | Shared/Deep/Down       |
 
     # notes: ../AGENTS.md#grafana-owns-the-tree
 
