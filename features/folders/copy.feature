@@ -7,14 +7,26 @@ Feature: Copying a folder
 
   Background:
     Given the app is connected to Grafana
+    And Grafana holds these resources:
+      | path                 | type      | tags      |
+      | /Demo/Overview       | dashboard | strategic |
+      | /metrics/Coast       | folder    |           |
+      | /metrics/Coast/Tides | dashboard |           |
+      | /links/Pinned        | dashboard | reference |
+    And Nextcloud holds these resources:
+      | path            |
+      | /Demo/notes.txt |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | metrics        | Shared    | sync | team folder  | admin  |
       | links          | Pointers  | link | admin folder |        |
+    And Grafana and Nextcloud are in sync
     And a folder "Scratch" that is not mapped
 
+  # notes: ../AGENTS.md#the-background-is-the-neighbourhood-not-the-subject
   # notes: ../AGENTS.md#the-mappings-in-the-background
+  # None of this is copied; it is what the mappings look like before anyone does.
 
     # ── RULE: a copied folder is a new folder, holding new dashboards ─────────
     # notes: ../AGENTS.md#a-copied-folder-is-a-new-folder

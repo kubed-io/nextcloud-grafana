@@ -781,6 +781,34 @@ checks that neither the titles nor the names moved. A scenario saying "and sync
 again" out loud would be narrating the app's plumbing; `still` already means the
 state held.
 
+### The Background is the neighbourhood, not the subject
+
+`folders/copy.feature` went through both mistakes before landing here, and the
+pair of them is the lesson.
+
+**First everything was in the Background** — the mappings AND the `Team` folder
+each scenario copies, three dashboards apiece, twelve rows. Every scenario then
+opened on a bare `When`, which reads as though nothing had been arranged, and the
+thing under test was buried in setup a reader had to go looking for.
+
+**Then nothing was.** Stripped back to mappings alone, the Background stopped
+describing an instance at all: three mappings over an empty Grafana, which is not
+what anybody's Grafana looks like and gives the gesture nothing to happen
+alongside.
+
+What belongs in each:
+
+| the Background | the scenario's own `Given` |
+|---|---|
+| the mappings, varied across mode and storage | the folder about to be copied |
+| dashboards and folders NOBODY touches | the dashboards inside it |
+| a non-dashboard file, because a mapped folder is still a folder | |
+| an unmapped folder to copy out to | |
+
+The test of a Background row: *would deleting this change what any scenario
+asserts?* If yes it is the subject and belongs in the scenario. If no it is the
+neighbourhood, and a spec with no neighbourhood is testing a laboratory.
+
 ### Copying a folder inside a link mapping is refused
 
 **Two situations get here and only one of them is ours.**
