@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Files\File;
+use OCP\Files\Folder;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -53,6 +54,8 @@ final class MotionService {
 		private GrafanaClient $grafana,
 		private FolderMirror $folderMirror,
 		private RecycleBin $recycleBin,
+		private ReplacedByMoveStore $replaced,
+		private CreateService $createService,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -165,8 +168,59 @@ final class MotionService {
 			return;
 		}
 
+		// AN OVERWRITE INHERITS THE IDENTITY IT LANDED ON, rather than imposing its own.
+		// See {@see ReplacedByMoveStore} for why: letting the arrival keep its uid leaves
+		// the destination's dashboard live in this mapping's Grafana folder with no file —
+		// so the next pull writes it back as `foo (1).grafana` beside the file that
+		// replaced it, and one overwrite has forked the mapping. Replacing a file's
+		// CONTENTS is what the user asked for; replacing what it points at is not.
+		$uid = $managed->uid;
+		$adopted = $this->replaced->adoptedUid($node->getId());
+		if ($adopted !== null && $adopted !== $uid) {
+			$this->logger->info('grafana_sync motion: an overwrite inherits the dashboard it replaced', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'arrivedWith' => $uid,
+				'adopted' => $adopted,
+			]);
+			$this->bindTo($node, $adopted, $to);
+			return;
+		}
+
+		// TWO FILES, ONE UID, IS NOT A STATE THIS MAPPING MAY REACH. Answer "keep both
+		// versions" and the Files app moves the arrival in under a FREE name — an
+		// ordinary move-in, no overwrite, no mark — while it still carries the uid of the
+		// file it was duplicated from. Binding it to that uid would push the arrival's
+		// body over the dashboard the other file mirrors and leave two files claiming
+		// one dashboard, which is the fork this whole mechanism exists to prevent. The
+		// person asked to keep both; a second file is only "both" if it is a second
+		// dashboard, so the arrival is born as its own.
+		if ($this->hasSyncedSibling($node, $uid)) {
+			$this->logger->info('grafana_sync motion: move-in duplicate of an already-mirrored dashboard; minting a new one', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'fileId' => $node->getId(),
+			]);
+			$this->createService->createForFile($node, $to, true);
+			return;
+		}
+
+		$this->bindTo($node, $uid, $to);
+	}
+
+	/**
+	 * Point $node at dashboard $uid inside mapping $to: push the file's body there and
+	 * stamp the file to agree.
+	 *
+	 * PUBLIC BECAUSE AN OVERWRITE CAN ARRIVE CARRYING NOTHING. A copy does not inherit
+	 * the metadata row, so dragging a copied `.grafana` over a synced file lands in
+	 * create-on-land rather than here — and create-on-land must be able to hand the file
+	 * to this instead of minting a second dashboard beside the one it replaced.
+	 * {@see \OCA\GrafanaSync\Listener\CreateInGrafanaListener} is that caller.
+	 */
+	public function bindTo(File $node, string $uid, Mapping $to): void {
 		$spec = $this->decodeSpec($node->getContent());
-		$spec->uid = $managed->uid; // identity is the metadata uid, never the file's typed value
+		$spec->uid = $uid; // identity is the metadata uid, never the file's typed value
 		// THE SUBFOLDER, NOT THE MAPPING ROOT. Using $to->grafanaFolderUid put a file
 		// dragged into another mapping's subfolder at that mapping's top level, which
 		// is the same bug the same-mapping path had — one rule, so one resolution.
@@ -178,7 +232,10 @@ final class MotionService {
 		// mapping still claiming to be unmapped — which every later gesture reads to
 		// decide what it may do. The upsert above already moved the dashboard out of the
 		// bin folder and into this mapping's; the stamp has to agree with it.
+		// THE UID IS WRITTEN TOO, because an overwrite may have changed it. For every
+		// other move-in it is the value already stamped and this is a no-op.
 		$update = [
+			DashboardMetadata::KEY_UID => $uid,
 			DashboardMetadata::KEY_MAPPING => $to->id,
 			DashboardMetadata::KEY_MODE => $to->mode,
 			DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? '',
@@ -188,6 +245,33 @@ final class MotionService {
 			$update[DashboardMetadata::KEY_VERSION] = $version;
 		}
 		$this->guard->run(fn () => $this->metadata->write($node->getId(), $update));
+	}
+
+	/**
+	 * Does another file in the same folder already mirror this dashboard?
+	 *
+	 * The incoming file is skipped by id, not by path: at this point it is sitting in
+	 * the folder it just arrived in, so a path comparison would have to know which of
+	 * two spellings the event used.
+	 */
+	private function hasSyncedSibling(File $node, string $uid): bool {
+		if ($uid === '') {
+			return false;
+		}
+		$parent = $node->getParent();
+		if (!$parent instanceof Folder) {
+			return false;
+		}
+		foreach ($parent->getDirectoryListing() as $sibling) {
+			if ($sibling->getId() === $node->getId() || !FilenameCodec::isDashboardFile($sibling)) {
+				continue; // skip the incoming file itself and anything not a dashboard file
+			}
+			$managed = $this->metadata->read($sibling->getId());
+			if ($managed !== null && $managed->uid === $uid) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

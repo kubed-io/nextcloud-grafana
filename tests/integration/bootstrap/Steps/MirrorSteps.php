@@ -532,6 +532,22 @@ trait MirrorSteps {
 				return $actual === $this->lastUid
 					? null
 					: "expected the uid it already had ({$this->lastUid}), found '{$actual}'";
+			case 'the uid the destination already had':
+				// AN OVERWRITE REPLACES CONTENTS, NOT IDENTITY. The uid is the destination's
+				// and the arrival inherits it, so this is the claim that one overwrite did
+				// not quietly fork the mapping into two dashboards.
+				//
+				// Against the value the arrange pinned BEFORE the gesture, for the same
+				// reason `its own, not the one it arrived with` is: the surviving file is
+				// the one being read, so a baseline taken now would be compared with itself.
+				if ($this->destinationUidBefore === '') {
+					throw new \RuntimeException(
+						"'{$expected}' needs the uid the destination held; no arrange step captured one",
+					);
+				}
+				return $actual === $this->destinationUidBefore
+					? null
+					: "expected the uid the destination already had ({$this->destinationUidBefore}), found '{$actual}'";
 			case "the mapping's id":
 				$folder = trim(dirname($path), '/.');
 				$want = $this->mappingIdForNcFolder($folder);

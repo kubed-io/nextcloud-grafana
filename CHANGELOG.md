@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Answering "keep the new version" when a dashboard file lands on one that already exists no longer deletes the dashboard being replaced. The arrival takes over the dashboard that was already there and contributes only its contents, so one overwrite can no longer leave a second dashboard behind for the next sync to write back beside it.
+- Keeping BOTH versions of such a collision now gives the arriving file its own dashboard, instead of pointing two files at one.
 - Restoring a dashboard file with the recycle bin off rebuilt the dashboard at the id the delete had just destroyed, rather than making a new one — the file's body carries that id inside it.
 - Dragging a dashboard back out of the recycle-bin folder in Grafana now brings its trashed file back, instead of leaving a second copy beside a trash entry for the original.
 - Restoring a dashboard file from a Team Folder's trash never reached Grafana: with the recycle bin on the dashboard stayed parked, and the next sync trashed the file again — restore, wait, watch it vanish. It comes back properly now.

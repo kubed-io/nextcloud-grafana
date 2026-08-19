@@ -14,6 +14,7 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\RecycleBin;
+use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -44,6 +45,7 @@ final class DeleteToGrafanaListener implements IEventListener {
 		private DeleteService $deleteService,
 		private DashboardMetadata $metadata,
 		private RecycleBin $recycleBin,
+		private ReplacedByMoveStore $replaced,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -62,6 +64,26 @@ final class DeleteToGrafanaListener implements IEventListener {
 			return;
 		}
 		/** @var \OCP\Files\File $node — isDashboardFile guarantees a File */
+
+		// AN OVERWRITE IS NOT A DELETE, and this is the only place that can know.
+		// Sabre performs a MOVE onto an existing name as `tree->delete($destination)`
+		// followed by the move, so the file being REPLACED arrives here looking exactly
+		// like one a user asked to delete. It is not: the user answered "keep the new
+		// version" in a conflict dialog, and the dashboard they kept must stay live.
+		// {@see \OCA\GrafanaSync\DAV\ReplacedByMovePlugin} marks it from sabre's
+		// `beforeMove`, which fires while both halves are still one gesture.
+		//
+		// BEFORE THE STAMP IS EVEN READ, because with the recycle bin off the branch
+		// below destroys the dashboard and Grafana has no undelete. There is no later
+		// step that could undo a wrong answer here.
+		if ($this->replaced->isReplaced($node->getId())) {
+			$this->logger->info('grafana_sync delete: this file is being replaced by a move, not deleted', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'file' => $node->getName(),
+			]);
+			return;
+		}
 
 		$managed = $this->metadata->read($node->getId());
 		if (!$managed?->isManaged()) {

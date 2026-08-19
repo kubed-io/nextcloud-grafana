@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Listener;
 
 use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\GrafanaSync\DAV\LinkWriteGuardPlugin;
+use OCA\GrafanaSync\DAV\ReplacedByMovePlugin;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 
@@ -21,6 +22,11 @@ use OCP\EventDispatcher\IEventListener;
  * is the supported seam for a third-party app to register its own Sabre plugin. Our plugin
  * then refuses WebDAV writes to link-mode dashboard files (see its class doc for why the
  * Sabre layer is the only reliable choke for that).
+ *
+ * {@see ReplacedByMovePlugin} rides along for a different reason: it refuses nothing and
+ * only WATCHES, marking a dashboard file that a MOVE is about to overwrite so the delete
+ * half of that overwrite does not reach Grafana. `beforeMove` is the only moment anything
+ * knows the delete and the move are one gesture, and Sabre is the only layer that fires it.
  *
  * A SECOND PLUGIN LIVED HERE BRIEFLY AND HAD TO GO. `CopyNamePlugin` rewrote a COPY's
  * `Destination` header so a colliding copy was born under our spelling rather than
@@ -34,6 +40,7 @@ use OCP\EventDispatcher\IEventListener;
 final class RegisterDavPluginsListener implements IEventListener {
 	public function __construct(
 		private LinkWriteGuardPlugin $linkWriteGuard,
+		private ReplacedByMovePlugin $replacedByMove,
 	) {
 	}
 
@@ -42,6 +49,8 @@ final class RegisterDavPluginsListener implements IEventListener {
 		if (!$event instanceof SabrePluginAddEvent) {
 			return;
 		}
-		$event->getServer()->addPlugin($this->linkWriteGuard);
+		$server = $event->getServer();
+		$server->addPlugin($this->linkWriteGuard);
+		$server->addPlugin($this->replacedByMove);
 	}
 }

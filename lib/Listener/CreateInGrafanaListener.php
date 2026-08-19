@@ -16,6 +16,8 @@ use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MotionService;
+use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
@@ -62,6 +64,8 @@ final class CreateInGrafanaListener implements IEventListener {
 	public function __construct(
 		private CreateService $createService,
 		private MappingService $mappings,
+		private MotionService $motion,
+		private ReplacedByMoveStore $replaced,
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
 		private IUserSession $userSession,
@@ -93,6 +97,37 @@ final class CreateInGrafanaListener implements IEventListener {
 		$managed = $this->metadata->read($node->getId());
 		if ($managed?->isManaged()) {
 			return; // already tracked — the writeback listener owns it
+		}
+
+		// AN OVERWRITE INHERITS, IT DOES NOT CREATE — even from a file that arrived
+		// carrying nothing. A copied `.grafana` has no `grafana_uid` (a copy does not
+		// inherit the metadata row), so dragging one over a synced file lands here rather
+		// than in {@see \OCA\GrafanaSync\Service\MotionService::onMove}. Create-on-land
+		// would mint a second dashboard and leave the one the file replaced live in this
+		// mapping's Grafana folder and file-less — which the next pull writes back beside
+		// it, as `foo (1).grafana`.
+		//
+		// The rule is the same whatever the arrival carried: the destination's identity
+		// survives and the arrival contributes only its body. `bindTo` already knows how
+		// to do that, so this hands over rather than repeating it.
+		$adopted = $this->replaced->adoptedUid($node->getId());
+		if ($adopted !== null) {
+			$this->logger->info('grafana_sync create-on-land: an overwrite inherits the dashboard it replaced', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'uid' => $adopted,
+			]);
+			try {
+				$this->motion->bindTo($node, $adopted, $mapping);
+			} catch (\Throwable $e) {
+				$this->logger->warning('grafana_sync create-on-land: inheriting the replaced dashboard failed', [
+					'app' => Application::APP_ID,
+					'fileId' => $node->getId(),
+					'uid' => $adopted,
+					'exception' => $e,
+				]);
+			}
+			return;
 		}
 
 		try {
