@@ -28,7 +28,7 @@ Feature: Creating a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Create a new dashboard in a mapped folder
-    When I create a new dashboard in "<nc folder>" via the Files "New" menu
+    When I create a new dashboard in "<nc folder>"
     Then a matching dashboard is created in Grafana
     And the dashboard is named after the file, in the "<grafana folder>" Grafana folder
     And "<nc folder>/New dashboard.grafana" holds:
@@ -50,8 +50,9 @@ Feature: Creating a dashboard
 
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a dashboard in Grafana
-    When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
-    Then "<nc folder>/CPU Load.grafana" holds:
+    When someone creates a dashboard in the "<grafana folder>" Grafana folder
+    Then a matching file is created in "<nc folder>"
+    And the file holds:
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | the mapping's id    |
       | grafana_mode       | "<mode>"            |
@@ -74,14 +75,14 @@ Feature: Creating a dashboard
 
   @user @in-nextcloud @gesture @ui
   Scenario: Create an unmapped dashboard
-    When I create a new dashboard in "Scratch" via the Files "New" menu
+    When I create a new dashboard in "Scratch"
     Then no dashboard is created in Grafana
     And "Scratch/New dashboard.grafana" holds no Grafana metadata at all
 
   # notes: ../AGENTS.md#a-link-mapping-authors-nothing
   @user @in-nextcloud @gesture @ui
   Scenario Outline: Creating a dashboard in a link-mapped folder is refused
-    When I try to create a new dashboard in "<nc folder>" via the Files "New" menu
+    When I try to create a new dashboard in "<nc folder>"
     Then the creation is refused with a message
 
     Examples: a link folder is Grafana's to write, at every depth

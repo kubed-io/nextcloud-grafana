@@ -152,32 +152,6 @@ trait LifecycleSteps {
 	// ── create ────────────────────────────────────────────────────────────────
 
 	/**
-	 * Create a file in a folder the scenario NAMES.
-	 *
-	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-	 * server cannot tell the two apart, and it is the PUT that fires the listener.
-	 * Both phrasings are therefore one method — the menu is how a person describes
-	 * it, not a second code path.
-	 *
-	 * @When I create :filename in :folder via the Files "New" menu
-	 * @When I create :filename in :folder
-	 */
-	public function iCreateTheFileIn(string $filename, string $folder): void {
-		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
-		$this->currentFolder = $folder;
-		$this->putDashboardFile($folder, $stem);
-
-		// CAPTURE THE UID THE APP MINTED. Creating is the one gesture where the
-		// dashboard did not exist until now, so nothing else in the scenario can know
-		// its id — and every later "the dashboard ..." assertion resolves through it.
-		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
-		if ($uid !== '') {
-			$this->lastUid = $uid;
-			$this->createdDashboardUids[] = $uid;
-		}
-	}
-
-	/**
 	 * The dashboard's name AND its folder, as one claim — they are one sentence
 	 * about where the new dashboard ended up, and splitting them said the same
 	 * thing twice. The name comes from the filename, because that is what the user
@@ -202,11 +176,34 @@ trait LifecycleSteps {
 		// cannot be compared against the uid directly the way a top-level folder can —
 		// there the arrange sets uid == title, which is the only reason this ever
 		// worked. Resolve the path first and compare uid to uid.
-		$want = $this->grafanaFolderUidByTitle($folder) ?? $folder;
+		// A PATH IS NEVER A UID, so falling back to the literal for one would hand the
+		// comparison a string that cannot match and report "landed in the wrong folder"
+		// for a folder that was simply not found. A single name still falls back,
+		// because the mapping table stores those as the uid verbatim.
+		$want = $this->grafanaFolderUidByTitle($folder);
+		if ($want === null) {
+			if (str_contains($folder, '/')) {
+				throw new \RuntimeException("Grafana has no folder at '$folder'");
+			}
+			$want = $folder;
+		}
 		$got = (string)$this->dashboardFolderUid($this->lastUid);
 		if ($got !== $want) {
 			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder' ($want)");
 		}
+	}
+
+	/**
+	 * @When /^I create the folder "([^"]*)"$/
+	 *
+	 * A PLAIN MKCOL, which is the whole point: the folder is made and nothing is put
+	 * in it. Every path that mirrors a folder into Grafana hangs off a DASHBOARD —
+	 * create, push, delete, move — so an empty folder should reach none of them, and
+	 * this is the gesture that says so.
+	 */
+	public function iCreateTheFolder(string $folder): void {
+		$this->davMkdir($folder);
+		$this->currentFolder = $folder;
 	}
 
 	/**
@@ -219,10 +216,14 @@ trait LifecycleSteps {
 	 * move, a copy, or an edit, and those are different gestures with their own
 	 * features.
 	 *
-	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-	 * server cannot tell the two apart, and it is the PUT that fires the listener.
+	 * THE MEDIUM IS NOT PART OF THE GESTURE. The step used to say "via the Files
+	 * 'New' menu", which is one way to reach it and not the only one: a desktop
+	 * client, a script, `occ`, or a plain WebDAV PUT all arrive at the same place,
+	 * and the server cannot tell them apart — it is the PUT that fires the listener.
+	 * Naming the browser affordance in the spec made a rule about dashboards read
+	 * like a rule about a menu.
 	 *
-	 * @When I create a new dashboard in :folder via the Files "New" menu
+	 * @When I create a new dashboard in :folder
 	 */
 	public function iCreateANewDashboardIn(string $folder): void {
 		$this->currentFolder = $folder;
@@ -241,7 +242,7 @@ trait LifecycleSteps {
 	/**
 	 * The same gesture, asked of a folder that must refuse it.
 	 *
-	 * @When I try to create a new dashboard in :folder via the Files "New" menu
+	 * @When I try to create a new dashboard in :folder
 	 */
 	public function iTryToCreateANewDashboardIn(string $folder): void {
 		// THE FOLDER HAS TO EXIST FIRST, and this step did not make it. A link mapping's
@@ -271,13 +272,6 @@ trait LifecycleSteps {
 		if ($this->davExists($this->attemptedCreatePath)) {
 			throw new \RuntimeException("a file arrived at {$this->attemptedCreatePath} despite the refusal");
 		}
-	}
-
-	/** @When I create a new :ext file in that folder via the Files "New" menu */
-	public function iCreateANewFileViaTheNewMenu(string $ext): void {
-		// The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-		// server cannot tell the two apart, and it is the PUT that fires the listener.
-		$this->putDashboardFile($this->currentFolder, 'New Board ' . bin2hex(random_bytes(3)));
 	}
 
 	/**
@@ -1164,7 +1158,7 @@ trait LifecycleSteps {
 		if ($record === null) {
 			throw new \RuntimeException("the copy claims dashboard '$copyUid', which does not exist in Grafana");
 		}
-		$want = $this->createdGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
+		$want = $this->knownGrafanaFolders[$title] ?? $this->grafanaFolderUidByTitle($title);
 		$got = (string)($record['meta']['folderUid'] ?? '');
 		if ($got !== $want) {
 			throw new \RuntimeException("the copy's dashboard is in '$got', expected '$want'");

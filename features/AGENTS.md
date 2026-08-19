@@ -69,6 +69,50 @@ suite green. See [the tree is the assertion](#the-tree-is-the-assertion).
 following values:`, same columns, one row each. Both are kept: one mapping reads
 better as one table, and several read better as several rows.
 
+### Creating never supplies a name
+
+**Neither side asks for one.** The Files "New" menu writes `New dashboard.grafana`
+— `src/files.js` picks the name, uniquified against the folder — and Grafana's own
+create button yields "New dashboard". The user picks a FOLDER and nothing else.
+
+So a scenario that says `I create "CPU Load.grafana" in "Demo"` or
+`someone creates the dashboard "CPU Load"` is not describing a create. Something
+that arrives already named came from a **move, a copy, or an edit**, and those are
+different gestures with features of their own — `dashboards/move.feature`,
+`dashboards/copy.feature`, `dashboards/edit.feature`. Naming it in the `When`
+quietly tests one gesture through another's vocabulary.
+
+It also makes the assertion dishonest. `Then "Demo/CPU Load.grafana" holds:` knows
+the filename only because the scenario supplied it a moment earlier; the claim
+"the file is called what I called it" is true by construction. The honest shape
+asks which file mirrors the dashboard that was just made:
+
+```gherkin
+When someone creates a dashboard in the "Demo" Grafana folder
+Then a matching file is created in "Demo"
+And the file holds:
+  | grafana_uid | the dashboard's uid |
+```
+
+Ported from the n8n master, which had it right from the start:
+`someone creates a workflow in n8n` / `a matching file is created in "<folder>"`.
+
+**And the medium is not part of the gesture either.** The step said "via the Files
+'New' menu", which is one way to reach it and not the only one — a desktop client,
+a script, `occ`, or a plain WebDAV PUT all arrive at the same place, and the server
+cannot tell them apart. It is the PUT that fires the listener. Naming the browser
+affordance made a rule about dashboards read like a rule about a menu, and would
+have to be re-litigated the first time someone created one any other way.
+
+**Folders are the exception, and genuinely so.** You DO type a folder's name, on
+both sides — so `I create the folder "Demo/Notes"` and
+`someone creates the Grafana folder "Demo/Deep/Down"` name what they make, because
+that is what the gesture is.
+
+The step that took a filename is deleted rather than left for the next person to
+reach for. `I create :filename in :folder` had no feature saying it once these two
+were fixed, and a vocabulary that can express the wrong thing eventually will.
+
 ### A background is a picture, not a story
 
 A Background says what IS, never what happened. `the admin has synced from
@@ -1465,6 +1509,97 @@ id on it". With the tag gone there is one marker left, so there is one rule: a
 folder holding no `grafana_folder_uid` is a folder the app has never had anything
 to do with, and a pull leaves it exactly so.
 
+**Where it is actually enforced**, now that the scenario asserting it is gone: the
+stamp is what `SyncService::isManagedFolder` reads before it will move a mirror,
+and an unstamped folder is left alone — with a unit test for each half. The rule
+is load-bearing there, in a way it never was in a Gherkin `Then`.
+
+### A folder that was already there when the mapping was made
+
+`folders/create.feature` declares `/Shared` and a `notes.txt` inside it BEFORE the
+mapping that claims that name — and the mapping is a Team Folder, which mounts at
+a path rather than living in the admin's home. So the Background states a real and
+awkward situation rather than a convenient one: *I already had a folder called
+Shared, and then I mapped a Team Folder to that name.*
+
+It costs nothing to describe and it is the sort of thing an instance actually
+looks like. If it turns out the two cannot coexist — a groupfolder mounting beside
+an existing folder of the same name rather than over it — then the Background has
+found something worth knowing, and the place to decide what should happen is
+`mapping/create.feature`, which owns what saving a mapping does.
+
+The `notes.txt` is there because a mapped folder is still a folder: the one
+concession every mode makes is that other file types may live alongside the
+dashboards, and a Background that only ever shows `.grafana` files quietly forgets
+it.
+
+### A mapping may rename its folder, and should be seen doing it
+
+**Renaming is a feature, not an exception.** A mapping pairs a Grafana folder with
+a Nextcloud one and the two names are free to differ — that is half of what a
+mapping IS, and a suite where every pair is identical quietly teaches the opposite.
+So the Backgrounds show it in both modes and both storages: `links` → `Pointers`
+in link mode on an admin folder, `metrics` → `Shared` in sync mode on a Team
+Folder. The third mapping pairs identical names, because that is also normal.
+
+**What is forbidden is a difference that means nothing.** `alpha` → `Alpha` and
+`shared` → `Shared` are not demonstrating the feature, they are noise a reader has
+to stop and squint at — is that deliberate, or did someone typo the Background? —
+directly above subfolders that must agree exactly. Twenty files once paired `demo`
+with `Demo` and this was the fix; writing new Backgrounds put case-only pairs
+straight back in, and they are gone again.
+
+Say it as one rule rather than two: **if two names differ, the difference must
+carry information.** `metrics` → `Shared` does. `shared` → `Shared` does not.
+
+And below the mapping, nothing renames at all —
+[a subfolder shares its name with Grafana exactly](#a-subfolder-shares-its-name-with-grafana-exactly-case-included).
+`/metrics/Coast/Tides` mirrors to `/Shared/Coast/Tides.grafana`: the mapped folder
+is renamed, `Coast` and `Tides` are not.
+
+### Grafana owns the tree
+
+The mirror image of [the parents come with it](#the-parents-come-with-it), and it
+uses the same assertion, because the claim is the same one read from the other
+side: the two trees agree, and each Nextcloud folder knows which Grafana folder it
+mirrors. Which side the gesture happened on changes the `When`, not the `Then`.
+
+Three shapes worth a row each, and they are genuinely different work for the pull:
+
+| the folder made in Grafana | what Nextcloud has to do |
+|---|---|
+| `Demo/Bubbles` | one folder, directly under a mapped one |
+| `Demo/Deep/Down/Low` | a chain it has never seen any of |
+| `Demo/Existing/Nubs` | one folder under a subfolder it already mirrors |
+
+The third is the one the retired `Holiday Photos` arrange was reaching for and
+never got to. It is also the one most likely to break on its own: the pull has to
+find the EXISTING mirror of `Existing` and hang the new folder off it, rather than
+making a second `Existing` beside the first — which Grafana would allow, since it
+permits duplicate titles under one parent.
+
+### RETIRED — the "Holiday Photos" half
+
+`Create a folder in Grafana under a mapped folder` used to arrange a second,
+unrelated Nextcloud folder and then assert that nothing had happened to it:
+
+```gherkin
+Given the folder "<folder>/Holiday Photos" holding no dashboards
+...
+And "<folder>/Holiday Photos" holds:
+  | grafana_folder_uid | absent |
+```
+
+Nothing happened to it because nothing was ever going to. The scenario's gesture is
+in Grafana, three folders away, and the arrange exists only to give the assertion
+something to be true about — the same fault as a sync run twice to check the tree
+did not move. An end state where nothing happened is not an end state.
+
+What survives is the positive half, which is the whole behaviour: a folder made in
+Grafana arrives in Nextcloud carrying the uid of the folder it mirrors. The
+Examples now spend their rows on coverage that differs — both modes, both storage
+kinds, and a nested parent as well as a mapped one.
+
 ### A subfolder shares its name with Grafana exactly, case included
 
 A mapped folder may pair two different names — that is the mapping's whole job, and
@@ -1513,6 +1648,49 @@ Following the dashboards answers all of them at once. A leaf holding spreadsheet
 and no dashboards simply never appears; a dashboard three folders deep creates all
 three. Grafana 13 has native nested folders (`/api/folders` carries `parentUid`),
 so the shape is expressible on the far side.
+- so
+### The parents come with it
+
+A dashboard five folders deep needs all five, and the app makes every level it is
+missing — `FolderMirror` walks UP from the file to the mapped folder, reverses,
+and creates on the way back down. So the interesting case is not the leaf, it is
+the **middle**: `Demo/Team/Drafts/Deep/Deeper` where `Team`, `Drafts` and `Deep`
+are all Nextcloud-only too. Nothing about the rule changes with depth, which is
+exactly why the depth is an Examples column rather than a scenario.
+
+**And the assertion had the depth baked into its sentence.** It used to read
+`Grafana holds "Team" under "Demo", and "Drafts" under "Team"` — two levels,
+spelled out, so a scenario could not vary how deep it went without a new step.
+`Grafana mirrors the folder "…"` walks whatever chain the scenario named and
+checks each level TWICE: the Grafana folder exists under the one before it, and
+the Nextcloud folder at that level carries its uid. Either alone is satisfied by
+a half-made mirror — a tree built in Grafana that Nextcloud cannot find again, or
+a stamp pointing at a folder that was never created.
+
+`no part of "…" exists in Grafana yet` is the other half. Without it the scenario
+passes just as well against a Grafana that already had the tree, which is the
+opposite of the claim being made.
+
+### Wherever it came from
+
+Three ways a dashboard arrives in a folder that does not exist in Grafana yet, and
+they are three Examples rows rather than three scenarios because the END STATE is
+identical — the chain is created, and the dashboard is in the innermost folder:
+
+| the file was | and moving it means |
+|---|---|
+| outside every mapping | it becomes a dashboard for the first time, in a folder made for it |
+| in this same mapping | it moves down a level, and the level is made on the way |
+| in another mapping | it changes hands, and the new owner builds the chain |
+
+The first row is the one that decides the assertion's shape: a file from outside
+every mapping had NO dashboard until it landed, so the uid cannot come from the
+scenario's cursor — it has to be read off the file afterwards.
+
+**The third row may yet earn its own scenario.** A cross-mapping move is a change
+of ownership as well as a change of folder, and ownership has rules of its own
+(`dashboards/move.feature`). It sits here for now because from this feature's
+point of view — does the folder get made? — it is the same gesture.
 
 ### A Grafana folder outlives its last dashboard
 

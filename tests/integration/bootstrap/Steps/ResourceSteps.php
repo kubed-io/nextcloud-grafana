@@ -208,10 +208,10 @@ trait ResourceSteps {
 			$tags = $this->parseTags(trim((string)($row['tags'] ?? '')));
 
 			if ($this->looksLikeFolder($path)) {
-				$this->davMkdirDeep($path);
+				$this->davMkdir($path);
 				$this->trackTopFolder($path);
 			} else {
-				$this->davMkdirDeep(ltrim($this->parentOf($path), '/'));
+				$this->davMkdir(ltrim($this->parentOf($path), '/'));
 				$this->trackTopFolder($path);
 				$this->davPut($path, $this->bodyFor($path));
 			}
@@ -500,6 +500,221 @@ trait ResourceSteps {
 		throw new \RuntimeException("no mapping covers the Grafana folder '$root'");
 	}
 
+	// ── the chain of folders below a mapping ──────────────────────────────────
+
+	/**
+	 * @Given /^no part of "([^"]*)" exists in Grafana yet$/
+	 *
+	 * SAYS OUT LOUD WHAT THE SCENARIO IS ABOUT TO PROVE. The folder exists in
+	 * Nextcloud and nowhere else, so every Grafana folder the gesture ends up needing
+	 * is one it had to create — without this line a scenario would pass just as well
+	 * against a Grafana that already had the tree, which is the opposite of the claim.
+	 */
+	public function noPartOfExistsInGrafanaYet(string $ncPath): void {
+		[$parentUid, $segments] = $this->grafanaChainFor($ncPath);
+		$first = $segments[0] ?? null;
+		if ($first === null) {
+			throw new \RuntimeException("'$ncPath' is a mapped folder itself — it exists in Grafana by definition");
+		}
+		// ONLY THE FIRST SEGMENT NEEDS ASKING. If the outermost folder of the chain is
+		// absent then nothing below it can exist either, and asking anyway would mean
+		// walking through a parent that is not there.
+		if ($this->grafanaChildUid($parentUid, $first) !== null) {
+			throw new \RuntimeException(
+				"Grafana already holds '$first' below the mapping, so '$ncPath' cannot show that a gesture creates it",
+			);
+		}
+	}
+
+	/**
+	 * @Then /^Grafana mirrors the folder "([^"]*)"$/
+	 *
+	 * THE CHAIN, NOT JUST THE LEAF, and at whatever depth the scenario used. A
+	 * dashboard five folders deep needs all five, and asserting only the innermost
+	 * would pass against a Grafana that had flattened the tree and hung the last
+	 * folder off the mapping's root.
+	 *
+	 * It replaces `Grafana holds "Team" under "Demo", and "Drafts" under "Team"`,
+	 * which spelled out exactly two levels — so the depth was baked into the sentence
+	 * and a scenario could not vary it. Every level is checked TWICE here: the Grafana
+	 * folder exists under the one before it, and the Nextcloud folder at that level
+	 * carries its uid. Either alone is satisfied by a half-made mirror.
+	 *
+	 * Each uid is recorded, so `the dashboard is in the folder mirroring …` can name a
+	 * folder only Grafana knows the uid of, and so teardown removes what the scenario
+	 * caused to exist.
+	 */
+	public function grafanaMirrorsTheFolder(string $ncPath): void {
+		[$parentUid, $segments] = $this->grafanaChainFor($ncPath);
+		if ($segments === []) {
+			throw new \RuntimeException("'$ncPath' is a mapped folder itself — there is no chain below it to mirror");
+		}
+
+		$ncWalked = $this->owningMappedFolder(trim($ncPath, '/'));
+		$parentPath = $ncWalked;
+		foreach ($segments as $segment) {
+			$ncWalked .= '/' . $segment;
+
+			$childUid = $this->grafanaChildUid($parentUid, $segment);
+			if ($childUid === null) {
+				throw new \RuntimeException(
+					"Grafana has no folder '$segment' under '$parentPath' — the chain below '$ncPath' was not "
+					. 'created all the way down',
+				);
+			}
+			// REMEMBERED, NOT ADOPTED. This step finds folders; it never makes one, so
+			// nothing it sees belongs on the teardown queue.
+			$this->knownGrafanaFolders[$segment] = $childUid;
+
+			$stamped = (string)$this->davReadMetadata($ncWalked, 'grafana_folder_uid');
+			Assert::assertSame(
+				$childUid,
+				$stamped,
+				"'$ncWalked' does not carry the uid of the Grafana folder mirroring it — the folder was made in "
+				. 'Grafana and Nextcloud was never told which one it is',
+			);
+
+			$parentUid = $childUid;
+			$parentPath = $ncWalked;
+		}
+	}
+
+	/**
+	 * @Then /^the dashboard is in the folder mirroring "([^"]*)"$/
+	 *
+	 * The uid comes from {@see grafanaMirrorsTheFolder}, which found it in Grafana —
+	 * so this cannot agree with itself by construction, and it says nothing about
+	 * WHERE the folder is, which is the other step's business.
+	 */
+	public function theDashboardIsInTheFolderMirroring(string $ncPath): void {
+		$leaf = $this->leafOf($ncPath);
+		$want = $this->knownGrafanaFolders[$leaf] ?? null;
+		if ($want === null) {
+			throw new \RuntimeException(
+				"nothing has located the Grafana folder mirroring '$ncPath'; assert `Grafana mirrors the folder` first",
+			);
+		}
+		// THE FILE'S OWN UID, NOT THE CURSOR. A file moved in from OUTSIDE every
+		// mapping had no dashboard until it landed, so the uid the scenario is asking
+		// about did not exist when the Given ran — `lastUid` would be empty, or worse,
+		// left over from an earlier step and pointing somewhere else entirely.
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		if ($uid === '') {
+			$uid = $this->lastUid;
+		}
+		$record = $this->grafanaGetDashboard($uid);
+		if ($record === null) {
+			throw new \RuntimeException("dashboard '$uid' does not exist in Grafana");
+		}
+		Assert::assertSame(
+			$want,
+			(string)($record['meta']['folderUid'] ?? ''),
+			"the dashboard is not in the Grafana folder mirroring '$ncPath'",
+		);
+	}
+
+	/**
+	 * @Then /^Grafana holds no folder named "([^"]*)"$/
+	 *
+	 * ANYWHERE IN GRAFANA, not just under the mapping. A folder invented at the root
+	 * because the app lost track of the parent is exactly as wrong as one invented in
+	 * the right place, and a check scoped to the mapping would call that a pass.
+	 *
+	 * Reads the deep listing, so a folder created two levels down cannot hide from it
+	 * the way it hid from the legacy top-level-only `/api/folders`.
+	 */
+	public function grafanaHoldsNoFolderNamed(string $title): void {
+		foreach ($this->grafanaListFoldersDeep() as $folder) {
+			if ($folder['title'] === $title) {
+				throw new \RuntimeException(
+					"Grafana holds a folder named '$title' (uid {$folder['uid']}) — an empty Nextcloud folder is "
+					. 'just a folder, and must not mint one',
+				);
+			}
+		}
+	}
+
+	/**
+	 * @When /^someone creates the Grafana folder "([^"]*)"$/
+	 *
+	 * Straight through Grafana's own API, naming the folder BY PATH — so one step
+	 * covers a folder at the mapping's root, a whole chain made at once, and one made
+	 * under a folder Grafana already had. It replaces `someone creates the folder X
+	 * under the Y Grafana folder`, which took the parent's UID: that reads the same as
+	 * a title for a top-level folder (the arrange gives those uid == title) and cannot
+	 * name a nested parent at all, because Grafana mints those uids itself.
+	 *
+	 * Grafana mints every uid here, which is what keeps the assertion honest — the
+	 * scenario never learns a uid it could have compared against itself.
+	 */
+	public function someoneCreatesTheGrafanaFolder(string $path): void {
+		$segments = explode('/', trim($path, '/'));
+		$root = (string)array_shift($segments);
+		$parentUid = $this->grafanaFolderUidByTitle($root);
+		if ($parentUid === null) {
+			throw new \RuntimeException("Grafana has no folder '$root' to create '$path' under");
+		}
+		if ($segments === []) {
+			throw new \RuntimeException("'$path' names a mapped folder, not a folder to create inside one");
+		}
+
+		foreach ($segments as $segment) {
+			// FIND OR CREATE, level by level. A scenario naming `Demo/Existing/Nubs`
+			// means "under the one Grafana already has", not "make a second folder
+			// called Existing" — and Grafana would happily do the latter, since it
+			// permits duplicate titles in one parent.
+			$uid = $this->grafanaChildUid($parentUid, $segment);
+			if ($uid === null) {
+				$uid = $this->grafanaCreateFolder($segment, $parentUid);
+				// ONLY WHAT THIS STEP MADE. A folder that was already there is the
+				// Background's or somebody else's, and deleting it at teardown would
+				// take its dashboards with it.
+				$this->createdGrafanaFolders[] = $uid;
+			}
+			$this->knownGrafanaFolders[$segment] = $uid;
+			$parentUid = $uid;
+		}
+		$this->pullEveryMapping();
+	}
+
+	/**
+	 * Where a Nextcloud path sits in Grafana: the mapping's folder uid, and the
+	 * segments below it.
+	 *
+	 * ONLY THE MAPPING'S OWN FOLDER IS TRANSLATED. A mapping may point a Grafana
+	 * folder at a differently-named Nextcloud one — `links` at `Pointers` — and
+	 * nothing beneath it ever may, so every deeper segment is carried across as it
+	 * stands. See `features/AGENTS.md#only-a-mapping-renames-a-folder`.
+	 *
+	 * @return array{0:string, 1:list<string>}
+	 */
+	private function grafanaChainFor(string $ncPath): array {
+		$ncPath = trim($ncPath, '/');
+		$owner = $this->owningMappedFolder($ncPath);
+		foreach ($this->listMappings() as $mapping) {
+			if ((string)($mapping['nc_folder'] ?? '') !== $owner) {
+				continue;
+			}
+			$rest = trim(substr($ncPath, strlen($owner)), '/');
+			return [
+				(string)($mapping['grafana_folder_uid'] ?? ''),
+				$rest === '' ? [] : explode('/', $rest),
+			];
+		}
+		throw new \RuntimeException("no mapping owns the Nextcloud folder '$ncPath'");
+	}
+
+	/** The uid of a Grafana folder titled $title directly under $parentUid, or null. */
+	private function grafanaChildUid(string $parentUid, string $title): ?string {
+		foreach ($this->grafanaChildFolders($parentUid) as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
+				$uid = (string)($folder['uid'] ?? '');
+				return $uid === '' ? null : $uid;
+			}
+		}
+		return null;
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**
@@ -732,18 +947,6 @@ trait ResourceSteps {
 			$out[$rel] = $isFolder;
 		}
 		return $out;
-	}
-
-	/** MKCOL every segment of a path that does not exist yet. */
-	private function davMkdirDeep(string $path): void {
-		$parts = array_values(array_filter(explode('/', trim($path, '/')), static fn (string $p): bool => $p !== ''));
-		$so_far = '';
-		foreach ($parts as $part) {
-			$so_far = $so_far === '' ? $part : $so_far . '/' . $part;
-			if (!$this->davExists($so_far)) {
-				$this->davMkdir($so_far);
-			}
-		}
 	}
 
 	/**

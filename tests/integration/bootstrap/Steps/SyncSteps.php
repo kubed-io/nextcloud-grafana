@@ -30,6 +30,9 @@ use PHPUnit\Framework\Assert;
  * Folder can have one.
  */
 trait SyncSteps {
+	/** What Grafana calls a dashboard nobody has named — its own "New dashboard". */
+	private const GRAFANA_NEW_DASHBOARD = 'New dashboard';
+
 	/** The decoded JSON the last `grafana_sync:sync pull` printed — what the run reports. */
 	private array $lastPullReport = [];
 
@@ -103,6 +106,32 @@ trait SyncSteps {
 
 		$res = $this->occ('background-job:execute ' . escapeshellarg($id) . ' --force-execute');
 		Assert::assertSame(0, $res['exit'], "running the scheduled pull failed:\n{$res['output']}");
+	}
+
+	/**
+	 * @Then a matching file is created in :folder
+	 *
+	 * FOUND BY UID, NOT BY NAME — which is the point of not naming it. The scenario
+	 * never said what the file would be called, so the only honest way to find it is
+	 * to ask which file in that folder mirrors the dashboard that was just made. It
+	 * becomes "the file" for the assertions that follow.
+	 */
+	public function aMatchingFileIsCreatedIn(string $folder): void {
+		Assert::assertNotSame('', $this->lastUid, 'no dashboard was created for a file to match');
+		$seen = [];
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$path = $folder . '/' . $name;
+			$seen[] = $name;
+			if ((string)$this->davReadMetadata($path, self::META_UID) === $this->lastUid) {
+				$this->currentFilePath = $path;
+				$this->currentFolder = $folder;
+				return;
+			}
+		}
+		throw new \RuntimeException(
+			"no file in '$folder' mirrors the dashboard just created ({$this->lastUid}); the folder holds: "
+			. (implode(', ', $seen) ?: '(nothing)'),
+		);
 	}
 
 	/**
@@ -281,14 +310,23 @@ trait SyncSteps {
 	}
 
 	/**
-	 * @When someone creates the dashboard :title in the :folder Grafana folder
+	 * @When someone creates a dashboard in the :folder Grafana folder
+	 *
+	 * NO TITLE, BECAUSE GRAFANA DOES NOT ASK FOR ONE. Creating a dashboard there
+	 * yields "New dashboard", exactly as the Files "New" menu yields
+	 * `New dashboard.grafana` — both sides name it for you. A scenario that supplied
+	 * a title was describing a dashboard that already had one, and something that
+	 * arrives already named came from a move, a copy or an edit; those are different
+	 * gestures with features of their own. Same principle as the n8n master's
+	 * `someone creates a workflow in n8n`.
 	 *
 	 * THE PULL IS FOLDED IN, as it is for every other in-Grafana gesture: nobody creates
 	 * a dashboard in order to run a sync. The uid is minted here rather than read back so
 	 * the teardown can remove it — a dashboard this app mirrors into a mapped folder is
 	 * re-mirrored into every later scenario that maps the same folder and pulls.
 	 */
-	public function someoneCreatesTheDashboardIn(string $title, string $folder): void {
+	public function someoneCreatesTheDashboardIn(string $folder): void {
+		$title = self::GRAFANA_NEW_DASHBOARD;
 		// `grafanaFolderUidByTitle` lives in TrashSteps and answers null for an unknown
 		// folder. Both traits compose into one FeatureContext, so a SECOND copy here was
 		// not a helper but a fatal: PHP refuses two traits contributing the same method

@@ -7,16 +7,24 @@ Feature: Creating a folder
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo         |
-      | nc folder      | Demo         |
-      | mode           | sync         |
-      | storage        | admin folder |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+    And Grafana holds these resources:
+      | path              | type   |
+      | /nextcloud-trash  | folder |
+      | /Demo/Existing    | folder |
+      | /links/Existing   | folder |
+      | /metrics/Existing | folder |
+    And Nextcloud holds these resources:
+      | path              |
+      | /Scratch          |
+      | /Shared           |
+      | /Shared/notes.txt |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | links          | Pointers  | link | admin folder |        |
+      | metrics        | Shared    | sync | team folder  | admin  |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
+    And Grafana and Nextcloud are in sync
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 
@@ -24,34 +32,43 @@ Feature: Creating a folder
     # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
 
   @user @in-nextcloud @gesture @ui
-  Scenario: Create a dashboard in a folder of a mapping
-    Given the folder "Demo/Team/Drafts" holding no dashboards
-    When I create "CPU Load.grafana" in "Demo/Team/Drafts"
-    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
-    And the dashboard is in the "Drafts" Grafana folder
-    And "Demo/Team" holds:
-      | grafana_folder_uid | the uid of the "Team" Grafana folder |
-    And "Demo/Team/Drafts" holds:
-      | grafana_folder_uid | the uid of the "Drafts" Grafana folder |
+  Scenario Outline: Create a dashboard in a folder of a mapping which is not yet in Grafana
+    Given the folder "<folder>" holding no dashboards
+    And no part of "<folder>" exists in Grafana yet
+    When I create a new dashboard in "<folder>"
+    Then Grafana mirrors the folder "<folder>"
+    And the dashboard is in the folder mirroring "<folder>"
 
-    # The parents come with it: a dashboard three folders deep needs all three.
+    Examples: however deep it lands, in either kind of storage
+      | folder                         |
+      | Demo/Team                      |
+      | Demo/Team/Drafts               |
+      | Shared/Team                    |
+      | Shared/Team/Drafts/Deep/Deeper |
+
+    # notes: ../AGENTS.md#the-parents-come-with-it
 
   # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
   @user @in-nextcloud @gesture @ui
-  Scenario: Move a dashboard into a folder of a mapping
-    Given a dashboard file named "Fleet Health.grafana" in "Demo"
-    And the folder "Demo/Team/Drafts" holding no dashboards
-    When I move the file into "Demo/Team/Drafts"
-    Then Grafana holds "Team" under "Demo", and "Drafts" under "Team"
-    And the dashboard is in the "Drafts" Grafana folder
-    And "Demo/Team/Drafts" holds:
-      | grafana_folder_uid | the uid of the "Drafts" Grafana folder |
+  Scenario Outline: Move a dashboard into a folder of a mapping which is not yet in Grafana
+    Given a dashboard file named "Fleet Health.grafana" in "<source>"
+    And the folder "<folder>" holding no dashboards
+    And no part of "<folder>" exists in Grafana yet
+    When I move the file into "<folder>"
+    Then Grafana mirrors the folder "<folder>"
+    And the dashboard is in the folder mirroring "<folder>"
 
-    # The second of exactly two ways a Grafana folder is born from Nextcloud, which
-    # is why it lives here and not with the other move gestures.
+    Examples: wherever it came from, it ends up in the same place
+      | source  | folder                         |
+      | Scratch | Demo/Team                      |
+      | Demo    | Demo/Team/Drafts               |
+      | Shared  | Demo/Team                      |
+      | Demo    | Shared/Team/Drafts/Deep/Deeper |
 
-  @user @in-nextcloud @gesture @ui @todo
-  Scenario: Create a folder holding no dashboards
+    # notes: ../AGENTS.md#wherever-it-came-from
+
+  @user @in-nextcloud @gesture @ui
+  Scenario: Create a new folder in a mapping
     When I create the folder "Demo/Notes"
     Then Grafana holds no folder named "Notes"
     And "Demo/Notes" holds:
@@ -61,25 +78,22 @@ Feature: Creating a folder
     # folder with no uid is one the app has never had anything to do with.
 
     # ── RULE: a folder made in Grafana arrives as a folder ────────────────────
-    # notes: ../AGENTS.md#a-folder-the-user-made-for-something-else-stays-theirs
 
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a folder in Grafana under a mapped folder
-    Given the folder "<folder>/Holiday Photos" holding no dashboards
-    When someone creates the folder "Bubbles" under the "<grafana folder>" Grafana folder
-    Then "<folder>/Bubbles" exists in Nextcloud
-    And "<folder>/Bubbles" holds:
-      | grafana_folder_uid | the uid of the "Bubbles" Grafana folder |
-    And "<folder>/Holiday Photos" holds:
-      | grafana_folder_uid | absent |
+    When someone creates the Grafana folder "<grafana folder>"
+    Then Grafana mirrors the folder "<folder>"
 
-    Examples: Grafana owns the tree in both modes — a link mirrors it too
-      | folder   | grafana folder |
-      | Demo     | Demo           |
-      | Pointers | links          |
+    Examples: at the mapping's root, all the way down, and under a folder it already had
+      | grafana folder      | folder                 |
+      | Demo/Bubbles        | Demo/Bubbles           |
+      | Demo/Deep/Down/Low  | Demo/Deep/Down/Low     |
+      | Demo/Existing/Nubs  | Demo/Existing/Nubs     |
+      | links/Bubbles       | Pointers/Bubbles       |
+      | links/Existing/Nubs | Pointers/Existing/Nubs |
+      | metrics/Deep/Down   | Shared/Deep/Down       |
 
-    # The pull claims the folders it mirrors and no others, which is the same
-    # sentence as the rule above read from Grafana's side.
+    # notes: ../AGENTS.md#grafana-owns-the-tree
 
     # ── RULE: the recycle bin's folder is the app's, not a user's ─────────────
     # notes: ../AGENTS.md#the-recycle-bin-folders-name-is-reserved
@@ -88,6 +102,6 @@ Feature: Creating a folder
   Scenario: Create a dashboard in a folder named after the recycle-bin folder
     Given the Grafana recycle bin is on
     And the folder "Demo/nextcloud-trash" holding no dashboards
-    When I create "CPU Load.grafana" in "Demo/nextcloud-trash"
+    When I create a new dashboard in "Demo/nextcloud-trash"
     Then the creation is refused with a message, explaining the name is reserved
     And the recycle-bin folder still holds what it held

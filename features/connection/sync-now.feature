@@ -10,17 +10,17 @@ Feature: Syncing every mapping
     Given the app is connected to Grafana
     And Grafana holds these resources:
       | path                       | type      | tags       |
-      | /alpha/Alpha Demo          | dashboard | dns, linux |
-      | /alpha/Region              | folder    |            |
-      | /alpha/Region/Latency      | dashboard | latency    |
-      | /alpha/Region/Deep         | folder    |            |
-      | /alpha/Region/Deep/Traffic | dashboard |            |
+      | /Alpha/Alpha Demo          | dashboard | dns, linux |
+      | /Alpha/Region              | folder    |            |
+      | /Alpha/Region/Latency      | dashboard | latency    |
+      | /Alpha/Region/Deep         | folder    |            |
+      | /Alpha/Region/Deep/Traffic | dashboard |            |
       | /links/Pinned              | dashboard | reference  |
       | /links/Nested              | folder    |            |
       | /links/Nested/Deeper       | dashboard |            |
-      | /shared/Shared Demo        | dashboard | ops        |
-      | /shared/Coast              | folder    |            |
-      | /shared/Coast/Tides        | dashboard |            |
+      | /metrics/Metrics Demo      | dashboard | ops        |
+      | /metrics/Coast             | folder    |            |
+      | /metrics/Coast/Tides       | dashboard |            |
     And Nextcloud holds these resources:
       | path                         | tags    |
       | /Alpha/notes.txt             | reading |
@@ -30,9 +30,9 @@ Feature: Syncing every mapping
       | /Alpha/Drafts/Sketch.grafana |         |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
-      | alpha          | Alpha     | sync | admin folder |        |
+      | Alpha          | Alpha     | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
-      | shared         | Shared    | sync | team folder  | admin  |
+      | metrics        | Shared    | sync | team folder  | admin  |
 
   # notes: ../AGENTS.md#a-background-is-a-picture-not-a-story
   # The two sides do not agree yet, and the Background never says why they don't.
@@ -58,7 +58,7 @@ Feature: Syncing every mapping
       | /Pointers/Pinned.grafana           | reference  |
       | /Pointers/Nested                   |            |
       | /Pointers/Nested/Deeper.grafana    |            |
-      | /Shared/Shared Demo.grafana        | ops        |
+      | /Shared/Metrics Demo.grafana       | ops        |
       | /Shared/Coast                      |            |
       | /Shared/Coast/Tides.grafana        |            |
 
@@ -77,9 +77,9 @@ Feature: Syncing every mapping
     Given Grafana and Nextcloud are in sync
     And these dashboards were changed in Grafana after their files were written:
       | path                  |
-      | /alpha/Alpha Demo     |
-      | /alpha/Region/Latency |
-      | /shared/Coast/Tides   |
+      | /Alpha/Alpha Demo     |
+      | /Alpha/Region/Latency |
+      | /metrics/Coast/Tides  |
     When the admin syncs every mapping to Grafana
     Then each of those dashboards in Grafana holds its file's panels
 
