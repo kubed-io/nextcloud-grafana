@@ -629,14 +629,47 @@ trait ResourceSteps {
 	 * the way it hid from the legacy top-level-only `/api/folders`.
 	 */
 	public function grafanaHoldsNoFolderNamed(string $title): void {
-		foreach ($this->grafanaListFoldersDeep() as $folder) {
-			if ($folder['title'] === $title) {
+		foreach ($this->grafanaFolderTreeLegacy() as $folder) {
+			if ((string)($folder['title'] ?? '') === $title) {
 				throw new \RuntimeException(
-					"Grafana holds a folder named '$title' (uid {$folder['uid']}) — an empty Nextcloud folder is "
-					. 'just a folder, and must not mint one',
+					"Grafana holds a folder named '$title' (uid " . (string)($folder['uid'] ?? '?') . ') — an empty '
+					. 'Nextcloud folder is just a folder, and must not mint one',
 				);
 			}
 		}
+	}
+
+	/**
+	 * Every Grafana folder, walked over the LEGACY api one parent at a time.
+	 *
+	 * ## AN ABSENCE MUST NOT BE READ FROM A LAGGING INDEX
+	 *
+	 * `grafanaListFoldersDeep()` reads unified storage, which is not instantly
+	 * consistent with the `/api/folders` the arranges write through — measured as an
+	 * intermittent "Grafana has no folder titled 'Demo'" for a folder that had just
+	 * been created. For a POSITIVE assertion that is a flake and you find out. For a
+	 * NEGATIVE one — "no folder named X" — a lagging index reports exactly what the
+	 * assertion wants to hear, and it passes for the wrong reason, silently, forever.
+	 *
+	 * So this pays a request per folder to ask the same store the writes went to.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function grafanaFolderTreeLegacy(): array {
+		$out = [];
+		$frontier = $this->grafanaListFolders();
+		while ($frontier !== []) {
+			$next = [];
+			foreach ($frontier as $folder) {
+				$out[] = $folder;
+				$uid = (string)($folder['uid'] ?? '');
+				if ($uid !== '') {
+					$next = array_merge($next, $this->grafanaChildFolders($uid));
+				}
+			}
+			$frontier = $next;
+		}
+		return $out;
 	}
 
 	/**

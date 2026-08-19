@@ -743,6 +743,21 @@ trait TrashSteps {
 		//
 		// One segment still means a top-level folder, because the walk starts at the
 		// root — so every caller that passes a plain title gets exactly what it did.
+		//
+		// AND A PLAIN TITLE IS ASKED OF THE LEGACY LIST FIRST, which is the SAME store
+		// the arrange created it in (`ensureGrafanaFolder` POSTs `/api/folders`). The
+		// deep listing is unified storage, and the two are not instantly consistent: a
+		// folder created a moment earlier is occasionally absent from it, which showed
+		// up as an intermittent "Grafana has no folder titled 'Demo'" for a folder the
+		// Background had just made and a scenario two lines up had just found.
+		if (!str_contains(trim($title, '/'), '/')) {
+			foreach ($this->grafanaListFolders() as $folder) {
+				if ((string)($folder['title'] ?? '') === $title) {
+					return (string)($folder['uid'] ?? '');
+				}
+			}
+		}
+
 		$byParent = [];
 		foreach ($this->grafanaListFoldersDeep() as $folder) {
 			$byParent[$folder['parentUid']][] = $folder;
