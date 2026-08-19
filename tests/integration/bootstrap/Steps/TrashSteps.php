@@ -739,12 +739,36 @@ trait TrashSteps {
 	}
 
 	private function grafanaFolderUidByTitle(string $title): ?string {
-		foreach ($this->grafanaListFolders() as $folder) {
-			if ((string)($folder['title'] ?? '') === $title) {
-				return (string)($folder['uid'] ?? '');
-			}
+		// A PATH, NOT ONLY A TITLE — and walked over the DEEP listing. This read
+		// `grafanaListFolders()`, which is the legacy `/api/folders` and returns
+		// top-level folders only, so no step built on it could name a folder inside a
+		// folder. That is the same blindness the app itself had, and it is why a
+		// scenario saying `the "Demo/Team" Grafana folder` was answered with "Grafana
+		// has no folder titled 'Demo/Team'" rather than the folder sitting right there.
+		//
+		// One segment still means a top-level folder, because the walk starts at the
+		// root — so every caller that passes a plain title gets exactly what it did.
+		$byParent = [];
+		foreach ($this->grafanaListFoldersDeep() as $folder) {
+			$byParent[$folder['parentUid']][] = $folder;
 		}
-		return null;
+
+		$parent = '';
+		$found = null;
+		foreach (explode('/', trim($title, '/')) as $segment) {
+			$found = null;
+			foreach ($byParent[$parent] ?? [] as $folder) {
+				if ($folder['title'] === $segment) {
+					$found = $folder['uid'];
+					break;
+				}
+			}
+			if ($found === null) {
+				return null;
+			}
+			$parent = $found;
+		}
+		return $found;
 	}
 
 	/** @Then the file is gone from :folder */

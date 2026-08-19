@@ -160,6 +160,15 @@ trait MappingSteps {
 		if ($uid !== '') {
 			$this->ensureGrafanaFolder($uid);
 		}
+		// TEAR THE MAPPED FOLDER DOWN AFTERWARDS. Saving a mapping provisions its
+		// Nextcloud folder, and nothing was registering that — so a Background naming
+		// a fixed folder handed the NEXT scenario whatever the last one had mirrored
+		// into it, and the pull wrote `Pinned (1)`, `Pinned (2)`, `Pinned (3)` beside
+		// the leftovers, one per Examples row. Invisible until an assertion looked at
+		// a whole tree; the older ones name a file at a time and never noticed.
+		if ($ncFolder !== '' && !in_array($ncFolder, $this->createdFolders, true)) {
+			$this->createdFolders[] = $ncFolder;
+		}
 		$res = $this->addMappingFromForm($uid, $form);
 		Assert::assertSame(0, $res['exit'], "the pre-state mapping could not be created:\n{$res['output']}");
 	}
