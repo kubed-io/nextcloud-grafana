@@ -120,16 +120,29 @@ default:
     # `folders` was inside `core` while folders/* was mostly @todo. It is not any
     # more — the folder specs carry more runnable scenarios than any other noun —
     # so it is its own suite, and `core` goes back to meaning the app itself.
+    #
+    # AND THEN IT REACHED 6m47s IN ONE GO, which is where `authoring` was before it
+    # was split. Same treatment, by gesture, and deliberately keeping `create` and
+    # `tags` apart: they are 26 of the 38 runnable scenarios between them, so any
+    # split leaving them together barely moves the slowest leg.
     folders:
       paths:
       - '%paths.base%/../../features/folders/create.feature'
-      - '%paths.base%/../../features/folders/copy.feature'
       - '%paths.base%/../../features/folders/delete.feature'
-      - '%paths.base%/../../features/folders/move.feature'
-      - '%paths.base%/../../features/folders/rename.feature'
       - '%paths.base%/../../features/folders/restore.feature'
       - '%paths.base%/../../features/folders/purge.feature'
+      contexts: *contexts
+
+    folder-tags:
+      paths:
       - '%paths.base%/../../features/folders/tags.feature'
+      contexts: *contexts
+
+    folder-motion:
+      paths:
+      - '%paths.base%/../../features/folders/copy.feature'
+      - '%paths.base%/../../features/folders/move.feature'
+      - '%paths.base%/../../features/folders/rename.feature'
       contexts: *contexts
 
     core:

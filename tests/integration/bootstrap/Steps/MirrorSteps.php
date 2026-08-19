@@ -41,6 +41,10 @@ use PHPUnit\Framework\Assert;
  *                         for an id — one that is merely non-empty could name any
  *                         dashboard, and naming THIS one is the point.
  *   the mapping's id      the mapping the scenario created.
+ *   the original id       the id it already had — the gesture did not touch it.
+ *   a new id              an id of its own, and NOT the one it was made from.
+ *                         Presence is too weak for either: `set` passes for any
+ *                         id at all, and the whole claim is which one.
  *   set                   present and non-empty. For opaque bookkeeping — a
  *                         Grafana version int and a body hash are the engine's,
  *                         and pinning either would assert its internals.
@@ -399,12 +403,11 @@ trait MirrorSteps {
 		// The FOLDER twin of the uid-survival cases below: grafana_folder_uid was
 		// captured by the arrange, and the claim is that the gesture did not touch it.
 		//
-		// DISPATCHED ON THE PROPERTY, not on the wording. "the uid it had before the
-		// rename" is the same sentence whether it is asked of a dashboard or of the
-		// folder holding it, and both are real questions in `folders/rename.feature` —
-		// which asserts the folder kept its identity AND that nothing inside it was
-		// re-minted. Keying only on the phrase meant the folder rows threw.
-		if ($property === self::META_FOLDER_UID && str_starts_with($expected, 'the uid it had before')) {
+		// DISPATCHED ON THE PROPERTY, not on the wording. "the original id" is the same
+		// sentence whether it is asked of a dashboard or of the folder holding it, and
+		// both are real questions in `folders/rename.feature` — which asserts the folder
+		// kept its identity AND that nothing inside it was re-minted.
+		if ($property === self::META_FOLDER_UID && $expected === 'the original id') {
 			if ($this->lastFolderUid === '') {
 				throw new \RuntimeException('the arrange captured no folder uid to compare against');
 			}
@@ -416,7 +419,7 @@ trait MirrorSteps {
 		// gesture LEFT the identity alone, the other says it made a new one. A copy
 		// asserts both at once — the original kept its uid, the copy has its own —
 		// which is the whole of "a copied folder is a new folder".
-		if ($property === self::META_FOLDER_UID && $expected === "its own, not the original's") {
+		if ($property === self::META_FOLDER_UID && $expected === 'a new id') {
 			// FAIL FAST WITH NO ORIGINAL PINNED. Without this the row passes for any
 			// non-empty uid, having proved nothing about whether it differs from the
 			// source — the sibling branch above has always done this and this one did
@@ -485,16 +488,18 @@ trait MirrorSteps {
 				return $actual === $this->renamedUid
 					? null
 					: "expected the renamed dashboard's uid ({$this->renamedUid}), found '{$actual}'";
-			case 'the uid it had before it was trashed':
-			case 'the uid it had before the rename':
-			case 'the uid it had before the move':
-				// The same claim, made by a file coming BACK: it left with the recycle bin on,
-				// so nothing was destroyed and nothing had to be forgotten. A returning file
-				// that minted a fresh uid would mean the parking never preserved anything.
-			case 'the uid it had before it left':
-				// THE IDENTITY SURVIVED THE GESTURE. `set` would pass for any uid at all,
-				// and the whole claim is that it is the SAME one — that the app moved a
-				// thing rather than replacing it.
+			case 'the original id':
+				// THE IDENTITY SURVIVED THE GESTURE, whichever gesture it was. `set` would
+				// pass for any uid at all and the whole claim is that it is the SAME one —
+				// that the app moved or renamed or restored a thing rather than replacing
+				// it. A file coming back out of the recycle bin makes the same claim: it
+				// left with nothing destroyed, so a fresh uid would mean the parking never
+				// preserved anything.
+				//
+				// SIX PHRASINGS COLLAPSED INTO THIS ONE. `the uid it had before the
+				// move`/`the rename`/`the copy`/`the delete`/`it was trashed`/`it left`
+				// all asked the identical question, named after whichever gesture happened
+				// to be nearby, and a reader had to check each one to be sure.
 				if ($property !== self::META_UID) {
 					// A folder's uid is not the dashboard uid the arrange captured. Fail
 					// loudly rather than compare the wrong two values silently.
@@ -541,7 +546,7 @@ trait MirrorSteps {
 				$folder = trim(dirname($path), '/.');
 				$want = $this->mappingModeForNcFolder($folder);
 				return $actual === $want ? null : "expected the mode of the mapping owning '{$folder}' ({$want}), found '{$actual}'";
-			case "its own, not the original's":
+			case 'a new id':
 				// PRESENCE IS TOO WEAK HERE. A uid that is merely non-empty could be the
 				// one it was copied from, and that is the entire anti-hijack claim.
 				if (($actual ?? '') === '') {

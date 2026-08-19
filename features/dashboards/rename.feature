@@ -102,7 +102,7 @@ Feature: Renaming a dashboard
     And a dashboard file named "Beta.grafana" in "Demo"
     When someone renames the "Beta" dashboard to "Alpha" in Grafana
     Then "Demo/Alpha.grafana" holds:
-      | grafana_uid | the uid it had before the rename |
+      | grafana_uid | the original id |
     And "Demo/Alpha (1).grafana" holds:
       | grafana_uid | the uid of the renamed dashboard |
     And the JSON title of both files is "Alpha"

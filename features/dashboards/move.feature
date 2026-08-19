@@ -43,7 +43,7 @@ Feature: Moving a dashboard file
     Then the dashboard is in the "Reports" Grafana folder
     And the dashboard is not deleted or recreated
     And the file holds:
-      | grafana_uid     | the uid it had before the move |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id               |
       | grafana_mode    | the mapping's mode             |
 
@@ -54,7 +54,7 @@ Feature: Moving a dashboard file
     When someone moves the dashboard into the "Reports" Grafana folder
     Then the file is gone from "Demo"
     And the file arrives in "Reports", holding:
-      | grafana_uid     | the uid it had before the move |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id               |
       | grafana_mode    | the mapping's mode             |
 
@@ -78,7 +78,7 @@ Feature: Moving a dashboard file
     When I move the file into "Scratch"
     Then the dashboard is in the "nextcloud-trash" Grafana folder
     And the file holds:
-      | grafana_uid     | the uid it had before the move |
+      | grafana_uid     | the original id |
       | grafana_mapping | absent                         |
       | grafana_mode    | "unmapped"                     |
     And the full dashboard JSON is still in the Nextcloud file
@@ -106,7 +106,7 @@ Feature: Moving a dashboard file
     When I move the file into "Reports"
     Then the dashboard is in the "Reports" Grafana folder
     And the file holds:
-      | grafana_uid     | the uid it had before it left |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id              |
       | grafana_mode    | the mapping's mode            |
 
@@ -226,5 +226,5 @@ Feature: Moving a dashboard file
     When I try to move the file into "Scratch"
     Then the move is aborted and the file stays in "Demo"
     And the file holds:
-      | grafana_uid     | the uid it had before the move |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id               |

@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copying a folder of linked dashboards out of its mapping is refused, with a message. Only a copy *into* a link mapping was ever caught, so the three pointers inside landed in the destination as if someone had authored them there.
 - **Sync to Grafana** now makes dashboards of files that have never been pushed — map a folder that already holds `.grafana` files, press the button, and they become real. It used to skip them and say so only in the log.
 - A dashboard moved between folders in Grafana now takes its file with it. The mirror was placed correctly when first created and then never moved again, so it stayed where it was through every later sync.
 - **Sync to Grafana** no longer skips dashboards in subfolders. It only ever looked at the top level of a mapped folder, on the one button that exists for declaring Nextcloud the source of truth.

@@ -266,12 +266,12 @@ trait FolderSteps {
 			Assert::assertTrue($this->davExists($path), "'$path' does not exist");
 			$key = $this->looksLikeFolder($path) ? self::META_FOLDER_UID : self::META_UID;
 
-			// A FILE'S "its own" IS ABOUT A SET, not about the cursor. The shared
+			// A FILE'S "a new id" IS ABOUT A SET, not about the cursor. The shared
 			// vocabulary compares against the ONE uid a scenario last touched, which is
 			// the right question when one file was copied and the wrong one when a
 			// folder of them was: each copy must differ from EVERY original, and there
 			// is no single original to be the answer.
-			if ($key === self::META_UID && $want === "its own, not the original's") {
+			if ($key === self::META_UID && $want === 'a new id') {
 				Assert::assertNotSame(
 					[],
 					$this->originalDashboardUids,

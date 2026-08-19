@@ -35,7 +35,7 @@ Feature: Restoring a dashboard file from the trash
     When I restore it from the trash
     Then the dashboard is in the "Demo" Grafana folder
     And the file holds:
-      | grafana_uid     | the uid it had before it was trashed |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id                     |
       | grafana_mode    | the mapping's mode                   |
 
@@ -112,7 +112,7 @@ Feature: Restoring a dashboard file from the trash
     Then the file is back in "Demo"
     And there is exactly one file for that dashboard
     And the file holds:
-      | grafana_uid     | the uid it had before it was trashed |
+      | grafana_uid     | the original id |
       | grafana_mapping | the mapping's id                     |
 
     # The trashed file is restored rather than a second one being written, because

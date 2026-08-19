@@ -132,7 +132,7 @@ jobs:
         # Handed over by the `versions` job above: the ceiling on a PR, the whole
         # declared range on main. SQLite is the fast integration path.
         server-versions: ${{ fromJSON(needs.versions.outputs.matrix) }}
-        suite: [admin, authoring, copying, naming, trash, motion, tags, folders, core]
+        suite: [admin, authoring, copying, naming, trash, motion, tags, folders, folder-tags, folder-motion, core]
 
     services:
       # Grafana with its admin user provisioned from env — a background container

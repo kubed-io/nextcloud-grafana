@@ -35,13 +35,13 @@ Feature: Copying a folder
       | /<folder>/Team/Gamma.grafana |
     When I copy "<folder>/Team" to "<folder>/Team copy"
     Then the mappings hold:
-      | path                              | identity                       |
-      | /<folder>/Team                    | the uid it had before the copy |
-      | /<folder>/Team/Alpha.grafana      | the uid it had before the copy |
-      | /<folder>/Team copy               | its own, not the original's    |
-      | /<folder>/Team copy/Alpha.grafana | its own, not the original's    |
-      | /<folder>/Team copy/Beta.grafana  | its own, not the original's    |
-      | /<folder>/Team copy/Gamma.grafana | its own, not the original's    |
+      | path                              | identity        |
+      | /<folder>/Team                    | the original id |
+      | /<folder>/Team/Alpha.grafana      | the original id |
+      | /<folder>/Team copy               | a new id        |
+      | /<folder>/Team copy/Alpha.grafana | a new id        |
+      | /<folder>/Team copy/Beta.grafana  | a new id        |
+      | /<folder>/Team copy/Gamma.grafana | a new id        |
 
     Examples: the storage a mapping uses makes no difference to what a copy is
       | folder |

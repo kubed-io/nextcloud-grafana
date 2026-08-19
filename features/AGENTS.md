@@ -781,6 +781,26 @@ checks that neither the titles nor the names moved. A scenario saying "and sync
 again" out loud would be narrating the app's plumbing; `still` already means the
 state held.
 
+### Two words for an id, not six phrasings
+
+`the original id` and `a new id`. That is the whole vocabulary for identity in a
+metadata table, and both are asked of a folder or of a file depending on which
+the path names.
+
+They replaced `the uid it had before the copy`, `… the move`, `… the rename`,
+`… the delete`, `… it was trashed`, `… it left` — six spellings of ONE question,
+each named after whichever gesture happened to be nearby, so a reader had to check
+every one to be sure they meant the same thing. They did. And
+`its own, not the original's` said in five words what "new" says in one.
+
+Two phrases are deliberately left alone, because they are different questions with
+different answers rather than different spellings of this one:
+
+- `its own, not the one it arrived with` — compares against the uid a file ARRIVED
+  carrying, which is not the same as the one it was copied from.
+- `the uid the destination already had` — an overwrite ADOPTS an identity, so the
+  claim names whose.
+
 ### The two sides already agree
 
 `the following items in the mappings:` names Nextcloud paths, and every one of
