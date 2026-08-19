@@ -136,7 +136,7 @@ Feature: Moving a dashboard file
     # The person answers what the CONTENT should be; the identity is never theirs to pick.
 
   # notes: ../AGENTS.md#keeping-one-version-of-a-duplicate-leaves-one-file-and-one-dashboard
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario Outline: Keeping one version of a duplicate leaves one file and one dashboard
     Given a dashboard file named "Turnbuckle.grafana" in "Demo"
     And an unmapped file named "Turnbuckle.grafana" in "Scratch" carrying "<its uid>"
@@ -160,7 +160,7 @@ Feature: Moving a dashboard file
       | the new version      | no grafana_uid at all  | the file that arrived  |
 
   # notes: ../AGENTS.md#keeping-both-versions-of-a-duplicate-makes-the-arrival-its-own-dashboard
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Keeping both versions of a duplicate makes the arrival its own dashboard
     Given a dashboard file named "Turnbuckle.grafana" in "Demo"
     And an unmapped file named "Turnbuckle.grafana" in "Scratch" carrying "the same grafana_uid"

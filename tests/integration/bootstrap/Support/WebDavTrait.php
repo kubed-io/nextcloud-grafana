@@ -116,10 +116,15 @@ trait WebDavTrait {
 	}
 
 	/** MOVE (rename) a file within the user's files root. */
-	private function davMove(string $from, string $to): void {
+	private function davMove(string $from, string $to, bool $overwrite = false): void {
 		$dest = $this->ncBaseUrl . '/remote.php/dav/files/' . rawurlencode($this->ncUser) . '/' . $this->davEncode($to);
+		// OVERWRITE DEFAULTS TO F HERE AND TO T IN THE PROTOCOL, which is the opposite of
+		// what a caller expects — deliberately. Nearly every move in this suite lands on a
+		// free name, and an accidental overwrite there would destroy a fixture and report
+		// itself as a passing move. The one gesture that really does overwrite is the
+		// conflict dialog's "keep the new version", and it says so at the call site.
 		$res = $this->davClient()->request('MOVE', $this->davEncode($from), [
-			'headers' => ['Destination' => $dest, 'Overwrite' => 'F'],
+			'headers' => ['Destination' => $dest, 'Overwrite' => $overwrite ? 'T' : 'F'],
 		]);
 		$this->assertStatus($res, [201, 204], "MOVE $from → $to");
 	}

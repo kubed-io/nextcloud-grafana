@@ -161,6 +161,60 @@ trait TrashSteps {
 		$this->lastTrashEntry = $entry;
 	}
 
+	/** Set while `files_trashbin` is off, so the teardown knows to put it back. */
+	private bool $trashAppDisabled = false;
+
+	/**
+	 * @Given the Nextcloud trash is disabled
+	 *
+	 * `files_trashbin` is a REMOVABLE app and this is the only honest way to model an
+	 * instance without one — the trash is not a setting, it is an app, and half-simulating
+	 * it would be testing a state no Nextcloud is ever in.
+	 *
+	 * TORN DOWN UNCONDITIONALLY, because leaving it off would not fail this scenario, it
+	 * would silently change what a delete MEANS for every scenario after it in the same
+	 * leg: nothing would land in the trash, and every restore and purge scenario would
+	 * fail somewhere far from the cause.
+	 */
+	public function theNextcloudTrashIsDisabled(): void {
+		$res = $this->occ('app:disable files_trashbin');
+		if ($res['exit'] !== 0) {
+			throw new \RuntimeException("setup: could not disable files_trashbin:\n{$res['output']}");
+		}
+		$this->trashAppDisabled = true;
+	}
+
+	/**
+	 * @AfterScenario
+	 *
+	 * See {@see theNextcloudTrashIsDisabled} for why this is not optional.
+	 */
+	public function restoreTheNextcloudTrash(): void {
+		if (!$this->trashAppDisabled) {
+			return;
+		}
+		$this->trashAppDisabled = false;
+		$this->occ('app:enable files_trashbin');
+	}
+
+	/**
+	 * @Given its dashboard no longer exists in Grafana
+	 *
+	 * THE BIN IS AN ORDINARY GRAFANA FOLDER, which is the whole reason this state is
+	 * reachable: anyone browsing Grafana can delete out of it, and the file meanwhile sits
+	 * in the Nextcloud trash knowing nothing about it. Done through Grafana's own API with
+	 * no involvement from this app, exactly as it would happen in the UI.
+	 */
+	public function itsDashboardNoLongerExistsInGrafana(): void {
+		if ($this->lastUid === '') {
+			throw new \RuntimeException('no dashboard behind the file under test');
+		}
+		$this->grafanaDeleteDashboard($this->lastUid);
+		if ($this->grafanaGetDashboard($this->lastUid) !== null) {
+			throw new \RuntimeException("setup: dashboard '{$this->lastUid}' is still in Grafana");
+		}
+	}
+
 	/**
 	 * The far side of the same pre-state: trashing with the bin on parks the
 	 * dashboard, and this names where it landed. One line per place.

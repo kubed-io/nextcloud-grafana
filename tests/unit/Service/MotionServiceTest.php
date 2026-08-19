@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
@@ -17,6 +18,7 @@ use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MotionService;
 use OCA\GrafanaSync\Service\RecycleBin;
+use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -41,6 +43,8 @@ final class MotionServiceTest extends TestCase {
 	private GrafanaClient $grafana;
 	private FolderMirror $folderMirror;
 	private RecycleBin $recycleBin;
+	private ReplacedByMoveStore $replaced;
+	private CreateService $createService;
 	private MotionService $service;
 
 	protected function setUp(): void {
@@ -58,12 +62,24 @@ final class MotionServiceTest extends TestCase {
 		$this->recycleBin = $this->createStub(RecycleBin::class);
 		$this->recycleBin->method('activeFolderUid')->willReturn(null);
 
+		// A REAL STORE, NOT A STUB. It is a request-scoped array with no I/O, and the
+		// adoption tests below are about what happens when a mark IS present — which a
+		// stub would have to be taught, one willReturn at a time, to say the same thing.
+		$this->replaced = new ReplacedByMoveStore();
+		// Reached only by the two duplicate paths — an adoption from create-on-land and a
+		// move-in beside a file already mirroring the same dashboard. Every other test in
+		// this file asserts it is NEVER called, which is the claim that an ordinary move
+		// re-parents rather than mints.
+		$this->createService = $this->createMock(CreateService::class);
+
 		$this->service = new MotionService(
 			$this->mappings,
 			$this->metadata,
 			$this->grafana,
 			$this->folderMirror,
 			$this->recycleBin,
+			$this->replaced,
+			$this->createService,
 			new SyncGuard(),
 			new NullLogger(),
 		);
@@ -184,6 +200,12 @@ final class MotionServiceTest extends TestCase {
 		$this->metadata->expects(self::once())
 			->method('write')
 			->with(42, [
+				// THE UID IS RE-STATED FOR THE SAME REASON THE MODE IS — an overwrite
+				// arrives here having inherited the destination's uid, so the stamp must
+				// say which dashboard this file now points at rather than assuming it is
+				// the one already written. For an ordinary move-in it is the value
+				// already there and the write is a no-op.
+				DashboardMetadata::KEY_UID => 'dash-keep',
 				DashboardMetadata::KEY_MAPPING => 'm-dst',
 				// THE MODE IS RE-STATED ON EVERY ARRIVAL, not only when it changed. A file
 				// parked with the recycle bin on is stamped `unmapped`, so a mapping has to
@@ -306,6 +328,70 @@ final class MotionServiceTest extends TestCase {
 		self::assertSame('m-dst', $captured[DashboardMetadata::KEY_MAPPING] ?? null);
 	}
 
+	// ── an overwrite adopts the identity it landed on ─────────────────────────────
+	//
+	// The unit half of `move.feature`'s two duplicate scenarios. The Sabre plugin that
+	// SETS the mark is only reachable from a live WebDAV MOVE, so what is pinned here is
+	// the other end: given a mark, the move-in binds to the uid that was already in the
+	// mapping and not to the one the arriving file carried.
+
+	public function testAnOverwriteBindsToTheUidItReplacedRatherThanTheOneItArrivedWith(): void {
+		$to = $this->mapping('m-dst', 'gf-dst', 'dst');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::UNMAPPED_PATH, null],
+			[self::DST_PATH, $to],
+		]);
+		// File id 42 is what `file()` answers; the plugin marked it as adopting dash-kept.
+		$this->replaced->mark(7, 42, 'dash-kept');
+
+		$pushed = null;
+		$this->grafana->expects(self::once())
+			->method('upsertDashboard')
+			->willReturnCallback(function (array $body) use (&$pushed): array {
+				$pushed = $body;
+				return ['version' => 4];
+			});
+		$captured = [];
+		$this->metadata->method('write')
+			->willReturnCallback(function (int $id, array $values) use (&$captured): void {
+				$captured = $values;
+			});
+
+		$this->service->onMove($this->file(self::DST_PATH), self::UNMAPPED_PATH);
+
+		// BOTH ENDS, because either alone can be right while the pair is wrong: pushing to
+		// the kept uid but stamping the arrival's would leave the file pointing at a
+		// dashboard it does not describe, and the next pull would write a second one.
+		self::assertSame('dash-kept', $pushed['dashboard']->uid ?? null, 'the push went to the wrong dashboard');
+		self::assertSame('dash-kept', $captured[DashboardMetadata::KEY_UID] ?? null, 'the file was stamped with the wrong uid');
+	}
+
+	public function testAnOrdinaryMoveInKeepsItsOwnUid(): void {
+		// THE CONTROL, and the reason the adoption is keyed by FILE ID rather than being a
+		// simple "is anything marked" flag: a mark belonging to some other file in the same
+		// request must not reach this one.
+		$to = $this->mapping('m-dst', 'gf-dst', 'dst');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::UNMAPPED_PATH, null],
+			[self::DST_PATH, $to],
+		]);
+		$this->replaced->mark(7, 99, 'dash-somebody-elses');
+
+		$pushed = null;
+		$this->grafana->expects(self::once())
+			->method('upsertDashboard')
+			->willReturnCallback(function (array $body) use (&$pushed): array {
+				$pushed = $body;
+				return ['version' => 4];
+			});
+
+		$this->service->onMove($this->file(self::DST_PATH), self::UNMAPPED_PATH);
+
+		self::assertSame('dash-arrived', $pushed['dashboard']->uid ?? null);
+	}
+
 	/** Rebuild with whatever the test just stubbed the bin to answer. */
 	private function rebuildWithBin(): void {
 		$this->service = new MotionService(
@@ -314,6 +400,8 @@ final class MotionServiceTest extends TestCase {
 			$this->grafana,
 			$this->folderMirror,
 			$this->recycleBin,
+			$this->replaced,
+			$this->createService,
 			new SyncGuard(),
 			new NullLogger(),
 		);

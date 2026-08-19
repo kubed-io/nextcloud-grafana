@@ -54,6 +54,21 @@ trait MirrorSteps {
 	private array $seededDashboards = [];
 
 	/**
+	 * @BeforeScenario
+	 *
+	 * NOW LOAD-BEARING, WHERE IT USED TO BE MERELY UNTIDY. This map only ever fed `the
+	 * dashboard's uid`, which falls back to the cursor — so a leftover entry from an
+	 * earlier scenario was unlikely to be consulted. It is now the FIRST answer for `the
+	 * uid it had before …` and the roster `both dashboards are titled …` counts, and every
+	 * `a dashboard file named X in Y` writes to it. Left uncleared, a second scenario
+	 * arranging a file under a name an earlier one used would check its claims against a
+	 * dashboard that no longer exists.
+	 */
+	public function resetSeededDashboards(): void {
+		$this->seededDashboards = [];
+	}
+
+	/**
 	 * The Grafana side of the pre-state, as one table.
 	 *
 	 * @Given /^the Grafana folder "([^"]*)" already contains:$/
@@ -509,6 +524,16 @@ trait MirrorSteps {
 				return $actual !== $this->arrivedWithUid
 					? null
 					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
+			case 'the uid of the renamed dashboard':
+				// THE OTHER FILE, named by what happened to it rather than by its own name
+				// — which it cannot be, because the whole point is that the app chose that
+				// name and the scenario should not restate the app's arithmetic.
+				if ($this->renamedUid === '') {
+					throw new \RuntimeException("'{$expected}' needs a rename; no When performed one");
+				}
+				return $actual === $this->renamedUid
+					? null
+					: "expected the renamed dashboard's uid ({$this->renamedUid}), found '{$actual}'";
 			case 'the uid it had before it was trashed':
 			case 'the uid it had before the rename':
 			case 'the uid it had before the move':
@@ -526,12 +551,35 @@ trait MirrorSteps {
 						"'{$expected}' is only defined for " . self::META_UID . ", not {$property}",
 					);
 				}
-				if ($this->lastUid === '') {
+				// THE UID THIS FILE'S OWN ARRANGE GAVE IT, falling back to the cursor. With
+				// one dashboard on stage the two are the same value. With TWO — a rename
+				// onto a name another dashboard already wears — `lastUid` is whichever was
+				// arranged last, so the incumbent's claim to have kept its uid would be
+				// checked against its neighbour's.
+				$stem = preg_replace('/\.grafana$/', '', basename($path)) ?? '';
+				$want = $this->seededDashboards[$stem] ?? $this->lastUid;
+				if ($want === '') {
 					throw new \RuntimeException('the arrange captured no uid to compare against');
 				}
-				return $actual === $this->lastUid
+				return $actual === $want
 					? null
-					: "expected the uid it already had ({$this->lastUid}), found '{$actual}'";
+					: "expected the uid it already had ({$want}), found '{$actual}'";
+			case 'the uid the destination already had':
+				// AN OVERWRITE REPLACES CONTENTS, NOT IDENTITY. The uid is the destination's
+				// and the arrival inherits it, so this is the claim that one overwrite did
+				// not quietly fork the mapping into two dashboards.
+				//
+				// Against the value the arrange pinned BEFORE the gesture, for the same
+				// reason `its own, not the one it arrived with` is: the surviving file is
+				// the one being read, so a baseline taken now would be compared with itself.
+				if ($this->destinationUidBefore === '') {
+					throw new \RuntimeException(
+						"'{$expected}' needs the uid the destination held; no arrange step captured one",
+					);
+				}
+				return $actual === $this->destinationUidBefore
+					? null
+					: "expected the uid the destination already had ({$this->destinationUidBefore}), found '{$actual}'";
 			case "the mapping's id":
 				$folder = trim(dirname($path), '/.');
 				$want = $this->mappingIdForNcFolder($folder);

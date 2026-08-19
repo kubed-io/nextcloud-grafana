@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
@@ -148,6 +149,31 @@ final class DeleteServiceTest extends TestCase {
 			->willReturn(['version' => 8]);
 		$this->grafana->expects(self::never())->method('deleteDashboard');
 		$this->metadata->expects(self::once())->method('write')->with(5, [DashboardMetadata::KEY_VERSION => '8']);
+		$this->create->expects(self::never())->method('createForFile');
+
+		$this->service->restore($this->file(5), $this->managed('dash-1'), $this->mapping());
+	}
+
+	public function testRestoreBinOnMintsANewDashboardWhenTheParkedOneIsGone(): void {
+		// The bin is an ordinary Grafana folder, so the dashboard can be deleted out of it
+		// while the file sits in the Nextcloud trash. The kept uid then names nothing, and
+		// an upsert on it would quietly build a dashboard at a dead id — or overwrite
+		// whatever a stranger had since created there.
+		$mapping = $this->mapping();
+		$this->grafana->method('readDashboard')->willThrowException(new GrafanaApiException('Dashboard not found', 404));
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->create->expects(self::once())->method('createForFile')->with(self::isInstanceOf(File::class), $mapping, true);
+
+		$this->service->restore($this->file(5), $this->managed('dash-1'), $mapping);
+	}
+
+	public function testRestoreBinOnStillUpsertsWhenGrafanaCannotBeReached(): void {
+		// DOUBT MEANS "IT IS STILL THERE", which is the opposite default from the purge's.
+		// There the unsafe direction is an irreversible delete; here it is minting, because
+		// a Grafana that is merely down would otherwise be read as "the dashboard is gone"
+		// and the restore would abandon a live dashboard and build a second one beside it.
+		$this->grafana->method('readDashboard')->willThrowException(new GrafanaApiException('connection refused', 0));
+		$this->grafana->expects(self::once())->method('upsertDashboard')->willReturn(['version' => 2]);
 		$this->create->expects(self::never())->method('createForFile');
 
 		$this->service->restore($this->file(5), $this->managed('dash-1'), $this->mapping());

@@ -16,6 +16,8 @@ use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MotionService;
+use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\ResolvesActingUser;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncNotifier;
@@ -23,6 +25,7 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
+use OCP\Files\File;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
@@ -62,6 +65,8 @@ final class CreateInGrafanaListener implements IEventListener {
 	public function __construct(
 		private CreateService $createService,
 		private MappingService $mappings,
+		private MotionService $motion,
+		private ReplacedByMoveStore $replaced,
 		private DashboardMetadata $metadata,
 		private SyncGuard $guard,
 		private IUserSession $userSession,
@@ -95,6 +100,44 @@ final class CreateInGrafanaListener implements IEventListener {
 			return; // already tracked — the writeback listener owns it
 		}
 
+		// AN OVERWRITE INHERITS, IT DOES NOT CREATE — even from a file that arrived
+		// carrying nothing. A copied `.grafana` has no `grafana_uid` (a copy does not
+		// inherit the metadata row), so dragging one over a synced file lands here rather
+		// than in {@see \OCA\GrafanaSync\Service\MotionService::onMove}. Create-on-land
+		// would mint a second dashboard and leave the one the file replaced live in this
+		// mapping's Grafana folder and file-less — which the next pull writes back beside
+		// it, as `foo (1).grafana`.
+		//
+		// The rule is the same whatever the arrival carried: the destination's identity
+		// survives and the arrival contributes only its body. `bindTo` already knows how
+		// to do that, so this hands over rather than repeating it.
+		$adopted = $this->replaced->adoptedUid($node->getId());
+		if ($adopted !== null) {
+			$this->logger->info('grafana_sync create-on-land: an overwrite inherits the dashboard it replaced', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'uid' => $adopted,
+			]);
+			try {
+				$this->motion->bindTo($node, $adopted, $mapping);
+			} catch (\Throwable $e) {
+				$this->logger->warning('grafana_sync create-on-land: inheriting the replaced dashboard failed', [
+					'app' => Application::APP_ID,
+					'fileId' => $node->getId(),
+					'uid' => $adopted,
+					'exception' => $e,
+				]);
+				// AND THE USER IS TOLD, exactly as the create below tells them. This branch
+				// is reached by a gesture the person is watching — they answered a conflict
+				// dialog — and it is the branch where silence costs the most: the file is
+				// sitting in the mapped folder looking synced while the dashboard it
+				// replaced still holds the old body. A log line nobody reads is how that
+				// becomes a mystery a week later.
+				$this->notifyFailure($node, $e);
+			}
+			return;
+		}
+
 		try {
 			$this->createService->createForFile($node, $mapping);
 		} catch (\Throwable $e) {
@@ -104,10 +147,15 @@ final class CreateInGrafanaListener implements IEventListener {
 				'path' => $node->getPath(),
 				'exception' => $e,
 			]);
-			$uid = $this->actingUserUid($node);
-			if ($uid !== '') {
-				$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
-			}
+			$this->notifyFailure($node, $e);
+		}
+	}
+
+	/** Tell whoever performed the gesture that the Grafana half of it did not happen. */
+	private function notifyFailure(File $node, \Throwable $e): void {
+		$uid = $this->actingUserUid($node);
+		if ($uid !== '') {
+			$this->notifier->failed($uid, $node->getId(), $node->getName(), GrafanaClient::describeConnectionError($e));
 		}
 	}
 

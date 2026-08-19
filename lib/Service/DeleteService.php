@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCP\Files\File;
 use Psr\Log\LoggerInterface;
 
@@ -185,6 +186,28 @@ final class DeleteService {
 				]);
 				return;
 			}
+			// THE PARKED DASHBOARD MAY BE GONE, and an upsert would not notice. The bin is
+			// an ordinary Grafana folder anyone can delete out of, so a file can sit in the
+			// Nextcloud trash for weeks while the dashboard it names is destroyed. Upserting
+			// the kept uid then RE-CREATES a dashboard at a uid that names nothing — quietly,
+			// because Grafana takes any free uid you offer it.
+			//
+			// That is the same situation the bin-OFF restore is in, and it gets the same
+			// answer: the file carried an id in, the app decided it was not usable, so the
+			// answer is a fresh one. Reusing it would also mean overwriting whatever a
+			// stranger had since created at that uid, which is the concrete harm.
+			if (!$this->dashboardStillExists($managed->uid)) {
+				$this->logger->info('grafana_sync restore: the parked dashboard is gone; re-creating it from the file', [
+					'app' => Application::APP_ID,
+					'fileId' => $node->getId(),
+					'uid' => $managed->uid,
+				]);
+				if ($mapping->mode === Mapping::MODE_SYNC) {
+					$this->createService->createForFile($node, $mapping, true);
+				}
+				return;
+			}
+
 			$spec = $this->decodeSpec($node->getContent());
 			$spec->uid = $managed->uid;
 			// Where the file actually IS, not where its mapping starts. Restoring a whole
@@ -213,6 +236,41 @@ final class DeleteService {
 		// sets: a birth must not inherit the id written in the bytes it was born from.
 		if ($mapping !== null && $mapping->mode === Mapping::MODE_SYNC) {
 			$this->createService->createForFile($node, $mapping, true);
+		}
+	}
+
+	/**
+	 * Is there still a dashboard at this uid?
+	 *
+	 * Answers **true** whenever it cannot prove otherwise, which is the opposite default
+	 * from {@see isStillParked} and deliberately so. There the unsafe direction is an
+	 * irreversible delete, so doubt means "leave it alone". Here the unsafe direction is
+	 * MINTING: a Grafana that is merely unreachable would be read as "the dashboard is
+	 * gone", and the restore would abandon a live dashboard and build a second one beside
+	 * it. Only a definite 404 — Grafana answering that it looked and found nothing —
+	 * counts as gone.
+	 */
+	private function dashboardStillExists(string $uid): bool {
+		try {
+			$this->grafana->readDashboard($uid);
+			return true;
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus === 404) {
+				return false;
+			}
+			$this->logger->warning('grafana_sync restore: could not confirm the parked dashboard still exists; assuming it does', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return true;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync restore: could not reach Grafana to check the parked dashboard; assuming it exists', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return true;
 		}
 	}
 

@@ -96,14 +96,14 @@ Feature: Renaming a dashboard
     # ── RULE: two dashboards may share a title, two files may not ─────────────
     # notes: ../AGENTS.md#the-suffix-is-nextclouds-alone
 
-  @grafana @in-grafana @gesture @ui @unbuilt
+  @grafana @in-grafana @gesture @ui
   Scenario: Rename a dashboard in Grafana to a title another one already has
     Given a dashboard file named "Alpha.grafana" in "Demo"
     And a dashboard file named "Beta.grafana" in "Demo"
     When someone renames the "Beta" dashboard to "Alpha" in Grafana
     Then "Demo/Alpha.grafana" holds:
       | grafana_uid | the uid it had before the rename |
-    And "Demo/Alpha (2).grafana" holds:
+    And "Demo/Alpha (1).grafana" holds:
       | grafana_uid | the uid of the renamed dashboard |
     And the JSON title of both files is "Alpha"
     And both dashboards are titled "Alpha" in Grafana

@@ -81,7 +81,7 @@ Feature: Trashing a dashboard file
     # ── RULE: the Grafana bin only works while the Nextcloud trash does ────────
 
   # notes: ../AGENTS.md#the-grafana-bin-needs-the-nextcloud-trash
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Delete a dashboard with the Nextcloud trash disabled
     Given the Nextcloud trash is disabled
     And the Grafana recycle bin is on
