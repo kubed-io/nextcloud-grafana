@@ -10,13 +10,13 @@ Feature: Syncing one mapping from its card
     And Grafana holds these resources:
       | path                  | type      | tags       |
       | /Alpha/Overview       | dashboard | dns, linux |
-      | /Alpha/Region         | folder    |            |
+      | /Alpha/Region         | folder    | quarterly  |
       | /Alpha/Region/Latency | dashboard | latency    |
       | /links/Pinned         | dashboard | dns, linux |
-      | /links/Region         | folder    |            |
+      | /links/Region         | folder    | quarterly  |
       | /links/Region/Deeper  | dashboard | latency    |
       | /metrics/Coastline    | dashboard | dns, linux |
-      | /metrics/Region       | folder    |            |
+      | /metrics/Region       | folder    | quarterly  |
       | /metrics/Region/Tides | dashboard | latency    |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
@@ -34,7 +34,7 @@ Feature: Syncing one mapping from its card
     Then Nextcloud holds exactly these resources:
       | path                                 | tags       |
       | /<nc folder>/<top>.grafana           | dns, linux |
-      | /<nc folder>/Region                  |            |
+      | /<nc folder>/Region                  | quarterly  |
       | /<nc folder>/Region/<nested>.grafana | latency    |
     And "<nc folder>/<top>.grafana" holds:
       | grafana_uid     | the dashboard's uid |

@@ -1509,6 +1509,13 @@ first sync then has to bring them across — a Background that tagged the folder
 afterwards would only ever exercise the easy direction, where this app wrote the
 annotation itself and is reading back its own handiwork.
 
+**The sync-now Backgrounds carry them too**, for the same reason: a folder tagged
+in Grafana before the mapping existed must arrive tagged on the FIRST pull, and
+until folder rows could hold tags that was untestable — every folder in every
+Background was bare, so the tree assertions proved only that untagged folders
+stayed untagged. `/Alpha/Region/Deep` is still deliberately bare, as the control:
+a folder with no tags must arrive with none rather than inheriting its parent's.
+
 **A Grafana folder's tags are an annotation this app invented**, not something
 Grafana ships: `nextcloud.kubed.io/tags` on the app-platform folder resource.
 That is why the resource tables refuse tags on a folder row *for a dashboard's
