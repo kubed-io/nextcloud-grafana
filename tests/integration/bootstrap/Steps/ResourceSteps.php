@@ -1,0 +1,703 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\GrafanaSync\Tests\Integration\Steps;
+
+use Behat\Gherkin\Node\TableNode;
+use PHPUnit\Framework\Assert;
+
+/**
+ * Declares one side of the world as a TREE, and asserts one side as a TREE.
+ *
+ * ## WHY A TABLE OF PATHS REPLACED A PILE OF ARRANGES
+ *
+ * `an admin-owned mapping from Grafana folder … to Nextcloud folder …`, `the
+ * Grafana folder … already contains:` and `a folder mapped as …` each declared one
+ * sliver of the world, and every one of them could only describe a FLAT folder. A
+ * Background wanting a folder inside a folder could not say so at all — which is
+ * why no scenario in this suite had ever placed a dashboard in a Grafana subfolder,
+ * and why the pull could flatten an entire tree onto the mapping's root with the
+ * whole suite green. See `features/AGENTS.md#the-tree-is-the-assertion`.
+ *
+ * ## ARRANGE AND ASSERT ARE DELIBERATELY DIFFERENT SENTENCES
+ *
+ * Behat matches a step by its TEXT, not by its keyword, so `Given Grafana holds
+ * these resources:` and `Then Grafana holds these resources:` would be the same
+ * definition doing opposite jobs. The assertion says `holds exactly these
+ * resources:` instead — which is not merely a way to tell them apart, it is the
+ * claim: the tree is the whole tree, extra files included, or the scenario fails.
+ *
+ * ## THE PATHS
+ *
+ *   /alpha                  a Grafana TOP-LEVEL folder, or a Nextcloud folder
+ *   /alpha/Region           a folder inside it, at any depth
+ *   /alpha/Region/Latency   a dashboard (Grafana) — the leaf is a title
+ *   /Alpha/Region/x.grafana a mirror (Nextcloud) — the leaf is a filename
+ *
+ * A top-level Grafana folder is created with uid == title, because that is what
+ * `a mapping with the following values:` stores when a scenario names a folder.
+ * Nested folders take whatever uid Grafana mints — a folder cannot be created with
+ * a chosen one — so this trait keeps a path ⇒ uid map for the scenario's lifetime.
+ *
+ * A dashboard's uid is DERIVED from its path rather than declared, so a table that
+ * does not care about uids does not have to invent them. A scenario that does care
+ * may still add a `uid` column.
+ */
+trait ResourceSteps {
+	/** Grafana path (`/alpha/Region`) ⇒ the folder uid behind it, this scenario. */
+	private array $grafanaFolderPaths = [];
+
+	/**
+	 * @BeforeScenario
+	 *
+	 * The map is scenario-scoped: an Examples row that re-declares `/alpha/Region`
+	 * gets a NEW Grafana folder (teardown deleted the last one), and a stale uid here
+	 * would quietly seed the next row's dashboards into a folder that no longer
+	 * exists — where they would be invisible to the sync and the failure would read
+	 * as "the pull wrote nothing".
+	 */
+	public function resetGrafanaFolderPaths(): void {
+		$this->grafanaFolderPaths = [];
+	}
+
+	// ── Grafana: arrange ──────────────────────────────────────────────────────
+
+	/**
+	 * @Given /^Grafana holds these resources:$/
+	 *
+	 * Columns: `path` (required), `type` (`folder`|`dashboard`, default inferred),
+	 * `uid` and `tags` (both optional).
+	 */
+	public function grafanaHoldsTheseResources(TableNode $table): void {
+		foreach ($table->getHash() as $row) {
+			$path = $this->requirePath($row);
+			$type = trim((string)($row['type'] ?? ''));
+			$tags = $this->parseTags(trim((string)($row['tags'] ?? '')));
+
+			if ($type === 'folder') {
+				// A GRAFANA FOLDER HAS NO TAGS OF ITS OWN. Grafana tags dashboards; the
+				// folder tags this app syncs are an annotation it bolts on, and they are
+				// `folders/tags.feature`'s subject rather than a column here. Refused
+				// rather than ignored, so a row that means something cannot read as
+				// though it took effect.
+				if ($tags !== []) {
+					throw new \RuntimeException(
+						"the folder row '$path' carries tags; only a dashboard row may. "
+						. 'Use `the Grafana folder … is tagged …` if a folder\'s tags are the subject.',
+					);
+				}
+				$this->ensureGrafanaFolderPath($path);
+				continue;
+			}
+
+			// A dashboard: the leaf is its title and everything above it is the folder
+			// it lives in, which is created on the way past if the table never named it.
+			$title = $this->leafOf($path);
+			$folderUid = $this->ensureGrafanaFolderPath($this->parentOf($path));
+			$uid = trim((string)($row['uid'] ?? '')) ?: $this->derivedDashboardUid($path);
+
+			if ($tags !== []) {
+				$this->grafanaCreateTaggedDashboard($uid, $title, $folderUid, $tags);
+			} else {
+				$this->grafanaCreateDashboard($uid, $title, $folderUid);
+			}
+			// So `the dashboard's uid` can resolve a title the scenario never gave a uid.
+			$this->seededDashboards[$title] = $uid;
+		}
+	}
+
+	// ── Grafana: assert ───────────────────────────────────────────────────────
+
+	/**
+	 * @Then /^Grafana holds exactly these resources:$/
+	 *
+	 * Exhaustive beneath every top-level folder the table mentions. Folders the table
+	 * does not reach into are not inspected — a scenario about `/alpha` should not
+	 * fail because some other feature's fixture is still sitting in `/bravo`.
+	 */
+	public function grafanaHoldsExactlyTheseResources(TableNode $table): void {
+		$want = [];
+		$wantTags = [];
+		foreach ($table->getHash() as $row) {
+			$path = $this->requirePath($row);
+			$want[] = $path;
+			$tags = trim((string)($row['tags'] ?? ''));
+			if ($tags === '') {
+				continue;
+			}
+			if (trim((string)($row['type'] ?? '')) === 'folder') {
+				throw new \RuntimeException("the folder row '$path' carries tags; only a dashboard row may");
+			}
+			$wantTags[$path] = $tags;
+		}
+		sort($want);
+
+		$roots = [];
+		foreach ($want as $path) {
+			$roots[$this->rootOf($path)] = true;
+		}
+
+		$got = [];
+		foreach (array_keys($roots) as $root) {
+			$got = array_merge($got, $this->grafanaTreeUnder($root));
+		}
+		sort($got);
+
+		Assert::assertSame(
+			$want,
+			$got,
+			"Grafana is not the tree the scenario describes.\n"
+			. '  expected: ' . implode("\n            ", $want) . "\n"
+			. '  actually: ' . implode("\n            ", $got),
+		);
+
+		// The tree first, tags second — see the Nextcloud twin for why.
+		foreach ($wantTags as $path => $tags) {
+			$uid = $this->grafanaDashboardUidAtPath($path);
+			$this->assertSameTags(
+				$this->parseTags($tags),
+				$this->grafanaDashboardTags($uid),
+				"the tags on the Grafana dashboard '$path'",
+			);
+		}
+	}
+
+	/** The uid of the dashboard sitting at a `/folder/Title` path. */
+	private function grafanaDashboardUidAtPath(string $path): string {
+		$folderUid = $this->ensureGrafanaFolderPath($this->parentOf($path));
+		$title = $this->leafOf($path);
+		foreach ($this->grafanaSearchDashboards($folderUid) as $row) {
+			if ((string)($row['title'] ?? '') === $title) {
+				return (string)($row['uid'] ?? '');
+			}
+		}
+		throw new \RuntimeException("Grafana has no dashboard at '$path'");
+	}
+
+	/**
+	 * A Grafana dashboard's tags.
+	 *
+	 * @return list<string>
+	 */
+	private function grafanaDashboardTags(string $uid): array {
+		$board = $this->grafanaGetDashboard($uid);
+		$tags = $board['dashboard']['tags'] ?? [];
+		$out = [];
+		foreach ((array)$tags as $tag) {
+			$tag = trim((string)$tag);
+			if ($tag !== '') {
+				$out[] = $tag;
+			}
+		}
+		return $out;
+	}
+
+	// ── Nextcloud: arrange ────────────────────────────────────────────────────
+
+	/**
+	 * @Given /^Nextcloud holds these resources:$/
+	 *
+	 * DECLARED BEFORE THE MAPPINGS, ALWAYS. Writing a `.grafana` file into a folder
+	 * that is ALREADY mapped is a gesture — the app answers it by creating the
+	 * dashboard — so a Background that mapped first could never describe "a file that
+	 * has never reached Grafana", which is the entire pre-state a push is about.
+	 */
+	public function nextcloudHoldsTheseResources(TableNode $table): void {
+		foreach ($table->getHash() as $row) {
+			$path = ltrim($this->requirePath($row), '/');
+			$tags = $this->parseTags(trim((string)($row['tags'] ?? '')));
+
+			if ($this->looksLikeFolder($path)) {
+				$this->davMkdirDeep($path);
+				$this->trackTopFolder($path);
+			} else {
+				$this->davMkdirDeep(ltrim($this->parentOf($path), '/'));
+				$this->trackTopFolder($path);
+				$this->davPut($path, $this->bodyFor($path));
+			}
+
+			if ($tags !== []) {
+				$this->setNextcloudTags($path, $tags);
+			}
+		}
+	}
+
+	// ── Nextcloud: assert ─────────────────────────────────────────────────────
+
+	/**
+	 * @Then /^Nextcloud holds exactly these resources:$/
+	 *
+	 * Columns: `path` (required) and `tags` (optional). Exhaustive under every top
+	 * folder the table mentions — see the trait docblock for why that matters more
+	 * than it looks.
+	 */
+	public function nextcloudHoldsExactlyTheseResources(TableNode $table): void {
+		$want = [];
+		$wantTags = [];
+		foreach ($table->getHash() as $row) {
+			$path = '/' . ltrim($this->requirePath($row), '/');
+			$want[] = $path;
+			$tags = trim((string)($row['tags'] ?? ''));
+			if ($tags !== '') {
+				$wantTags[$path] = $tags;
+			}
+		}
+		sort($want);
+
+		$roots = [];
+		foreach ($want as $path) {
+			$roots[$this->rootOf($path)] = true;
+		}
+
+		$got = [];
+		foreach (array_keys($roots) as $root) {
+			$got = array_merge($got, $this->davTreeUnder(ltrim($root, '/')));
+		}
+		sort($got);
+
+		Assert::assertSame(
+			$want,
+			$got,
+			"Nextcloud is not the tree the scenario describes.\n"
+			. '  expected: ' . implode("\n            ", $want) . "\n"
+			. '  actually: ' . implode("\n            ", $got),
+		);
+
+		// TAGS ARE ASSERTED SECOND, AND ONLY AFTER THE TREE PASSES. A tag mismatch
+		// reported over a wrong tree is noise: the useful failure is that the file is
+		// in the wrong place, and reading its tags first would bury that.
+		foreach ($wantTags as $path => $tags) {
+			$this->assertNextcloudTags(ltrim($path, '/'), $tags);
+		}
+	}
+
+	// ── the state the two sides can be in ─────────────────────────────────────
+
+	/**
+	 * @Given /^Grafana and Nextcloud are in sync$/
+	 *
+	 * A STATE, NOT AN ACTION. A Background says what IS; how the two sides came to
+	 * agree — a sync, a fixture, a restored backup — is not something any scenario
+	 * below depends on, and naming one in a Given would be inventing history to
+	 * explain a fact. See `features/AGENTS.md#a-background-is-a-picture-not-a-story`.
+	 *
+	 * Making it true happens to be a pull, which is the only lever there is.
+	 */
+	public function grafanaAndNextcloudAreInSync(): void {
+		$res = $this->occ('grafana_sync:sync pull');
+		Assert::assertSame(0, $res['exit'], "could not bring the two sides into sync:\n{$res['output']}");
+	}
+
+	// ── mappings, in the plural ───────────────────────────────────────────────
+
+	/**
+	 * @Given /^the following mappings were made:$/
+	 *
+	 * The plural of `a mapping with the following values:` — same columns, one row
+	 * each. BOTH ARE KEPT: one mapping reads better as one upright table, and three
+	 * read better as three rows, and neither is worth converting the other's
+	 * twenty-odd feature files to prove a point.
+	 */
+	public function theFollowingMappingsWereMade(TableNode $table): void {
+		foreach ($table->getHash() as $row) {
+			$form = [];
+			foreach ($row as $key => $value) {
+				$value = trim((string)$value);
+				if ($value !== '') {
+					$form[(string)$key] = $value;
+				}
+			}
+			$this->declareMapping($form);
+		}
+	}
+
+	// ── syncing, named ────────────────────────────────────────────────────────
+
+	/**
+	 * @When /^(the admin|the schedule) syncs every mapping from Grafana$/
+	 *
+	 * The direction is spelt out because this feature has TWO buttons and naming
+	 * only one of them was how "sync" came to mean "pull" everywhere but the push
+	 * scenario.
+	 */
+	public function actorSyncsEveryMappingFromGrafana(string $actor): void {
+		$this->actorSyncsScope($actor, 'every mapping');
+	}
+
+	/**
+	 * @When /^the admin syncs the "([^"]*)" mapping from Grafana$/
+	 *
+	 * NAMED, not "one mapping". The card's button is only interesting when another
+	 * mapping is standing beside it untouched, and a step that syncs whichever
+	 * mapping happens to be first cannot express that.
+	 */
+	public function theAdminSyncsTheMappingFromGrafana(string $ncFolder): void {
+		$id = $this->mappingIdForNcFolder($ncFolder);
+		$res = $this->occ('grafana_sync:sync pull --mapping=' . escapeshellarg($id));
+		Assert::assertSame(0, $res['exit'], "syncing the '$ncFolder' mapping failed:\n{$res['output']}");
+		$this->lastPullReport = self::decodeSyncReport((string)$res['output']);
+	}
+
+	// ── the push, from the side that makes it a declaration ───────────────────
+
+	/** Grafana path ⇒ the mirror path in Nextcloud, pinned by the arrange below. */
+	private array $divergedDashboards = [];
+
+	/** @BeforeScenario */
+	public function resetDivergedDashboards(): void {
+		$this->divergedDashboards = [];
+	}
+
+	/**
+	 * @Given /^these dashboards were changed in Grafana after their files were written:$/
+	 *
+	 * THE ROW THAT TURNS A CATCH-UP INTO A DECLARATION. Without it the scenario
+	 * passes for an implementation that merely pushes whatever is newer. Grafana is
+	 * made newer than the file ON PURPOSE, so "the dashboard holds its file's panels"
+	 * afterwards can only be true if Nextcloud won where the two disagreed — which is
+	 * what an admin means by "Grafana should match".
+	 *
+	 * CHANGED IN GRAFANA RATHER THAN IN THE FILE, which is the other half of why this
+	 * arrange is shaped so. Writeback is pinned inline for these scenarios, so a DAV
+	 * write to the mirror would be pushed the instant it landed and there would be no
+	 * divergence left to sync.
+	 */
+	public function theseDashboardsWereChangedInGrafana(TableNode $table): void {
+		foreach ($table->getHash() as $row) {
+			$path = $this->requirePath($row);
+			$uid = $this->grafanaDashboardUidAtPath($path);
+			$filePath = $this->mirrorPathFor($path);
+
+			Assert::assertTrue(
+				$this->davExists($filePath),
+				"the sync wrote no mirror at '$filePath', so there is nothing for a push to declare",
+			);
+
+			$board = $this->grafanaGetDashboardObject($uid);
+			Assert::assertNotNull($board, "Grafana has no dashboard at '$path'");
+			$board->panels = [(object)['type' => 'text', 'title' => 'ChangedInGrafana-' . substr(sha1($path), 0, 6)]];
+			$this->grafanaClient()->request('POST', 'dashboards/db', [
+				'headers' => ['Content-Type' => 'application/json'],
+				'body' => json_encode(['dashboard' => $board, 'overwrite' => true], JSON_THROW_ON_ERROR),
+			]);
+
+			$this->divergedDashboards[$path] = $filePath;
+		}
+		Assert::assertNotSame([], $this->divergedDashboards, 'the table named no dashboards');
+	}
+
+	/**
+	 * @Then /^each of those dashboards in Grafana holds its file's panels$/
+	 *
+	 * Read from GRAFANA, which is the surface the file cannot fake: a file agreeing
+	 * with itself proves nothing about what was pushed.
+	 */
+	public function eachOfThoseDashboardsHoldsItsFilesPanels(): void {
+		Assert::assertNotSame([], $this->divergedDashboards, 'no dashboards were arranged to diverge');
+		foreach ($this->divergedDashboards as $path => $filePath) {
+			$uid = $this->grafanaDashboardUidAtPath($path);
+			$board = $this->grafanaGetDashboardObject($uid);
+			Assert::assertNotNull($board, "Grafana has no dashboard at '$path'");
+
+			$file = json_decode($this->davGet($filePath), false, 512, JSON_THROW_ON_ERROR);
+			Assert::assertSame(
+				json_encode($file->panels ?? [], JSON_THROW_ON_ERROR),
+				json_encode($board->panels ?? [], JSON_THROW_ON_ERROR),
+				"the push did not carry '$filePath' to '$path' — Grafana still holds what it was changed to",
+			);
+		}
+	}
+
+	/**
+	 * The Nextcloud mirror of a Grafana path.
+	 *
+	 * ONLY THE FIRST SEGMENT IS TRANSLATED. A mapping may point a Grafana folder at a
+	 * differently-named Nextcloud one; nothing beneath it ever may, so every deeper
+	 * segment is carried across verbatim. See
+	 * `features/AGENTS.md#only-a-mapping-renames-a-folder`.
+	 */
+	private function mirrorPathFor(string $grafanaPath): string {
+		$parts = explode('/', trim($grafanaPath, '/'));
+		$root = array_shift($parts);
+		foreach ($this->listMappings() as $mapping) {
+			if ((string)($mapping['grafana_folder_uid'] ?? '') === $root) {
+				array_unshift($parts, (string)($mapping['nc_folder'] ?? $root));
+				return implode('/', $parts) . '.grafana';
+			}
+		}
+		throw new \RuntimeException("no mapping covers the Grafana folder '$root'");
+	}
+
+	// ── helpers ───────────────────────────────────────────────────────────────
+
+	/** The `path` cell, or a failure that says which table is wrong. */
+	private function requirePath(array $row): string {
+		$path = trim((string)($row['path'] ?? ''));
+		if ($path === '') {
+			throw new \RuntimeException('a resource table needs a "path" column with a value in every row');
+		}
+		return $path;
+	}
+
+	/** `/alpha/Region/Latency` ⇒ `Latency`. */
+	private function leafOf(string $path): string {
+		$parts = explode('/', trim($path, '/'));
+		return (string)end($parts);
+	}
+
+	/** `/alpha/Region/Latency` ⇒ `/alpha/Region`; a one-segment path ⇒ `''`. */
+	private function parentOf(string $path): string {
+		$parts = explode('/', trim($path, '/'));
+		array_pop($parts);
+		return $parts === [] ? '' : '/' . implode('/', $parts);
+	}
+
+	/** `/alpha/Region/Latency` ⇒ `/alpha` — the top-level folder an assertion walks from. */
+	private function rootOf(string $path): string {
+		$parts = explode('/', trim($path, '/'));
+		return '/' . ($parts[0] ?? '');
+	}
+
+	/**
+	 * A Nextcloud path with no extension on its leaf is a folder.
+	 *
+	 * Inferred rather than declared because the name already says it, and a `type`
+	 * column that only ever repeats the filename is a column nobody reads.
+	 */
+	private function looksLikeFolder(string $path): bool {
+		return !str_contains($this->leafOf($path), '.');
+	}
+
+	/** A stable uid for a dashboard the table did not name one for. */
+	private function derivedDashboardUid(string $path): string {
+		return 'gs-' . substr(sha1($path), 0, 16);
+	}
+
+	/**
+	 * The Grafana folder at this path, creating it and its ancestors if need be.
+	 *
+	 * The TOP level is `ensureGrafanaFolder`, which mints uid == title, because that
+	 * is the uid a mapping table stores when it names a folder. Everything below it
+	 * gets Grafana's own uid, which is why the map exists.
+	 */
+	private function ensureGrafanaFolderPath(string $path): string {
+		$path = '/' . trim($path, '/');
+		if ($path === '/') {
+			return '';
+		}
+		if (isset($this->grafanaFolderPaths[$path])) {
+			return $this->grafanaFolderPaths[$path];
+		}
+
+		$parent = $this->parentOf($path);
+		if ($parent === '') {
+			$title = $this->leafOf($path);
+			$this->ensureGrafanaFolder($title);
+			return $this->grafanaFolderPaths[$path] = $title;
+		}
+
+		$parentUid = $this->ensureGrafanaFolderPath($parent);
+		$uid = $this->grafanaCreateFolder($this->leafOf($path), $parentUid);
+		if (!in_array($uid, $this->createdGrafanaFolders, true)) {
+			$this->createdGrafanaFolders[] = $uid;
+		}
+		return $this->grafanaFolderPaths[$path] = $uid;
+	}
+
+	/**
+	 * Every folder and dashboard beneath a top-level Grafana folder, as paths.
+	 *
+	 * @return list<string>
+	 */
+	private function grafanaTreeUnder(string $root): array {
+		$rootUid = trim($root, '/');
+		$byParent = [];
+		foreach ($this->grafanaListFoldersDeep() as $folder) {
+			$byParent[(string)($folder['parentUid'] ?? '')][] = $folder;
+		}
+
+		$out = [];
+		$walk = function (string $uid, string $path) use (&$walk, $byParent, &$out): void {
+			foreach ($this->grafanaSearchDashboards($uid) as $row) {
+				$out[] = $path . '/' . (string)($row['title'] ?? '');
+			}
+			foreach ($byParent[$uid] ?? [] as $child) {
+				$childPath = $path . '/' . (string)($child['title'] ?? '');
+				$out[] = $childPath;
+				$walk((string)($child['uid'] ?? ''), $childPath);
+			}
+		};
+		$walk($rootUid, '/' . $rootUid);
+		return $out;
+	}
+
+	/**
+	 * Grafana's folders INCLUDING nested ones.
+	 *
+	 * NOT `grafanaListFolders()`, which is the legacy `/api/folders` and returns
+	 * top-level folders only — measured, and the reason a whole class of subfolder
+	 * bug was invisible to this suite. This is the same resource the app itself
+	 * walks ({@see \OCA\GrafanaSync\Service\GrafanaClient::listFolders}), so a test
+	 * asserting a tree and the code building one are reading the same thing.
+	 *
+	 * @return list<array{uid:string, title:string, parentUid:string}>
+	 */
+	private function grafanaListFoldersDeep(): array {
+		$res = $this->grafanaClient()->request(
+			'GET',
+			'/apis/folder.grafana.app/v1beta1/namespaces/default/folders?limit=1000',
+		);
+		Assert::assertSame(200, $res->getStatusCode(), 'listing Grafana folders failed: ' . (string)$res->getBody());
+		$decoded = json_decode((string)$res->getBody(), true);
+		$out = [];
+		foreach ((array)($decoded['items'] ?? []) as $item) {
+			if (!is_array($item)) {
+				continue;
+			}
+			$uid = (string)($item['metadata']['name'] ?? '');
+			if ($uid === '') {
+				continue;
+			}
+			$out[] = [
+				'uid' => $uid,
+				'title' => (string)($item['spec']['title'] ?? $uid),
+				'parentUid' => (string)($item['metadata']['annotations']['grafana.app/folder'] ?? ''),
+			];
+		}
+		return $out;
+	}
+
+	/**
+	 * Every descendant of a Nextcloud folder, as absolute paths.
+	 *
+	 * DEPTH 1, RECURSING BY HAND. `Depth: infinity` is refused by default on a
+	 * Nextcloud instance, so a helper written the obvious way passes locally and
+	 * returns nothing in CI.
+	 *
+	 * @return list<string>
+	 */
+	private function davTreeUnder(string $folder): array {
+		$folder = trim($folder, '/');
+		$out = [];
+		$queue = [$folder];
+		for ($i = 0; $i < count($queue); $i++) {
+			foreach ($this->davChildren($queue[$i]) as $child => $isFolder) {
+				$out[] = '/' . $child;
+				if ($isFolder) {
+					$queue[] = $child;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * One level of a Nextcloud folder: child path ⇒ whether it is a collection.
+	 *
+	 * @return array<string, bool>
+	 */
+	private function davChildren(string $folder): array {
+		$res = $this->davClient()->request('PROPFIND', $this->davEncode($folder), [
+			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+			'http_errors' => false,
+		]);
+		if ($res->getStatusCode() === 404) {
+			return []; // a folder the sync was supposed to make and did not
+		}
+		Assert::assertSame(207, $res->getStatusCode(), "PROPFIND $folder failed: " . (string)$res->getBody());
+
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		$self = trim($folder, '/');
+
+		$out = [];
+		foreach ($doc->xpath('//d:response') ?: [] as $response) {
+			$response->registerXPathNamespace('d', 'DAV:');
+			$href = rawurldecode((string)(($response->xpath('d:href')[0]) ?? ''));
+			$isFolder = ($response->xpath('.//d:collection') ?: []) !== [];
+
+			// The href is server-absolute (`/remote.php/dav/files/<user>/…`); everything
+			// up to and including the folder itself is the prefix, and the remainder is
+			// the path this suite speaks in.
+			$pos = strpos($href, '/' . $self . '/');
+			if ($self !== '' && $pos === false) {
+				continue; // the collection's own entry
+			}
+			$rel = $self === '' ? $href : substr($href, $pos + 1);
+			$rel = trim($rel, '/');
+			if ($rel === '' || $rel === $self) {
+				continue;
+			}
+			$out[$rel] = $isFolder;
+		}
+		return $out;
+	}
+
+	/** MKCOL every segment of a path that does not exist yet. */
+	private function davMkdirDeep(string $path): void {
+		$parts = array_values(array_filter(explode('/', trim($path, '/')), static fn (string $p): bool => $p !== ''));
+		$so_far = '';
+		foreach ($parts as $part) {
+			$so_far = $so_far === '' ? $part : $so_far . '/' . $part;
+			if (!$this->davExists($so_far)) {
+				$this->davMkdir($so_far);
+			}
+		}
+	}
+
+	/**
+	 * Register a declared path's TOP folder for teardown.
+	 *
+	 * The top segment only: `tearDown` deletes the folder, which takes everything
+	 * beneath it, and queueing every descendant separately would just make the
+	 * teardown fail noisily on paths their parent already removed.
+	 */
+	private function trackTopFolder(string $path): void {
+		$root = trim($this->rootOf($path), '/');
+		if ($root !== '' && !in_array($root, $this->createdFolders, true)) {
+			$this->createdFolders[] = $root;
+		}
+	}
+
+	/**
+	 * What a declared Nextcloud file contains.
+	 *
+	 * A `.grafana` file gets a real dashboard body, because a mirror the push cannot
+	 * parse is not a mirror. Anything else gets prose — its only job is to still be
+	 * there afterwards.
+	 */
+	private function bodyFor(string $path): string {
+		$name = $this->leafOf($path);
+		if (!str_ends_with($name, '.grafana')) {
+			return "declared by a scenario, and not a dashboard\n";
+		}
+		$title = substr($name, 0, -strlen('.grafana'));
+		return json_encode([
+			'title' => $title,
+			'panels' => [],
+			'schemaVersion' => 39,
+		], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+	}
+
+	/** The id of the mapping whose Nextcloud folder is named, or a failure naming what exists. */
+	private function mappingIdForNcFolder(string $ncFolder): string {
+		$seen = [];
+		foreach ($this->listMappings() as $mapping) {
+			$folder = (string)($mapping['nc_folder'] ?? '');
+			$seen[] = $folder;
+			if ($folder === $ncFolder) {
+				return (string)($mapping['id'] ?? '');
+			}
+		}
+		throw new \RuntimeException(
+			"no mapping targets the Nextcloud folder '$ncFolder'; the mappings are: " . implode(', ', $seen),
+		);
+	}
+}

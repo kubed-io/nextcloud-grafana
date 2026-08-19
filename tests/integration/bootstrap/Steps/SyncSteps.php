@@ -37,49 +37,16 @@ trait SyncSteps {
 	private array $pinnedEtags = [];
 
 	/**
-	 * Create an admin-owned sync mapping from a preloaded Grafana folder to a
-	 * Nextcloud folder, and register the folder for teardown.
-	 *
-	 * @Given an admin-owned mapping from Grafana folder :uid to Nextcloud folder :folder
-	 */
-	public function anAdminOwnedMappingFromGrafanaFolderToNextcloudFolder(string $uid, string $folder): void {
-		// CLEAR FIRST, so this is a pre-STATE rather than an accumulation.
-		//
-		// A mapping is unique on the Grafana uid, so without this the second row of
-		// an Examples table that maps the same folder is refused as a duplicate and
-		// the scenario fails on its Given. Every scenario in this file wants exactly
-		// one mapping anyway, and a pre-state step that quietly depends on what the
-		// previous scenario left behind is the thing outlines exist to avoid.
-		foreach ($this->listMappingsForSync() as $existing) {
-			$id = (string)($existing['id'] ?? '');
-			if ($id !== '') {
-				$this->occ('grafana_sync:remove-mapping ' . escapeshellarg($id));
-			}
-		}
-
-		$json = json_encode([
-			'grafana_folder_uid' => $uid,
-			'grafana_folder_title' => $uid,
-			'nc_folder' => $folder,
-			'mode' => 'sync',
-			'use_team_folder' => false,
-		], JSON_THROW_ON_ERROR);
-		$res = $this->occ('grafana_sync:add-mapping ' . escapeshellarg($json));
-		Assert::assertSame(0, $res['exit'], "adding the mapping failed:\n{$res['output']}");
-		// The pull creates this folder in the actor's home; track it so tearDown removes it.
-		if (!in_array($folder, $this->createdFolders, true)) {
-			$this->createdFolders[] = $folder;
-		}
-	}
-
-	/**
 	 * A REGEX WITH THE VOCABULARY SPELLED OUT, not `:actor syncs :scope`. Behat's
 	 * `:name` placeholder matches a quoted string or a single non-space token — so
 	 * `the admin` never matches it, and all three rows come back UNDEFINED. The
 	 * alternation also makes a typo in an Examples cell a hard failure rather than
 	 * a silently different actor.
 	 *
-	 * @When /^(the admin|the schedule) syncs (one mapping|every mapping)$/
+	 * NO LONGER A STEP OF ITS OWN. Every feature now names the direction — `syncs
+	 * every mapping from Grafana` — because this file has two buttons and naming only
+	 * one of them was how "sync" came to mean "pull" everywhere but the push scenario.
+	 * {@see \OCA\GrafanaSync\Tests\Integration\Steps\ResourceSteps} is the caller.
 	 *
 	 * THE TRIGGER IS DATA, NOT A BEHAVIOUR. Three ways to start the same sync —
 	 * the card's button, the section's button, and the clock — so the outline
@@ -89,7 +56,7 @@ trait SyncSteps {
 	 * the schedule is the interesting one, because the only honest way to test it
 	 * is to make the real TimedJob run.
 	 */
-	public function actorSyncsScope(string $actor, string $scope): void {
+	private function actorSyncsScope(string $actor, string $scope): void {
 		if ($actor === 'the schedule') {
 			$this->theScheduleFires();
 
@@ -379,15 +346,6 @@ trait SyncSteps {
 	}
 
 	/**
-	 * @When the admin pulls from Grafana
-	 */
-	public function theAdminPullsFromGrafana(): void {
-		$res = $this->occ('grafana_sync:sync pull');
-		Assert::assertSame(0, $res['exit'], "pull failed:\n{$res['output']}");
-		$this->lastPullReport = self::decodeSyncReport((string)$res['output']);
-	}
-
-	/**
 	 * The mirror's "Modified" is the dashboard's own `meta.updated`, not the moment the
 	 * pull ran.
 	 *
@@ -583,14 +541,6 @@ trait SyncSteps {
 	public function theFileIsADashboardForUid(string $path, string $mode, string $uid): void {
 		Assert::assertSame($uid, $this->davReadMetadata($path, self::META_UID), "uid metadata mismatch on '$path'");
 		Assert::assertSame($mode, $this->davReadMetadata($path, self::META_MODE), "mode metadata mismatch on '$path'");
-	}
-
-	/**
-	 * @Then :folder holds exactly :count dashboard file(s)
-	 */
-	public function holdsExactlyDashboardFiles(string $folder, int $count): void {
-		$files = $this->davListDashboardFiles($folder);
-		Assert::assertCount($count, $files, "unexpected dashboard files in '$folder': " . implode(', ', $files));
 	}
 
 	/**

@@ -18,6 +18,7 @@ use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MirrorSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MoveConflictSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\RenameSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\ResourceSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\SyncSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\TagSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\TrashSteps;
@@ -60,6 +61,7 @@ final class FeatureContext implements Context {
 	use RenameSteps;
 	use MirrorSteps;
 	use MoveConflictSteps;
+	use ResourceSteps;
 	use TagSteps;
 
 	private const APP_ID = 'grafana_sync';

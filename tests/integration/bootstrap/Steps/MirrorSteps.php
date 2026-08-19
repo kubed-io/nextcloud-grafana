@@ -25,11 +25,11 @@ use PHPUnit\Framework\Assert;
  * weakest possible statement about a tree: it passes whatever the file is called
  * and wherever it sits.
  *
- * So the pre-state is declared (`the Grafana folder … already contains:`) and the
- * end state is the tree (`the mapped folder holds:`), the same shape
- * `kubed-io/nextcloud-penpot` settled on. Seeding is find-or-overwrite, so a
- * scenario may name a dashboard the preload already wrote and still read as the
- * pre-state it is.
+ * So the pre-state is declared and the end state is the tree, the same shape
+ * `kubed-io/nextcloud-penpot` settled on. The pre-state table that used to live
+ * here — `the Grafana folder … already contains:` — could only ever describe ONE
+ * FLAT folder, and is replaced by `Grafana holds these resources:`
+ * ({@see ResourceSteps}), which describes a tree.
  *
  * ## AND THE METADATA, WHICH IS A POST-STATE
  *
@@ -66,28 +66,6 @@ trait MirrorSteps {
 	 */
 	public function resetSeededDashboards(): void {
 		$this->seededDashboards = [];
-	}
-
-	/**
-	 * The Grafana side of the pre-state, as one table.
-	 *
-	 * @Given /^the Grafana folder "([^"]*)" already contains:$/
-	 */
-	public function theGrafanaFolderAlreadyContains(string $folderUid, TableNode $table): void {
-		foreach ($table->getHash() as $row) {
-			$title = $row['dashboard'];
-			$uid = $row['uid'];
-			// A `tags` column seeds the dashboard WITH those tags. Without this branch
-			// the column would be silently ignored, and a tag-import assertion would
-			// pass against a dashboard that never carried a tag.
-			$tags = trim((string)($row['tags'] ?? ''));
-			if ($tags !== '') {
-				$this->grafanaCreateTaggedDashboard($uid, $title, $folderUid, $this->parseTags($tags));
-			} else {
-				$this->grafanaCreateDashboard($uid, $title, $folderUid);
-			}
-			$this->seededDashboards[$title] = $uid;
-		}
 	}
 
 	/**

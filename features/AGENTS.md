@@ -37,6 +37,76 @@ because it will be believed.
 
 Ported from `kubed-io/nextcloud-penpot`, where this layout was worked out.
 
+## Declaring a world: the resource tables
+
+`Grafana holds these resources:` and `Nextcloud holds these resources:` describe
+one side as a TREE, in one table, at whatever depth the scenario needs:
+
+```gherkin
+And Grafana holds these resources:
+  | path                  | type      | tags       |
+  | /alpha/Alpha Demo     | dashboard | dns, linux |
+  | /alpha/Region         | folder    | quarterly  |
+  | /alpha/Region/Latency | dashboard |            |
+```
+
+`type` is optional on the Nextcloud side, where the name already says it: a
+`.grafana` file is a mirror, anything else with an extension is an ordinary file,
+and a bare name is a folder. `tags` and `uid` are optional everywhere; an omitted
+uid is minted from the title, because a scenario that does not mention a uid
+should not have to invent one.
+
+**They replaced a pile of single-purpose arranges.** `an admin-owned mapping from
+Grafana folder … to Nextcloud folder …`, `the Grafana folder … already contains:`
+and `a folder mapped as … ` each declared one sliver of the world, so a
+Background wanting three folders and a non-dashboard file could not say so at
+all. Every one of them could only describe a FLAT folder, which is why no
+scenario in this suite had ever placed a dashboard in a Grafana subfolder — and
+why the pull could flatten an entire tree onto the mapping's root with the whole
+suite green. See [the tree is the assertion](#the-tree-is-the-assertion).
+
+`the following mappings were made:` is the plural of `a mapping with the
+following values:`, same columns, one row each. Both are kept: one mapping reads
+better as one table, and several read better as several rows.
+
+### A background is a picture, not a story
+
+A Background says what IS, never what happened. `the admin has synced from
+Grafana` was the first draft of the "and now the two sides agree" line, and it is
+the wrong shape twice over: it is an action in a Given, and it is a claim about
+provenance that no scenario below it depends on. Maybe a sync ran. Maybe the
+fixtures were written into place. Maybe the app has never started. `Grafana and
+Nextcloud are in sync` is the only part that matters, and it is checkable.
+
+The same rule is why `connection/sync-now.feature`'s Background does NOT say the
+two sides disagree "because nobody has synced yet". They disagree. Why is the
+scenario's business, not the Background's.
+
+### The tree is the assertion
+
+`Then Nextcloud holds these resources:` is exhaustive, folders included, and that
+is the entire point.
+
+A misplaced mirror is invisible to every weaker form. `holds exactly 3 dashboard
+files` passes with all three flattened onto the mapping's root. `Latency.grafana
+appears in the mapped folder` passes for the same reason. Both were in this suite
+for months while a dashboard living in a Grafana subfolder had its mirror written
+to the mapping's root and PINNED there — found by hand on a live instance, never
+by CI, because no assertion anywhere in the suite knew what a subfolder was.
+
+The non-dashboard files are listed too. A sync that tidied away someone's
+`notes.txt` is exactly as wrong as one that misplaced a mirror, and only a table
+that names everything can say so.
+
+### Only a mapping renames a folder
+
+A mapping may point a Grafana folder at a differently-named Nextcloud one —
+`links` → `Pointers`. Nothing beneath it ever may: `links/Nested` mirrors to
+`Pointers/Nested`, never `Pointers/nested`, never anything else.
+
+`dashboards/create.feature` states it with two Examples rows rather than prose,
+because the rule is only visible when both are in front of you.
+
 ## mapping/create
 
 `features/mapping/create.feature`
@@ -339,6 +409,25 @@ the file arrived carrying — the shape `kubed-io/nextcloud-penpot` settled on.
 The root mapping came with the split for the same reason the card did: `/` with
 subfolder sync on is still ONE mapping, and syncing it is the card's button doing
 the largest job it can do.
+
+### Three mappings shaped alike
+
+The three Grafana folders hold the SAME shape — an `Overview` dashboard, a
+`Region` subfolder, a `Latency` inside it — so the outline can assert one tree
+with the folder name substituted in. Give each mapping its own fixtures and the
+end state differs per row, and an Examples table cannot vary the shape of a table
+inside the scenario. Identical shapes are what make the row a column.
+
+They differ in the only two ways a mapping can: `sync` vs `link`, and an admin
+folder vs a team folder. That is the whole matrix, and one pass of the card's
+button is asserted against every cell of it.
+
+**"Syncing one mapping leaves the others where they were" was removed.** It was
+the negative half — another mapping standing there, still empty afterwards — and
+it is not a behaviour. Nothing happened to `Bravo`; a scenario whose end state is
+"unchanged" is asserting the absence of a bug rather than the presence of a
+behaviour, which is the same fault as a scenario that syncs twice and checks the
+tree did not move.
 
 ## connection/connection
 
@@ -2408,6 +2497,83 @@ step definitions are kept with their docblocks, so re-adding it is one line if i
 ever earns a home. The behaviours that DO rewrite a mirror assert their own end
 states, which is where the guarantee belongs.
 
+### A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
+
+THE PUSH COULD NOT SEE PAST THE FIRST LEVEL. `pushOne` walked
+`getDirectoryListing()` on the mapping's folder and stopped, while the pull walked
+the whole tree — so a dashboard living in a Grafana subfolder had a mirror the pull
+maintained faithfully and the push silently skipped. "Sync to Grafana" is the
+button an admin reaches for on the day something has gone wrong in Grafana, and
+the deeper the file, the more certainly it was left out. It walks
+`indexByUid` now, which is the same walk the pull already did.
+
+**The divergence is arranged in GRAFANA, not in the file.** Writeback is pinned
+inline for these scenarios, so a DAV write to a mirror is pushed the instant it
+lands and there would be nothing left to sync. Changing the dashboard instead
+leaves the file holding what it always held, and makes Grafana NEWER than it — so
+"the dashboard holds its file's panels" afterwards can only be true if Nextcloud
+won where the two disagreed, which is what an admin means by "Grafana should
+match". Same reasoning as the n8n master's `one of its workflows was changed in
+n8n after its file was written`, arrived at from the opposite side.
+
+**A whole-tree `Then` was the first draft and was wrong here.** It would have
+asserted that a push CREATES the Grafana folders Nextcloud has and Grafana does
+not — true, worth having, and a different behaviour from this one. It also
+depended on the push minting dashboards for files that have never been pushed,
+which is a documented future step (`PushService::push` says so in as many words),
+so the scenario would have been failing for a reason it was not about.
+
+### A mirror follows its dashboard between folders
+
+WHERE A MIRROR LIVES IS GRAFANA'S TO SAY, and for a long time nothing said it. The
+pull worked out the right folder for every dashboard — `FolderTreeMirror` returns
+the map — and then used it only when CREATING a mirror. An existing one was
+reconciled for contents, name, stamp and tags, and never for location. So a mirror
+that ended up in the wrong folder stayed there permanently.
+
+The plainest way to get one is to move a dashboard between folders in Grafana: the
+file simply never follows. Measured on a live instance — a dashboard moved from one
+subfolder to another kept its file where it was through a pull every seventy
+seconds, and reported `unchanged` every time.
+
+**The old code had a guard that was right, and it is kept.** The rename was
+deliberately confined to the file's own folder: *"never yank a file the user put in
+a subfolder back to the mapping root."* So a mirror is relocated only when it sits
+in a folder THIS APP MANAGES — the mapping's root, or a folder stamped with the
+Grafana folder uid it mirrors. A folder the user made carries no stamp, so their
+filing is left alone, and `Drafts` in this file's Background is what says so.
+
+Both halves have unit tests, because this one is plain logic rather than the
+storage-shaped kind CI cannot see.
+
+### RETIRED — A sync dates the mirror from Grafana
+
+Never a behaviour. A mirror wearing Grafana's clocks is an END STATE, so it rides
+the scenario that produced it as one more `Then`, and it now does — on the
+outline above. `carries its Grafana dates` survives as the sentence; only the
+scenario wrapped around it is gone.
+
+### RETIRED — A sync leaves the mirror wearing Grafana's tags
+
+Same fault, and it had grown a whole scenario to hold it. Tags are an end state
+of a sync, so they are a COLUMN on the tree table now — which is strictly
+stronger, because it says what every file's tags are rather than one file's.
+
+The tag-search claim it also carried (`can be found by a Nextcloud tag search
+for …`) was not lost: `dashboards/tags.feature` already asserts it, which is
+where a claim about tag search belongs.
+
+### RETIRED — A folder that already holds a mirror is filled in place, not doubled
+
+Two syncs, one table, no difference — which is the definition of a scenario that
+asserts nothing. It was defensible when the assertion was a COUNT (`holds exactly
+1 dashboard file`), because a count run twice at least catches a duplicate. Once
+the assertion became the whole tree, the first sync already says everything the
+second one could: the tree is the tree, and a duplicate would fail the first run.
+
+The situation it was reaching for — a first sync over a folder that already holds
+files — is now in the Background of every scenario in this file, where it belongs.
+
 ### carries its Grafana dates
 
 AN END STATE, NOT A FEATURE OF ITS OWN. A mirror wears the dashboard's clocks
@@ -2427,17 +2593,25 @@ existing file rather than leaving an `Alpha Demo (2).grafana` beside it. Kept
 out of the outline above because it asks a different question, and folding it in
 would prove the same thing three times, once per actor, for no extra information.
 
-### A sync fills the mapped folder, however it was started
+### A sync from Grafana mounts every mapped folder, however it was started
 
-actor        | scope
--------------+---------------------
-the admin    | one mapping        the card's "Sync now"
-the admin    | every mapping      the section's "Sync from Grafana"
-the schedule | every mapping      time as the actor
+actor        | what presses it
+-------------+---------------------------------
+the admin    | the section's "Sync from Grafana"
+the schedule | time as the actor
 
-Same pre-state, same post-state. The actor and the scope are the only things
-that differ, so they are COLUMNS rather than three scenarios. Whether a run is
-synchronous or queued is a mechanism, and is asserted nowhere.
+Same pre-state, same post-state, so the actor is a COLUMN rather than two
+scenarios. Whether a run is synchronous or queued is a mechanism, and is
+asserted nowhere.
+
+MOUNTS, not "fills". A mapped folder is not a bucket that a sync tips dashboards
+into — it is where a Grafana folder is mounted, and what arrives is that folder's
+whole shape: subfolders, their subfolders, and each dashboard in the one it
+actually lives in. "Fills" is what the old flat assertions were describing, and
+they were describing a bug.
+
+The third row of the old table — `the admin | one mapping` — moved out with the
+scenario it belonged to, and is `mapping/sync-now.feature`.
 
 THIS FILE IS THE FIRST SYNC, AND ONLY THAT. Nothing is tracked yet, so whatever
 is in Grafana is simply a Given. A LATER run only has work to do because
