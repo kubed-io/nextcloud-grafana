@@ -302,6 +302,78 @@ trait ResourceSteps {
 				}
 			}
 			$this->declareMapping($form);
+			$this->trackMappedFolder(
+				(string)($form['nc folder'] ?? ''),
+				(string)($form['storage'] ?? ''),
+			);
+		}
+	}
+
+	/** Team Folder mount points this scenario's mappings provisioned. */
+	private array $mappedTeamFolders = [];
+
+	/**
+	 * Remember a mapped folder so the scenario does not hand its leftovers to the next
+	 * one.
+	 *
+	 * ## WHY THIS IS HERE AND NOT IN THE MAPPING ARRANGE
+	 *
+	 * Saving a mapping PROVISIONS its Nextcloud folder, and nothing tears that down.
+	 * A Background naming a fixed folder therefore inherits whatever the last scenario
+	 * mirrored into it, and the pull writes `Pinned (1)`, `Pinned (2)`, `Pinned (3)`
+	 * beside the leftovers — one per Examples row.
+	 *
+	 * The obvious place for the fix is `declareMapping`, shared by both mapping
+	 * arranges. Putting it there broke `motion` and `trash`: the older features name
+	 * fixed folders too, and deleting one out from under them changes what they were
+	 * written against. They do not NEED it — an assertion that names one file at a
+	 * time cannot see the debris — so the cleanup belongs to the arrange whose
+	 * assertions look at whole trees, and the wider fix is its own change.
+	 *
+	 * ## A TEAM FOLDER IS NOT A FOLDER YOU CAN DELETE
+	 *
+	 * `tearDown` removes the admin's folders over WebDAV, and a groupfolder mount
+	 * answers that with a shrug: `Pointers` came back clean and `Shared` did not,
+	 * measured. A Team Folder has to go through groupfolders' own occ command, which
+	 * is what {@see forgetTeamFolders} does.
+	 */
+	private function trackMappedFolder(string $ncFolder, string $storage): void {
+		if ($ncFolder === '') {
+			return;
+		}
+		if (str_contains($storage, 'team')) {
+			$this->mappedTeamFolders[$ncFolder] = true;
+			return;
+		}
+		if (!in_array($ncFolder, $this->createdFolders, true)) {
+			$this->createdFolders[] = $ncFolder;
+		}
+	}
+
+	/**
+	 * @AfterScenario
+	 *
+	 * Best-effort, like every other teardown here: a failure to clean up must never
+	 * turn a passing scenario into a failing one.
+	 */
+	public function forgetTeamFolders(): void {
+		if ($this->mappedTeamFolders === []) {
+			return;
+		}
+		$mounts = $this->mappedTeamFolders;
+		$this->mappedTeamFolders = [];
+		try {
+			$res = $this->occ('groupfolders:list --output=json');
+			$folders = json_decode((string)$res['output'], true);
+			foreach (is_array($folders) ? $folders : [] as $folder) {
+				$mount = (string)($folder['mount_point'] ?? '');
+				$id = (string)($folder['id'] ?? '');
+				if ($id !== '' && isset($mounts[$mount])) {
+					$this->occ('groupfolders:delete ' . escapeshellarg($id) . ' --force');
+				}
+			}
+		} catch (\Throwable) {
+			// best-effort cleanup
 		}
 	}
 

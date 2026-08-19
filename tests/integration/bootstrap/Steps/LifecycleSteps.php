@@ -198,9 +198,14 @@ trait LifecycleSteps {
 		// add-mapping. Resolving it through grafanaFolderUid() would hash it into a
 		// `nc-t-…` uid belonging to the older arrange style, and compare two folders
 		// that were never the same one.
+		// A NESTED FOLDER'S UID IS GRAFANA'S TO MINT, so a scenario naming `Demo/Team`
+		// cannot be compared against the uid directly the way a top-level folder can —
+		// there the arrange sets uid == title, which is the only reason this ever
+		// worked. Resolve the path first and compare uid to uid.
+		$want = $this->grafanaFolderUidByTitle($folder) ?? $folder;
 		$got = (string)$this->dashboardFolderUid($this->lastUid);
-		if ($got !== $folder) {
-			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder'");
+		if ($got !== $want) {
+			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder' ($want)");
 		}
 	}
 

@@ -610,8 +610,9 @@ trait MirrorSteps {
 	 * actually carries and a scenario never has to know the quirk.
 	 */
 	private function mappingModeForNcFolder(string $folder): string {
+		$owner = $this->owningMappedFolder($folder);
 		foreach ($this->listMappings() as $m) {
-			if ((string)($m['nc_folder'] ?? '') === $folder) {
+			if ((string)($m['nc_folder'] ?? '') === $owner) {
 				$mode = (string)($m['mode'] ?? '');
 				return $mode === 'link' ? 'reference' : $mode;
 			}
@@ -620,11 +621,40 @@ trait MirrorSteps {
 	}
 
 	private function mappingIdForNcFolder(string $folder): string {
+		$owner = $this->owningMappedFolder($folder);
 		foreach ($this->listMappings() as $m) {
-			if ((string)($m['nc_folder'] ?? '') === $folder) {
+			if ((string)($m['nc_folder'] ?? '') === $owner) {
 				return (string)($m['id'] ?? '');
 			}
 		}
 		throw new \RuntimeException("no mapping owns the Nextcloud folder '{$folder}'");
+	}
+
+	/**
+	 * The mapped folder that owns a path: itself, or the nearest ancestor a mapping
+	 * names.
+	 *
+	 * A MAPPING OWNS EVERYTHING UNDER IT. Both lookups above matched the folder
+	 * exactly, which held for as long as no scenario put a dashboard in a subfolder —
+	 * and then answered "no mapping owns the Nextcloud folder 'Demo/Team'" about a
+	 * file the `Demo` mapping had just mirrored there itself.
+	 *
+	 * Unmapped paths come back unchanged, so the callers' own failure still names the
+	 * folder the scenario asked about rather than some ancestor of it.
+	 */
+	private function owningMappedFolder(string $folder): string {
+		$folder = trim($folder, '/');
+		$mapped = [];
+		foreach ($this->listMappings() as $m) {
+			$mapped[(string)($m['nc_folder'] ?? '')] = true;
+		}
+		for ($candidate = $folder; $candidate !== '' && $candidate !== '.';) {
+			if (isset($mapped[$candidate])) {
+				return $candidate;
+			}
+			$parent = dirname($candidate);
+			$candidate = $parent === $candidate ? '' : trim($parent, '/.');
+		}
+		return $folder;
 	}
 }
