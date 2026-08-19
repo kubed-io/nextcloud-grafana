@@ -81,18 +81,17 @@ trait ResourceSteps {
 			$tags = $this->parseTags(trim((string)($row['tags'] ?? '')));
 
 			if ($type === 'folder') {
-				// A GRAFANA FOLDER HAS NO TAGS OF ITS OWN. Grafana tags dashboards; the
-				// folder tags this app syncs are an annotation it bolts on, and they are
-				// `folders/tags.feature`'s subject rather than a column here. Refused
-				// rather than ignored, so a row that means something cannot read as
-				// though it took effect.
+				// A FOLDER MAY CARRY TAGS, and this used to refuse them. Grafana tags
+				// dashboards natively and folders not at all, which is true and was the
+				// wrong conclusion: a mirrored folder's tags live in the
+				// `nextcloud.kubed.io/tags` annotation, they are as real as any other
+				// pre-state, and an admin's own API call is exactly how they get there
+				// before this app has ever connected. `folders/tags.feature` needs to
+				// say so in its Background.
+				$uid = $this->ensureGrafanaFolderPath($path);
 				if ($tags !== []) {
-					throw new \RuntimeException(
-						"the folder row '$path' carries tags; only a dashboard row may. "
-						. 'Use `the Grafana folder … is tagged …` if a folder\'s tags are the subject.',
-					);
+					$this->grafanaSetFolderTags($uid, $tags);
 				}
-				$this->ensureGrafanaFolderPath($path);
 				continue;
 			}
 
@@ -124,6 +123,7 @@ trait ResourceSteps {
 	public function grafanaHoldsExactlyTheseResources(TableNode $table): void {
 		$want = [];
 		$wantTags = [];
+		$folderRows = [];
 		foreach ($table->getHash() as $row) {
 			$path = $this->requirePath($row);
 			$want[] = $path;
@@ -131,10 +131,8 @@ trait ResourceSteps {
 			if ($tags === '') {
 				continue;
 			}
-			if (trim((string)($row['type'] ?? '')) === 'folder') {
-				throw new \RuntimeException("the folder row '$path' carries tags; only a dashboard row may");
-			}
 			$wantTags[$path] = $tags;
+			$folderRows[$path] = trim((string)($row['type'] ?? '')) === 'folder';
 		}
 		sort($want);
 
@@ -153,10 +151,17 @@ trait ResourceSteps {
 
 		// The tree first, tags second — see the Nextcloud twin for why.
 		foreach ($wantTags as $path => $tags) {
-			$uid = $this->grafanaDashboardUidAtPath($path);
+			if ($folderRows[$path] ?? false) {
+				$this->assertSameTags(
+					$this->parseTags($tags),
+					$this->grafanaFolderTags($this->ensureGrafanaFolderPath($path)),
+					"the tags on the Grafana folder '$path'",
+				);
+				continue;
+			}
 			$this->assertSameTags(
 				$this->parseTags($tags),
-				$this->grafanaDashboardTags($uid),
+				$this->grafanaDashboardTags($this->grafanaDashboardUidAtPath($path)),
 				"the tags on the Grafana dashboard '$path'",
 			);
 		}

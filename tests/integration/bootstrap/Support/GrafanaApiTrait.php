@@ -258,6 +258,25 @@ trait GrafanaApiTrait {
 		return $uid;
 	}
 
+	/**
+	 * Rename a Grafana folder, as a person with API access would.
+	 *
+	 * The legacy endpoint, which takes a title and settles the version itself — the
+	 * app-platform resource would need the current `resourceVersion` read back first,
+	 * and a test arrange has no business racing Grafana for it.
+	 */
+	private function grafanaRenameFolder(string $uid, string $title): void {
+		$res = $this->grafanaClient()->request('PUT', 'folders/' . rawurlencode($uid), [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode(['title' => $title, 'overwrite' => true], JSON_THROW_ON_ERROR),
+		]);
+		Assert::assertSame(
+			200,
+			$res->getStatusCode(),
+			"renaming Grafana folder $uid to '$title' failed: " . (string)$res->getBody(),
+		);
+	}
+
 	/** Delete a Grafana folder by uid. 200 = gone; 404 = already gone. Best-effort teardown. */
 	private function grafanaDeleteFolder(string $uid): void {
 		$this->grafanaClient()->request('DELETE', 'folders/' . rawurlencode($uid), ['http_errors' => false]);
