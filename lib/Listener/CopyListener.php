@@ -12,6 +12,7 @@ namespace OCA\GrafanaSync\Listener;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\CopyService;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderCascade;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -33,6 +34,7 @@ use Psr\Log\LoggerInterface;
 final class CopyListener implements IEventListener {
 	public function __construct(
 		private CopyService $copyService,
+		private FolderCascade $cascade,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
 	) {
@@ -60,7 +62,7 @@ final class CopyListener implements IEventListener {
 		// first dashboard landing in it ({@see \OCA\GrafanaSync\Service\FolderMirror})
 		// rather than needing a step of its own — which is the same rule
 		// `folders/create.feature` states: a folder is in Grafana when a dashboard is.
-		foreach ($this->dashboardFilesIn($node) as $file) {
+		foreach ($this->copiedDashboards($node) as $file) {
 			try {
 				$this->copyService->onCopy($file);
 			} catch (\Throwable $e) {
@@ -80,29 +82,16 @@ final class CopyListener implements IEventListener {
 	/**
 	 * The dashboard files a copy produced: the node itself, or every one beneath it.
 	 *
+	 * The walk belongs to {@see FolderCascade}, which already does it for the trash
+	 * and the purge — one tree walk with one set of edge cases, rather than a second
+	 * copy of it here that would drift from the first.
+	 *
 	 * @return list<File>
 	 */
-	private function dashboardFilesIn(Node $node): array {
-		if ($node instanceof File) {
-			return FilenameCodec::isDashboardFile($node) ? [$node] : [];
+	private function copiedDashboards(Node $node): array {
+		if ($node instanceof Folder) {
+			return $this->cascade->dashboardFilesIn($node);
 		}
-		if (!$node instanceof Folder) {
-			return [];
-		}
-		$out = [];
-		try {
-			foreach ($node->getDirectoryListing() as $child) {
-				$out = [...$out, ...$this->dashboardFilesIn($child)];
-			}
-		} catch (\Throwable $e) {
-			// A folder we cannot list leaves its copies untracked, which is the same
-			// outcome as before this walk existed — never a failed copy.
-			$this->logger->warning('grafana_sync: could not walk a copied folder', [
-				'app' => Application::APP_ID,
-				'path' => $node->getPath(),
-				'exception' => $e,
-			]);
-		}
-		return $out;
+		return $node instanceof File && FilenameCodec::isDashboardFile($node) ? [$node] : [];
 	}
 }

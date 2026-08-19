@@ -207,6 +207,12 @@ trait FolderSteps {
 	 * Columns: `path` (required) and `tags` (optional).
 	 */
 	public function theFollowingItemsInTheMappings(TableNode $table): void {
+		// RESET, AND RECORD WHAT THIS TABLE SEEDED. The Background declares the
+		// neighbourhood and the scenario declares its subject, in that order — so the
+		// last table to run is the one a `Then` means by "those dashboards", and the
+		// gestures need no pinning step of their own. `I move … to the trash` already
+		// exists in TrashSteps and must not be redeclared to add one.
+		$this->originalDashboardUids = [];
 		$touchedMapping = false;
 		foreach ($table->getHash() as $row) {
 			$path = ltrim($this->requirePath($row), '/');
@@ -238,6 +244,7 @@ trait FolderSteps {
 			}
 			$this->createdDashboardUids[] = $uid;
 			$this->seededDashboards[$title] = $uid;
+			$this->originalDashboardUids[] = $uid;
 		}
 
 		if ($touchedMapping) {
@@ -381,6 +388,171 @@ trait FolderSteps {
 				$this->originalDashboardUids[] = $uid;
 			}
 		}
+	}
+
+	// ── moving ────────────────────────────────────────────────────────────────
+
+	/**
+	 * @When /^I move "([^"]*)" into "([^"]*)"$/
+	 *
+	 * Pins the source's identities first, for the reason {@see iCopyTo} gives: after
+	 * the gesture there is nothing left to compare "the original id" against.
+	 */
+	public function iMoveInto(string $from, string $into): void {
+		$this->pinOriginalsOf($from);
+		$this->davMkdir($into);
+		$this->davMove($from, rtrim($into, '/') . '/' . $this->leafOf($from));
+		$this->currentFolder = rtrim($into, '/') . '/' . $this->leafOf($from);
+	}
+
+	/** @When /^I try to move "([^"]*)" into "([^"]*)"$/ */
+	public function iTryToMoveInto(string $from, string $into): void {
+		$this->pinOriginalsOf($from);
+		$this->davMkdir($into);
+		$this->lastMoveStatus = $this->davMoveStatus($from, rtrim($into, '/') . '/' . $this->leafOf($from));
+	}
+
+	/**
+	 * @When /^someone moves the "([^"]*)" Grafana folder under "([^"]*)" as "([^"]*)"$/
+	 *
+	 * One call, because Grafana takes a parent and a title together — which is why
+	 * `folders/move.feature` can move and rename at once where a Files gesture cannot.
+	 */
+	public function someoneMovesTheGrafanaFolderUnderAs(string $ncPath, string $newParent, string $name): void {
+		$uid = $this->grafanaFolderUidForNcPath($ncPath);
+		$this->lastFolderUid = (string)$this->davReadMetadata($ncPath, self::META_FOLDER_UID);
+		$this->grafanaMoveFolder($uid, $this->grafanaFolderUidForNcPath($newParent), $name);
+		$this->pullEveryMapping();
+	}
+
+	/** @Then /^the move is refused with a message$/ */
+	public function theMoveIsRefusedWithAMessage(): void {
+		$this->assertRefused('move', $this->lastMoveStatus);
+	}
+
+	// ── the trash ─────────────────────────────────────────────────────────────
+
+	/** @When /^I try to move "([^"]*)" to the trash$/ */
+	public function iTryToMoveToTheTrash(string $folder): void {
+		$this->pinOriginalsOf($folder);
+		$this->lastDeleteStatus = $this->davDeleteStatus($folder);
+	}
+
+	/** @Then /^the trash is refused with a message$/ */
+	public function theTrashIsRefusedWithAMessage(): void {
+		$this->assertRefused('trash', $this->lastDeleteStatus);
+	}
+
+	/**
+	 * @Given /^"([^"]*)" is in the Nextcloud trash$/
+	 *
+	 * The trash gesture ITSELF, run as an arrange. Restoring and purging both need a
+	 * folder that has really been through it — the trash hooks are what park or
+	 * delete the dashboards, and a folder placed in the trash by any other route
+	 * would leave Grafana in a state no gesture produces.
+	 */
+	public function isInTheNextcloudTrash(string $folder): void {
+		$this->pinOriginalsOf($folder);
+		$this->davDelete($folder);
+		Assert::assertFalse($this->davExists($folder), "'$folder' is still in Nextcloud after being trashed");
+		Assert::assertNotNull($this->trashbinPathFor($folder), "setup: '$folder' did not reach the Nextcloud trash");
+	}
+
+	/** @Then /^"([^"]*)" is recoverable from the Nextcloud trash$/ */
+	public function isRecoverableFromTheNextcloudTrash(string $folder): void {
+		Assert::assertNotNull(
+			$this->trashbinPathFor($folder),
+			"'$folder' is not in the Nextcloud trash, so nothing could be recovered",
+		);
+	}
+
+	/** @When /^I restore "([^"]*)" from the Nextcloud trash$/ */
+	public function iRestoreFromTheNextcloudTrash(string $folder): void {
+		$entry = $this->trashbinPathFor($folder);
+		Assert::assertNotNull($entry, "'$folder' is not in the Nextcloud trash");
+		$res = $this->davClient()->request('MOVE', $this->trashHref($entry), [
+			'headers' => [
+				'Destination' => $this->ncBaseUrl . '/remote.php/dav/trashbin/'
+					. rawurlencode($this->ncUser) . '/restore/' . rawurlencode($entry),
+			],
+		]);
+		$this->assertStatus($res, [201, 204], "restore $entry");
+		$this->currentFolder = $folder;
+	}
+
+	/** @When /^I purge "([^"]*)" from the trash$/ */
+	public function iPurgeFromTheTrash(string $folder): void {
+		$entry = $this->trashbinPathFor($folder);
+		Assert::assertNotNull($entry, "'$folder' is not in the Nextcloud trash");
+		$this->assertStatus($this->davClient()->request('DELETE', $this->trashHref($entry)), [204, 200], "purge $entry");
+	}
+
+	/** @Then /^"([^"]*)" is gone from the Nextcloud trash$/ */
+	public function isGoneFromTheNextcloudTrash(string $folder): void {
+		Assert::assertNull(
+			$this->trashbinPathFor($folder),
+			"'$folder' is still in the Nextcloud trash",
+		);
+	}
+
+	// ── what became of the dashboards ─────────────────────────────────────────
+
+	/** @Then /^none of those dashboards exists in Grafana$/ */
+	public function noneOfThoseDashboardsExistsInGrafana(): void {
+		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		foreach ($this->originalDashboardUids as $uid) {
+			Assert::assertNull(
+				$this->grafanaGetDashboard($uid),
+				"dashboard $uid still exists in Grafana",
+			);
+		}
+	}
+
+	/** @Then /^no dashboard it held exists in Grafana$/ */
+	public function noDashboardItHeldExistsInGrafana(): void {
+		$this->noneOfThoseDashboardsExistsInGrafana();
+	}
+
+	/**
+	 * @Then /^those dashboards are parked in "([^"]*)"$/
+	 *
+	 * PARKED, NOT DELETED — the whole of what the recycle bin buys. Each is still
+	 * live in Grafana, and living in the bin folder is the only thing that changed.
+	 */
+	public function thoseDashboardsAreParkedIn(string $binTitle): void {
+		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		$bin = $this->grafanaFolderUidByTitle($binTitle);
+		Assert::assertNotNull($bin, "Grafana has no folder titled '$binTitle'");
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			Assert::assertNotNull($record, "dashboard $uid was deleted rather than parked");
+			Assert::assertSame(
+				$bin,
+				(string)($record['meta']['folderUid'] ?? ''),
+				"dashboard $uid is not in '$binTitle'",
+			);
+		}
+	}
+
+	/** @Then /^"([^"]*)" holds no dashboard files$/ */
+	public function holdsNoDashboardFiles(string $folder): void {
+		$found = $this->davListDashboardFiles($folder);
+		Assert::assertSame([], $found, "'$folder' still holds: " . implode(', ', $found));
+	}
+
+	/** @Then /^"([^"]*)" holds "([^"]*)"$/ */
+	public function holdsNamedFile(string $folder, string $name): void {
+		Assert::assertTrue(
+			$this->davExists(trim($folder, '/') . '/' . $name),
+			"'$folder' does not hold '$name'",
+		);
+	}
+
+	/** @When /^someone deletes the "([^"]*)" folder in Grafana$/ */
+	public function someoneDeletesTheFolderInGrafana(string $ncPath): void {
+		$this->pinOriginalsOf($ncPath);
+		$this->grafanaDeleteFolder($this->grafanaFolderUidForNcPath($ncPath));
+		$this->pullEveryMapping();
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────

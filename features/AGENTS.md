@@ -854,6 +854,40 @@ The test of a Background row: *would deleting this change what any scenario
 asserts?* If yes it is the subject and belongs in the scenario. If no it is the
 neighbourhood, and a spec with no neighbourhood is testing a laboratory.
 
+### Nextcloud vacating its own source is not a claim
+
+`Then "Demo/Team" is gone from Nextcloud` after `When I move "Demo/Team" into
+"Demo/Archive"` asserts that a move moved something. That is the file manager's
+doing, true before this app was written, and it would pass if every listener in
+here were deleted.
+
+It survives in exactly two places, where it IS a claim: after a folder is renamed
+or moved **in Grafana**, and after one is deleted there. The gesture happened on
+the far side, so the old Nextcloud path disappearing is the mirror following —
+which is the whole behaviour.
+
+### A parked folder coming back
+
+`dashboards/move.feature` has a pair — a file leaving its mapping with the bin ON
+is parked, and moving it back un-parks it with the identity it left with — and
+`folders/move.feature` had only the leaving half. A folder move IS that gesture,
+several dashboards at a time, so the return trip is the same claim and the same
+risk: a rebuild would hand every dashboard a new id and break every saved URL at
+once rather than one at a time.
+
+**Two parity gaps are recorded rather than written**, because guessing at them
+would be worse than naming them:
+
+- **A folder moved OUT of the mapped tree in Grafana.** `dashboards/move.feature`
+  covers a dashboard moved out of a sync mapping and out of a link one. The folder
+  twin means the pull stops seeing the folder at all, and whether the mirror is
+  pruned, kept, or unstamped is a decision nobody has made.
+- **A folder moved onto a name that already exists.** The dashboard side has three
+  scenarios for this — keep one, keep both, overwrite inside one mapping — and
+  every one of them was hard-won. Nextcloud offers to MERGE two folders, which is
+  a gesture the dashboard rules have no answer for: the arrival and the
+  destination both hold dashboards, and some of them may be the same dashboard.
+
 ### A folder copy fires once, for the folder
 
 Nextcloud satisfies a recursive copy SERVER-SIDE and raises a single

@@ -277,6 +277,22 @@ trait GrafanaApiTrait {
 		);
 	}
 
+	/**
+	 * Move a Grafana folder under a new parent, renaming it in the same breath.
+	 *
+	 * TWO CALLS, because Grafana splits them: `POST /folders/:uid/move` takes the new
+	 * parent and `PUT /folders/:uid` takes the title. The scenario says one gesture
+	 * because that is what a person does; which endpoints it costs is ours.
+	 */
+	private function grafanaMoveFolder(string $uid, string $parentUid, string $title): void {
+		$res = $this->grafanaClient()->request('POST', 'folders/' . rawurlencode($uid) . '/move', [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode(['parentUid' => $parentUid], JSON_THROW_ON_ERROR),
+		]);
+		Assert::assertSame(200, $res->getStatusCode(), "moving Grafana folder $uid failed: " . (string)$res->getBody());
+		$this->grafanaRenameFolder($uid, $title);
+	}
+
 	/** Delete a Grafana folder by uid. 200 = gone; 404 = already gone. Best-effort teardown. */
 	private function grafanaDeleteFolder(string $uid): void {
 		$this->grafanaClient()->request('DELETE', 'folders/' . rawurlencode($uid), ['http_errors' => false]);
