@@ -2716,6 +2716,45 @@ MotionService keeps its re-home branch as a defensive path, the way it keeps the
 link move-out strip: the guard refuses first, and a service that is reached anyway
 should still do the least surprising thing.
 
+### A refused move has to say why, and `AbortedEventException` cannot
+
+`Then the move is refused with a message` failed for four rows across two suites
+while the messages it wanted were sitting right there in `MoveGuardListener`, fully
+written. Four CI rounds could not explain it. Reading the running server's own source
+in a pod did, in two greps:
+
+- `OC\Files\Node\HookConnector::rename()` wraps the `BeforeNodeRenamedEvent` dispatch
+  in `catch (AbortedEventException $e)`, logs a warning, and sets `run = false`. The
+  message goes to the log and nowhere else.
+- `View::rename()` then returns `false`, and `Sabre\...\Directory::moveInto()` answers
+  `throw new \Sabre\DAV\Exception\Forbidden('')` — an empty string, by literal.
+
+So every refusal this app made on a move reached the user as a blank 403. The Files
+app showed a failure with nothing in it. **That is a product bug the suite happened to
+catch, not a suite problem** — and the rows that DID pass all along were the ones
+refused by `LinkWriteGuardPlugin` in the DAV layer, where nothing is swallowing.
+
+The fix is one exception class. `OCP\Files\ForbiddenException` is what core itself
+throws from `View::rename()` ("Moving a folder into a child folder is forbidden"), and
+`moveInto()` catches it by name and forwards the message:
+`catch (ForbiddenException $ex) { throw new Forbidden($ex->getMessage(), ...); }`.
+It aborts at the same point — before the rename — and the locks `View::rename()` took
+come off in its own `finally`.
+
+**The general lesson, which this repo has now learned three times.** Core swallows a
+typed abort on `copy` ({@see CopyGuardListener}), on `PUT`, and now on `rename`. A
+refusal that has to reach a person belongs in the DAV layer or in an exception core is
+already forwarding — never in an event whose abort core catches. The three notes are
+the same note; this is the one that names the mechanism for moves.
+
+**Deletes are left alone on purpose.** `HookConnector::delete()` swallows the same way,
+and `Directory::delete()` / `File::delete()` forward a `ForbiddenException` identically,
+so the same swap would work there. It is not made because nothing is asking for it: a
+link delete already answers with a message from `beforeUnbind`, and
+`BeforeNodeDeletedEvent` is dispatched by the trashbin and the purge as well as by a
+person — where an exception escaping is a new failure mode rather than a better message.
+Worth doing when a scenario asks for it, and not before.
+
 ### A failed Grafana delete on move-out never strips the file's identity
 
 Both of these are unit-tested invariants that no scenario stated. They are the

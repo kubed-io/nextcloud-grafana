@@ -17,15 +17,36 @@ use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
-use OCP\Exceptions\AbortedEventException;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Folder;
+use OCP\Files\ForbiddenException;
 use OCP\Files\Node;
 
 /**
  * Gate-keeps a managed dashboard file's moves *before* they happen. NC fires
  * {@see BeforeNodeRenamedEvent} for both renames and moves; throwing
- * {@see AbortedEventException} aborts the operation and shows the message to the user.
+ * {@see ForbiddenException} aborts the operation AND carries the reason to the user.
+ *
+ * ## WHY NOT `AbortedEventException`, WHICH IS THE OBVIOUS ANSWER
+ *
+ * Because Nextcloud eats the message. `OC\Files\Node\HookConnector::rename()` wraps the
+ * dispatch in `catch (AbortedEventException $e)`, logs a warning and sets `run = false`;
+ * `View::rename()` then returns `false`, and `Sabre\...\Directory::moveInto()` answers
+ * `throw new \Sabre\DAV\Exception\Forbidden('')` — an EMPTY message, by literal.
+ * So every refusal this class made reached the user as a blank 403: the Files app showed
+ * a failure with nothing in it, and the person was told no without being told why.
+ *
+ * `ForbiddenException` is the one core itself throws from `View::rename()` ("Moving a
+ * folder into a child folder is forbidden"), and `moveInto()` catches it explicitly:
+ * `catch (ForbiddenException $ex) { throw new Forbidden($ex->getMessage(), ...); }`.
+ * It aborts the same way — the rename has not happened when this runs — and the locks
+ * `View::rename()` took are released in its own `finally`.
+ *
+ * Measured, not deduced: read out of the running server's source in a pod after four CI
+ * rounds could not explain why a refusal whose message was right there arrived empty.
+ * The refusals that DID carry a message all came from {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin},
+ * which throws in the DAV layer where nothing is swallowing — the same lesson that plugin's
+ * `method:PUT` and `method:COPY` handlers already record.
  * The *consequences* of an allowed move are handled afterwards by {@see MotionListener}
  * on the post-move `NodeRenamedEvent`.
  *
@@ -113,9 +134,10 @@ final class MoveGuardListener implements IEventListener {
 		// nothing reports. Refused here, where the user can see why.
 		$targetName = $event->getTarget()->getName();
 		if ($renamed && FilenameCodec::isDashboardName($targetName) && FilenameCodec::displayName($targetName) === '') {
-			throw new AbortedEventException(
+			throw new ForbiddenException(
 				'A dashboard file needs a name — the title in Grafana comes from it. '
 				. 'Give the file a non-blank name.',
+				false,
 			);
 		}
 
@@ -124,9 +146,10 @@ final class MoveGuardListener implements IEventListener {
 		// the filename from Grafana and quietly undid it. A rename undone later is worse
 		// than one refused now: the user is neither told no nor allowed to keep it.
 		if ($renamed && $mode === Mapping::MODE_LINK) {
-			throw new AbortedEventException(
+			throw new ForbiddenException(
 				'“' . $source->getName() . '” is a linked Grafana dashboard, so its name comes from Grafana '
 				. 'and can’t be changed here. Rename the dashboard in Grafana instead.',
+				false,
 			);
 		}
 
@@ -146,9 +169,10 @@ final class MoveGuardListener implements IEventListener {
 		// writes it back at the source. Refusing is the only answer that is not a silent
 		// undo one sync later.
 		if ($mode === Mapping::MODE_LINK) {
-			throw new AbortedEventException(
+			throw new ForbiddenException(
 				'A linked Grafana dashboard can’t be moved out of its mapped folder ("'
 				. $srcMapping->ncFolder . '") — it’s only a pointer. Move it within that folder instead.',
+				false,
 			);
 		}
 
@@ -156,9 +180,10 @@ final class MoveGuardListener implements IEventListener {
 		// folder it mirrors and from nowhere else, so a file moved in by hand is at best
 		// ignored and at worst pruned by the next pull.
 		if ($tgtMapping !== null && $tgtMapping->mode === Mapping::MODE_LINK) {
-			throw new AbortedEventException(
+			throw new ForbiddenException(
 				'“' . $tgtMapping->ncFolder . '” mirrors a Grafana folder in link mode, so its dashboards '
 				. 'are Grafana’s to place — files can’t be moved into it. Move the dashboard in Grafana instead.',
+				false,
 			);
 		}
 
@@ -200,20 +225,22 @@ final class MoveGuardListener implements IEventListener {
 			// Leaving the mapped set. Allowed for sync (the cascade handles it); refused
 			// for link, whose dashboards are pointers with nothing to rebuild from.
 			if ($srcMapping->mode === Mapping::MODE_LINK) {
-				throw new AbortedEventException(
+				throw new ForbiddenException(
 					'“' . $source->getName() . '” can’t be moved out of “' . $srcMapping->ncFolder
 					. '” — that folder mirrors Grafana in link mode, so its dashboards are only pointers. '
 					. 'Move it within that folder instead.',
+					false,
 				);
 			}
 			return;
 		}
 
 		if ($srcMapping->mode !== $tgtMapping->mode) {
-			throw new AbortedEventException(
+			throw new ForbiddenException(
 				'“' . $source->getName() . '” can’t be moved from “' . $srcMapping->ncFolder . '” to “'
 				. $tgtMapping->ncFolder . '” — one mirrors Grafana in ' . $srcMapping->mode
 				. ' mode and the other in ' . $tgtMapping->mode . ' mode, and a move may not change that.',
+				false,
 			);
 		}
 	}

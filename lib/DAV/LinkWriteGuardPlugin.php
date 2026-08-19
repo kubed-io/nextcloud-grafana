@@ -255,12 +255,14 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			return true; // gone already, or not ours to judge — never block on doubt
 		}
 		// NO FOLDER BRANCH HERE, AND THAT IS DELIBERATE — see
-		// `features/AGENTS.md#trashing-a-folder-in-a-link-mapping`. One lived here
-		// briefly and regressed every link MOVE: sabre routes a move through
-		// `beforeUnbind` too, so refusing the source here intercepted refusals
-		// `MoveGuardListener` was already making properly, and answered 403 with an
-		// empty body where the listener answers with a message. A refusal the user
-		// cannot read is the failure this plugin exists to avoid.
+		// `features/AGENTS.md#trashing-a-folder-in-a-link-mapping`. Sabre routes a MOVE
+		// through `beforeUnbind` as well as a DELETE, so a folder branch here cannot
+		// tell the two apart: it would refuse every folder move out of a link mapping in
+		// the voice of a delete ("this folder can't be deleted"), over the top of
+		// {@see \OCA\GrafanaSync\Listener\MoveGuardListener}, which refuses the same
+		// gesture and says the right thing about it. Refusing a move as if it were a
+		// delete is worse than the gap: the user is told no for a reason that is not the
+		// reason. Trashing a link folder stays unbuilt until it can be told apart.
 		if (!$this->isLinkFile($node)) {
 			return true; // sync/unmapped files are the user's to delete
 		}
@@ -330,7 +332,6 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	}
 
 	/**
-	 * Is this a FOLDER whose dashboards are links?	/**
 	 * Is this a FOLDER whose dashboards are links?
 	 *
 	 * ## THE SOURCE GUARD ONLY EVER LOOKED AT FILES
