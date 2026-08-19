@@ -172,7 +172,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return;
 		}
-		if ($this->holdsLinkedDashboards($node)) {
+		if ($this->isLinkMappedFolder($source, $node)) {
 			$name = $node->getName();
 			$this->logger->warning('grafana_sync: refused a WebDAV copy of a folder holding linked dashboards', [
 				'app' => Application::APP_ID,
@@ -259,7 +259,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// gesture, so the per-file refusal never fires for the pointers inside it
 		// either. Under a link the tree is Grafana's, and deleting a mirror of it here
 		// would leave the dashboards live and their folder gone.
-		if ($node !== null && $this->holdsLinkedDashboards($node)) {
+		if ($this->isLinkMappedFolder($path, $node)) {
 			$name = $node->getName();
 			$this->logger->warning('grafana_sync: refused a WebDAV delete of a folder holding linked dashboards', [
 				'app' => Application::APP_ID,
@@ -289,6 +289,57 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	}
 
 	/**
+	 * Is this a folder that a LINK MAPPING still covers, holding linked dashboards?
+	 *
+	 * ## THE MAPPING IS HALF THE QUESTION, AND IT WAS MISSING
+	 *
+	 * {@see isLinkFile} reads a FILE's own stamp, which is right for a file: a
+	 * pointer is a pointer wherever it sits. Asking the same of a folder was not,
+	 * because a folder is only "a link folder" while a link mapping says so — and a
+	 * mapping can be removed.
+	 *
+	 * Without this the refusal outlived the mapping. Remove a link mapping and its
+	 * folder became undeletable: the files inside were still stamped `reference`, so
+	 * the guard kept refusing on behalf of a mapping that no longer existed, and the
+	 * only way out was to delete the files one at a time from the inside. The
+	 * integration suite hit it as a teardown that could never clean up after a link
+	 * mapping, which left `Pointers` standing between scenarios.
+	 *
+	 * Unmapped, those files are nobody's pointers any more — they are the user's, and
+	 * so is the folder holding them.
+	 */
+	private function isLinkMappedFolder(string $davPath, ?INode $node): bool {
+		if ($node === null || !$this->holdsLinkedDashboards($node)) {
+			return false;
+		}
+		return $this->linkMappingAt($davPath) !== null;
+	}
+
+	/**
+	 * The link mapping covering a Sabre path, or null.
+	 *
+	 * Shares its spelling with {@see refuseIfDestinationIsALinkMapping}: Sabre works
+	 * in `files/<uid>/<relative>` and the rest of the app in `/<uid>/files/<relative>`.
+	 */
+	private function linkMappingAt(string $davPath): ?Mapping {
+		$uid = $this->userSession->getUser()?->getUID() ?? '';
+		if ($uid === '') {
+			return null;
+		}
+		$relative = preg_replace('#^files/[^/]+/#', '', ltrim($davPath, '/'));
+		if (!is_string($relative) || $relative === '') {
+			return null;
+		}
+		try {
+			$mapping = $this->mappings->resolveForPath('/' . $uid . '/files/' . $relative);
+		} catch (\Throwable) {
+			return null;
+		}
+		return $mapping !== null && $mapping->mode === Mapping::MODE_LINK ? $mapping : null;
+	}
+
+	/**
+	 * Is this a FOLDER whose dashboards are links?	/**
 	 * Is this a FOLDER whose dashboards are links?
 	 *
 	 * ## THE SOURCE GUARD ONLY EVER LOOKED AT FILES

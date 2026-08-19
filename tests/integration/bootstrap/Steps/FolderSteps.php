@@ -459,6 +459,14 @@ trait FolderSteps {
 		$this->lastDeleteStatus = $this->davDeleteStatus($folder);
 	}
 
+	/** The trashbin entry this scenario made, pinned so a stale one cannot answer for it. */
+	private string $trashedFolderEntry = '';
+
+	/** @BeforeScenario */
+	public function resetTrashedFolderEntry(): void {
+		$this->trashedFolderEntry = '';
+	}
+
 	/**
 	 * @Given /^"([^"]*)" is in the Nextcloud trash$/
 	 *
@@ -473,9 +481,17 @@ trait FolderSteps {
 		if ($this->davExists($folder)) {
 			throw new \RuntimeException("'$folder' is still in Nextcloud after being trashed");
 		}
-		if ($this->trashbinPathFor($folder) === null) {
+		$entry = $this->trashbinPathFor($folder);
+		if ($entry === null) {
 			throw new \RuntimeException("setup: '$folder' did not reach the Nextcloud trash");
 		}
+		// PINNED HERE, NOT LOOKED UP LATER. Every scenario trashes a folder called the
+		// same thing and nothing empties the trash between them — emptying it is itself
+		// a gesture that finishes deletes in Grafana — so asking by name afterwards can
+		// answer with an entry an earlier scenario left behind, and report this one
+		// still present after it was purged. Measured: the same `Team.d1787180677`
+		// answered for three different scenarios.
+		$this->trashedFolderEntry = $entry;
 	}
 
 	/** @Then /^"([^"]*)" is recoverable from the Nextcloud trash$/ */
@@ -503,8 +519,8 @@ trait FolderSteps {
 
 	/** @When /^I purge "([^"]*)" from the trash$/ */
 	public function iPurgeFromTheTrash(string $folder): void {
-		$entry = $this->trashbinPathFor($folder);
-		if ($entry === null) {
+		$entry = $this->trashedFolderEntry ?: $this->trashbinPathFor($folder);
+		if ($entry === null || $entry === '') {
 			throw new \RuntimeException("'$folder' is not in the Nextcloud trash");
 		}
 		$this->assertStatus($this->davClient()->request('DELETE', $this->trashHref($entry)), [204, 200], "purge $entry");
@@ -512,10 +528,25 @@ trait FolderSteps {
 
 	/** @Then /^"([^"]*)" is gone from the Nextcloud trash$/ */
 	public function isGoneFromTheNextcloudTrash(string $folder): void {
-		$left = $this->trashbinPathFor($folder);
-		if ($left !== null) {
-			throw new \RuntimeException("'$folder' is still in the Nextcloud trash as '$left'");
+		// THIS SCENARIO'S ENTRY, not whatever the name resolves to now — see the pin in
+		// `is in the Nextcloud trash`.
+		if ($this->trashedFolderEntry === '') {
+			throw new \RuntimeException("nothing recorded trashing '$folder', so 'gone' has nothing to mean");
 		}
+		if ($this->trashEntryExists($this->trashedFolderEntry)) {
+			throw new \RuntimeException(
+				"'$folder' is still in the Nextcloud trash as '{$this->trashedFolderEntry}'",
+			);
+		}
+	}
+
+	/** Is one named trashbin entry still there? */
+	private function trashEntryExists(string $entry): bool {
+		$res = $this->davClient()->request('PROPFIND', $this->trashHref($entry), [
+			'headers' => ['Depth' => '0'],
+			'http_errors' => false,
+		]);
+		return $res->getStatusCode() === 207;
 	}
 
 	// ── what became of the dashboards ─────────────────────────────────────────
