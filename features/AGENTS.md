@@ -2086,6 +2086,37 @@ makes the body column discriminating; without it the rows grade nothing.
 arrival went when it was not kept — the picker filtered it out before any request, so
 it never moved.
 
+### An overwrite can happen inside one mapping
+
+**Found by a human dragging a file, after the overwrite work had shipped and gone
+green.** `observe/blurn/Killer Stuff` was moved onto `observe/morton/Killer Stuff`
+and the answer was "keep the new version". The result was TWO dashboards titled
+`Killer Stuff` in morton's Grafana folder with one file between them — and the tags
+the user had put on the destination stayed with the one that no longer had a file.
+
+The adoption lived inside `onEnterMapping`, which is only reached when the mapping
+CHANGES. Both subfolders belong to the same `observe` mapping, so `onMove` took its
+same-mapping branch, reparented the arrival under its own uid, and returned before
+the adoption could run. The suppression worked — the destination's dashboard was
+correctly not deleted — which is exactly what left it stranded.
+
+**Every scenario in `move.feature` arrives from an UNMAPPED folder**, so none of
+them could reach this branch. That is the lesson worth keeping: the conflict
+scenarios were written around the arrangement that was easiest to build, and an
+overwrite is not a KIND of move — it can arrive down any of them. The adoption is
+answered in `onMove` before it picks a branch now.
+
+**And the arrival's own dashboard has to go.** Its file points somewhere else, so it
+sits in a mirrored folder with nothing mirroring it — the exact state a pull reads
+as "a dashboard with no file" and answers by writing one. Left alone, the overwrite
+grows its duplicate back on the next tick, minutes after the user thought two files
+had become one. It is disposed of the way every other removal in this app is: bin
+ON parks it, bin OFF deletes it.
+
+Only when the file came FROM a mapping. An arrival from outside every mapping
+leaves nothing behind that this app mirrors, which is the rule the scenarios below
+already state.
+
 ### Keeping both versions of a duplicate makes the arrival its own dashboard
 
 A `Then` PER FILE, which is why this is a scenario and not a third row. The two files

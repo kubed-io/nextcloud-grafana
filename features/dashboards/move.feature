@@ -159,6 +159,23 @@ Feature: Moving a dashboard file
       | the new version      | a different grafana_uid | the file that arrived  |
       | the new version      | no grafana_uid at all  | the file that arrived  |
 
+  # notes: ../AGENTS.md#an-overwrite-can-happen-inside-one-mapping
+  @user @in-nextcloud @gesture @ui
+  Scenario: Overwriting a duplicate inside one mapping leaves one dashboard
+    Given a dashboard file named "Turnbuckle.grafana" in "Demo"
+    And a second dashboard file named "Turnbuckle.grafana" in the subfolder "Team"
+    And that file's panels differ from the dashboard's
+    When I move that file into "Demo"
+    And I select "the new version"
+    Then "Demo/Turnbuckle.grafana" holds the panels of "the file that arrived"
+    And "Demo/Turnbuckle.grafana" holds:
+      | grafana_uid     | the uid the destination already had |
+      | grafana_mapping | the mapping's id                    |
+    And the "Demo" Grafana folder holds one dashboard titled "Turnbuckle"
+
+    # One mapping, so the move never changes mapping — the branch every other duplicate
+    # scenario here skips. The arrival's own dashboard goes; a file-less one is mirrored back.
+
   # notes: ../AGENTS.md#keeping-both-versions-of-a-duplicate-makes-the-arrival-its-own-dashboard
   @user @in-nextcloud @gesture @ui
   Scenario: Keeping both versions of a duplicate makes the arrival its own dashboard

@@ -181,6 +181,102 @@ trait MoveConflictSteps {
 	}
 
 	/**
+	 * A second dashboard file wearing the same name, in a SUBFOLDER OF THE SAME MAPPING.
+	 *
+	 * THE ARRANGEMENT THE CONFLICT SCENARIOS WERE ALL MISSING. Every other duplicate here
+	 * walks its file out to an unmapped folder first, because that is the easy way to get
+	 * a second file with the same name — and it meant every one of them exercised the
+	 * mapping-CHANGED branch of the move. A drag between two subfolders of one mapping
+	 * takes a different branch entirely, which is where the adoption was not being run:
+	 * two dashboards in one Grafana folder, one file, and the destination's tags stranded
+	 * on the copy nobody could see. Found by a person, not by this suite.
+	 *
+	 * @Given a second dashboard file named :filename in the subfolder :subfolder
+	 */
+	public function aSecondDashboardFileNamedInTheSubfolder(string $filename, string $subfolder): void {
+		if ($this->currentFilePath === '') {
+			throw new \RuntimeException('no first file to collide with — a Given must arrange one');
+		}
+		$this->collisionSyncedPath = $this->currentFilePath;
+		$mapped = $this->currentFolder;
+		$this->davMkdir($mapped . '/' . $subfolder);
+
+		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
+		$dest = $mapped . '/' . $subfolder . '/' . $filename;
+		$this->putDashboardFile($mapped . '/' . $subfolder, $stem);
+		$this->currentFilePath = $dest;
+		$this->collisionIncomingPath = $dest;
+
+		if (($this->davReadMetadata($dest, self::META_UID) ?? '') === '') {
+			throw new \RuntimeException("setup: the second file at $dest was never stamped");
+		}
+		$this->arrivedWithUid = (string)$this->davReadMetadata($dest, self::META_UID);
+		$this->destinationUidBefore = (string)$this->davReadMetadata($this->collisionSyncedPath, self::META_UID);
+		if ($this->destinationUidBefore === '' || $this->destinationUidBefore === $this->arrivedWithUid) {
+			throw new \RuntimeException('setup: the two files must be two different dashboards');
+		}
+		$this->existingPanelTitle = $this->givePanelTo($this->collisionSyncedPath, 'Existing-' . bin2hex(random_bytes(3)));
+	}
+
+	/**
+	 * @When I move that file into :folder
+	 *
+	 * The neutral twin of `I move the unmapped file into` — same announcement, for an
+	 * arrangement where the file was never unmapped. Both are answered by `I select`.
+	 */
+	public function iMoveThatFileInto(string $folder): void {
+		$this->conflictDestination = $folder;
+	}
+
+	/**
+	 * @Then the :folder Grafana folder holds one dashboard titled :title
+	 *
+	 * THE ASSERTION THE WHOLE BUG TURNED ON. Every metadata claim beside it passed while
+	 * a second dashboard sat in the same folder: the surviving FILE was correct, and
+	 * Grafana was not. Counting is the only way to see it — and a duplicate here is not
+	 * cosmetic, it is what the next pull mirrors back as a second file.
+	 */
+	public function theGrafanaFolderHoldsOneDashboardTitled(string $folder, string $title): void {
+		$uid = $this->grafanaFolderUidForMapping($folder);
+		$titles = [];
+		foreach ($this->grafanaSearchDashboards($uid) as $row) {
+			if ((string)($row['title'] ?? '') === $title) {
+				$titles[] = (string)($row['uid'] ?? '');
+			}
+		}
+		if (count($titles) !== 1) {
+			throw new \RuntimeException(
+				"the '$folder' Grafana folder holds " . count($titles) . " dashboards titled '$title' ("
+				. implode(', ', $titles) . '); an overwrite must leave exactly one',
+			);
+		}
+	}
+
+	/**
+	 * @Then that dashboard's tags in Grafana are :tags
+	 *
+	 * Tags travel with the BODY, which is the whole of what "keep the new version" chose.
+	 * Asserted on the Grafana side because that is the surface the file cannot fake: a
+	 * file agreeing with itself proves nothing about what was pushed.
+	 */
+	public function thatDashboardsTagsInGrafanaAre(string $tags): void {
+		$want = array_values(array_filter(array_map('trim', explode(',', $tags))));
+		sort($want);
+		$uid = (string)$this->davReadMetadata($this->collisionDestinationPath(), self::META_UID);
+		$record = $this->grafanaGetDashboardObject($uid);
+		if ($record === null) {
+			throw new \RuntimeException("Grafana has no dashboard '$uid'");
+		}
+		$got = array_map('strval', (array)($record->dashboard->tags ?? []));
+		sort($got);
+		if ($got !== $want) {
+			throw new \RuntimeException(
+				'the dashboard carries [' . implode(', ', $got) . '], not [' . implode(', ', $want) . ']',
+			);
+		}
+	}
+
+	/**
 	 * Give the incoming file a body of its own, so "whose panels survived" is a question
 	 * with an answer. Without it, keeping either version leaves the same bytes behind and
 	 * nothing downstream can tell the two apart.
@@ -322,6 +418,23 @@ trait MoveConflictSteps {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Every dashboard directly inside one Grafana folder.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function grafanaSearchDashboards(string $folderUid): array {
+		$res = $this->grafanaClient()->request(
+			'GET',
+			'/api/search?type=dash-db&limit=500&folderUIDs=' . rawurlencode($folderUid),
+		);
+		if ($res->getStatusCode() !== 200) {
+			throw new \RuntimeException("searching the '$folderUid' folder failed: " . (string)$res->getBody());
+		}
+		$rows = json_decode((string)$res->getBody(), true);
+		return is_array($rows) ? array_values(array_filter($rows, 'is_array')) : [];
+	}
 
 	/** Where the surviving file in the mapping is: the colliding name, in the destination. */
 	private function collisionDestinationPath(): string {
