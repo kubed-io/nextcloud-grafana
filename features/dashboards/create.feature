@@ -50,8 +50,9 @@ Feature: Creating a dashboard
 
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a dashboard in Grafana
-    When someone creates the dashboard "CPU Load" in the "<grafana folder>" Grafana folder
-    Then "<nc folder>/CPU Load.grafana" holds:
+    When someone creates a dashboard in the "<grafana folder>" Grafana folder
+    Then a matching file is created in "<nc folder>"
+    And the file holds:
       | grafana_uid        | the dashboard's uid |
       | grafana_mapping    | the mapping's id    |
       | grafana_mode       | "<mode>"            |

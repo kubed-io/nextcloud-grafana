@@ -152,32 +152,6 @@ trait LifecycleSteps {
 	// ── create ────────────────────────────────────────────────────────────────
 
 	/**
-	 * Create a file in a folder the scenario NAMES.
-	 *
-	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-	 * server cannot tell the two apart, and it is the PUT that fires the listener.
-	 * Both phrasings are therefore one method — the menu is how a person describes
-	 * it, not a second code path.
-	 *
-	 * @When I create :filename in :folder via the Files "New" menu
-	 * @When I create :filename in :folder
-	 */
-	public function iCreateTheFileIn(string $filename, string $folder): void {
-		$stem = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
-		$this->currentFolder = $folder;
-		$this->putDashboardFile($folder, $stem);
-
-		// CAPTURE THE UID THE APP MINTED. Creating is the one gesture where the
-		// dashboard did not exist until now, so nothing else in the scenario can know
-		// its id — and every later "the dashboard ..." assertion resolves through it.
-		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
-		if ($uid !== '') {
-			$this->lastUid = $uid;
-			$this->createdDashboardUids[] = $uid;
-		}
-	}
-
-	/**
 	 * The dashboard's name AND its folder, as one claim — they are one sentence
 	 * about where the new dashboard ended up, and splitting them said the same
 	 * thing twice. The name comes from the filename, because that is what the user

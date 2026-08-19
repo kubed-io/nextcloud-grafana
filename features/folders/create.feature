@@ -35,7 +35,7 @@ Feature: Creating a folder
   Scenario Outline: Create a dashboard in a folder of a mapping which is not yet in Grafana
     Given the folder "<folder>" holding no dashboards
     And no part of "<folder>" exists in Grafana yet
-    When I create "CPU Load.grafana" in "<folder>"
+    When I create a new dashboard in "<folder>" via the Files "New" menu
     Then Grafana mirrors the folder "<folder>"
     And the dashboard is in the folder mirroring "<folder>"
 
@@ -102,6 +102,6 @@ Feature: Creating a folder
   Scenario: Create a dashboard in a folder named after the recycle-bin folder
     Given the Grafana recycle bin is on
     And the folder "Demo/nextcloud-trash" holding no dashboards
-    When I create "CPU Load.grafana" in "Demo/nextcloud-trash"
+    When I create a new dashboard in "Demo/nextcloud-trash" via the Files "New" menu
     Then the creation is refused with a message, explaining the name is reserved
     And the recycle-bin folder still holds what it held

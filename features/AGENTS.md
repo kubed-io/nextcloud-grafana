@@ -69,6 +69,43 @@ suite green. See [the tree is the assertion](#the-tree-is-the-assertion).
 following values:`, same columns, one row each. Both are kept: one mapping reads
 better as one table, and several read better as several rows.
 
+### Creating never supplies a name
+
+**Neither side asks for one.** The Files "New" menu writes `New dashboard.grafana`
+— `src/files.js` picks the name, uniquified against the folder — and Grafana's own
+create button yields "New dashboard". The user picks a FOLDER and nothing else.
+
+So a scenario that says `I create "CPU Load.grafana" in "Demo"` or
+`someone creates the dashboard "CPU Load"` is not describing a create. Something
+that arrives already named came from a **move, a copy, or an edit**, and those are
+different gestures with features of their own — `dashboards/move.feature`,
+`dashboards/copy.feature`, `dashboards/edit.feature`. Naming it in the `When`
+quietly tests one gesture through another's vocabulary.
+
+It also makes the assertion dishonest. `Then "Demo/CPU Load.grafana" holds:` knows
+the filename only because the scenario supplied it a moment earlier; the claim
+"the file is called what I called it" is true by construction. The honest shape
+asks which file mirrors the dashboard that was just made:
+
+```gherkin
+When someone creates a dashboard in the "Demo" Grafana folder
+Then a matching file is created in "Demo"
+And the file holds:
+  | grafana_uid | the dashboard's uid |
+```
+
+Ported from the n8n master, which had it right from the start:
+`someone creates a workflow in n8n` / `a matching file is created in "<folder>"`.
+
+**Folders are the exception, and genuinely so.** You DO type a folder's name, on
+both sides — so `I create the folder "Demo/Notes"` and
+`someone creates the Grafana folder "Demo/Deep/Down"` name what they make, because
+that is what the gesture is.
+
+The step that took a filename is deleted rather than left for the next person to
+reach for. `I create :filename in :folder` had no feature saying it once these two
+were fixed, and a vocabulary that can express the wrong thing eventually will.
+
 ### A background is a picture, not a story
 
 A Background says what IS, never what happened. `the admin has synced from
