@@ -202,7 +202,17 @@ trait LifecycleSteps {
 		// cannot be compared against the uid directly the way a top-level folder can —
 		// there the arrange sets uid == title, which is the only reason this ever
 		// worked. Resolve the path first and compare uid to uid.
-		$want = $this->grafanaFolderUidByTitle($folder) ?? $folder;
+		// A PATH IS NEVER A UID, so falling back to the literal for one would hand the
+		// comparison a string that cannot match and report "landed in the wrong folder"
+		// for a folder that was simply not found. A single name still falls back,
+		// because the mapping table stores those as the uid verbatim.
+		$want = $this->grafanaFolderUidByTitle($folder);
+		if ($want === null) {
+			if (str_contains($folder, '/')) {
+				throw new \RuntimeException("Grafana has no folder at '$folder'");
+			}
+			$want = $folder;
+		}
 		$got = (string)$this->dashboardFolderUid($this->lastUid);
 		if ($got !== $want) {
 			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder' ($want)");

@@ -1465,6 +1465,54 @@ id on it". With the tag gone there is one marker left, so there is one rule: a
 folder holding no `grafana_folder_uid` is a folder the app has never had anything
 to do with, and a pull leaves it exactly so.
 
+**Where it is actually enforced**, now that the scenario asserting it is gone: the
+stamp is what `SyncService::isManagedFolder` reads before it will move a mirror,
+and an unstamped folder is left alone — with a unit test for each half. The rule
+is load-bearing there, in a way it never was in a Gherkin `Then`.
+
+### Grafana owns the tree
+
+The mirror image of [the parents come with it](#the-parents-come-with-it), and it
+uses the same assertion, because the claim is the same one read from the other
+side: the two trees agree, and each Nextcloud folder knows which Grafana folder it
+mirrors. Which side the gesture happened on changes the `When`, not the `Then`.
+
+Three shapes worth a row each, and they are genuinely different work for the pull:
+
+| the folder made in Grafana | what Nextcloud has to do |
+|---|---|
+| `Demo/Bubbles` | one folder, directly under a mapped one |
+| `Demo/Deep/Down/Low` | a chain it has never seen any of |
+| `Demo/Existing/Nubs` | one folder under a subfolder it already mirrors |
+
+The third is the one the retired `Holiday Photos` arrange was reaching for and
+never got to. It is also the one most likely to break on its own: the pull has to
+find the EXISTING mirror of `Existing` and hang the new folder off it, rather than
+making a second `Existing` beside the first — which Grafana would allow, since it
+permits duplicate titles under one parent.
+
+### RETIRED — the "Holiday Photos" half
+
+`Create a folder in Grafana under a mapped folder` used to arrange a second,
+unrelated Nextcloud folder and then assert that nothing had happened to it:
+
+```gherkin
+Given the folder "<folder>/Holiday Photos" holding no dashboards
+...
+And "<folder>/Holiday Photos" holds:
+  | grafana_folder_uid | absent |
+```
+
+Nothing happened to it because nothing was ever going to. The scenario's gesture is
+in Grafana, three folders away, and the arrange exists only to give the assertion
+something to be true about — the same fault as a sync run twice to check the tree
+did not move. An end state where nothing happened is not an end state.
+
+What survives is the positive half, which is the whole behaviour: a folder made in
+Grafana arrives in Nextcloud carrying the uid of the folder it mirrors. The
+Examples now spend their rows on coverage that differs — both modes, both storage
+kinds, and a nested parent as well as a mapped one.
+
 ### A subfolder shares its name with Grafana exactly, case included
 
 A mapped folder may pair two different names — that is the mapping's whole job, and
@@ -1513,7 +1561,7 @@ Following the dashboards answers all of them at once. A leaf holding spreadsheet
 and no dashboards simply never appears; a dashboard three folders deep creates all
 three. Grafana 13 has native nested folders (`/api/folders` carries `parentUid`),
 so the shape is expressible on the far side.
-
+- so
 ### The parents come with it
 
 A dashboard five folders deep needs all five, and the app makes every level it is

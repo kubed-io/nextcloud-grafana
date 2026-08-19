@@ -115,24 +115,6 @@ trait MirrorSteps {
 		$this->davMkdir($folder);
 	}
 
-	/**
-	 * @When someone creates the folder :title under the :parent Grafana folder
-	 *
-	 * Straight through Grafana's own API — Grafana mints the uid, and the minted uid
-	 * is what the vocabulary's "the uid of the ... Grafana folder" later compares
-	 * against, so the assertion can never agree with itself by construction.
-	 *
-	 * The parent may be named as a PATH (`Demo/Existing`), because a folder can be
-	 * created under a folder. It used to take the uid verbatim, which reads the same
-	 * for a top-level folder — the arrange gives those uid == title — and cannot name
-	 * a nested one at all, since Grafana mints those uids itself.
-	 */
-	public function someoneCreatesTheFolderUnderTheGrafanaFolder(string $title, string $parent): void {
-		$parentUid = $this->grafanaFolderUidByTitle($parent) ?? $parent;
-		$this->createdGrafanaFolders[$title] = $this->grafanaCreateFolder($title, $parentUid);
-		$this->pullEveryMapping();
-	}
-
 	/** @Then /^"([^"]*)" exists in Nextcloud$/ */
 	public function existsInNextcloud(string $path): void {
 		if (!$this->davExists($path)) {

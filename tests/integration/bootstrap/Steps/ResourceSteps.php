@@ -512,18 +512,17 @@ trait ResourceSteps {
 	 */
 	public function noPartOfExistsInGrafanaYet(string $ncPath): void {
 		[$parentUid, $segments] = $this->grafanaChainFor($ncPath);
-		$walked = '';
-		foreach ($segments as $segment) {
-			$walked = $walked === '' ? $segment : $walked . '/' . $segment;
-			$childUid = $this->grafanaChildUid($parentUid, $segment);
-			if ($childUid !== null) {
-				throw new \RuntimeException(
-					"Grafana already holds '$walked' below the mapping, so '$ncPath' cannot show that a "
-					. 'gesture creates it',
-				);
-			}
-			// The parent is missing, so nothing below it can exist either.
-			return;
+		$first = $segments[0] ?? null;
+		if ($first === null) {
+			throw new \RuntimeException("'$ncPath' is a mapped folder itself — it exists in Grafana by definition");
+		}
+		// ONLY THE FIRST SEGMENT NEEDS ASKING. If the outermost folder of the chain is
+		// absent then nothing below it can exist either, and asking anyway would mean
+		// walking through a parent that is not there.
+		if ($this->grafanaChildUid($parentUid, $first) !== null) {
+			throw new \RuntimeException(
+				"Grafana already holds '$first' below the mapping, so '$ncPath' cannot show that a gesture creates it",
+			);
 		}
 	}
 
@@ -552,16 +551,15 @@ trait ResourceSteps {
 		}
 
 		$ncWalked = $this->owningMappedFolder(trim($ncPath, '/'));
-		$walked = '';
+		$parentPath = $ncWalked;
 		foreach ($segments as $segment) {
-			$walked = $walked === '' ? $segment : $walked . '/' . $segment;
 			$ncWalked .= '/' . $segment;
 
 			$childUid = $this->grafanaChildUid($parentUid, $segment);
 			if ($childUid === null) {
 				throw new \RuntimeException(
-					"Grafana has no folder '$segment' below '$walked' — the chain under '$ncPath' was not created"
-					. ' all the way down',
+					"Grafana has no folder '$segment' under '$parentPath' — the chain below '$ncPath' was not "
+					. 'created all the way down',
 				);
 			}
 			$this->createdGrafanaFolders[$segment] = $childUid;
@@ -575,6 +573,7 @@ trait ResourceSteps {
 			);
 
 			$parentUid = $childUid;
+			$parentPath = $ncWalked;
 		}
 	}
 
@@ -610,6 +609,43 @@ trait ResourceSteps {
 			(string)($record['meta']['folderUid'] ?? ''),
 			"the dashboard is not in the Grafana folder mirroring '$ncPath'",
 		);
+	}
+
+	/**
+	 * @When /^someone creates the Grafana folder "([^"]*)"$/
+	 *
+	 * Straight through Grafana's own API, naming the folder BY PATH — so one step
+	 * covers a folder at the mapping's root, a whole chain made at once, and one made
+	 * under a folder Grafana already had. It replaces `someone creates the folder X
+	 * under the Y Grafana folder`, which took the parent's UID: that reads the same as
+	 * a title for a top-level folder (the arrange gives those uid == title) and cannot
+	 * name a nested parent at all, because Grafana mints those uids itself.
+	 *
+	 * Grafana mints every uid here, which is what keeps the assertion honest — the
+	 * scenario never learns a uid it could have compared against itself.
+	 */
+	public function someoneCreatesTheGrafanaFolder(string $path): void {
+		$segments = explode('/', trim($path, '/'));
+		$root = (string)array_shift($segments);
+		$parentUid = $this->grafanaFolderUidByTitle($root);
+		if ($parentUid === null) {
+			throw new \RuntimeException("Grafana has no folder '$root' to create '$path' under");
+		}
+		if ($segments === []) {
+			throw new \RuntimeException("'$path' names a mapped folder, not a folder to create inside one");
+		}
+
+		foreach ($segments as $segment) {
+			// FIND OR CREATE, level by level. A scenario naming `Demo/Existing/Nubs`
+			// means "under the one Grafana already has", not "make a second folder
+			// called Existing" — and Grafana would happily do the latter, since it
+			// permits duplicate titles in one parent.
+			$uid = $this->grafanaChildUid($parentUid, $segment)
+				?? $this->grafanaCreateFolder($segment, $parentUid);
+			$this->createdGrafanaFolders[$segment] = $uid;
+			$parentUid = $uid;
+		}
+		$this->pullEveryMapping();
 	}
 
 	/**
