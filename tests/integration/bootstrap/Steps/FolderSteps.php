@@ -540,14 +540,6 @@ trait FolderSteps {
 		}
 	}
 
-	/** Is one named trashbin entry still there? */
-	private function trashEntryExists(string $entry): bool {
-		$res = $this->davClient()->request('PROPFIND', $this->trashHref($entry), [
-			'headers' => ['Depth' => '0'],
-			'http_errors' => false,
-		]);
-		return $res->getStatusCode() === 207;
-	}
 
 	// ── what became of the dashboards ─────────────────────────────────────────
 
