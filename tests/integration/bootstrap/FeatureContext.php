@@ -13,6 +13,7 @@ use Behat\Behat\Context\Context;
 use GuzzleHttp\Client;
 use OCA\GrafanaSync\Tests\Integration\Steps\AdminSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\AppLifecycleSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\FolderSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\LifecycleSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MappingSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\MirrorSteps;
@@ -62,6 +63,7 @@ final class FeatureContext implements Context {
 	use MirrorSteps;
 	use MoveConflictSteps;
 	use ResourceSteps;
+	use FolderSteps;
 	use TagSteps;
 
 	private const APP_ID = 'grafana_sync';
@@ -74,6 +76,7 @@ final class FeatureContext implements Context {
 	private const META_UID = 'grafana_uid';
 	private const META_MODE = 'grafana_mode';
 	private const META_MAPPING = 'grafana_mapping';
+	private const META_FOLDER_UID = 'grafana_folder_uid';
 
 	/** The occ invocation prefix, e.g. "php occ". */
 	private string $occ;

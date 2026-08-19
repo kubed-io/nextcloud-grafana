@@ -398,7 +398,13 @@ trait MirrorSteps {
 		}
 		// The FOLDER twin of the uid-survival cases below: grafana_folder_uid was
 		// captured by the arrange, and the claim is that the gesture did not touch it.
-		if ($expected === 'the uid it had before the delete') {
+		//
+		// DISPATCHED ON THE PROPERTY, not on the wording. "the uid it had before the
+		// rename" is the same sentence whether it is asked of a dashboard or of the
+		// folder holding it, and both are real questions in `folders/rename.feature` —
+		// which asserts the folder kept its identity AND that nothing inside it was
+		// re-minted. Keying only on the phrase meant the folder rows threw.
+		if ($property === self::META_FOLDER_UID && str_starts_with($expected, 'the uid it had before')) {
 			if ($this->lastFolderUid === '') {
 				throw new \RuntimeException('the arrange captured no folder uid to compare against');
 			}

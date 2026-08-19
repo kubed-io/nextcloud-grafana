@@ -11,15 +11,15 @@ Feature: Syncing every mapping
     And Grafana holds these resources:
       | path                       | type      | tags       |
       | /Alpha/Alpha Demo          | dashboard | dns, linux |
-      | /Alpha/Region              | folder    |            |
+      | /Alpha/Region              | folder    | quarterly  |
       | /Alpha/Region/Latency      | dashboard | latency    |
       | /Alpha/Region/Deep         | folder    |            |
       | /Alpha/Region/Deep/Traffic | dashboard |            |
       | /links/Pinned              | dashboard | reference  |
-      | /links/Nested              | folder    |            |
+      | /links/Nested              | folder    | reference  |
       | /links/Nested/Deeper       | dashboard |            |
       | /metrics/Metrics Demo      | dashboard | ops        |
-      | /metrics/Coast             | folder    |            |
+      | /metrics/Coast             | folder    | tidal      |
       | /metrics/Coast/Tides       | dashboard |            |
     And Nextcloud holds these resources:
       | path                         | tags    |
@@ -51,15 +51,15 @@ Feature: Syncing every mapping
       | /Alpha/Drafts                      |            |
       | /Alpha/Drafts/plan.txt             |            |
       | /Alpha/Drafts/Sketch.grafana       |            |
-      | /Alpha/Region                      |            |
+      | /Alpha/Region                      | quarterly  |
       | /Alpha/Region/Latency.grafana      | latency    |
       | /Alpha/Region/Deep                 |            |
       | /Alpha/Region/Deep/Traffic.grafana |            |
       | /Pointers/Pinned.grafana           | reference  |
-      | /Pointers/Nested                   |            |
+      | /Pointers/Nested                   | reference  |
       | /Pointers/Nested/Deeper.grafana    |            |
       | /Shared/Metrics Demo.grafana       | ops        |
-      | /Shared/Coast                      |            |
+      | /Shared/Coast                      | tidal      |
       | /Shared/Coast/Tides.grafana        |            |
 
     Examples: both ways an instance-wide sync starts

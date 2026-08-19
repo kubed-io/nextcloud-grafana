@@ -1501,6 +1501,68 @@ The reverse direction needs no such care. **Deleting a folder in Nextcloud is
 always safe to honour**: it is an ordinary Nextcloud delete, everything lands in the
 trash, and Nextcloud is better at restoring than this app would be.
 
+### The tags were there before the mapping was
+
+`folders/tags.feature` declares the Grafana folders AND their tags before any
+mapping exists, which is what an admin's own API call would leave behind. The
+first sync then has to bring them across — a Background that tagged the folders
+afterwards would only ever exercise the easy direction, where this app wrote the
+annotation itself and is reading back its own handiwork.
+
+**The sync-now Backgrounds carry them too**, for the same reason: a folder tagged
+in Grafana before the mapping existed must arrive tagged on the FIRST pull, and
+until folder rows could hold tags that was untestable — every folder in every
+Background was bare, so the tree assertions proved only that untagged folders
+stayed untagged. `/Alpha/Region/Deep` is still deliberately bare, as the control:
+a folder with no tags must arrive with none rather than inheriting its parent's.
+
+**A Grafana folder's tags are an annotation this app invented**, not something
+Grafana ships: `nextcloud.kubed.io/tags` on the app-platform folder resource.
+That is why the resource tables refuse tags on a folder row *for a dashboard's
+sake* and accept them here — the earlier rule was written too broadly. Grafana
+tags DASHBOARDS natively; folder tags are ours, they are real, and a scenario may
+declare them.
+
+### The uid is why this is a rename
+
+A rename read by NAME is one folder vanishing and another appearing — and if the
+app believed that, it would delete a Grafana folder and every dashboard in it,
+then make a new one with new uids and new URLs. Read by uid it is one folder with
+a new name, and nothing inside it moves at all.
+
+So both scenarios assert the uid on the folder AND on a dashboard inside it. The
+folder alone is not enough: a mirror that kept the folder's identity while
+re-minting the dashboards underneath would satisfy half the claim and destroy
+every link anyone had saved.
+
+### RETIRED — the folder's Modified clock
+
+Both tag scenarios used to end with:
+
+```gherkin
+And the folder holds:
+  | Modified | when the folder last changed in Grafana |
+```
+
+**It asserts a clock that cannot move.** Tagging a folder writes an ANNOTATION,
+and by Grafana's own reckoning that is not a modification —
+[measured, with the table](#a-folder-tag-does-not-move-the-clock-and-that-is-measured):
+`updated` advances for a spec change and stands still for an annotation. Nextcloud
+independently agrees, because assigning a systemtag does not touch a folder's
+mtime either.
+
+So both sides arrive at "the time did not move" without this app doing anything at
+all, and an assertion that passes whether or not the code under test exists is not
+an assertion. `MirrorTimes::apply()` takes a `File` for the same reason: there was
+never a folder clock to mirror on a tag change.
+
+**An earlier draft of this note said Grafana does not record a folder's update time
+at all. That is wrong** — the app-platform resource carries only
+`creationTimestamp`, but the legacy `GET /api/folders/{uid}` returns `updated`
+alongside `created` and `version`. Checked on the live instance rather than
+inferred from the resource I happened to be reading. The reason to drop the
+assertion is that tagging does not move that clock, not that the clock is absent.
+
 ### A folder the user made for something else stays theirs
 
 A pull claims the folders it mirrors and no others. Under the tag model this needed
@@ -3162,10 +3224,25 @@ same reasoning would have refused dashboard tags. A tag is a tag; it syncs.
 
 ### Tagging a folder in a link mapping does not reach Grafana
 
-The mode rule holds for folder tags exactly as it does for a dashboard's — under a
-link, Grafana owns the state and Nextcloud is a mirror of it, so a tag applied here
-does not travel and settles back on the next sync. This is the folder-level twin of
-"changing the tags on a link does not change them in Grafana".
+Under a link, Grafana owns the state, so a tag applied in Nextcloud does not
+travel. The code does not attempt the write at all — it is not refused downstream,
+it is never sent.
+
+**Asserted as "untouched", not as "has no tags".** The gesture under test tries to
+ADD a tag, so a far side that had been CLEARED would satisfy "no tags" while still
+proving the app wrote where it should not. The Background seeds the Grafana folder
+with a tag of its own precisely so the assertion has something to be unchanged.
+
+**Nothing refuses the gesture, and nothing should.** To Nextcloud a folder is a
+folder — a link-mapped one may hold a user's own files alongside the mirrored
+dashboards, and blocking them from organising it would be the app taking over a
+folder it merely fills. The tag is simply theirs, local, and of no interest to
+Grafana. Whether a later pull tidies it away is not specified here, because it is
+not what anybody is asking about: linked folder tags are not visible in Grafana at
+all, so there is nothing on the far side for the answer to matter to.
+
+An earlier draft asserted the Nextcloud tag "settles back" on the next sync. That
+made a promise about tidying that nobody wants and the code does not owe.
 
 ### A folder tag does not move the clock, and that is measured
 
@@ -3326,6 +3403,14 @@ the folder's Nextcloud file id — rather than by its path.
 A failed far-side rename must not roll back the local one. The user's gesture in
 their own file tree is theirs; the app reports the divergence and lets the next
 reconcile settle it. Same rule as rename-dashboard.feature.
+
+**@blocked, not @todo, and the capability is named.** The code is there —
+`FolderRenameListener` catches, logs, and raises a notification through
+`SyncNotifier` — but this harness has no way to make Grafana unreachable for the
+duration of one request. That is the same missing capability
+[the delete scenarios name](#the-grafana-delete-is-aborted-if-grafana-is-unreachable),
+and it is what keeps this out of the @todo queue rather than sitting there looking
+like unwritten work. The other two scenarios in the file are live.
 
 ### Renaming the mapped folder in Grafana does not break the mapping
 
