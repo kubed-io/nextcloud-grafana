@@ -9,14 +9,17 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\DAV;
 
+use OCA\DAV\Connector\Sabre\Directory as DavDirectory;
 use OCA\DAV\Connector\Sabre\File as DavFile;
 use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Listener\RestoreFromTrashListener;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderCascade;
 use OCA\GrafanaSync\Service\RestoreInProgress;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
+use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Server;
@@ -55,6 +58,7 @@ final class TrashRestorePlugin extends ServerPlugin {
 		private RestoreInProgress $restore,
 		private DashboardMetadata $metadata,
 		private RestoreFromTrashListener $restoreListener,
+		private FolderCascade $cascade,
 		private IRootFolder $rootFolder,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
@@ -109,6 +113,15 @@ final class TrashRestorePlugin extends ServerPlugin {
 	public function afterMove(string $source, string $destination): bool {
 		$managed = $this->restore->claim($destination);
 		if ($managed === null) {
+			// A FOLDER CAME BACK, NOT A FILE. Nothing was carried, because a folder has no
+			// stamp of its own — but the dashboards INSIDE it are still parked in the
+			// recycle-bin folder, and on this path nothing else will ever fetch them: the
+			// cascade in {@see RestoreFromTrashListener} hangs off `NodeRestoredEvent`,
+			// which Sabre never dispatches here. Left alone the tree looks restored in
+			// Nextcloud and is still in the bin in Grafana.
+			if ($this->restore->active() && $this->isTrashPath($source)) {
+				$this->reconcileRestoredTree($destination);
+			}
 			return true;
 		}
 		try {
@@ -125,31 +138,95 @@ final class TrashRestorePlugin extends ServerPlugin {
 			return true;
 		}
 
-		// The stamp goes back on the NEW file id, inside the guard so the write does not
-		// echo back as a user edit.
 		$fileId = $node->getId();
-		$this->guard->run(fn () => $this->metadata->write($fileId, [
-			DashboardMetadata::KEY_UID => $managed->uid,
-			DashboardMetadata::KEY_MAPPING => $managed->mappingId,
-			DashboardMetadata::KEY_MODE => $managed->mode,
-		]));
+		// NOTHING BELOW MAY REACH SABRE. The file is already back where the user asked
+		// for it by the time this runs, and the class contract above says this plugin
+		// never refuses a move — so an exception escaping here would turn a restore that
+		// SUCCEEDED into a 500, losing the file from the user's point of view over a
+		// failure in the bookkeeping that follows it. Same log-and-swallow policy the
+		// restore listeners use, and for the same reason.
+		try {
+			// The stamp goes back on the NEW file id, inside the guard so the write does
+			// not echo back as a user edit.
+			$this->guard->run(fn () => $this->metadata->write($fileId, [
+				DashboardMetadata::KEY_UID => $managed->uid,
+				DashboardMetadata::KEY_MAPPING => $managed->mappingId,
+				DashboardMetadata::KEY_MODE => $managed->mode,
+			]));
 
-		// AND GRAFANA IS RECONCILED HERE TOO, because on this path nothing else will.
-		// `Trashbin::restore()` never ran — Sabre did the copy and the delete itself — so
-		// neither `NodeRestoredEvent` nor `post_restore` was emitted, and the two
-		// listeners that answer a restore are both asleep. Left alone, the dashboard
-		// would sit in the recycle-bin folder forever while its file looked restored.
-		$file = $this->fileFor($fileId);
-		if ($file !== null) {
-			$this->restoreListener->restoreOne($file);
+			// AND GRAFANA IS RECONCILED HERE TOO, because on this path nothing else will.
+			// `Trashbin::restore()` never ran — Sabre did the copy and the delete itself —
+			// so neither `NodeRestoredEvent` nor `post_restore` was emitted, and the two
+			// listeners that answer a restore are both asleep. Left alone, the dashboard
+			// would sit in the recycle-bin folder forever while its file looked restored.
+			$file = $this->fileFor($fileId);
+			if ($file !== null) {
+				$this->restoreListener->restoreOne($file);
+			}
+			$this->logger->info('grafana_sync restore: re-attached the restored file to its dashboard', [
+				'app' => Application::APP_ID,
+				'path' => $destination,
+				'fileId' => $fileId,
+				'uid' => $managed->uid,
+			]);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync restore: the file is back, but re-attaching it to Grafana failed', [
+				'app' => Application::APP_ID,
+				'path' => $destination,
+				'fileId' => $fileId,
+				'uid' => $managed->uid,
+				'exception' => $e,
+			]);
 		}
-		$this->logger->info('grafana_sync restore: re-attached the restored file to its dashboard', [
-			'app' => Application::APP_ID,
-			'path' => $destination,
-			'fileId' => $fileId,
-			'uid' => $managed->uid,
-		]);
 		return true;
+	}
+
+	/**
+	 * Bring every dashboard under a restored FOLDER back out of the Grafana bin.
+	 *
+	 * Each child kept its own stamp through the trash, so there is nothing to carry —
+	 * only the Grafana side is out of step, which is exactly what `restoreOne` settles.
+	 * Log-and-swallow throughout: the tree is already back, and a folder that half
+	 * reconciles is still better than a restore that 500s.
+	 */
+	private function reconcileRestoredTree(string $destination): void {
+		try {
+			$node = $this->server?->tree->getNodeForPath($destination);
+			if (!$node instanceof DavDirectory) {
+				return;
+			}
+			$folder = $this->folderFor($node->getId());
+			if ($folder === null) {
+				return;
+			}
+			$files = $this->cascade->dashboardFilesIn($folder);
+			foreach ($files as $file) {
+				$this->restoreListener->restoreOne($file);
+			}
+			if ($files !== []) {
+				$this->logger->info('grafana_sync restore: reconciled the dashboards under a restored folder', [
+					'app' => Application::APP_ID,
+					'path' => $destination,
+					'files' => count($files),
+				]);
+			}
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync restore: the folder is back, but its dashboards were not reconciled', [
+				'app' => Application::APP_ID,
+				'path' => $destination,
+				'exception' => $e,
+			]);
+		}
+	}
+
+	/** The OCP folder node behind an id. */
+	private function folderFor(int $fileId): ?Folder {
+		foreach ($this->rootFolder->getById($fileId) as $node) {
+			if ($node instanceof Folder) {
+				return $node;
+			}
+		}
+		return null;
 	}
 
 	/** The OCP file node behind an id, for handing to the restore listener. */
@@ -194,7 +271,7 @@ final class TrashRestorePlugin extends ServerPlugin {
 			]);
 			return null;
 		}
-		if (!is_object($node) || !method_exists($node, 'getFileId')) {
+		if ($node === null || !method_exists($node, 'getFileId')) {
 			return null;
 		}
 		$id = $node->getFileId();

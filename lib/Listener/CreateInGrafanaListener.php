@@ -108,7 +108,12 @@ final class CreateInGrafanaListener implements IEventListener {
 		// dashboard beside the one being restored. {@see \OCA\GrafanaSync\DAV\TrashRestorePlugin}
 		// re-attaches the real identity once the move completes; this is what keeps the
 		// two from racing to define what the file is.
-		if ($this->restoring->active()) {
+		// ONLY WHEN THE RESTORE ACTUALLY BROUGHT AN IDENTITY. With the recycle bin OFF the
+		// trashing deleted the dashboard and stripped the file, so a restore has nothing
+		// to re-attach and this listener is exactly what should run — the spec asks for a
+		// fresh dashboard there. Standing down for every restore left a bin-off restore
+		// with no dashboard at all.
+		if ($this->restoring->active() && $this->restoring->carriedAnything()) {
 			$this->logger->info('grafana_sync create-on-land: a restore is under way; the file keeps the dashboard it had', [
 				'app' => Application::APP_ID,
 				'fileId' => $node->getId(),

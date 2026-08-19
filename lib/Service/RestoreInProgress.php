@@ -80,4 +80,21 @@ final class RestoreInProgress {
 	public function claim(string $destination): ?ManagedFile {
 		return $this->carried[$destination] ?? null;
 	}
+
+	/**
+	 * Did this restore bring an identity with it?
+	 *
+	 * THE DIFFERENCE BETWEEN THE TWO RECYCLE-BIN MODES, and the reason create-on-land
+	 * cannot simply stand down for the length of a restore. With the bin ON the trashed
+	 * file kept its stamp, so there is a dashboard to re-attach and minting a second one
+	 * would fork the mapping. With the bin OFF the trashing DELETED the dashboard and
+	 * stripped the file, so there is nothing to carry and create-on-land is exactly
+	 * right: the spec asks for a fresh dashboard, `its own, not the one it arrived with`.
+	 *
+	 * Suppressing it in both cases left a bin-off restore with no dashboard at all —
+	 * caught by the live smoke run, not by any test.
+	 */
+	public function carriedAnything(): bool {
+		return $this->carried !== [];
+	}
 }
