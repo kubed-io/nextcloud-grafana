@@ -280,15 +280,14 @@ trait FolderSteps {
 			// is no single original to be the answer.
 			if ($key === self::META_UID && $want === 'a new id') {
 				Assert::assertNotSame(
-					[],
-					$this->originalDashboardUids,
+					0,
+					count($this->originalDashboardUids),
 					'the arrange captured no original uids to differ from',
 				);
 				$uid = (string)$this->davReadMetadata($path, self::META_UID);
 				Assert::assertNotSame('', $uid, "'$path' carries no uid, so the copy never became a dashboard");
-				Assert::assertNotContains(
-					$uid,
-					$this->originalDashboardUids,
+				Assert::assertFalse(
+					in_array($uid, $this->originalDashboardUids, true),
 					"'$path' reused an original's uid ($uid) — two files would claim one dashboard",
 				);
 				continue;
@@ -350,13 +349,13 @@ trait FolderSteps {
 			implode("\n", $got),
 			"'$copy' does not hold the same files as '$original'",
 		);
-		Assert::assertNotSame([], $got, "'$original' holds no dashboard files, so the copy proves nothing");
+		Assert::assertNotSame(0, count($got), "'$original' holds no dashboard files, so the copy proves nothing");
 	}
 
 	/** @Then /^the dashboards in "([^"]*)" hold no Grafana metadata at all$/ */
 	public function theDashboardsInHoldNoGrafanaMetadata(string $folder): void {
 		$files = $this->davListDashboardFiles($folder);
-		Assert::assertNotSame([], $files, "'$folder' holds no dashboard files");
+		Assert::assertNotSame(0, count($files), "'$folder' holds no dashboard files");
 		foreach ($files as $name) {
 			foreach ([self::META_UID, self::META_MAPPING, self::META_MODE] as $key) {
 				Assert::assertSame(
@@ -382,8 +381,14 @@ trait FolderSteps {
 	private function pinOriginalsOf(string $folder): void {
 		$this->lastFolderUid = (string)$this->davReadMetadata($folder, self::META_FOLDER_UID);
 		$this->originalDashboardUids = [];
-		foreach ($this->davListDashboardFiles($folder) as $name) {
-			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+		// AT EVERY DEPTH. `davListDashboardFiles` is one level, and a folder gesture is
+		// recursive by nature — a purge of a folder holding `Sub/Deep.grafana` pinned
+		// nothing at all and then complained it had nothing to look for.
+		foreach ($this->davTreeUnder($folder) as $path) {
+			if (!str_ends_with($path, '.grafana')) {
+				continue;
+			}
+			$uid = (string)$this->davReadMetadata(ltrim($path, '/'), self::META_UID);
 			if ($uid !== '') {
 				$this->originalDashboardUids[] = $uid;
 			}
@@ -425,22 +430,12 @@ trait FolderSteps {
 		$this->pullEveryMapping();
 	}
 
-	/** @Then /^the move is refused with a message$/ */
-	public function theMoveIsRefusedWithAMessage(): void {
-		$this->assertRefused('move', $this->lastMoveStatus);
-	}
-
 	// ── the trash ─────────────────────────────────────────────────────────────
 
 	/** @When /^I try to move "([^"]*)" to the trash$/ */
 	public function iTryToMoveToTheTrash(string $folder): void {
 		$this->pinOriginalsOf($folder);
 		$this->lastDeleteStatus = $this->davDeleteStatus($folder);
-	}
-
-	/** @Then /^the trash is refused with a message$/ */
-	public function theTrashIsRefusedWithAMessage(): void {
-		$this->assertRefused('trash', $this->lastDeleteStatus);
 	}
 
 	/**
@@ -499,7 +494,7 @@ trait FolderSteps {
 
 	/** @Then /^none of those dashboards exists in Grafana$/ */
 	public function noneOfThoseDashboardsExistsInGrafana(): void {
-		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		Assert::assertNotSame(0, count($this->originalDashboardUids), 'nothing captured the dashboards to look for');
 		foreach ($this->originalDashboardUids as $uid) {
 			Assert::assertNull(
 				$this->grafanaGetDashboard($uid),
@@ -508,9 +503,18 @@ trait FolderSteps {
 		}
 	}
 
-	/** @Then /^no dashboard it held exists in Grafana$/ */
+	/**
+	 * @Then /^no dashboard it held exists in Grafana$/
+	 *
+	 * VACUOUS WHEN IT HELD NONE, deliberately. `purge.feature` runs this over an
+	 * Examples table whose whole point is that what was inside makes no difference —
+	 * and one row is a folder holding only a spreadsheet. Demanding a non-empty set
+	 * would fail that row for being exactly what it says it is.
+	 */
 	public function noDashboardItHeldExistsInGrafana(): void {
-		$this->noneOfThoseDashboardsExistsInGrafana();
+		foreach ($this->originalDashboardUids as $uid) {
+			Assert::assertNull($this->grafanaGetDashboard($uid), "dashboard $uid still exists in Grafana");
+		}
 	}
 
 	/**
@@ -520,7 +524,7 @@ trait FolderSteps {
 	 * live in Grafana, and living in the bin folder is the only thing that changed.
 	 */
 	public function thoseDashboardsAreParkedIn(string $binTitle): void {
-		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		Assert::assertNotSame(0, count($this->originalDashboardUids), 'nothing captured the dashboards to look for');
 		$bin = $this->grafanaFolderUidByTitle($binTitle);
 		Assert::assertNotNull($bin, "Grafana has no folder titled '$binTitle'");
 		foreach ($this->originalDashboardUids as $uid) {
@@ -537,7 +541,7 @@ trait FolderSteps {
 	/** @Then /^"([^"]*)" holds no dashboard files$/ */
 	public function holdsNoDashboardFiles(string $folder): void {
 		$found = $this->davListDashboardFiles($folder);
-		Assert::assertSame([], $found, "'$folder' still holds: " . implode(', ', $found));
+		Assert::assertSame('', implode(', ', $found), "'$folder' still holds dashboard files");
 	}
 
 	/** @Then /^"([^"]*)" holds "([^"]*)"$/ */

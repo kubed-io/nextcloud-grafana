@@ -132,7 +132,7 @@ jobs:
         # Handed over by the `versions` job above: the ceiling on a PR, the whole
         # declared range on main. SQLite is the fast integration path.
         server-versions: ${{ fromJSON(needs.versions.outputs.matrix) }}
-        suite: [admin, authoring, copying, naming, trash, motion, tags, folders, folder-tags, folder-motion, core]
+        suite: [admin, authoring, copying, naming, trash, motion, tags, folders, folder-trash, folder-tags, folder-motion, folder-copy, core]
 
     services:
       # Grafana with its admin user provisioned from env — a background container
@@ -226,7 +226,7 @@ jobs:
     # is what turns a rate-limit blip from a red build into a slow step.
     - name: Cache Team Folders (groupfolders)
       id: groupfolders-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: apps/groupfolders
         key: groupfolders-${{ matrix.server-versions }}-v1

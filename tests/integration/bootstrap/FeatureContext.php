@@ -273,6 +273,20 @@ final class FeatureContext implements Context {
 	 * @AfterScenario
 	 */
 	public function tearDown(): void {
+		// MAPPINGS FIRST, FOLDERS SECOND — and the order is load-bearing now.
+		//
+		// It used to be the other way round, so that deleting a mapped folder would
+		// cascade its dashboards out of Grafana. Then the link guard learned to refuse
+		// deleting a folder that holds linked dashboards
+		// ({@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin::beforeUnbind}) — which is
+		// correct, and which meant teardown could no longer clean up after a link
+		// mapping at all. `Pointers` survived every scenario, and the next pull wrote
+		// `Pinned (1).grafana`, then `(2)`, beside what was already there.
+		//
+		// Unmapping first costs nothing: the Grafana folders this scenario created are
+		// deleted below, and a folder delete takes its dashboards with it.
+		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
+
 		foreach ($this->createdFolders as $folder) {
 			try {
 				$this->davClient()->request('DELETE', rawurlencode($folder));
@@ -300,8 +314,6 @@ final class FeatureContext implements Context {
 		//
 		// Isolation between scenarios is `trashbinPathFor` picking the NEWEST matching
 		// entry instead, which costs nothing and triggers no app behaviour.
-		// Reset the mapping list so the next scenario starts from zero mappings.
-		$this->occ('config:app:delete ' . self::APP_ID . ' mappings');
 		$this->createdFolders = [];
 		$this->currentFolder = '';
 		$this->currentFilePath = '';

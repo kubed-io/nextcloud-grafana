@@ -125,9 +125,17 @@ default:
     # was split. Same treatment, by gesture, and deliberately keeping `create` and
     # `tags` apart: they are 26 of the 38 runnable scenarios between them, so any
     # split leaving them together barely moves the slowest leg.
+    # SPLIT AGAIN, and the numbers are why. `folders` and `folder-motion` came back
+    # at 6.0 and 7.3 minutes once these specs actually ran — the folder gestures are
+    # the most expensive in the suite, because every one of them is several
+    # dashboards and a Grafana folder rather than a single file.
     folders:
       paths:
       - '%paths.base%/../../features/folders/create.feature'
+      contexts: *contexts
+
+    folder-trash:
+      paths:
       - '%paths.base%/../../features/folders/delete.feature'
       - '%paths.base%/../../features/folders/restore.feature'
       - '%paths.base%/../../features/folders/purge.feature'
@@ -140,8 +148,12 @@ default:
 
     folder-motion:
       paths:
-      - '%paths.base%/../../features/folders/copy.feature'
       - '%paths.base%/../../features/folders/move.feature'
+      contexts: *contexts
+
+    folder-copy:
+      paths:
+      - '%paths.base%/../../features/folders/copy.feature'
       - '%paths.base%/../../features/folders/rename.feature'
       contexts: *contexts
 

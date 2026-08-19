@@ -62,13 +62,17 @@ PLACEHOLDER = '(?:"[^"]*"|\'[^\']*\'|[^\\s"\']+)'
 
 regex_re = re.compile(r'@(?:Given|When|Then)\s+/\^(.+?)\$/')
 plain_re = re.compile(r'@(?:Given|When|Then)\s+(?!/)(\S.*?)\s*$')
-patterns, seen, parens = [], {}, []
+patterns, seen, parens, sentences = [], {}, [], {}
 for php in sorted(bootstrap.rglob('*.php')):
     for line in php.read_text(encoding='utf-8').splitlines():
         m = regex_re.search(line)
         if m:
             patterns.append(m.group(1))
             seen.setdefault(m.group(1), []).append(php.name)
+            # A regex with no metacharacters left IS a sentence, and Behat will match
+            # it alongside the identical plain-text step. See the `sentences` report.
+            if not re.search(r'[\\\[\]().*+?|]', m.group(1)):
+                sentences.setdefault(m.group(1), []).append(php.name)
             continue
         m = plain_re.search(line)
         if not m:
@@ -99,6 +103,21 @@ for php in sorted(bootstrap.rglob('*.php')):
         body = body.replace(r'\(s\)', 's?')
         patterns.append(body)
         seen.setdefault(body, []).append(php.name)
+        sentences.setdefault(text, []).append(php.name)
+
+# THE SAME SENTENCE, ONE PLAIN AND ONE ANCHORED REGEX. `seen` cannot see this: the
+# plain branch stores an ESCAPED pattern and the regex branch stores the raw one, so
+# `the move is refused with a message` and `/^the move is refused with a message$/`
+# are different keys there while Behat matches both and refuses the scenario with
+# "Ambiguous match". Measured — CI failed on exactly this after the check passed.
+ambiguous = {t: f for t, f in sentences.items() if len(set(f)) > 1 or len(f) > 1}
+if ambiguous:
+    fail = True
+    print('✘ AMBIGUOUS STEP — one sentence, registered more than once. Behat matches')
+    print('  every definition and then refuses the scenario as ambiguous:')
+    for t, files in sorted(ambiguous.items()):
+        print(f'    {t}  ({", ".join(sorted(set(files)))})')
+    print('  Delete one — a phrasing defined anywhere is reachable from every trait.')
 
 dupes = {p: f for p, f in seen.items() if len(f) > 1}
 if dupes:
