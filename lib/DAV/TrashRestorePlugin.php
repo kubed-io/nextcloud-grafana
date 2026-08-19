@@ -261,8 +261,17 @@ final class TrashRestorePlugin extends ServerPlugin {
 	 * part of the `ITrash` interface, so anything answering it is answering honestly.
 	 */
 	private function trashedFileId(string $path): ?int {
+		// THE SERVER IS CHECKED FIRST, not the node. `getNodeForPath()` returns a
+		// non-nullable `INode`, so a null test on its result is dead code — Psalm said so
+		// twice, once for the `is_object()` this replaced and once for the `=== null` that
+		// replaced THAT. Narrowing `$this->server` up front is what actually makes the
+		// nullability go away, and it leaves `method_exists()` a guaranteed object.
+		$server = $this->server;
+		if ($server === null) {
+			return null;
+		}
 		try {
-			$node = $this->server?->tree->getNodeForPath($path);
+			$node = $server->tree->getNodeForPath($path);
 		} catch (\Throwable $e) {
 			$this->logger->debug('grafana_sync restore: could not resolve the trashed node', [
 				'app' => Application::APP_ID,
@@ -271,7 +280,7 @@ final class TrashRestorePlugin extends ServerPlugin {
 			]);
 			return null;
 		}
-		if ($node === null || !method_exists($node, 'getFileId')) {
+		if (!method_exists($node, 'getFileId')) {
 			return null;
 		}
 		$id = $node->getFileId();
