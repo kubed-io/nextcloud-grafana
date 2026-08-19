@@ -366,7 +366,12 @@ trait ResourceSteps {
 			$res = $this->occ('groupfolders:list --output=json');
 			$folders = json_decode((string)$res['output'], true);
 			foreach (is_array($folders) ? $folders : [] as $folder) {
-				$mount = (string)($folder['mount_point'] ?? '');
+				// `mountPoint`, camel-cased — NOT the `mount_point` the rest of this
+				// app's config speaks. Guessing it cost a whole CI round: nothing
+				// matched, nothing was deleted, and a best-effort teardown has no way
+				// to complain about that. {@see MappingSteps::theTeamFolderIsSharedWithTheGroupOutsideThisApp}
+				// reads the same key.
+				$mount = (string)($folder['mountPoint'] ?? '');
 				$id = (string)($folder['id'] ?? '');
 				if ($id !== '' && isset($mounts[$mount])) {
 					$this->occ('groupfolders:delete ' . escapeshellarg($id) . ' --force');
