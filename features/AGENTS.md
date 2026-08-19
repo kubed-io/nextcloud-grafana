@@ -912,6 +912,55 @@ It is also why the same walk is needed on the guard side — see
 [copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
 One recursive gesture, one event, two places that have to look inside it.
 
+### Restoring a folder in a Team Folder
+
+**@unbuilt, and the storage is the whole difference.** The identical scenario over
+an admin-owned folder passes: the folder comes back, its Grafana folder is rebuilt,
+and the parked dashboards return with the ids they left with. Over a Team Folder it
+does not — Grafana has no folder under the mapping to hold them.
+
+It was one Examples row beside `Demo`, which made a real gap look like a flake in a
+passing outline. Split out, so the thing that does not work is a scenario that says
+so rather than a row that keeps a suite red.
+
+**What is different about a Team Folder is not obvious and should not be guessed
+at.** A groupfolder is a MOUNT, not a folder in anybody's home: restoring from the
+trash goes through `OCA\GroupFolders\Trash\TrashBackend` rather than the ordinary
+one, the node ids and the acting user differ, and the folder-restore path has more
+than one place that could reasonably be the one giving up. Finding out means
+reading that backend against a live groupfolder, which is its own piece of work.
+
+This is the second Team-Folder-only defect in this app — the first was a folder
+delete over object storage — and both were invisible to the admin-folder rows
+beside them. Worth a habit: when a storage column exists, a row failing alone is
+evidence about the STORAGE, not noise.
+
+### Trashing a folder in a link mapping
+
+**@unbuilt, and the reason is a regression it caused.** A guard for this lived in
+`LinkWriteGuardPlugin::beforeUnbind` for one afternoon and broke every link MOVE in
+the suite.
+
+Sabre routes a MOVE through `beforeUnbind` on the source as well as a DELETE. So a
+folder branch there did not only refuse trashing — it intercepted moves that
+`MoveGuardListener` was already refusing properly, and answered **403 with an empty
+body** where the listener answers with a message a person can read. `motion` had
+been green; it went red on rows that had nothing to do with folders.
+
+A refusal nobody can read is the exact failure this plugin exists to prevent, so
+the guard came out rather than being narrowed. Refusing the DELETE without
+touching the MOVE means distinguishing the two inside `beforeUnbind`, which sabre
+does not hand you — and guessing from the request method inside an unbind hook is
+the kind of cleverness that breaks the next time sabre reorders something.
+
+The copy half stays: `method:COPY` is its own hook and refusing there costs a move
+nothing.
+
+**What actually happens today**: trashing a link-mapped folder succeeds, and the
+mirrors go to the Nextcloud trash. The dashboards are untouched in Grafana, so the
+next pull writes the folder back — untidy, and not destructive, which is the right
+way round for a gap.
+
 ### Copying a folder inside a link mapping is refused
 
 **Two situations get here and only one of them is ours.**

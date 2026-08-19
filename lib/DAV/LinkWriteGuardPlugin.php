@@ -254,22 +254,13 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return true; // gone already, or not ours to judge — never block on doubt
 		}
-		// THE SAME BLIND SPOT THE COPY HALF HAD. `isLinkFile` sees files, so trashing a
-		// link-mapped FOLDER was waved through — and a folder delete is one recursive
-		// gesture, so the per-file refusal never fires for the pointers inside it
-		// either. Under a link the tree is Grafana's, and deleting a mirror of it here
-		// would leave the dashboards live and their folder gone.
-		if ($this->isLinkMappedFolder($path, $node)) {
-			$name = $node->getName();
-			$this->logger->warning('grafana_sync: refused a WebDAV delete of a folder holding linked dashboards', [
-				'app' => Application::APP_ID,
-				'folder' => $name,
-			]);
-			throw new Forbidden(
-				'“' . $name . '” holds linked Grafana dashboards — pointers to dashboards that live in Grafana, '
-				. 'so it can’t be deleted here. Delete them in Grafana, or remove the mapping itself.',
-			);
-		}
+		// NO FOLDER BRANCH HERE, AND THAT IS DELIBERATE — see
+		// `features/AGENTS.md#trashing-a-folder-in-a-link-mapping`. One lived here
+		// briefly and regressed every link MOVE: sabre routes a move through
+		// `beforeUnbind` too, so refusing the source here intercepted refusals
+		// `MoveGuardListener` was already making properly, and answered 403 with an
+		// empty body where the listener answers with a message. A refusal the user
+		// cannot read is the failure this plugin exists to avoid.
 		if (!$this->isLinkFile($node)) {
 			return true; // sync/unmapped files are the user's to delete
 		}

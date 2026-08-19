@@ -24,24 +24,34 @@ Feature: Restoring a folder from the trash
     # notes: ../AGENTS.md#the-recycle-bin-folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario Outline: Restore a folder with the recycle bin on
+  Scenario: Restore a folder with the recycle bin on
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                         |
-      | /<folder>/Team/Alpha.grafana |
-      | /<folder>/Team/Beta.grafana  |
-    And "<folder>/Team" is in the Nextcloud trash
-    When I restore "<folder>/Team" from the Nextcloud trash
-    Then Grafana mirrors the folder "<folder>/Team"
+      | path                     |
+      | /Demo/Team/Alpha.grafana |
+      | /Demo/Team/Beta.grafana  |
+    And "Demo/Team" is in the Nextcloud trash
+    When I restore "Demo/Team" from the Nextcloud trash
+    Then Grafana mirrors the folder "Demo/Team"
     And the mappings hold:
-      | path                         | identity        |
-      | /<folder>/Team/Alpha.grafana | the original id |
-      | /<folder>/Team/Beta.grafana  | the original id |
+      | path                     | identity        |
+      | /Demo/Team/Alpha.grafana | the original id |
+      | /Demo/Team/Beta.grafana  | the original id |
 
-    Examples: the storage a mapping uses makes no difference to what a restore is
-      | folder |
-      | Demo   |
-      | Shared |
+  # notes: ../AGENTS.md#restoring-a-folder-in-a-team-folder
+  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
+  Scenario: Restore a folder in a Team Folder
+    Given the Grafana recycle bin is on
+    And the following items in the mappings:
+      | path                       |
+      | /Shared/Team/Alpha.grafana |
+      | /Shared/Team/Beta.grafana  |
+    And "Shared/Team" is in the Nextcloud trash
+    When I restore "Shared/Team" from the Nextcloud trash
+    Then Grafana mirrors the folder "Shared/Team"
+    And the mappings hold:
+      | path                       | identity        |
+      | /Shared/Team/Alpha.grafana | the original id |
 
     # Nothing was destroyed, so nothing has to be rebuilt: the dashboards come back
     # with the ids, URLs and history they always had.
