@@ -32,7 +32,7 @@ Feature: Creating a folder
     # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
 
   @user @in-nextcloud @gesture @ui
-  Scenario Outline: Create a dashboard in a folder of a mapping
+  Scenario Outline: Create a dashboard in a folder of a mapping which is not yet in Grafana
     Given the folder "<folder>" holding no dashboards
     And no part of "<folder>" exists in Grafana yet
     When I create "CPU Load.grafana" in "<folder>"
@@ -50,7 +50,7 @@ Feature: Creating a folder
 
   # notes: ../AGENTS.md#a-subfolder-is-in-grafana-when-a-dashboard-is-in-it
   @user @in-nextcloud @gesture @ui
-  Scenario Outline: Move a dashboard into a folder of a mapping
+  Scenario Outline: Move a dashboard into a folder of a mapping which is not yet in Grafana
     Given a dashboard file named "Fleet Health.grafana" in "<source>"
     And the folder "<folder>" holding no dashboards
     And no part of "<folder>" exists in Grafana yet
@@ -67,7 +67,7 @@ Feature: Creating a folder
 
     # notes: ../AGENTS.md#wherever-it-came-from
 
-  @user @in-nextcloud @gesture @ui @todo
+  @user @in-nextcloud @gesture @ui
   Scenario: Create a new folder in a mapping
     When I create the folder "Demo/Notes"
     Then Grafana holds no folder named "Notes"

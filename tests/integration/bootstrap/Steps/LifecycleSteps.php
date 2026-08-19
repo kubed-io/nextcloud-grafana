@@ -220,6 +220,19 @@ trait LifecycleSteps {
 	}
 
 	/**
+	 * @When /^I create the folder "([^"]*)"$/
+	 *
+	 * A PLAIN MKCOL, which is the whole point: the folder is made and nothing is put
+	 * in it. Every path that mirrors a folder into Grafana hangs off a DASHBOARD —
+	 * create, push, delete, move — so an empty folder should reach none of them, and
+	 * this is the gesture that says so.
+	 */
+	public function iCreateTheFolder(string $folder): void {
+		$this->davMkdir($folder);
+		$this->currentFolder = $folder;
+	}
+
+	/**
 	 * THE APP'S OWN "New dashboard" GESTURE, which is what creating actually is.
 	 *
 	 * The user picks a folder and nothing else: `src/files.js` writes

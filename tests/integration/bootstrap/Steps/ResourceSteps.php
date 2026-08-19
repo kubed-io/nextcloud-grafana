@@ -612,6 +612,27 @@ trait ResourceSteps {
 	}
 
 	/**
+	 * @Then /^Grafana holds no folder named "([^"]*)"$/
+	 *
+	 * ANYWHERE IN GRAFANA, not just under the mapping. A folder invented at the root
+	 * because the app lost track of the parent is exactly as wrong as one invented in
+	 * the right place, and a check scoped to the mapping would call that a pass.
+	 *
+	 * Reads the deep listing, so a folder created two levels down cannot hide from it
+	 * the way it hid from the legacy top-level-only `/api/folders`.
+	 */
+	public function grafanaHoldsNoFolderNamed(string $title): void {
+		foreach ($this->grafanaListFoldersDeep() as $folder) {
+			if ($folder['title'] === $title) {
+				throw new \RuntimeException(
+					"Grafana holds a folder named '$title' (uid {$folder['uid']}) — an empty Nextcloud folder is "
+					. 'just a folder, and must not mint one',
+				);
+			}
+		}
+	}
+
+	/**
 	 * @When /^someone creates the Grafana folder "([^"]*)"$/
 	 *
 	 * Straight through Grafana's own API, naming the folder BY PATH — so one step
