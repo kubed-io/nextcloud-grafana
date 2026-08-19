@@ -12,12 +12,14 @@ Feature: Creating a folder
       | /Demo/Existing   | folder |
       | /links/Existing  | folder |
       | /shared/Existing | folder |
+    And Nextcloud holds these resources:
+      | path     |
+      | /Scratch |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
       | shared         | Shared    | sync | team folder  | admin  |
-    And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
     And Grafana and Nextcloud are in sync
 
