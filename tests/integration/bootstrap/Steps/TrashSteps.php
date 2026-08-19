@@ -775,7 +775,7 @@ trait TrashSteps {
 		foreach ($this->grafanaDashboardsInFolder($folderUid) as $uid) {
 			$this->grafanaDeleteDashboard($uid);
 		}
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**

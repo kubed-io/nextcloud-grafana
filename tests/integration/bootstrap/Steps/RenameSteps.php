@@ -87,7 +87,7 @@ trait RenameSteps {
 		$uid = 'nc-seed-' . bin2hex(random_bytes(3));
 		$this->grafanaCreateDashboard($uid, $title, $grafanaFolder);
 		$this->createdDashboardUids[] = $uid;
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 
 		$this->lastUid = $uid;
 		$this->currentFolder = $folder;
@@ -372,7 +372,7 @@ trait RenameSteps {
 		if ($res->getStatusCode() !== 200) {
 			throw new \RuntimeException('renaming in Grafana failed: ' . (string)$res->getBody());
 		}
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**

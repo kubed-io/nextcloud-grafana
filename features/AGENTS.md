@@ -414,15 +414,25 @@ the largest job it can do.
 
 ### Three mappings shaped alike
 
-The three Grafana folders hold the SAME shape — an `Overview` dashboard, a
-`Region` subfolder, a `Latency` inside it — so the outline can assert one tree
-with the folder name substituted in. Give each mapping its own fixtures and the
-end state differs per row, and an Examples table cannot vary the shape of a table
-inside the scenario. Identical shapes are what make the row a column.
+The three Grafana folders hold the same SHAPE — a dashboard, a `Region`
+subfolder, a dashboard inside it — so the outline can assert one tree with the
+names substituted in. An Examples table cannot vary the shape of a table inside
+the scenario, so a differently-shaped fixture per mapping would mean three
+scenarios. Identical shapes are what make the row a column.
 
-They differ in the only two ways a mapping can: `sync` vs `link`, and an admin
-folder vs a team folder. That is the whole matrix, and one pass of the card's
-button is asserted against every cell of it.
+**The titles are all different, though, and that is not decoration.** They were
+`Overview` and `Latency` in all three folders at first, which reads better and is
+wrong: `the dashboard's uid` resolves a TITLE to the uid the arrange seeded, and
+three dashboards sharing a title leave one entry in that map — the last one
+written. Every row then checked its file against a dashboard in somebody else's
+folder. It failed, which was lucky; a suite where two of the three collided would
+have passed two rows out of three and looked fine.
+
+The mappings differ in the only two ways a mapping can: `sync` vs `link`, and an
+admin folder vs a team folder. That is the whole matrix, and one pass of the
+card's button is asserted against every cell of it. The `mode` and `storage`
+columns are the Background's doing rather than inputs — they ride the Examples
+table so that the coverage is visible where the rows are.
 
 **"Syncing one mapping leaves the others where they were" was removed.** It was
 the negative half — another mapping standing there, still empty afterwards — and

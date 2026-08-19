@@ -149,13 +149,7 @@ trait ResourceSteps {
 		}
 		sort($got);
 
-		Assert::assertSame(
-			$want,
-			$got,
-			"Grafana is not the tree the scenario describes.\n"
-			. '  expected: ' . implode("\n            ", $want) . "\n"
-			. '  actually: ' . implode("\n            ", $got),
-		);
+		$this->assertTree('Grafana', $want, $got);
 
 		// The tree first, tags second — see the Nextcloud twin for why.
 		foreach ($wantTags as $path => $tags) {
@@ -261,13 +255,7 @@ trait ResourceSteps {
 		}
 		sort($got);
 
-		Assert::assertSame(
-			$want,
-			$got,
-			"Nextcloud is not the tree the scenario describes.\n"
-			. '  expected: ' . implode("\n            ", $want) . "\n"
-			. '  actually: ' . implode("\n            ", $got),
-		);
+		$this->assertTree('Nextcloud', $want, $got);
 
 		// TAGS ARE ASSERTED SECOND, AND ONLY AFTER THE TREE PASSES. A tag mismatch
 		// reported over a wrong tree is noise: the useful failure is that the file is
@@ -436,6 +424,34 @@ trait ResourceSteps {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Compare two trees AS TEXT, and say what is missing and what is extra.
+	 *
+	 * NOT `assertSame` ON THE ARRAYS. PHPUnit shortens an array longer than ten
+	 * entries when it builds a failure diff, and reaching for that setting outside a
+	 * PHPUnit run hits an unconfigured registry: `Registry::get(): Return value must
+	 * be of type Configuration, null returned`. Behat then reports THAT instead of
+	 * the assertion — so every tree assertion big enough to be worth making was
+	 * guaranteed to fail unreadably. Measured in CI on a sixteen-row table.
+	 *
+	 * Joining first also makes the failure legible: two sorted lists side by side,
+	 * plus the two lines that actually differ.
+	 *
+	 * @param list<string> $want
+	 * @param list<string> $got
+	 */
+	private function assertTree(string $side, array $want, array $got): void {
+		$missing = array_values(array_diff($want, $got));
+		$extra = array_values(array_diff($got, $want));
+		Assert::assertSame(
+			implode("\n", $want),
+			implode("\n", $got),
+			"$side is not the tree the scenario describes."
+			. ($missing === [] ? '' : "\n  MISSING (the scenario says these exist): " . implode(', ', $missing))
+			. ($extra === [] ? '' : "\n  UNEXPECTED (these exist and the scenario does not name them): " . implode(', ', $extra)),
+		);
+	}
 
 	/** The `path` cell, or a failure that says which table is wrong. */
 	private function requirePath(array $row): string {

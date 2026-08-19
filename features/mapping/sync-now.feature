@@ -8,16 +8,16 @@ Feature: Syncing one mapping from its card
   Background:
     Given the app is connected to Grafana
     And Grafana holds these resources:
-      | path                   | type      | tags       |
-      | /alpha/Overview        | dashboard | dns, linux |
-      | /alpha/Region          | folder    |            |
-      | /alpha/Region/Latency  | dashboard | latency    |
-      | /links/Overview        | dashboard | dns, linux |
-      | /links/Region          | folder    |            |
-      | /links/Region/Latency  | dashboard | latency    |
-      | /shared/Overview       | dashboard | dns, linux |
-      | /shared/Region         | folder    |            |
-      | /shared/Region/Latency | dashboard | latency    |
+      | path                  | type      | tags       |
+      | /alpha/Overview       | dashboard | dns, linux |
+      | /alpha/Region         | folder    |            |
+      | /alpha/Region/Latency | dashboard | latency    |
+      | /links/Pinned         | dashboard | dns, linux |
+      | /links/Region         | folder    |            |
+      | /links/Region/Deeper  | dashboard | latency    |
+      | /shared/Coastline     | dashboard | dns, linux |
+      | /shared/Region        | folder    |            |
+      | /shared/Region/Tides  | dashboard | latency    |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      | groups |
       | alpha          | Alpha     | sync | admin folder |        |
@@ -32,24 +32,24 @@ Feature: Syncing one mapping from its card
   Scenario Outline: A sync from Grafana mounts the mapping it was asked for
     When the admin syncs the "<nc folder>" mapping from Grafana
     Then Nextcloud holds exactly these resources:
-      | path                                | tags       |
-      | /<nc folder>/Overview.grafana       | dns, linux |
-      | /<nc folder>/Region                 |            |
-      | /<nc folder>/Region/Latency.grafana | latency    |
-    And "<nc folder>/Overview.grafana" holds:
+      | path                                 | tags       |
+      | /<nc folder>/<top>.grafana           | dns, linux |
+      | /<nc folder>/Region                  |            |
+      | /<nc folder>/Region/<nested>.grafana | latency    |
+    And "<nc folder>/<top>.grafana" holds:
       | grafana_uid     | the dashboard's uid |
       | grafana_mapping | set                 |
-      | grafana_mode    | "<mode>"            |
-    And the file "<nc folder>/Overview.grafana" carries its Grafana dates
+      | grafana_mode    | the mapping's mode  |
+    And the file "<nc folder>/<top>.grafana" carries its Grafana dates
 
     Examples: one mapping at a time, and every kind of mapping there is
-      | nc folder | mode | storage      |
-      | Alpha     | sync | admin folder |
-      | Pointers  | link | admin folder |
-      | Shared    | sync | team folder  |
+      | nc folder | mode | storage      | top       | nested  |
+      | Alpha     | sync | admin folder | Overview  | Latency |
+      | Pointers  | link | admin folder | Pinned    | Deeper  |
+      | Shared    | sync | team folder  | Coastline | Tides   |
 
     # notes: ../AGENTS.md#carries-its-grafana-dates
-    # The storage column is the Background's; it rides here so the coverage shows.
+    # notes: ../AGENTS.md#three-mappings-shaped-alike
 
   # ── the whole-instance mirror, which is still one mapping ──────────────────
 

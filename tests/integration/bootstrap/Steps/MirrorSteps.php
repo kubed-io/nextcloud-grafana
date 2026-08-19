@@ -164,7 +164,7 @@ trait MirrorSteps {
 	 */
 	public function someoneCreatesTheFolderUnderTheGrafanaFolder(string $title, string $parentUid): void {
 		$this->createdGrafanaFolders[$title] = $this->grafanaCreateFolder($title, $parentUid);
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/** @Then /^"([^"]*)" exists in Nextcloud$/ */

@@ -201,7 +201,7 @@ trait SyncSteps {
 		if ($res->getStatusCode() !== 200) {
 			throw new \RuntimeException("editing '$uid' in Grafana failed: " . (string)$res->getBody());
 		}
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**
@@ -301,7 +301,7 @@ trait SyncSteps {
 		$this->grafanaCreateDashboard($uid, $title, $folderUid);
 		$this->createdDashboardUids[] = $uid;
 		$this->lastUid = $uid;
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**
@@ -475,6 +475,20 @@ trait SyncSteps {
 		}
 		$decoded = json_decode(substr($output, $start), true);
 		return is_array($decoded) ? $decoded : [];
+	}
+
+	/**
+	 * Pull every mapping, as an internal helper.
+	 *
+	 * NO LONGER A STEP: no feature says "the admin pulls from Grafana" since the
+	 * arrange tables landed, but sixteen call sites across seven step traits still
+	 * need a pull. Deleting the method because no FEATURE said its sentence broke
+	 * every one of them — the annotation was dead, the method very much was not.
+	 */
+	private function pullEveryMapping(): void {
+		$res = $this->occ('grafana_sync:sync pull');
+		Assert::assertSame(0, $res['exit'], "pull failed:\n{$res['output']}");
+		$this->lastPullReport = self::decodeSyncReport((string)$res['output']);
 	}
 
 	/**

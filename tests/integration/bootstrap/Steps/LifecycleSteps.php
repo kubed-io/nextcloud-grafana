@@ -89,7 +89,7 @@ trait LifecycleSteps {
 			// never adopts a file the user drops in. Seed a dashboard through Grafana's
 			// own API (no involvement from this app), then pull it down.
 			$this->seedGrafanaDashboard($mapping, 'Linked ' . bin2hex(random_bytes(3)));
-			$this->theAdminPullsFromGrafana();
+			$this->pullEveryMapping();
 			$files = $this->davListDashboardFiles($this->mappedFolder($mapping));
 			$this->check($files !== [], "the pull produced no link file in the '$mapping' mapping");
 			$this->currentFilePath = $this->mappedFolder($mapping) . '/' . $files[0];
@@ -985,13 +985,13 @@ trait LifecycleSteps {
 	 * @When both mappings are pulled
 	 */
 	public function theMappingIsPulled(?string $mapping = null): void {
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/** @When the :mapping mapping is pulled twice */
 	public function theMappingIsPulledTwice(string $mapping): void {
-		$this->theAdminPullsFromGrafana();
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
+		$this->pullEveryMapping();
 	}
 
 	/** @When the :mapping mapping is pushed */
@@ -1206,7 +1206,7 @@ trait LifecycleSteps {
 			throw new \RuntimeException('copying in Grafana failed: ' . (string)$res->getBody());
 		}
 		$this->createdDashboardUids[] = $this->grafanaCopyUid;
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**
@@ -1308,7 +1308,7 @@ trait LifecycleSteps {
 		$this->assertAllTitled($title, 'as they landed');
 		$namesBefore = $this->namedFiles;
 
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 
 		$namesAfter = $this->davListDashboardFiles($this->namedFolder);
 		sort($namesAfter);
