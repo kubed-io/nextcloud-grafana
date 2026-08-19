@@ -216,10 +216,14 @@ trait LifecycleSteps {
 	 * move, a copy, or an edit, and those are different gestures with their own
 	 * features.
 	 *
-	 * The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-	 * server cannot tell the two apart, and it is the PUT that fires the listener.
+	 * THE MEDIUM IS NOT PART OF THE GESTURE. The step used to say "via the Files
+	 * 'New' menu", which is one way to reach it and not the only one: a desktop
+	 * client, a script, `occ`, or a plain WebDAV PUT all arrive at the same place,
+	 * and the server cannot tell them apart — it is the PUT that fires the listener.
+	 * Naming the browser affordance in the spec made a rule about dashboards read
+	 * like a rule about a menu.
 	 *
-	 * @When I create a new dashboard in :folder via the Files "New" menu
+	 * @When I create a new dashboard in :folder
 	 */
 	public function iCreateANewDashboardIn(string $folder): void {
 		$this->currentFolder = $folder;
@@ -238,7 +242,7 @@ trait LifecycleSteps {
 	/**
 	 * The same gesture, asked of a folder that must refuse it.
 	 *
-	 * @When I try to create a new dashboard in :folder via the Files "New" menu
+	 * @When I try to create a new dashboard in :folder
 	 */
 	public function iTryToCreateANewDashboardIn(string $folder): void {
 		// THE FOLDER HAS TO EXIST FIRST, and this step did not make it. A link mapping's
@@ -268,13 +272,6 @@ trait LifecycleSteps {
 		if ($this->davExists($this->attemptedCreatePath)) {
 			throw new \RuntimeException("a file arrived at {$this->attemptedCreatePath} despite the refusal");
 		}
-	}
-
-	/** @When I create a new :ext file in that folder via the Files "New" menu */
-	public function iCreateANewFileViaTheNewMenu(string $ext): void {
-		// The "+ New" menu is a browser affordance over an ordinary WebDAV PUT; the
-		// server cannot tell the two apart, and it is the PUT that fires the listener.
-		$this->putDashboardFile($this->currentFolder, 'New Board ' . bin2hex(random_bytes(3)));
 	}
 
 	/**

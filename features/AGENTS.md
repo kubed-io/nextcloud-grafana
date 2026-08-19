@@ -97,6 +97,13 @@ And the file holds:
 Ported from the n8n master, which had it right from the start:
 `someone creates a workflow in n8n` / `a matching file is created in "<folder>"`.
 
+**And the medium is not part of the gesture either.** The step said "via the Files
+'New' menu", which is one way to reach it and not the only one — a desktop client,
+a script, `occ`, or a plain WebDAV PUT all arrive at the same place, and the server
+cannot tell them apart. It is the PUT that fires the listener. Naming the browser
+affordance made a rule about dashboards read like a rule about a menu, and would
+have to be re-litigated the first time someone created one any other way.
+
 **Folders are the exception, and genuinely so.** You DO type a folder's name, on
 both sides — so `I create the folder "Demo/Notes"` and
 `someone creates the Grafana folder "Demo/Deep/Down"` name what they make, because
