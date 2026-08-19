@@ -137,7 +137,11 @@ namespace OCP\Files {
 	// signature and is always false here: none of these refusals are transient.
 	if (!class_exists(ForbiddenException::class, false)) {
 		class ForbiddenException extends \Exception {
-			public function __construct(string $message, private bool $retry, ?\Exception $previous = null) {
+			public function __construct(
+				string $message,
+				private bool $retry,
+				?\Exception $previous = null,
+			) {
 				parent::__construct($message, 0, $previous);
 			}
 
