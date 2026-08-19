@@ -13,6 +13,7 @@ use OCA\GrafanaSync\AppInfo\Application;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DeleteService;
 use OCA\GrafanaSync\Service\FolderCascade;
+use OCA\GrafanaSync\Service\RestoreInProgress;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -47,6 +48,7 @@ use Psr\Log\LoggerInterface;
  */
 final class TrashPurgeHook {
 	public function __construct(
+		private RestoreInProgress $restoring,
 		private DeleteService $deleteService,
 		private DashboardMetadata $metadata,
 		private FolderCascade $cascade,
@@ -122,6 +124,23 @@ final class TrashPurgeHook {
 		}
 
 		try {
+			// A RESTORE REACHES THIS HOOK, AND IT IS NOT A PURGE. Restoring over WebDAV is
+			// a MOVE out of `trashbin/`, which Sabre cannot do as a rename across
+			// collections — so it copies and then DELETES the trashed node, and that
+			// delete is `Trashbin::delete()`, the very function emptying the trash calls,
+			// emitting this very hook. Nothing at this depth can tell the two apart;
+			// {@see \OCA\GrafanaSync\Service\RestoreInProgress} is set from the DAV
+			// layer, which is the only place that still knows.
+			//
+			// Without it a restore permanently deleted the dashboard it was restoring.
+			if ($this->restoring->active()) {
+				$this->logger->info('grafana_sync purge: this trashbin delete is half of a restore; leaving Grafana alone', [
+					'app' => Application::APP_ID,
+					'uid' => $managed->uid,
+				]);
+				return;
+			}
+
 			$this->deleteService->hardDelete($managed);
 		} catch (\Throwable $e) {
 			// Log + swallow: a legacy hook can't cleanly abort, and a leftover parked dashboard

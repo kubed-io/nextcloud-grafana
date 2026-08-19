@@ -90,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Restoring a dashboard file from the trash permanently deleted the dashboard it was restoring**, then silently replaced it with a new one — a different URL, and no history. Restoring now brings back the dashboard you had.
 - Deleting a dashboard file on an instance with the Nextcloud trash turned off now deletes the dashboard, instead of hiding it in the recycle-bin folder behind a file that can never come back for it.
 - Restoring a file whose parked dashboard was deleted in Grafana meanwhile now builds a new dashboard, instead of quietly re-creating one at an id that names nothing — or overwriting whatever someone else had since put there.
 - Authoring a dashboard file into a link-mapped folder is refused wherever the write comes from. The WebDAV guard let a file created through the Files "New" menu straight through.

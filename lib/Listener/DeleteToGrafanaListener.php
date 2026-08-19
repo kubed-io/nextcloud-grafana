@@ -29,15 +29,32 @@ use Psr\Log\LoggerInterface;
  * {@see AbortedEventException} — throwing it aborts the delete. That's exactly the safety we want:
  * if the Grafana step can't confirm, the file stays put rather than desyncing the two systems.
  *
- * This event's normal job is the **soft step**: the first delete, with the file at its normal
- * path, on its way to trash. The **hard step** — permanently emptying the trash — does NOT fire a
- * typed event (proven live); it rides the legacy `\OCP\Trashbin` `preDelete` hook, handled by
- * {@see TrashPurgeHook}. The `isInTrashbin` branch below is kept only for a trash-*bypassed* direct
- * delete (trash disabled, `X-NC-Skip-Trashbin`, or another listener called `disableTrashBin()`) that
- * would land a still-managed sync file's delete here with a trashbin path — we treat that as the
- * hard step so the dashboard still gets deleted. {@see DeleteService} holds the rule table.
+ * This event's job is the **soft step**, and ONLY the soft step: the first delete, with the file
+ * at its normal path, on its way to trash. {@see DeleteService} holds the rule table.
  *
- * Restore is handled by {@see RestoreFromTrashListener}; empty-trash by {@see TrashPurgeHook}.
+ * ## THIS LISTENER USED TO ANSWER A TRASHBIN PATH, AND IT COST A DASHBOARD
+ *
+ * There was a branch here that treated a node under `…/files_trashbin/files/…` as the hard step
+ * and permanently deleted the dashboard. It was defended as covering a trash-BYPASSED delete —
+ * but a bypassed delete never has a trashbin path in the first place (it is deleted where it
+ * stands, which is the soft branch), so the only things that branch ever caught were real
+ * purges, which {@see TrashPurgeHook} already owns, and one gesture nobody had thought of.
+ *
+ * **A RESTORE.** Restoring is a move out of the trash. Where that move is a rename nothing is
+ * deleted; on OBJECT STORAGE it is a copy plus an unlink of the source, so the trash node's
+ * delete fired this event, wearing a trashbin path, in the middle of a restore. The dashboard
+ * the user was restoring was permanently deleted, and create-on-land then built a replacement —
+ * new uid, new URL, empty history. The file came back looking perfect.
+ *
+ * Measured on the live instance, whose primary storage is S3. CI cannot see it: there the
+ * restore is a rename, so no delete event exists to be misread, and every purge and restore
+ * scenario passes either way. The n8n master never had this branch at all — its equivalent
+ * listener says outright that the trashbin's `removeItem` emits nothing typed — which is the
+ * shape this one now matches.
+ *
+ * Purge is {@see TrashPurgeHook} (legacy `\OCP\Trashbin` `preDelete`) plus
+ * {@see TeamFolderPurgeListener} for the trash that hook cannot see; restore is
+ * {@see RestoreFromTrashListener} and {@see TrashRestoreHook}.
  *
  * @implements IEventListener<BeforeNodeDeletedEvent>
  */
@@ -110,36 +127,33 @@ final class DeleteToGrafanaListener implements IEventListener {
 			);
 		}
 
-		$isHardStep = $this->isInTrashbin($node->getPath());
+		// A NODE ALREADY IN THE TRASHBIN IS NOT THIS LISTENER'S BUSINESS — see the class
+		// docblock. A purge belongs to TrashPurgeHook, and the other thing that unlinks a
+		// trash node is a RESTORE, which must not delete anything at all.
+		if ($this->isInTrashbin($node->getPath())) {
+			return;
+		}
+
 		try {
-			if ($isHardStep) {
-				$this->deleteService->hardDelete($managed);
-			} else {
-				// Resolve the bin folder (null when bin mode is off); throws if bin mode is on
-				// but the folder is unusable — we abort rather than fall back to a true delete.
-				//
-				// AND THE GRAFANA BIN NEEDS THE NEXTCLOUD TRASH. `files_trashbin` is a
-				// removable app; without it a delete is permanent and there is no second
-				// step. Parking the dashboard then hides it in a folder whose file will
-				// never come back to claim it — a dashboard nobody can find, from a mapping
-				// that no longer mirrors it. The two halves are one gesture, so when one is
-				// gone the other stops applying and this is the delete.
-				$binUid = $this->trash->isAvailable() ? $this->recycleBin->activeFolderUid() : null;
-				$this->deleteService->softDelete($node, $managed, $binUid);
-			}
+			// Resolve the bin folder (null when bin mode is off); throws if bin mode is on
+			// but the folder is unusable — we abort rather than fall back to a true delete.
+			//
+			// AND THE GRAFANA BIN NEEDS THE NEXTCLOUD TRASH. `files_trashbin` is a
+			// removable app; without it a delete is permanent and there is no second
+			// step. Parking the dashboard then hides it in a folder whose file will
+			// never come back to claim it — a dashboard nobody can find, from a mapping
+			// that no longer mirrors it. The two halves are one gesture, so when one is
+			// gone the other stops applying and this is the delete.
+			$binUid = $this->trash->isAvailable() ? $this->recycleBin->activeFolderUid() : null;
+			$this->deleteService->softDelete($node, $managed, $binUid);
 		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync ' . ($isHardStep ? 'purge' : 'trash') . ' failed; aborting the Nextcloud delete', [
+			$this->logger->warning('grafana_sync trash failed; aborting the Nextcloud delete', [
 				'app' => Application::APP_ID,
 				'fileId' => $node->getId(),
 				'uid' => $managed->uid,
 				'exception' => $e,
 			]);
-			throw new AbortedEventException(
-				($isHardStep
-					? 'Couldn’t delete the dashboard in Grafana: '
-					: 'Couldn’t sync the delete to Grafana: ')
-				. $e->getMessage(),
-			);
+			throw new AbortedEventException('Couldn’t sync the delete to Grafana: ' . $e->getMessage());
 		}
 	}
 

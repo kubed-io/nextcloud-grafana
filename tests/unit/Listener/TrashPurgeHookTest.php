@@ -15,6 +15,7 @@ use OCA\GrafanaSync\Service\DeleteService;
 use OCA\GrafanaSync\Service\FolderCascade;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
+use OCA\GrafanaSync\Service\RestoreInProgress;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -49,6 +50,28 @@ final class TrashPurgeHookTest extends TestCase {
 		$this->deleteService = $this->createMock(DeleteService::class);
 		$this->cascade = $this->createMock(FolderCascade::class);
 		$this->guard = new SyncGuard();
+		$this->restoring = new RestoreInProgress();
+	}
+
+	/**
+	 * THE ONE THAT COST A DASHBOARD ON A LIVE INSTANCE. A WebDAV restore is a MOVE out
+	 * of `trashbin/`, and Sabre cannot rename across collections — so it copies and then
+	 * DELETES the trashed node through `Trashbin::delete()`, the same function emptying
+	 * the trash calls, which emits the very hook this class listens to. The purge ran,
+	 * and the dashboard the user was restoring was permanently deleted.
+	 *
+	 * Every restore scenario in the integration suite passes regardless: on CI's local
+	 * storage the same MOVE is a rename, so no delete happens and this hook never fires.
+	 * This test is the only place that failure is reachable.
+	 */
+	public function testARestoreIsNotAPurge(): void {
+		// The same arrangement as the purge test below — a managed dashboard file being
+		// removed from the trash. The ONLY difference is the flag, which is the point.
+		$this->resolved = $this->file(11);
+		$this->restoring->mark();
+		$this->deleteService->expects(self::never())->method('hardDelete');
+
+		$this->hook()->preDelete(['path' => '/files_trashbin/files/A.grafana.d1770000000']);
 	}
 
 	/** THE BUG. One hook for the whole subtree, and the name says nothing about it. */
@@ -143,6 +166,7 @@ final class TrashPurgeHookTest extends TestCase {
 		$rootFolder->method('getUserFolder')->willReturn($home);
 
 		return new TrashPurgeHook(
+			$this->restoring,
 			$this->deleteService,
 			$metadata,
 			$this->cascade,
@@ -152,6 +176,12 @@ final class TrashPurgeHookTest extends TestCase {
 			new NullLogger(),
 		);
 	}
+
+	/**
+	 * A REAL FLAG, NOT A STUB — it is a request-scoped bool with no I/O, and the test
+	 * below that raises it is the whole point of the class.
+	 */
+	private RestoreInProgress $restoring;
 
 	private function file(int $id, bool $managed = true): File {
 		$file = $this->createStub(File::class);
