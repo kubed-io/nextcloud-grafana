@@ -234,6 +234,20 @@ final class TrashControl {
 		}
 	}
 
+	/**
+	 * Is there a Nextcloud trash at all?
+	 *
+	 * `files_trashbin` is a REMOVABLE app, and an instance without it deletes files
+	 * outright — there is no second step and nothing to restore from. That changes what a
+	 * delete MEANS to this app, which is why the answer is public: the Grafana recycle bin
+	 * only ever made sense as the far half of a Nextcloud trashing, so with no trash to
+	 * pair with, parking a dashboard would strand it behind a file that no longer exists.
+	 * {@see \OCA\GrafanaSync\Listener\DeleteToGrafanaListener} reads this to decide.
+	 */
+	public function isAvailable(): bool {
+		return $this->trashManager() !== null;
+	}
+
 	/** The trash manager, or null when `files_trashbin` is not installed/enabled. */
 	private function trashManager(): ?ITrashManager {
 		if (!interface_exists(ITrashManager::class)) {

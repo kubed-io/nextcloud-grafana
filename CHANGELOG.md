@@ -90,6 +90,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Deleting a dashboard file on an instance with the Nextcloud trash turned off now deletes the dashboard, instead of hiding it in the recycle-bin folder behind a file that can never come back for it.
+- Restoring a file whose parked dashboard was deleted in Grafana meanwhile now builds a new dashboard, instead of quietly re-creating one at an id that names nothing — or overwriting whatever someone else had since put there.
+- Authoring a dashboard file into a link-mapped folder is refused wherever the write comes from. The WebDAV guard let a file created through the Files "New" menu straight through.
 - Answering "keep the new version" when a dashboard file lands on one that already exists no longer deletes the dashboard being replaced. The arrival takes over the dashboard that was already there and contributes only its contents, so one overwrite can no longer leave a second dashboard behind for the next sync to write back beside it.
 - Keeping BOTH versions of such a collision now gives the arriving file its own dashboard, instead of pointing two files at one.
 - Restoring a dashboard file with the recycle bin off rebuilt the dashboard at the id the delete had just destroyed, rather than making a new one — the file's body carries that id inside it.

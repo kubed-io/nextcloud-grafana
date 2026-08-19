@@ -200,6 +200,12 @@ final class MotionServiceTest extends TestCase {
 		$this->metadata->expects(self::once())
 			->method('write')
 			->with(42, [
+				// THE UID IS RE-STATED FOR THE SAME REASON THE MODE IS — an overwrite
+				// arrives here having inherited the destination's uid, so the stamp must
+				// say which dashboard this file now points at rather than assuming it is
+				// the one already written. For an ordinary move-in it is the value
+				// already there and the write is a no-op.
+				DashboardMetadata::KEY_UID => 'dash-keep',
 				DashboardMetadata::KEY_MAPPING => 'm-dst',
 				// THE MODE IS RE-STATED ON EVERY ARRIVAL, not only when it changed. A file
 				// parked with the recycle bin on is stamped `unmapped`, so a mapping has to

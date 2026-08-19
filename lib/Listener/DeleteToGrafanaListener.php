@@ -16,6 +16,7 @@ use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCA\GrafanaSync\Service\TrashControl;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Exceptions\AbortedEventException;
@@ -45,6 +46,7 @@ final class DeleteToGrafanaListener implements IEventListener {
 		private DeleteService $deleteService,
 		private DashboardMetadata $metadata,
 		private RecycleBin $recycleBin,
+		private TrashControl $trash,
 		private ReplacedByMoveStore $replaced,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
@@ -115,7 +117,14 @@ final class DeleteToGrafanaListener implements IEventListener {
 			} else {
 				// Resolve the bin folder (null when bin mode is off); throws if bin mode is on
 				// but the folder is unusable — we abort rather than fall back to a true delete.
-				$binUid = $this->recycleBin->activeFolderUid();
+				//
+				// AND THE GRAFANA BIN NEEDS THE NEXTCLOUD TRASH. `files_trashbin` is a
+				// removable app; without it a delete is permanent and there is no second
+				// step. Parking the dashboard then hides it in a folder whose file will
+				// never come back to claim it — a dashboard nobody can find, from a mapping
+				// that no longer mirrors it. The two halves are one gesture, so when one is
+				// gone the other stops applying and this is the delete.
+				$binUid = $this->trash->isAvailable() ? $this->recycleBin->activeFolderUid() : null;
 				$this->deleteService->softDelete($node, $managed, $binUid);
 			}
 		} catch (\Throwable $e) {

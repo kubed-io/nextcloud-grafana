@@ -66,7 +66,7 @@ Feature: Restoring a dashboard file from the trash
     # ── RULE: the world may have moved while the file sat in the trash ───────
 
   # notes: ../AGENTS.md#restoring-a-parked-file-whose-dashboard-was-deleted-in-grafana-re-creates-it
-  @user @in-nextcloud @gesture @ui @recycle-bin @todo
+  @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a file whose parked dashboard has since been deleted
     Given the Grafana recycle bin is on
     And a dashboard file named "Fleet Health.grafana" in "Demo"

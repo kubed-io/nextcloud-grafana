@@ -509,6 +509,16 @@ trait MirrorSteps {
 				return $actual !== $this->arrivedWithUid
 					? null
 					: "it reused the uid it arrived with ({$actual}), but this gesture should mint a new one";
+			case 'the uid of the renamed dashboard':
+				// THE OTHER FILE, named by what happened to it rather than by its own name
+				// — which it cannot be, because the whole point is that the app chose that
+				// name and the scenario should not restate the app's arithmetic.
+				if ($this->renamedUid === '') {
+					throw new \RuntimeException("'{$expected}' needs a rename; no When performed one");
+				}
+				return $actual === $this->renamedUid
+					? null
+					: "expected the renamed dashboard's uid ({$this->renamedUid}), found '{$actual}'";
 			case 'the uid it had before it was trashed':
 			case 'the uid it had before the rename':
 			case 'the uid it had before the move':
@@ -526,12 +536,19 @@ trait MirrorSteps {
 						"'{$expected}' is only defined for " . self::META_UID . ", not {$property}",
 					);
 				}
-				if ($this->lastUid === '') {
+				// THE UID THIS FILE'S OWN ARRANGE GAVE IT, falling back to the cursor. With
+				// one dashboard on stage the two are the same value. With TWO — a rename
+				// onto a name another dashboard already wears — `lastUid` is whichever was
+				// arranged last, so the incumbent's claim to have kept its uid would be
+				// checked against its neighbour's.
+				$stem = preg_replace('/\.grafana$/', '', basename($path)) ?? '';
+				$want = $this->seededDashboards[$stem] ?? $this->lastUid;
+				if ($want === '') {
 					throw new \RuntimeException('the arrange captured no uid to compare against');
 				}
-				return $actual === $this->lastUid
+				return $actual === $want
 					? null
-					: "expected the uid it already had ({$this->lastUid}), found '{$actual}'";
+					: "expected the uid it already had ({$want}), found '{$actual}'";
 			case 'the uid the destination already had':
 				// AN OVERWRITE REPLACES CONTENTS, NOT IDENTITY. The uid is the destination's
 				// and the arrival inherits it, so this is the claim that one overwrite did

@@ -15,6 +15,7 @@ use OCA\Files_Trashbin\Events\NodeRestoredEvent;
 use OCA\GrafanaSync\BackgroundJob\ScheduledPullJob;
 use OCA\GrafanaSync\Listener\CopyGuardListener;
 use OCA\GrafanaSync\Listener\CopyListener;
+use OCA\GrafanaSync\Listener\CreateGuardListener;
 use OCA\GrafanaSync\Listener\CreateInGrafanaListener;
 use OCA\GrafanaSync\Listener\DeleteToGrafanaListener;
 use OCA\GrafanaSync\Listener\FolderDeleteListener;
@@ -46,6 +47,7 @@ use OCP\Files\Cache\CacheEntryRemovedEvent;
 use OCP\Files\Events\Node\BeforeNodeCopiedEvent;
 use OCP\Files\Events\Node\BeforeNodeDeletedEvent;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
+use OCP\Files\Events\Node\BeforeNodeWrittenEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
 use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
@@ -131,6 +133,11 @@ final class Application extends App implements IBootstrap {
 		// The copy guard — a link is not copyable, and a link mapping is not a destination.
 		// The Sabre plugin answers WebDAV with a 403 + message; this holds everywhere else.
 		$context->registerEventListener(BeforeNodeCopiedEvent::class, CopyGuardListener::class);
+		// The authoring half of the same rule: a link mapping is Grafana's to fill, so a
+		// write into one is refused wherever it came from. The Sabre plugin answers 403
+		// over WebDAV; this holds for every other route — and for the create path, where
+		// CI measured the plugin's own `beforeCreateFile` letting a live PUT through.
+		$context->registerEventListener(BeforeNodeWrittenEvent::class, CreateGuardListener::class);
 		$context->registerEventListener(NodeRenamedEvent::class, MotionListener::class);
 		// The folder half of a rename — every other listener filters to files on its
 		// first line, so a folder gesture had nothing watching it.

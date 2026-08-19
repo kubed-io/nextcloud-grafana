@@ -153,7 +153,12 @@ trait MoveConflictSteps {
 		// The arriving file is the one the scenario moves next, and its uid is the
 		// baseline `its own, not the one it arrived with` measures against.
 		$this->arrivedWithUid = (string)($this->davReadMetadata($dest, self::META_UID) ?? '');
-		$this->existingPanelTitle = $this->panelTitleIn($this->collisionSyncedPath);
+		// AND THE DESTINATION IS GIVEN A BODY OF ITS OWN, because `dashboardBody()` writes
+		// `panels: []` and "whose panels survived" needs BOTH sides to be nameable. The
+		// write goes over DAV so the app's own push carries it to Grafana, which is what
+		// makes `its dashboard in Grafana … holds the panels it always had` a real check
+		// rather than a comparison of two empty lists.
+		$this->existingPanelTitle = $this->givePanelTo($this->collisionSyncedPath, 'Existing-' . bin2hex(random_bytes(3)));
 	}
 
 	/**
@@ -323,6 +328,20 @@ trait MoveConflictSteps {
 		if ($got !== $panel) {
 			throw new \RuntimeException("the dashboard behind $path holds the panel '$got', not '$panel'");
 		}
+	}
+
+	/**
+	 * Write one named panel into a dashboard file, leaving its title alone, and return
+	 * the panel's name.
+	 */
+	private function givePanelTo(string $path, string $panelTitle): string {
+		$spec = json_decode($this->davGet($path), false, 512, JSON_THROW_ON_ERROR);
+		if (!$spec instanceof \stdClass) {
+			throw new \RuntimeException("setup: $path is not a JSON object");
+		}
+		$spec->panels = [(object)['type' => 'text', 'title' => $panelTitle]];
+		$this->davPut($path, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+		return $panelTitle;
 	}
 
 	/** The first panel title in a mirror, which is the whole of a body in these scenarios. */

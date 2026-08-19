@@ -65,7 +65,13 @@ trait RenameSteps {
 		// realistic one. `copy.feature` needs both: it can only spell the collision name
 		// it expects if it chose the original's name, and it can only prove the original
 		// survived if something read it first.
-		$this->captureOriginal($this->putDashboardFile($folder, $stem), $stem);
+		$path = $this->putDashboardFile($folder, $stem);
+		$this->captureOriginal($path, $stem);
+		// KNOWN BY NAME FROM HERE ON. A scenario with two dashboards on stage cannot say
+		// "the dashboard", and `lastUid` only ever remembers the most recent arrange — so
+		// the second `Given` would erase the first one's uid and every later claim about
+		// it would silently compare against the wrong dashboard.
+		$this->seededDashboards[$stem] = (string)$this->davReadMetadata($path, self::META_UID);
 	}
 
 	/**
@@ -128,6 +134,77 @@ trait RenameSteps {
 		if ($actual !== $filename || !$this->davExists($this->currentFilePath)) {
 			throw new \RuntimeException("expected a file named '$filename', found '$actual'");
 		}
+	}
+
+	/**
+	 * @Then the JSON title of both files is :title
+	 *
+	 * THE SUFFIX IS NEXTCLOUD'S ALONE. A filename may carry `(1)` because two files in a
+	 * folder cannot share a name; the body and Grafana are both left saying the real,
+	 * duplicated title. Asserting it on BOTH files is what makes that a rule rather than
+	 * an observation about whichever one the pull happened to touch last.
+	 */
+	public function theJsonTitleOfBothFilesIs(string $title): void {
+		$checked = 0;
+		foreach ($this->filesForSeededDashboards() as $path => $uid) {
+			$spec = json_decode($this->davGet($path), true, 512, JSON_THROW_ON_ERROR);
+			$actual = is_array($spec) ? (string)($spec['title'] ?? '') : '';
+			if ($actual !== $title) {
+				throw new \RuntimeException("the body of $path says '$actual', not '$title'");
+			}
+			$checked++;
+		}
+		if ($checked < 2) {
+			throw new \RuntimeException("only $checked of the arranged dashboards has a file; 'both' needs two");
+		}
+	}
+
+	/**
+	 * @Then both dashboards are titled :title in Grafana
+	 *
+	 * The far side of the same claim: Grafana permits the duplicate and nothing renamed
+	 * anything over there. Without this, a pull that "resolved" the collision by renaming
+	 * the dashboard would satisfy every file-side assertion above it.
+	 */
+	public function bothDashboardsAreTitledInGrafana(string $title): void {
+		$checked = 0;
+		foreach ($this->seededDashboards as $name => $uid) {
+			if ($uid === '') {
+				continue;
+			}
+			$record = $this->grafanaGetDashboard($uid);
+			if ($record === null) {
+				throw new \RuntimeException("Grafana has no dashboard '$uid' (arranged as '$name')");
+			}
+			$actual = (string)($record['dashboard']['title'] ?? '');
+			if ($actual !== $title) {
+				throw new \RuntimeException("dashboard '$uid' is titled '$actual', not '$title'");
+			}
+			$checked++;
+		}
+		if ($checked < 2) {
+			throw new \RuntimeException("only $checked dashboard(s) were arranged; 'both' needs two");
+		}
+	}
+
+	/**
+	 * Every file in the current folder mirroring a dashboard this scenario arranged, as
+	 * `path => uid`. Found by UID rather than by name, because the names are exactly what
+	 * the collision rule just decided and a lookup by name would assume the answer.
+	 *
+	 * @return array<string,string>
+	 */
+	private function filesForSeededDashboards(): array {
+		$wanted = array_filter($this->seededDashboards);
+		$found = [];
+		foreach ($this->davListDashboardFiles($this->currentFolder) as $name) {
+			$path = $this->currentFolder . '/' . $name;
+			$uid = (string)$this->davReadMetadata($path, self::META_UID);
+			if ($uid !== '' && in_array($uid, $wanted, true)) {
+				$found[$path] = $uid;
+			}
+		}
+		return $found;
 	}
 
 	/** @Then the JSON title is :title */
@@ -231,6 +308,29 @@ trait RenameSteps {
 	private function settleRename(): void {
 		$this->drainJobs(self::JOB_PUSH);
 		$this->drainJobs(self::JOB_RENAME);
+	}
+
+	/** The uid of the dashboard the NAMED rename moved, for `the uid of the renamed dashboard`. */
+	private string $renamedUid = '';
+
+	/**
+	 * @When someone renames the :which dashboard to :title in Grafana
+	 *
+	 * THE NAMED TWIN of the cursor form below, and it exists because a collision needs
+	 * TWO dashboards on stage — so "the dashboard" stops being an answer. Which one is
+	 * being renamed is the whole setup of the scenario, so the scenario says it.
+	 */
+	public function someoneRenamesTheNamedDashboardToInGrafana(string $which, string $title): void {
+		$uid = $this->seededDashboards[$which] ?? '';
+		if ($uid === '') {
+			throw new \RuntimeException("no dashboard called '$which' was arranged by this scenario");
+		}
+		// REMEMBERED BEFORE THE PULL, because after it the file wearing that dashboard has
+		// a different name and `lastUid` has moved on — and `the uid of the renamed
+		// dashboard` is a claim about which of the two files ended up suffixed.
+		$this->renamedUid = $uid;
+		$this->lastUid = $uid;
+		$this->someoneRenamesTheDashboardToInGrafana($title);
 	}
 
 	/**
