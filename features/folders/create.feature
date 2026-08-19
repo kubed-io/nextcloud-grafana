@@ -8,11 +8,8 @@ Feature: Creating a folder
   Background:
     Given the app is connected to Grafana
     And Grafana holds these resources:
-      | path              | type   |
-      | /nextcloud-trash  | folder |
-      | /Demo/Existing    | folder |
-      | /links/Existing   | folder |
-      | /metrics/Existing | folder |
+      | path             | type   |
+      | /nextcloud-trash | folder |
     And Nextcloud holds these resources:
       | path              |
       | /Scratch          |
@@ -23,8 +20,12 @@ Feature: Creating a folder
       | Demo           | Demo      | sync | admin folder |        |
       | links          | Pointers  | link | admin folder |        |
       | metrics        | Shared    | sync | team folder  | admin  |
+    And the following items in the mappings:
+      | path               |
+      | /Demo/Existing     |
+      | /Pointers/Existing |
+      | /Shared/Existing   |
     And the Grafana recycle-bin folder is named "nextcloud-trash"
-    And Grafana and Nextcloud are in sync
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
 

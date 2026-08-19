@@ -417,6 +417,13 @@ trait MirrorSteps {
 		// asserts both at once — the original kept its uid, the copy has its own —
 		// which is the whole of "a copied folder is a new folder".
 		if ($property === self::META_FOLDER_UID && $expected === "its own, not the original's") {
+			// FAIL FAST WITH NO ORIGINAL PINNED. Without this the row passes for any
+			// non-empty uid, having proved nothing about whether it differs from the
+			// source — the sibling branch above has always done this and this one did
+			// not, which is a green assertion that asserts nothing.
+			if ($this->lastFolderUid === '') {
+				throw new \RuntimeException('the arrange captured no original folder uid to differ from');
+			}
 			if (($actual ?? '') === '') {
 				return 'expected a folder uid of its own, found nothing';
 			}

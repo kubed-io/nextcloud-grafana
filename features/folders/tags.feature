@@ -7,17 +7,14 @@ Feature: Tagging a folder
 
   Background:
     Given the app is connected to Grafana
-    And Grafana holds these resources:
-      | path        | type   | tags           |
-      | /Demo       | folder | strategic      |
-      | /Demo/Team  | folder | quarterly, ops |
-      | /links      | folder | reference      |
-      | /links/Team | folder | reference      |
     And the following mappings were made:
       | grafana folder | nc folder | mode | storage      |
       | Demo           | Demo      | sync | admin folder |
       | links          | Pointers  | link | admin folder |
-    And Grafana and Nextcloud are in sync
+    And the following items in the mappings:
+      | path                     | tags      |
+      | /Demo/Overview.grafana   | dns       |
+      | /Pointers/Pinned.grafana | reference |
 
   # notes: ../AGENTS.md#the-tags-were-there-before-the-mapping-was
   # The tags predate the connection, as an admin's own API call would leave them.

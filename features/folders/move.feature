@@ -7,18 +7,18 @@ Feature: Moving a folder
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
-    And a mapping with the following values:
-      | grafana folder | Reports |
-      | nc folder      | Reports |
-      | mode           | sync    |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | Reports        | Reports   | sync | admin folder |        |
+      | metrics        | Shared    | sync | team folder  | admin  |
+      | links          | Pointers  | link | admin folder |        |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Reports/Quarterly.grafana  |
+      | /Shared/Coast/Tides.grafana |
+      | /Pointers/Pinned.grafana    |
     And a folder "Scratch" that is not mapped
     And the Grafana recycle-bin folder is named "nextcloud-trash"
 

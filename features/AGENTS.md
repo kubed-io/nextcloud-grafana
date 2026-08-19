@@ -781,6 +781,31 @@ checks that neither the titles nor the names moved. A scenario saying "and sync
 again" out loud would be narrating the app's plumbing; `still` already means the
 state held.
 
+### The two sides already agree
+
+`the following items in the mappings:` names Nextcloud paths, and every one of
+them exists on BOTH sides. That is what a mapping means — a `.grafana` file
+implies its dashboard, a folder implies the Grafana folder mirroring it — so
+spelling the far side out as well would say the same thing twice and invite the
+two halves to drift apart in the spec. Only the mapping's own folder is ever named
+differently, and translating it is the step's job rather than the reader's.
+
+**It replaced `Grafana and Nextcloud are in sync`, which was a violation.** That
+line was a `Given` that RAN A SYNC: an action dressed as a state, and the very
+sync-now that `connection/sync-now.feature` exists to test. Every Background using
+it was performing behaviour before the `When`, and a scenario about copying a
+folder should no more run a sync in its arrange than a scenario about deleting one
+should.
+
+The tell was how it spread. It was allowed once, as a convenience in one
+Background, and turned up in five files inside two days — because "just sync it"
+is always the easiest way to arrange anything, which is exactly why it must not be
+available. **The state is declarable; how it came to be true is nobody's business
+in a spec.**
+
+`connection/sync-now.feature` is the one file that legitimately shows the two
+sides disagreeing, because there the sync IS the behaviour.
+
 ### The Background is the neighbourhood, not the subject
 
 `folders/copy.feature` went through both mistakes before landing here, and the

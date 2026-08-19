@@ -11,6 +11,11 @@ Feature: Renaming a subfolder
       | grafana folder | nc folder | mode | storage      | groups |
       | Demo           | Demo      | sync | admin folder |        |
       | metrics        | Shared    | sync | team folder  | admin  |
+    And the following items in the mappings:
+      | path                        |
+      | /Demo/Overview.grafana      |
+      | /Demo/notes.txt             |
+      | /Shared/Coast/Tides.grafana |
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
   # notes: ../AGENTS.md#a-subfolder-shares-its-name-with-grafana-exactly

@@ -20,7 +20,6 @@ use OCA\GrafanaSync\Service\SyncNotifier;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\Forbidden;
-use Sabre\DAV\ICollection;
 use Sabre\DAV\INode;
 use Sabre\DAV\Server;
 use Sabre\DAV\ServerPlugin;
@@ -173,7 +172,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return;
 		}
-		if ($node !== null && $this->holdsLinkedDashboards($node)) {
+		if ($this->holdsLinkedDashboards($node)) {
 			$name = $node->getName();
 			$this->logger->warning('grafana_sync: refused a WebDAV copy of a folder holding linked dashboards', [
 				'app' => Application::APP_ID,
@@ -296,12 +295,21 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	 * pull side.
 	 */
 	private function holdsLinkedDashboards(INode $node): bool {
-		if (!$node instanceof ICollection) {
+		// DUCK-TYPED, because `Sabre\DAV\ICollection` is not in `tests/external-stubs.php`
+		// and Psalm reports it as an undefined class — the stubs carry only the handful of
+		// Sabre types this app touches. Asking whether the node can list children is the
+		// same question `instanceof` would ask, and it needs no stub. Same shape as
+		// {@see \OCA\GrafanaSync\DAV\TrashRestorePlugin}, where a trash node's
+		// `getFileId()` is reached the same way.
+		if (!method_exists($node, 'getChildren')) {
 			return false;
 		}
 		try {
 			foreach ($node->getChildren() as $child) {
-				if ($this->isLinkFile($child) || ($child instanceof ICollection && $this->holdsLinkedDashboards($child))) {
+				if (!$child instanceof INode) {
+					continue;
+				}
+				if ($this->isLinkFile($child) || $this->holdsLinkedDashboards($child)) {
 					return true;
 				}
 			}
