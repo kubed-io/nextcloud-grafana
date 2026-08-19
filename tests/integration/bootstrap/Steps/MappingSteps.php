@@ -121,6 +121,21 @@ trait MappingSteps {
 	 * and nothing said so.
 	 */
 	public function aMappingWithTheFollowingValues(TableNode $table): void {
+		$this->declareMapping($this->formValues($table));
+	}
+
+	/**
+	 * Declare one mapping as pre-state, from an already-parsed form.
+	 *
+	 * SHARED WITH THE PLURAL, `the following mappings were made:` — the upright
+	 * table and the row-per-mapping table are two spellings of one arrange, and the
+	 * once-per-scenario reset below is the part that must not be duplicated. Two
+	 * copies of it and a Background using both forms would clear the first form's
+	 * mappings when it reached the second.
+	 *
+	 * @param array<string, string> $form
+	 */
+	private function declareMapping(array $form): void {
 		if (!$this->mappingsDeclared) {
 			$this->noGrafanaFoldersAreMapped();
 			// PIN THE WRITEBACK TO INLINE. Without this every PUT is handed to a
@@ -132,7 +147,6 @@ trait MappingSteps {
 			$this->forceInlineWriteback();
 			$this->mappingsDeclared = true;
 		}
-		$form = $this->formValues($table);
 		// RECORD THE MODE. Without it no arrange can tell a link mapping from a sync
 		// one, and a link mirror cannot be seeded the way it really appears — through
 		// a pull — because writing into a link folder is refused by design.

@@ -89,7 +89,7 @@ trait LifecycleSteps {
 			// never adopts a file the user drops in. Seed a dashboard through Grafana's
 			// own API (no involvement from this app), then pull it down.
 			$this->seedGrafanaDashboard($mapping, 'Linked ' . bin2hex(random_bytes(3)));
-			$this->theAdminPullsFromGrafana();
+			$this->pullEveryMapping();
 			$files = $this->davListDashboardFiles($this->mappedFolder($mapping));
 			$this->check($files !== [], "the pull produced no link file in the '$mapping' mapping");
 			$this->currentFilePath = $this->mappedFolder($mapping) . '/' . $files[0];
@@ -198,9 +198,14 @@ trait LifecycleSteps {
 		// add-mapping. Resolving it through grafanaFolderUid() would hash it into a
 		// `nc-t-…` uid belonging to the older arrange style, and compare two folders
 		// that were never the same one.
+		// A NESTED FOLDER'S UID IS GRAFANA'S TO MINT, so a scenario naming `Demo/Team`
+		// cannot be compared against the uid directly the way a top-level folder can —
+		// there the arrange sets uid == title, which is the only reason this ever
+		// worked. Resolve the path first and compare uid to uid.
+		$want = $this->grafanaFolderUidByTitle($folder) ?? $folder;
 		$got = (string)$this->dashboardFolderUid($this->lastUid);
-		if ($got !== $folder) {
-			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder'");
+		if ($got !== $want) {
+			throw new \RuntimeException("the dashboard landed in Grafana folder '$got', not '$folder' ($want)");
 		}
 	}
 
@@ -985,13 +990,13 @@ trait LifecycleSteps {
 	 * @When both mappings are pulled
 	 */
 	public function theMappingIsPulled(?string $mapping = null): void {
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/** @When the :mapping mapping is pulled twice */
 	public function theMappingIsPulledTwice(string $mapping): void {
-		$this->theAdminPullsFromGrafana();
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
+		$this->pullEveryMapping();
 	}
 
 	/** @When the :mapping mapping is pushed */
@@ -1206,7 +1211,7 @@ trait LifecycleSteps {
 			throw new \RuntimeException('copying in Grafana failed: ' . (string)$res->getBody());
 		}
 		$this->createdDashboardUids[] = $this->grafanaCopyUid;
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/**
@@ -1308,7 +1313,7 @@ trait LifecycleSteps {
 		$this->assertAllTitled($title, 'as they landed');
 		$namesBefore = $this->namedFiles;
 
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 
 		$namesAfter = $this->davListDashboardFiles($this->namedFolder);
 		sort($namesAfter);

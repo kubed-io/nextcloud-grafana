@@ -2,60 +2,85 @@
 
 Feature: Syncing every mapping
   As a Nextcloud admin
-  I want one sync to bring every mapped folder up to date
-  So that the mirror stays true without anyone tending it
+  I want one sync, in either direction, across every mapping at once
+  So that the mirror stays true without anyone tending it — and so I can declare
+  Nextcloud the source of truth on the day something has gone wrong in Grafana
 
   Background:
     Given the app is connected to Grafana
+    And Grafana holds these resources:
+      | path                       | type      | tags       |
+      | /alpha/Alpha Demo          | dashboard | dns, linux |
+      | /alpha/Region              | folder    |            |
+      | /alpha/Region/Latency      | dashboard | latency    |
+      | /alpha/Region/Deep         | folder    |            |
+      | /alpha/Region/Deep/Traffic | dashboard |            |
+      | /links/Pinned              | dashboard | reference  |
+      | /links/Nested              | folder    |            |
+      | /links/Nested/Deeper       | dashboard |            |
+      | /shared/Shared Demo        | dashboard | ops        |
+      | /shared/Coast              | folder    |            |
+      | /shared/Coast/Tides        | dashboard |            |
+    And Nextcloud holds these resources:
+      | path                         | tags    |
+      | /Alpha/notes.txt             | reading |
+      | /Alpha/Local Only.grafana    | draft   |
+      | /Alpha/Drafts                |         |
+      | /Alpha/Drafts/plan.txt       |         |
+      | /Alpha/Drafts/Sketch.grafana |         |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | alpha          | Alpha     | sync | admin folder |        |
+      | links          | Pointers  | link | admin folder |        |
+      | shared         | Shared    | sync | team folder  | admin  |
+
+  # notes: ../AGENTS.md#a-background-is-a-picture-not-a-story
+  # The two sides do not agree yet, and the Background never says why they don't.
 
   # ── one behaviour, two ways to start it across every mapping ───────────────
   # notes: ../AGENTS.md#sync-now-scope
 
   @admin @occ @ui
-  Scenario Outline: A sync fills the mapped folder, however it was started
-    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "<folder>"
-    And the Grafana folder "nc-alpha" already contains:
-      | dashboard  | uid           |
-      | Alpha Demo | nc-alpha-demo |
-    When <actor> syncs <scope>
-    Then the mapped folder "<folder>" holds:
-      | file               |
-      | Alpha Demo.grafana |
-    And "<folder>/Alpha Demo.grafana" holds:
-      | grafana_uid     | the dashboard's uid |
-      | grafana_mode    | "sync"              |
-      | grafana_version | set                 |
-    And the file "<folder>/Alpha Demo.grafana" carries its Grafana dates
+  Scenario Outline: A sync from Grafana mounts every mapped folder, however it was started
+    When <actor> syncs every mapping from Grafana
+    Then Nextcloud holds exactly these resources:
+      | path                               | tags       |
+      | /Alpha/notes.txt                   | reading    |
+      | /Alpha/Local Only.grafana          | draft      |
+      | /Alpha/Alpha Demo.grafana          | dns, linux |
+      | /Alpha/Drafts                      |            |
+      | /Alpha/Drafts/plan.txt             |            |
+      | /Alpha/Drafts/Sketch.grafana       |            |
+      | /Alpha/Region                      |            |
+      | /Alpha/Region/Latency.grafana      | latency    |
+      | /Alpha/Region/Deep                 |            |
+      | /Alpha/Region/Deep/Traffic.grafana |            |
+      | /Pointers/Pinned.grafana           | reference  |
+      | /Pointers/Nested                   |            |
+      | /Pointers/Nested/Deeper.grafana    |            |
+      | /Shared/Shared Demo.grafana        | ops        |
+      | /Shared/Coast                      |            |
+      | /Shared/Coast/Tides.grafana        |            |
 
     Examples: both ways an instance-wide sync starts
-      | actor        | scope         | folder       |
-      | the admin    | every mapping | all-mappings |
-      | the schedule | every mapping | on-schedule  |
+      | actor        |
+      | the admin    |
+      | the schedule |
 
-    # notes: ../AGENTS.md#carries-its-grafana-dates
+    # notes: ../AGENTS.md#the-tree-is-the-assertion
+    # notes: ../AGENTS.md#a-mirror-follows-its-dashboard-between-folders
 
-  # notes: ../AGENTS.md#a-sync-leaves-the-mirror-wearing-grafanas-tags
-  @admin @occ @ui
-  Scenario: A sync leaves the mirror wearing Grafana's tags
-    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "tagged"
-    And the Grafana folder "nc-alpha" is tagged "quarterly"
-    And the Grafana folder "nc-alpha" already contains:
-      | dashboard  | uid           | tags       |
-      | Alpha Demo | nc-alpha-demo | dns, linux |
-    When the admin syncs every mapping
-    Then the folder "tagged" is tagged "quarterly" in Nextcloud
-    And the tags on "tagged/Alpha Demo.grafana" are "dns, linux" in Nextcloud
-    And the tags in the file "tagged/Alpha Demo.grafana" are "dns, linux"
-    And the file "tagged/Alpha Demo.grafana" can be found by a Nextcloud tag search for "linux"
-
-  # ── what a first sync does with a folder that already holds mirrors ────────
+    # ── RULE: the other direction — Nextcloud is declared the source of truth ──
 
   @admin @occ @ui
-  Scenario: A folder that already holds a mirror is filled in place, not doubled
-    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "alpha-again"
-    And the admin pulls from Grafana
-    When the admin pulls from Grafana
-    Then "alpha-again" holds exactly 1 dashboard file
-    # notes: ../AGENTS.md#a-folder-that-already-holds-a-mirror-is-filled-in-place-not-doubled
+  Scenario: A sync to Grafana makes Grafana match Nextcloud, however deep the file sits
+    Given Grafana and Nextcloud are in sync
+    And these dashboards were changed in Grafana after their files were written:
+      | path                  |
+      | /alpha/Alpha Demo     |
+      | /alpha/Region/Latency |
+      | /shared/Coast/Tides   |
+    When the admin syncs every mapping to Grafana
+    Then each of those dashboards in Grafana holds its file's panels
 
-  # ── the whole-instance mirror ──────────────────────────────────────────────
+    # notes: ../AGENTS.md#a-sync-to-grafana-makes-grafana-match-nextcloud-however-deep-the-file-sits

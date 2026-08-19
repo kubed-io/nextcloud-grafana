@@ -7,22 +7,17 @@ Feature: Creating a dashboard
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo         |
-      | nc folder      | Demo         |
-      | mode           | sync         |
-      | storage        | admin folder |
-    And a mapping with the following values:
-      | grafana folder | links        |
-      | nc folder      | Pointers     |
-      | mode           | link         |
-      | storage        | admin folder |
-    And a mapping with the following values:
-      | grafana folder | Shared      |
-      | nc folder      | Shared      |
-      | mode           | sync        |
-      | storage        | team folder |
-      | groups         | admin       |
+    And Grafana holds these resources:
+      | path              | type   |
+      | /Demo/Team        | folder |
+      | /links/Nested     | folder |
+      | /Shared/Quarterly | folder |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | Demo           | Demo      | sync | admin folder |        |
+      | links          | Pointers  | link | admin folder |        |
+      | Shared         | Shared    | sync | team folder  | admin  |
+    And Grafana and Nextcloud are in sync
     And a folder "Scratch" that is not mapped
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
@@ -44,9 +39,14 @@ Feature: Creating a dashboard
       | grafana_syncedHash | set                 |
 
     Examples: the folder is the whole input — the Background said what each one is
-      | nc folder | grafana folder |
-      | Demo      | Demo           |
-      | Shared    | Shared         |
+      | nc folder        | grafana folder    |
+      | Demo             | Demo              |
+      | Demo/Team        | Demo/Team         |
+      | Shared           | Shared            |
+      | Shared/Quarterly | Shared/Quarterly  |
+
+    # A subfolder is not a second kind of destination — it is the same rule one
+    # level down, which is exactly why it is worth a row rather than a scenario.
 
   @grafana @in-grafana @gesture @ui
   Scenario Outline: Create a dashboard in Grafana
@@ -60,11 +60,14 @@ Feature: Creating a dashboard
     And the file holds "<contents>"
 
     Examples: one gesture, and the mapping decides what the file is
-      | grafana folder | nc folder | mode | version | contents                   |
-      | Demo           | Demo      | sync | set     | the dashboard's full JSON  |
-      | links          | Pointers  | link | absent  | a pointer to the dashboard |
-      | Shared         | Shared    | sync | set     | the dashboard's full JSON  |
+      | grafana folder    | nc folder        | mode | version | contents                   |
+      | Demo              | Demo             | sync | set     | the dashboard's full JSON  |
+      | Demo/Team         | Demo/Team        | sync | set     | the dashboard's full JSON  |
+      | links             | Pointers         | link | absent  | a pointer to the dashboard |
+      | links/Nested      | Pointers/Nested  | link | absent  | a pointer to the dashboard |
+      | Shared            | Shared           | sync | set     | the dashboard's full JSON  |
 
+    # notes: ../AGENTS.md#only-a-mapping-renames-a-folder
     # A version records what a push last sent, and a link never pushes.
 
     # ── RULE: where the file lands decides whether it is a dashboard ───────────
@@ -77,9 +80,14 @@ Feature: Creating a dashboard
 
   # notes: ../AGENTS.md#a-link-mapping-authors-nothing
   @user @in-nextcloud @gesture @ui
-  Scenario: Creating a dashboard in a link-mapped folder is refused
-    When I try to create a new dashboard in "Pointers" via the Files "New" menu
+  Scenario Outline: Creating a dashboard in a link-mapped folder is refused
+    When I try to create a new dashboard in "<nc folder>" via the Files "New" menu
     Then the creation is refused with a message
+
+    Examples: a link folder is Grafana's to write, at every depth
+      | nc folder       |
+      | Pointers        |
+      | Pointers/Nested |
 
     # A link folder is Grafana's to write, so a file authored into one could never
     # become the dashboard it looks like. Refused at the door rather than accepted.

@@ -7,25 +7,49 @@ Feature: Syncing one mapping from its card
 
   Background:
     Given the app is connected to Grafana
+    And Grafana holds these resources:
+      | path                  | type      | tags       |
+      | /alpha/Overview       | dashboard | dns, linux |
+      | /alpha/Region         | folder    |            |
+      | /alpha/Region/Latency | dashboard | latency    |
+      | /links/Pinned         | dashboard | dns, linux |
+      | /links/Region         | folder    |            |
+      | /links/Region/Deeper  | dashboard | latency    |
+      | /shared/Coastline     | dashboard | dns, linux |
+      | /shared/Region        | folder    |            |
+      | /shared/Region/Tides  | dashboard | latency    |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode | storage      | groups |
+      | alpha          | Alpha     | sync | admin folder |        |
+      | links          | Pointers  | link | admin folder |        |
+      | shared         | Shared    | sync | team folder  | admin  |
 
+  # notes: ../AGENTS.md#three-mappings-shaped-alike
+  # None has been synced, so all three mapped folders start empty.
+
+  # notes: ../AGENTS.md#syncing-one-mapping-fills-its-folder
   @admin @occ @ui
-  Scenario: Syncing one mapping fills its folder
-    Given an admin-owned mapping from Grafana folder "nc-alpha" to Nextcloud folder "one-mapping"
-    And the Grafana folder "nc-alpha" already contains:
-      | dashboard  | uid           |
-      | Alpha Demo | nc-alpha-demo |
-    When the admin syncs one mapping
-    Then the mapped folder "one-mapping" holds:
-      | file               |
-      | Alpha Demo.grafana |
-    And "one-mapping/Alpha Demo.grafana" holds:
-      | grafana_uid        | the dashboard's uid |
-      | grafana_mapping    | set                 |
-      | grafana_mode       | "sync"              |
-      | grafana_version    | set                 |
-      | grafana_syncedHash | set                 |
-    And the file "one-mapping/Alpha Demo.grafana" carries its Grafana dates
-    # notes: ../AGENTS.md#syncing-one-mapping-fills-its-folder
+  Scenario Outline: A sync from Grafana mounts the mapping it was asked for
+    When the admin syncs the "<nc folder>" mapping from Grafana
+    Then Nextcloud holds exactly these resources:
+      | path                                 | tags       |
+      | /<nc folder>/<top>.grafana           | dns, linux |
+      | /<nc folder>/Region                  |            |
+      | /<nc folder>/Region/<nested>.grafana | latency    |
+    And "<nc folder>/<top>.grafana" holds:
+      | grafana_uid     | the dashboard's uid |
+      | grafana_mapping | set                 |
+      | grafana_mode    | the mapping's mode  |
+    And the file "<nc folder>/<top>.grafana" carries its Grafana dates
+
+    Examples: one mapping at a time, and every kind of mapping there is
+      | nc folder | mode | storage      | top       | nested  |
+      | Alpha     | sync | admin folder | Overview  | Latency |
+      | Pointers  | link | admin folder | Pinned    | Deeper  |
+      | Shared    | sync | team folder  | Coastline | Tides   |
+
+    # notes: ../AGENTS.md#carries-its-grafana-dates
+    # notes: ../AGENTS.md#three-mappings-shaped-alike
 
   # ── the whole-instance mirror, which is still one mapping ──────────────────
 
@@ -34,7 +58,7 @@ Feature: Syncing one mapping from its card
   Scenario: A root mapping mirrors the whole instance
     Given a folder mapped as "sync" to the Grafana root "/"
     And Grafana has dashboards at the root and inside nested folders
-    When the admin syncs one mapping
+    When the admin syncs the "root" mapping from Grafana
     Then every Grafana folder that holds dashboards appears as a nested Nextcloud subfolder
     And every dashboard appears as a ".grafana" file in the matching subfolder
     And the Nextcloud tree is a one-to-one mirror of the Grafana folder structure

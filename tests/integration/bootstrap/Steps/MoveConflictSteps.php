@@ -145,7 +145,7 @@ trait MoveConflictSteps {
 				$this->collisionSyncedPath = $syncedPath;
 			} else {
 				$this->rescueParkedDashboard($parkedUid, $mappedFolder);
-				$this->theAdminPullsFromGrafana();
+				$this->pullEveryMapping();
 				// FOUND BY UID, not by filename: the pull names a mirror after its
 				// DASHBOARD, so the filename is Grafana's to choose.
 				$this->collisionSyncedPath = $this->mirrorFor($mappedFolder, $parkedUid);

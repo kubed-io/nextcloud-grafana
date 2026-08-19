@@ -165,7 +165,7 @@ trait TagSteps {
 					$this->grafanaFolderUidForMapping($folder),
 					$this->parseTags($tags),
 				);
-				$this->theAdminPullsFromGrafana();
+				$this->pullEveryMapping();
 			}
 			return;
 		}
@@ -205,7 +205,7 @@ trait TagSteps {
 			(string)($record['meta']['folderUid'] ?? ''),
 			$this->parseTags($tags),
 		);
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/** @Then the dashboard's tags are :tags in Nextcloud */
@@ -239,7 +239,7 @@ trait TagSteps {
 	 * overwritten the next time the mirror is brought up to date.
 	 */
 	public function theFilesTagsSettleBackTo(string $tags): void {
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 		$this->theTagsInTheFileAre($this->originalPath, $tags);
 	}
 

@@ -25,11 +25,11 @@ use PHPUnit\Framework\Assert;
  * weakest possible statement about a tree: it passes whatever the file is called
  * and wherever it sits.
  *
- * So the pre-state is declared (`the Grafana folder … already contains:`) and the
- * end state is the tree (`the mapped folder holds:`), the same shape
- * `kubed-io/nextcloud-penpot` settled on. Seeding is find-or-overwrite, so a
- * scenario may name a dashboard the preload already wrote and still read as the
- * pre-state it is.
+ * So the pre-state is declared and the end state is the tree, the same shape
+ * `kubed-io/nextcloud-penpot` settled on. The pre-state table that used to live
+ * here — `the Grafana folder … already contains:` — could only ever describe ONE
+ * FLAT folder, and is replaced by `Grafana holds these resources:`
+ * ({@see ResourceSteps}), which describes a tree.
  *
  * ## AND THE METADATA, WHICH IS A POST-STATE
  *
@@ -66,28 +66,6 @@ trait MirrorSteps {
 	 */
 	public function resetSeededDashboards(): void {
 		$this->seededDashboards = [];
-	}
-
-	/**
-	 * The Grafana side of the pre-state, as one table.
-	 *
-	 * @Given /^the Grafana folder "([^"]*)" already contains:$/
-	 */
-	public function theGrafanaFolderAlreadyContains(string $folderUid, TableNode $table): void {
-		foreach ($table->getHash() as $row) {
-			$title = $row['dashboard'];
-			$uid = $row['uid'];
-			// A `tags` column seeds the dashboard WITH those tags. Without this branch
-			// the column would be silently ignored, and a tag-import assertion would
-			// pass against a dashboard that never carried a tag.
-			$tags = trim((string)($row['tags'] ?? ''));
-			if ($tags !== '') {
-				$this->grafanaCreateTaggedDashboard($uid, $title, $folderUid, $this->parseTags($tags));
-			} else {
-				$this->grafanaCreateDashboard($uid, $title, $folderUid);
-			}
-			$this->seededDashboards[$title] = $uid;
-		}
 	}
 
 	/**
@@ -186,7 +164,7 @@ trait MirrorSteps {
 	 */
 	public function someoneCreatesTheFolderUnderTheGrafanaFolder(string $title, string $parentUid): void {
 		$this->createdGrafanaFolders[$title] = $this->grafanaCreateFolder($title, $parentUid);
-		$this->theAdminPullsFromGrafana();
+		$this->pullEveryMapping();
 	}
 
 	/** @Then /^"([^"]*)" exists in Nextcloud$/ */
@@ -632,8 +610,9 @@ trait MirrorSteps {
 	 * actually carries and a scenario never has to know the quirk.
 	 */
 	private function mappingModeForNcFolder(string $folder): string {
+		$owner = $this->owningMappedFolder($folder);
 		foreach ($this->listMappings() as $m) {
-			if ((string)($m['nc_folder'] ?? '') === $folder) {
+			if ((string)($m['nc_folder'] ?? '') === $owner) {
 				$mode = (string)($m['mode'] ?? '');
 				return $mode === 'link' ? 'reference' : $mode;
 			}
@@ -642,11 +621,40 @@ trait MirrorSteps {
 	}
 
 	private function mappingIdForNcFolder(string $folder): string {
+		$owner = $this->owningMappedFolder($folder);
 		foreach ($this->listMappings() as $m) {
-			if ((string)($m['nc_folder'] ?? '') === $folder) {
+			if ((string)($m['nc_folder'] ?? '') === $owner) {
 				return (string)($m['id'] ?? '');
 			}
 		}
 		throw new \RuntimeException("no mapping owns the Nextcloud folder '{$folder}'");
+	}
+
+	/**
+	 * The mapped folder that owns a path: itself, or the nearest ancestor a mapping
+	 * names.
+	 *
+	 * A MAPPING OWNS EVERYTHING UNDER IT. Both lookups above matched the folder
+	 * exactly, which held for as long as no scenario put a dashboard in a subfolder —
+	 * and then answered "no mapping owns the Nextcloud folder 'Demo/Team'" about a
+	 * file the `Demo` mapping had just mirrored there itself.
+	 *
+	 * Unmapped paths come back unchanged, so the callers' own failure still names the
+	 * folder the scenario asked about rather than some ancestor of it.
+	 */
+	private function owningMappedFolder(string $folder): string {
+		$folder = trim($folder, '/');
+		$mapped = [];
+		foreach ($this->listMappings() as $m) {
+			$mapped[(string)($m['nc_folder'] ?? '')] = true;
+		}
+		for ($candidate = $folder; $candidate !== '' && $candidate !== '.';) {
+			if (isset($mapped[$candidate])) {
+				return $candidate;
+			}
+			$parent = dirname($candidate);
+			$candidate = $parent === $candidate ? '' : trim($parent, '/.');
+		}
+		return $folder;
 	}
 }

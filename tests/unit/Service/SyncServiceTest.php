@@ -13,6 +13,7 @@ use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FilenameCodec;
+use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\FolderTreeMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
@@ -61,6 +62,7 @@ final class SyncServiceTest extends TestCase {
 	private PushService $push;
 	private MirrorTimes $times;
 	private FolderTreeMirror $tree;
+	private FolderMetadata $folders;
 	private TagSyncService $tagSync;
 	private SyncGuard $guard;
 	private SyncService $service;
@@ -87,6 +89,12 @@ final class SyncServiceTest extends TestCase {
 		$this->tree = $this->createStub(FolderTreeMirror::class);
 		$this->tree->method('sync')->willReturn([]);
 
+		// NO FOLDER IS A MIRROR unless a test says so. `uidOf` returning '' is what
+		// tells the pull that a file's folder is one the user made — so the default
+		// here is "leave every mirror where it is", and a relocation test opts in.
+		$this->folders = $this->createStub(FolderMetadata::class);
+		$this->folders->method('uidOf')->willReturn('');
+
 		// Tag import is asserted in TagSyncServiceTest; here it only has to not fire.
 		$this->tagSync = $this->createStub(TagSyncService::class);
 
@@ -111,6 +119,7 @@ final class SyncServiceTest extends TestCase {
 			$this->push,
 			$this->times,
 			$this->tree,
+			$this->folders,
 			$this->tagSync,
 			// A REAL TrashControl, not a double. The unit suite has no
 			// `files_trashbin`, so `withoutTrash()` finds no manager and simply runs
@@ -235,6 +244,103 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $res['processed']);
 		self::assertSame(1, $res['succeeded']);
 		self::assertSame(0, $res['pruned']);
+	}
+
+	// ── where a mirror lives ─────────────────────────────────────────────────
+
+	/**
+	 * A dashboard that moved to a Grafana subfolder takes its mirror with it.
+	 *
+	 * THE BUG THIS GUARDS WAS FOUND BY HAND, ON A LIVE INSTANCE, and could not have
+	 * been found any other way at the time: no assertion in the whole integration
+	 * suite knew what a subfolder was, so a pull that flattened every dashboard onto
+	 * the mapping's root passed everything. The mirror was reconciled for contents,
+	 * name, stamp and tags — everything except the one thing that was wrong.
+	 */
+	public function testPullOneMovesAMirrorIntoTheFolderMirroringItsGrafanaFolder(): void {
+		$sub = $this->createMock(Folder::class);
+		$sub->method('getId')->willReturn(2);
+		$sub->method('getPath')->willReturn('/admin/files/alpha/Region');
+		$sub->method('nodeExists')->willReturn(false);
+		$sub->method('getDirectoryListing')->willReturn([]);
+
+		$root = $this->createMock(Folder::class);
+		$root->method('getId')->willReturn(1);
+		$root->method('getPath')->willReturn('/admin/files/alpha');
+
+		$existing = $this->createMock(File::class);
+		$existing->method('getId')->willReturn(10);
+		$existing->method('getName')->willReturn(FilenameCodec::format('Board', 'd1', false, 0));
+		$existing->method('getParent')->willReturn($root);
+		// The whole assertion: it is moved into the subfolder, keeping its name.
+		$existing->expects(self::once())
+			->method('move')
+			->with('/admin/files/alpha/Region/' . FilenameCodec::format('Board', 'd1', false, 0));
+
+		$root->method('getDirectoryListing')->willReturn([$existing]);
+		$root->expects(self::never())->method('newFile');
+
+		$this->tree = $this->createStub(FolderTreeMirror::class);
+		$this->tree->method('sync')->willReturn(['gf-sub' => $sub]);
+		$this->rebuildService();
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($root);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+
+		// SCOPED PER FOLDER, because the pull asks Grafana once per folder it mirrors
+		// and a blanket willReturn would hand the same dashboard back for every scope.
+		$this->grafana->method('listDashboards')->willReturnCallback(
+			static fn (string $scope): array => $scope === 'gf-sub'
+				? [['uid' => 'd1', 'title' => 'Board', 'folderUid' => 'gf-sub', 'url' => '/d/d1/x', 'tags' => []]]
+				: [],
+		);
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6], null, null));
+
+		$res = $this->service->pullOne($this->mapping());
+
+		self::assertSame(1, $res['processed']);
+		self::assertSame(1, $res['succeeded']);
+	}
+
+	/**
+	 * A mirror in a folder the USER made is left exactly where they put it.
+	 *
+	 * The counterweight to the test above, and the reason the relocation asks whether
+	 * a folder is one this app manages rather than simply moving whatever is in the
+	 * wrong place. A folder with no Grafana uid stamped on it is somebody's filing,
+	 * and a pull that tidied it away every seventy seconds would be worse than the
+	 * bug it fixed.
+	 */
+	public function testPullOneLeavesAMirrorInAFolderTheUserMade(): void {
+		$theirs = $this->createMock(Folder::class);
+		$theirs->method('getId')->willReturn(3); // not the root, and carries no uid
+		$theirs->method('getPath')->willReturn('/admin/files/alpha/Drafts');
+		$theirs->method('nodeExists')->willReturn(false);
+
+		$root = $this->createMock(Folder::class);
+		$root->method('getId')->willReturn(1);
+		$root->method('getPath')->willReturn('/admin/files/alpha');
+
+		$existing = $this->createMock(File::class);
+		$existing->method('getId')->willReturn(10);
+		$existing->method('getName')->willReturn(FilenameCodec::format('Board', 'd1', false, 0));
+		$existing->method('getParent')->willReturn($theirs);
+		$existing->expects(self::never())->method('move');
+
+		$root->method('getDirectoryListing')->willReturn([$existing]);
+
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($root);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'title' => 'Board', 'version' => 6], null, null));
+
+		$res = $this->service->pullOne($this->mapping());
+
+		self::assertSame(1, $res['processed']);
 	}
 
 	// ── pull change-detection (saga Ch2, Course 7) ───────────────────────────────

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A dashboard moved between folders in Grafana now takes its file with it. The mirror was placed correctly when first created and then never moved again, so it stayed where it was through every later sync.
+- **Sync to Grafana** no longer skips dashboards in subfolders. It only ever looked at the top level of a mapped folder, on the one button that exists for declaring Nextcloud the source of truth.
 - A copy is named once: the filename, the JSON title and the Grafana title all say `Fleet Health (1)`.
 - Dashboards in one Grafana folder may share a title; their files take a numbered suffix and keep it.
 - Copying a dashboard next to itself produced a file the app could not see: no dashboard in Grafana, nothing on click, and the original's uid still inside it. The copy now lands correctly named and becomes its own dashboard.

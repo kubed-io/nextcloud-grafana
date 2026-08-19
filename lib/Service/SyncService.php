@@ -58,6 +58,7 @@ final class SyncService {
 		private PushService $push,
 		private MirrorTimes $times,
 		private FolderTreeMirror $tree,
+		private FolderMetadata $folders,
 		private TagSyncService $tagSync,
 		private TrashControl $trash,
 		private TrashReconcileService $trashReconcile,
@@ -217,18 +218,17 @@ final class SyncService {
 		$succeeded = 0;
 		$failed = 0;
 		$errors = [];
-		foreach ($folder->getDirectoryListing() as $node) {
-			if (!FilenameCodec::isDashboardFile($node)) {
-				continue;
-			}
+		// EVERY MIRROR THE MAPPING OWNS, AT EVERY DEPTH. `indexByUid` walks the tree
+		// and this used to walk one level, so a dashboard in a Grafana subfolder had a
+		// mirror the pull maintained and the push could not see. "Sync to Grafana"
+		// silently skipped it — and the deeper the file, the more certainly the button
+		// that exists to declare Nextcloud the source of truth left it out.
+		foreach ($this->indexByUid($folder, $mapping) as $node) {
 			$managed = $this->metadata->read($node->getId());
-			if (!$managed?->isManaged()) {
-				continue;
-			}
 			// Push only files that are themselves `sync`. A `link` file must not
 			// push even in a sync mapping; a legacy file with no recorded mode is treated
 			// as sync for backward compatibility.
-			if ($managed->mode !== '' && !$managed->isSync()) {
+			if ($managed !== null && $managed->mode !== '' && !$managed->isSync()) {
 				continue;
 			}
 			$processed++;
@@ -325,7 +325,7 @@ final class SyncService {
 					// folder that holds it; anything we have no mirror for falls back to
 					// the mapping's root, which is where it used to go unconditionally.
 					$into = $placed[$row['folderUid'] ?? ''] ?? $targetFolder;
-					if ($this->writeDashboard($into, $mapping, $row, $existingByUid, $nameCounts)) {
+					if ($this->writeDashboard($into, $targetFolder, $mapping, $row, $existingByUid, $nameCounts)) {
 						$unchanged++;
 					}
 					$succeeded++;
@@ -534,6 +534,7 @@ final class SyncService {
 	 */
 	private function writeDashboard(
 		Folder $folder,
+		Folder $root,
 		Mapping $mapping,
 		array $row,
 		array $existingByUid,
@@ -599,20 +600,11 @@ final class SyncService {
 			// Every tick, for every duplicate — and with three dashboards sharing a
 			// title, twice a tick. An exception is not a naming policy, and the log
 			// line's own question mark says nobody was sure it was one.
-			$desired = $this->desiredMirrorName($existing, $displayName, $uid);
-			if ($desired !== null && $existing->getName() !== $desired) {
-				try {
-					// Rename within the file's OWN folder — never yank a file the user
-					// put in a subfolder back to the mapping root.
-					$existing->move($existing->getParent()->getPath() . '/' . $desired);
-				} catch (\Throwable $e) {
-					$this->logger->info('rename skipped (collision?)', [
-						'app' => Application::APP_ID,
-						'from' => $existing->getName(),
-						'to' => $desired,
-						'exception' => $e,
-					]);
-				}
+			$existing = $this->placeMirror($existing, $folder, $root, $displayName, $uid);
+			if ($existing === null) {
+				// The file could not be placed AND could not be found again — see
+				// placeMirror. Nothing more can safely be done with it this run.
+				return false;
 			}
 			$fileId = $existing->getId();
 			// Course 7: the body is the only write here that is not already
@@ -669,16 +661,134 @@ final class SyncService {
 	 * dashboard's identity lives in its metadata, so a mirror is never lost by being
 	 * misnamed, and a pull that aborts over cosmetics would strand the whole folder.
 	 */
-	private function desiredMirrorName(File $existing, string $displayName, string $uid): ?string {
-		$parent = $existing->getParent();
+	private function desiredMirrorName(File $existing, Folder $target, string $displayName, string $uid): ?string {
+		// COLLISIONS ARE ASKED OF THE FOLDER THE FILE IS GOING TO, which is its own
+		// only when it is staying put. Asked of the source folder during a relocation,
+		// the answer describes a folder the file is about to leave — so it would take
+		// a suffix it does not need, or walk into a name the destination already has.
 		$current = $existing->getName();
+		$staying = $target->getId() === $existing->getParent()->getId();
 		for ($collision = 0; $collision <= 1000; $collision++) {
 			$candidate = FilenameCodec::format($displayName, $uid, false, $collision);
-			if ($candidate === $current || !$parent->nodeExists($candidate)) {
+			if (($staying && $candidate === $current) || !$target->nodeExists($candidate)) {
 				return $candidate;
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Put an existing mirror where its dashboard says it belongs, under the name its
+	 * dashboard says it should wear. One move, because both are one.
+	 *
+	 * ## WHERE A MIRROR LIVES IS GRAFANA'S TO SAY
+	 *
+	 * The pull worked out the right folder already — `$into` mirrors the Grafana
+	 * folder holding this dashboard — and then used it only when CREATING a mirror.
+	 * An existing one was reconciled in place: contents, stamp, tags and name, never
+	 * location. So a mirror that ended up in the wrong folder stayed there for good,
+	 * and the plainest way to get one was to move the dashboard between folders IN
+	 * GRAFANA: the mirror simply never followed. Measured on a live instance, a
+	 * dashboard moved to a subfolder kept its file at the mapping's root through a
+	 * pull every seventy seconds, indefinitely.
+	 *
+	 * ## AND A FOLDER THE USER MADE IS STILL THEIRS
+	 *
+	 * The rename this replaces was confined to the file's own folder on purpose —
+	 * *"never yank a file the user put in a subfolder back to the mapping root"* —
+	 * and that instinct is kept rather than discarded. A mirror is relocated only
+	 * when it is sitting in a folder THIS APP MANAGES: the mapping's root, or a
+	 * folder stamped with the Grafana folder uid it mirrors. A file in a folder the
+	 * user made for their own reasons carries no such stamp, so it is left exactly
+	 * where they put it — and `folders/create.feature` is what makes that a rule
+	 * rather than an accident.
+	 */
+	private function placeMirror(File $existing, Folder $into, Folder $root, string $displayName, string $uid): ?File {
+		$parent = $existing->getParent();
+		$relocating = $parent->getId() !== $into->getId() && $this->isManagedFolder($parent, $root);
+		$target = $relocating ? $into : $parent;
+
+		$desired = $this->desiredMirrorName($existing, $target, $displayName, $uid);
+		if ($desired === null || (!$relocating && $existing->getName() === $desired)) {
+			return $existing;
+		}
+
+		try {
+			$existing->move($target->getPath() . '/' . $desired);
+			return $existing;
+		} catch (\Throwable $e) {
+			$this->logger->info('grafana_sync pull: could not put a mirror where its dashboard says it belongs', [
+				'app' => Application::APP_ID,
+				'from' => $parent->getPath() . '/' . $existing->getName(),
+				'to' => $target->getPath() . '/' . $desired,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+
+			// THE HANDLE IS NOW SUSPECT, AND WRITING THROUGH IT MAKES A SECOND FILE.
+			// The likeliest reason a move fails is that ANOTHER PULL ALREADY MADE IT —
+			// the schedule and the admin's button can overlap, and the second run holds
+			// a node whose path no longer exists ("Source path not found in cache",
+			// measured live). Carrying on regardless calls `putContent` on that stale
+			// path, and on object storage that RE-CREATES the file where it used to be:
+			// one dashboard, two files, and the new one unstamped because the stamp
+			// follows the id to where the file really went.
+			//
+			// So the file is looked up again by the id it kept. Found → carry on with
+			// the real node, wherever the other run put it. Not found → leave this
+			// dashboard for the next pull, which is a no-op rather than a duplicate.
+			return $this->reResolve($existing, $root);
+		}
+	}
+
+	/**
+	 * Find a file again by the id it kept, after its path stopped being true.
+	 *
+	 * Searched from the mapping's root because that is the subtree the pull owns and
+	 * the only place it may write.
+	 */
+	private function reResolve(File $existing, Folder $root): ?File {
+		try {
+			foreach ($root->getById($existing->getId()) as $node) {
+				if ($node instanceof File) {
+					return $node;
+				}
+			}
+		} catch (\Throwable $e) {
+			$this->logger->debug('grafana_sync pull: could not find a mirror again after a failed move', [
+				'app' => Application::APP_ID,
+				'fileId' => $existing->getId(),
+				'exception' => $e,
+			]);
+		}
+		return null;
+	}
+
+	/**
+	 * Is this folder one the app placed mirrors in — the mapping's root, or a mirror
+	 * of a Grafana folder?
+	 *
+	 * The stamp is the whole test. A folder this app created to mirror a Grafana one
+	 * carries its uid ({@see FolderMetadata}); a folder the user made carries
+	 * nothing, and that difference is exactly the line between "the pull put this
+	 * here and may move it" and "somebody filed this here on purpose".
+	 */
+	private function isManagedFolder(Folder $folder, Folder $root): bool {
+		if ($folder->getId() === $root->getId()) {
+			return true;
+		}
+		try {
+			return $this->folders->uidOf($folder->getId()) !== '';
+		} catch (\Throwable $e) {
+			// CANNOT TELL → DO NOT MOVE. Guessing "managed" here would move a user's
+			// file out of their own folder on the strength of a failed lookup.
+			$this->logger->debug('grafana_sync pull: could not tell whether a folder is a mirror; leaving the file alone', [
+				'app' => Application::APP_ID,
+				'folder' => $folder->getPath(),
+				'exception' => $e,
+			]);
+			return false;
+		}
 	}
 
 	/**
