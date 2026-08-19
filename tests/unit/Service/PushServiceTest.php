@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
+use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FolderMirror;
@@ -43,6 +44,7 @@ final class PushServiceTest extends TestCase {
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
 	private FolderMirror $folderMirror;
+	private CreateService $createService;
 	private PushService $service;
 
 	protected function setUp(): void {
@@ -57,24 +59,39 @@ final class PushServiceTest extends TestCase {
 			static fn (Node $n, Mapping $m): ?string
 				=> $m->grafanaFolderUid === '/' ? null : $m->grafanaFolderUid,
 		);
+		// The create path is CreateService's own to test; here it only has to exist.
+		// A push that reaches it is a push of a file with no uid.
+		$this->createService = $this->createStub(CreateService::class);
+		$this->rebuildService();
+	}
+
+	/**
+	 * Rebuild from the current collaborators.
+	 *
+	 * A test that swaps the create stub has to rebuild, because the service takes it
+	 * by constructor — swapping after construction leaves the old one wired in while
+	 * the test believes otherwise.
+	 */
+	private function rebuildService(): void {
 		// Tag mirroring is asserted in TagSyncServiceTest; here it only has to not fire.
 		$this->service = new PushService(
 			$this->mappings,
 			$this->grafana,
 			$this->metadata,
 			$this->folderMirror,
+			$this->createService,
 			new MirrorTimes(new NullLogger()),
 			$this->createStub(TagSyncService::class),
 			new NullLogger(),
 		);
 	}
 
-	private function mapping(string $folderUid = 'gf-alpha', string $id = 'map-alpha'): Mapping {
+	private function mapping(string $folderUid = 'gf-alpha', string $id = 'map-alpha', string $mode = 'sync'): Mapping {
 		return Mapping::fromArray([
 			'id' => $id,
 			'grafana_folder_uid' => $folderUid,
 			'nc_folder' => 'alpha',
-			'mode' => 'sync',
+			'mode' => $mode,
 		]);
 	}
 
@@ -99,10 +116,53 @@ final class PushServiceTest extends TestCase {
 		self::assertFalse($this->service->push($this->createStub(Folder::class)));
 	}
 
-	public function testUnmanagedFileIsNotPushed(): void {
+	public function testUnmanagedFileOutsideAMappingIsNotPushed(): void {
+		// The guard that survives: no mapping, no dashboard. It used to read
+		// "an unmanaged file is not pushed" full stop, which is no longer true —
+		// inside a sync mapping a file with no uid is exactly what the first push is
+		// for, and skipping it was the gap this rule replaced.
 		$this->metadata->method('read')->willReturn(null);
+		$this->mappings->method('resolveForPath')->willReturn(null);
 		$this->grafana->expects(self::never())->method('upsertDashboard');
 		self::assertFalse($this->service->push($this->file(1, '{}')));
+	}
+
+	public function testUnmanagedFileInALinkMappingIsNotPushed(): void {
+		$this->metadata->method('read')->willReturn(null);
+		$this->mappings->method('resolveForPath')->willReturn($this->mapping(mode: Mapping::MODE_LINK));
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		self::assertFalse($this->service->push($this->file(1, '{}')));
+	}
+
+	/**
+	 * Unmap a folder, copy a dashboard file inside it, map it back, push.
+	 *
+	 * THE COPY'S BYTES ARE THE ORIGINAL'S, uid included — a copy only loses its uid
+	 * when the copy happens INSIDE a mapping, where CopyService strips it. So both
+	 * files name the same dashboard, and without this rule both would upsert onto it:
+	 * two files, one dashboard, last write winning and no way to tell them apart.
+	 *
+	 * The first to claim a uid keeps it; the second is born. Same answer
+	 * `dashboards/copy.feature` gives to the same question.
+	 */
+	public function testTwoUnmanagedFilesCarryingOneUidDoNotBothAdoptIt(): void {
+		$body = '{"uid":"d1","title":"Board","panels":[]}';
+		$this->metadata->method('read')->willReturn(null);
+		$this->mappings->method('resolveForPath')->willReturn($this->mapping());
+
+		$create = $this->createMock(CreateService::class);
+		$create->expects(self::exactly(2))
+			->method('createForFile')
+			// false = may re-adopt the uid its body names; true = must be born.
+			->willReturnCallback(static function (File $node, Mapping $m, bool $asNew): string {
+				self::assertSame($node->getId() !== 1, $asNew);
+				return $node->getId() === 1 ? 'd1' : 'd2';
+			});
+		$this->createService = $create;
+		$this->rebuildService();
+
+		self::assertTrue($this->service->push($this->file(1, $body)));
+		self::assertTrue($this->service->push($this->file(2, $body)));
 	}
 
 	public function testLinkFileIsNotPushed(): void {

@@ -29,9 +29,10 @@ use Psr\Log\LoggerInterface;
  * push→pull round-trip never looks like a change. On **failure we do NOT stamp**, so
  * the next save retries; Grafana's own error message rides the thrown exception.
  *
- * Scope (Course 3): **updates** of dashboards we already track (have a `grafana_uid`).
- * Creating a brand-new dashboard from a hand-made file is Course 4 — such files are
- * skipped here with a log line. A `link` file is a read-only pointer and never pushes.
+ * A file with NO `grafana_uid` is created rather than skipped, through the same
+ * {@see CreateService::createForFile()} a file landing in a mapped folder goes
+ * through — so a file that predates its mapping ends up indistinguishable from one
+ * made after it. A `link` file is a read-only pointer and never pushes.
  */
 final class PushService {
 	public function __construct(
@@ -39,6 +40,7 @@ final class PushService {
 		private GrafanaClient $grafana,
 		private DashboardMetadata $metadata,
 		private FolderMirror $folderMirror,
+		private CreateService $createService,
 		private MirrorTimes $times,
 		private TagSyncService $tagSync,
 		private LoggerInterface $logger,
@@ -57,13 +59,7 @@ final class PushService {
 		}
 		$managed = $this->metadata->read($node->getId());
 		if (!$managed?->isManaged()) {
-			// No grafana_uid yet → a brand-new hand-made file. Creating it in Grafana is
-			// a future step (Course 4); skip for now.
-			$this->logger->info('grafana_sync writeback: file has no grafana_uid; new-dashboard create not implemented', [
-				'app' => Application::APP_ID,
-				'path' => $node->getPath(),
-			]);
-			return false;
+			return $this->create($node);
 		}
 		// Only sync files push. A link file is a read-only pointer; unmapped never
 		// push. A legacy file with no recorded mode is treated as sync (backward compat).
@@ -108,6 +104,74 @@ final class PushService {
 		$tags = TagSet::of(is_array($inBody) ? $inBody : []);
 		$this->tagSync->applyToDashboard($node, $tags);
 		return true;
+	}
+
+	/** Dashboard uids adopted during this run — see {@see create()}. */
+	private array $claimed = [];
+
+	/**
+	 * A file that has never been pushed becomes a dashboard.
+	 *
+	 * ## THIS USED TO BE A LOG LINE AND A SHRUG
+	 *
+	 * "No grafana_uid yet → a brand-new hand-made file. Creating it in Grafana is a
+	 * future step (Course 4); skip for now." Which made the most obvious first use of
+	 * "Sync to Grafana" — *I already had dashboard files in this folder, now make them
+	 * real* — do nothing at all, and say so only in the log.
+	 *
+	 * {@see CreateService::createForFile()} is the same door a file landing in a mapped
+	 * folder goes through, so a file that predates its mapping ends up
+	 * indistinguishable from one made after it. It also brings the re-adoption rule
+	 * with it for free: the upsert keys on `dashboard.uid`, so a file whose BODY still
+	 * names a dashboard re-attaches to it instead of minting a stranger.
+	 *
+	 * ## AND A UID MAY BE CLAIMED ONCE PER RUN
+	 *
+	 * That re-adoption is exactly right for one file and exactly wrong for two. Unmap a
+	 * folder, copy a dashboard file inside it, map it back: the copy's BYTES are the
+	 * original's, `uid` included — a copy only loses its uid when the copy gesture
+	 * happens inside a mapping, where {@see CopyService} strips it. Both files would
+	 * then upsert onto the same dashboard, last one winning, and the mapping would hold
+	 * two files claiming one dashboard with no way to tell which is which.
+	 *
+	 * So the first file to adopt a uid keeps it and any later one is BORN, which is the
+	 * same answer `dashboards/copy.feature` gives to the same question: a copy is
+	 * always a birth.
+	 */
+	private function create(File $node): bool {
+		$mapping = $this->mappings->resolveForPath($node->getPath());
+		if ($mapping === null || $mapping->mode !== Mapping::MODE_SYNC) {
+			return false; // outside a mapping, or a link — neither authors a dashboard
+		}
+
+		$carried = $this->uidInBody($node);
+		$taken = $carried !== '' && isset($this->claimed[$carried]);
+
+		$uid = $this->createService->createForFile($node, $mapping, $taken);
+		$this->claimed[$uid] = true;
+
+		$this->logger->info('grafana_sync push: a file that had never been pushed is now a dashboard', [
+			'app' => Application::APP_ID,
+			'path' => $node->getPath(),
+			'uid' => $uid,
+			'bornRatherThanAdopted' => $taken,
+		]);
+		return true;
+	}
+
+	/**
+	 * The uid a file's own JSON names, or '' when it names none.
+	 *
+	 * Read from the BODY rather than the metadata, because the whole point is a file
+	 * the metadata says nothing about.
+	 */
+	private function uidInBody(File $node): string {
+		try {
+			$decoded = json_decode($node->getContent(), true, 512, JSON_THROW_ON_ERROR);
+		} catch (\Throwable) {
+			return ''; // not JSON; createForFile will report it properly
+		}
+		return is_array($decoded) ? trim((string)($decoded['uid'] ?? '')) : '';
 	}
 
 	/**
