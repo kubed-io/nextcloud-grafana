@@ -124,6 +124,15 @@ namespace OCA\DAV\Connector\Sabre {
 			public function getPath(): string {
 				return '';
 			}
+
+			// Both connector nodes extend `OCA\DAV\Connector\Sabre\Node`, which is where
+			// `getId()` really lives — the stub flattens that hierarchy, so the method has
+			// to be restated on each leaf. Its absence here was not a missing feature but a
+			// missing STUB: the restore plugin's folder walk calls it, and Psalm was right
+			// that this declaration did not have it.
+			public function getId(): int {
+				return 0;
+			}
 		}
 	}
 	if (!class_exists(File::class, false)) {
