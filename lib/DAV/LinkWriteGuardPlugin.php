@@ -16,7 +16,9 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MoveRules;
 use OCA\GrafanaSync\Service\SyncNotifier;
+use OCP\Files\IRootFolder;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\Forbidden;
@@ -53,6 +55,8 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	public function __construct(
 		private DashboardMetadata $metadata,
 		private MappingService $mappings,
+		private MoveRules $rules,
+		private IRootFolder $rootFolder,
 		private SyncNotifier $notifier,
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
@@ -99,6 +103,70 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// layer swallows AbortedEventException exactly as `View::copy()` does. Refusing
 		// from the method handler is the one place a 403 actually reaches the client.
 		$server->on('method:PUT', [$this, 'onPut'], 10);
+		// AND `method:MOVE`, WHICH IS THE THIRD TIME THIS LESSON HAS BEEN LEARNED.
+		// {@see \OCA\GrafanaSync\Listener\MoveGuardListener} stops a refused move on
+		// every route there is — but `HookConnector::rename()` catches the abort by name,
+		// logs the message and sets `run = false`, and `Directory::moveInto()` then
+		// answers `throw new Forbidden('')` with an empty string. So a person dragging a
+		// link into another folder got a failure dialog with nothing in it.
+		//
+		// Nothing else can be thrown from that listener instead: `OC_Hook::emit()` wraps
+		// each slot in `catch (Throwable)` and carries on, so any other exception is
+		// logged and the move SUCCEEDS. Measured, both halves — see MoveGuardListener.
+		// Refusing here is what makes the reason reach the client.
+		$server->on('method:MOVE', [$this, 'onMove'], 10);
+	}
+
+	/**
+	 * Refuse a MOVE the rules refuse, in words the user can read.
+	 *
+	 * @param ResponseInterface $response unused; part of Sabre's `method:*` signature
+	 * @return bool always true — this handler either throws or hands the request on
+	 *
+	 * The rules are {@see MoveRules}, shared with the listener rather than restated, so
+	 * the two answers cannot drift apart. Everything this adds is the translation: Sabre
+	 * works in `files/<uid>/<relative>` and the rest of the app in `/<uid>/files/<relative>`.
+	 *
+	 * FAILING OPEN IS THE RULE HERE, AS EVERYWHERE IN THIS PLUGIN. A source that cannot be
+	 * resolved or a destination Sabre cannot place leaves the move alone — the listener is
+	 * still behind it, and a guard that blocks on doubt is worse than the thing guarded.
+	 */
+	public function onMove(RequestInterface $request, ResponseInterface $response): bool {
+		$destination = $request->getHeader('Destination');
+		if ($destination === null || $destination === '' || $this->server === null) {
+			return true;
+		}
+		$uid = $this->userSession->getUser()?->getUID() ?? '';
+		if ($uid === '') {
+			return true;
+		}
+		try {
+			$targetDav = $this->server->calculateUri($destination);
+			$source = $this->rootFolder->getUserFolder($uid)->get($this->relativeTo($request->getPath()));
+		} catch (\Throwable) {
+			return true;
+		}
+		$targetRelative = $this->relativeTo($targetDav);
+		if ($targetRelative === '') {
+			return true;
+		}
+
+		$refusal = $this->rules->refusalFor($source, '/' . $uid . '/files/' . $targetRelative, basename($targetRelative));
+		if ($refusal === null) {
+			return true;
+		}
+		$this->logger->warning('grafana_sync: refused a WebDAV move', [
+			'app' => Application::APP_ID,
+			'from' => $request->getPath(),
+			'to' => $targetDav,
+		]);
+		throw new Forbidden($refusal);
+	}
+
+	/** `files/<uid>/<relative>` as Sabre spells it → the `<relative>` the app works in. */
+	private function relativeTo(string $davPath): string {
+		$relative = preg_replace('#^files/[^/]+/#', '', ltrim($davPath, '/'));
+		return is_string($relative) ? $relative : '';
 	}
 
 	/**

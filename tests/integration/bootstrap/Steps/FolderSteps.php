@@ -293,7 +293,7 @@ trait FolderSteps {
 			// folder of them was: each copy must differ from EVERY original, and there
 			// is no single original to be the answer.
 			if ($key === self::META_UID && $want === 'a new id') {
-				if ($this->originalDashboardUids === []) {
+				if ($this->pinnedForCopy && $this->originalDashboardUids === []) {
 					throw new \RuntimeException('the arrange captured no original uids to differ from');
 				}
 				$uid = (string)$this->davReadMetadata($path, self::META_UID);
@@ -317,9 +317,22 @@ trait FolderSteps {
 	/** The source folder's Grafana uid and its dashboards' uids, captured before a copy. */
 	private array $originalDashboardUids = [];
 
+	/**
+	 * Whether the pin was taken FOR A COPY, which decides what an empty set means.
+	 *
+	 * "a new id" is two different claims depending on the gesture. After a COPY it is
+	 * the anti-hijack claim — the copy must not have taken an original's uid — so an
+	 * empty set of originals means the arrange is broken and the assertion would pass
+	 * vacuously. After a MOVE INTO a mapping it means "it has one now": the files were
+	 * loose `.grafana` documents with no identity at all, so there is nothing to differ
+	 * from and having a uid is the whole claim.
+	 */
+	private bool $pinnedForCopy = false;
+
 	/** @BeforeScenario */
 	public function resetOriginalDashboardUids(): void {
 		$this->originalDashboardUids = [];
+		$this->pinnedForCopy = false;
 	}
 
 	/**
@@ -330,14 +343,14 @@ trait FolderSteps {
 	 * value read afterwards would only agree with itself.
 	 */
 	public function iCopyTo(string $from, string $to): void {
-		$this->pinOriginalsOf($from);
+		$this->pinOriginalsOf($from, true);
 		$this->davCopy($from, $to);
 		$this->currentFolder = $to;
 	}
 
 	/** @When /^I try to copy "([^"]*)" to "([^"]*)"$/ */
 	public function iTryToCopyTo(string $from, string $to): void {
-		$this->pinOriginalsOf($from);
+		$this->pinOriginalsOf($from, true);
 		$this->lastCopyStatus = $this->davCopyStatus($from, $to);
 	}
 
@@ -399,9 +412,10 @@ trait FolderSteps {
 	/**
 	 * Pin what the source holds, so the copy can be compared against it afterwards.
 	 */
-	private function pinOriginalsOf(string $folder): void {
+	private function pinOriginalsOf(string $folder, bool $forCopy = false): void {
 		$this->lastFolderUid = (string)$this->davReadMetadata($folder, self::META_FOLDER_UID);
 		$this->originalDashboardUids = [];
+		$this->pinnedForCopy = $forCopy;
 		// AT EVERY DEPTH. `davListDashboardFiles` is one level, and a folder gesture is
 		// recursive by nature — a purge of a folder holding `Sub/Deep.grafana` pinned
 		// nothing at all and then complained it had nothing to look for.

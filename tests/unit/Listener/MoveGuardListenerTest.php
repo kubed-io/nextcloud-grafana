@@ -15,11 +15,12 @@ use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MoveRules;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCP\Exceptions\AbortedEventException;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\File;
 use OCP\Files\Folder;
-use OCP\Files\ForbiddenException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
@@ -34,6 +35,7 @@ use PHPUnit\Framework\TestCase;
  * be dragged out of it.
  */
 #[CoversClass(MoveGuardListener::class)]
+#[CoversClass(MoveRules::class)]
 final class MoveGuardListenerTest extends TestCase {
 	/** @var array<int,string> folder id → banked Grafana uid */
 	private array $stamped = [];
@@ -45,7 +47,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$this->stamped = [20 => 'gf-team'];
 		$this->mapped = ['Demo' => Mapping::MODE_SYNC, 'Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/may not change that/');
 		$this->guard('/alice/files/Demo/Team', '/alice/files/Pointers/Team', 20);
 	}
@@ -54,7 +56,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$this->stamped = [20 => 'gf-team'];
 		$this->mapped = ['Demo' => Mapping::MODE_SYNC, 'Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->guard('/alice/files/Pointers/Team', '/alice/files/Demo/Team', 20);
 	}
 
@@ -63,7 +65,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$this->stamped = [20 => 'gf-team'];
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/only pointers/');
 		$this->guard('/alice/files/Pointers/Team', '/alice/files/Scratch/Team', 20);
 	}
@@ -135,7 +137,7 @@ final class MoveGuardListenerTest extends TestCase {
 	public function testALinkMayNotMoveToAnotherLinkMapping(): void {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK, 'Mirrors' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/only a pointer/');
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Mirrors/Fleet.grafana', Mapping::MODE_LINK);
 	}
@@ -143,21 +145,21 @@ final class MoveGuardListenerTest extends TestCase {
 	public function testALinkMayNotMoveIntoASyncMapping(): void {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK, 'Demo' => Mapping::MODE_SYNC];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Demo/Fleet.grafana', Mapping::MODE_LINK);
 	}
 
 	public function testALinkMayNotLeaveForAnUnmappedFolder(): void {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Scratch/Fleet.grafana', Mapping::MODE_LINK);
 	}
 
 	public function testASyncFileMayNotMoveIntoALinkMapping(): void {
 		$this->mapped = ['Demo' => Mapping::MODE_SYNC, 'Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/Grafana’s to place/u');
 		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Pointers/Fleet.grafana', Mapping::MODE_SYNC);
 	}
@@ -199,7 +201,7 @@ final class MoveGuardListenerTest extends TestCase {
 	public function testALinkRenameIsRefused(): void {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/name comes from Grafana/u');
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Pointers/Renamed.grafana', Mapping::MODE_LINK);
 	}
@@ -207,7 +209,7 @@ final class MoveGuardListenerTest extends TestCase {
 	public function testARenameToAWhitespaceStemIsRefused(): void {
 		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
 
-		$this->expectException(ForbiddenException::class);
+		$this->expectException(AbortedEventException::class);
 		$this->expectExceptionMessageMatches('/needs a name/');
 		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Demo/ .grafana', Mapping::MODE_SYNC);
 	}
@@ -252,7 +254,8 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($folders, $mappings, $this->createStub(DashboardMetadata::class), new SyncGuard());
+		$rules = new MoveRules($folders, $mappings, $this->createStub(DashboardMetadata::class));
+		$listener = new MoveGuardListener($rules, new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 
@@ -290,7 +293,8 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($this->createStub(FolderMetadata::class), $mappings, $metadata, new SyncGuard());
+		$rules = new MoveRules($this->createStub(FolderMetadata::class), $mappings, $metadata);
+		$listener = new MoveGuardListener($rules, new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 }

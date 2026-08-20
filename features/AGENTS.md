@@ -2716,44 +2716,40 @@ MotionService keeps its re-home branch as a defensive path, the way it keeps the
 link move-out strip: the guard refuses first, and a service that is reached anyway
 should still do the least surprising thing.
 
-### A refused move has to say why, and `AbortedEventException` cannot
+### A refused move has to say why, and only the DAV layer can
 
-`Then the move is refused with a message` failed for four rows across two suites
-while the messages it wanted were sitting right there in `MoveGuardListener`, fully
-written. Four CI rounds could not explain it. Reading the running server's own source
-in a pod did, in two greps:
+`Then the move is refused with a message` failed for four rows across two suites while
+the messages it wanted sat fully written in the move guard. Reading the running server's
+source in a pod explained it, in three greps — and the first two were a trap.
 
-- `OC\Files\Node\HookConnector::rename()` wraps the `BeforeNodeRenamedEvent` dispatch
-  in `catch (AbortedEventException $e)`, logs a warning, and sets `run = false`. The
-  message goes to the log and nowhere else.
+- `OC\Files\Node\HookConnector::rename()` catches `AbortedEventException`, logs it and
+  sets `run = false`. The message goes to the log and nowhere else.
 - `View::rename()` then returns `false`, and `Sabre\...\Directory::moveInto()` answers
   `throw new \Sabre\DAV\Exception\Forbidden('')` — an empty string, by literal.
 
-So every refusal this app made on a move reached the user as a blank 403. The Files
-app showed a failure with nothing in it. **That is a product bug the suite happened to
-catch, not a suite problem** — and the rows that DID pass all along were the ones
-refused by `LinkWriteGuardPlugin` in the DAV layer, where nothing is swallowing.
+So every refusal this app made on a move reached the user as a blank 403. **That is a
+product bug the suite caught, not a suite problem.** But the obvious repair is a trap:
 
-The fix is one exception class. `OCP\Files\ForbiddenException` is what core itself
-throws from `View::rename()` ("Moving a folder into a child folder is forbidden"), and
-`moveInto()` catches it by name and forwards the message:
-`catch (ForbiddenException $ex) { throw new Forbidden($ex->getMessage(), ...); }`.
-It aborts at the same point — before the rename — and the locks `View::rename()` took
-come off in its own `finally`.
+- `OC_Hook::emit()` wraps every slot in `catch (Throwable)`, logs it and CARRIES ON.
+  Only `HintException` and `ServerNotAvailableException` are re-thrown.
 
-**The general lesson, which this repo has now learned three times.** Core swallows a
-typed abort on `copy` ({@see CopyGuardListener}), on `PUT`, and now on `rename`. A
-refusal that has to reach a person belongs in the DAV layer or in an exception core is
-already forwarding — never in an event whose abort core catches. The three notes are
-the same note; this is the one that names the mechanism for moves.
+`AbortedEventException` is therefore not one option among several — it is the ONLY thing
+a listener on this route can throw that refuses anything at all. Swapping it for
+`OCP\Files\ForbiddenException` to rescue the message was measured in CI: nine refusals
+came back **HTTP 201**, allowed. The exception was swallowed and the move went ahead.
 
-**Deletes are left alone on purpose.** `HookConnector::delete()` swallows the same way,
-and `Directory::delete()` / `File::delete()` forward a `ForbiddenException` identically,
-so the same swap would work there. It is not made because nothing is asking for it: a
-link delete already answers with a message from `beforeUnbind`, and
-`BeforeNodeDeletedEvent` is dispatched by the trashbin and the purge as well as by a
-person — where an exception escaping is a new failure mode rather than a better message.
-Worth doing when a scenario asks for it, and not before.
+**So the rules are stated once and asked twice.** `MoveRules` holds them and answers with
+a message or null; `MoveGuardListener` asks and aborts, reaching `occ`, other apps and
+scripts; `LinkWriteGuardPlugin` asks on Sabre's `method:MOVE` and throws `Forbidden` with
+the reason, which is the only place a readable 403 reaches a client. This is the same
+split `method:PUT` and `method:COPY` already use, arrived at the same way — the third
+time this repo has learned that a refusal a person must read cannot live in an event
+whose abort core catches.
+
+**Deletes are left alone on purpose.** `HookConnector::delete()` swallows identically,
+and a link delete already answers with a message from `beforeUnbind`. `BeforeNodeDeletedEvent`
+is also dispatched by the trashbin and the purge, where a change here is a new failure
+mode rather than a better message. Worth doing when a scenario asks for it, and not before.
 
 ### A failed Grafana delete on move-out never strips the file's identity
 

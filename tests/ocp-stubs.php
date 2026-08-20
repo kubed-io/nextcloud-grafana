@@ -131,25 +131,6 @@ namespace OCP\Files {
 			public function updateFilecache(string $ext, int $mimetypeId): int;
 		}
 	}
-	// THE REFUSAL THAT KEEPS ITS MESSAGE. Thrown by {@see OCA\GrafanaSync\Listener\MoveGuardListener}
-	// to stop a move before it happens. Not `AbortedEventException`, which core catches
-	// and discards on this route — see that listener's docblock. `$retry` is core's
-	// signature and is always false here: none of these refusals are transient.
-	if (!class_exists(ForbiddenException::class, false)) {
-		class ForbiddenException extends \Exception {
-			public function __construct(
-				string $message,
-				private bool $retry,
-				?\Exception $previous = null,
-			) {
-				parent::__construct($message, 0, $previous);
-			}
-
-			public function getRetry(): bool {
-				return $this->retry;
-			}
-		}
-	}
 }
 
 namespace OCP\Files\Storage {
@@ -299,9 +280,10 @@ namespace OCP\EventDispatcher {
 }
 
 namespace OCP\Exceptions {
-	// Thrown by the copy, create and delete guards to abort a gesture before it happens.
-	// NOT by the move guard: core catches this on the rename route and throws the message
-	// away, which is why that one throws {@see OCP\Files\ForbiddenException} instead.
+	// Thrown by the copy, create, delete and move guards to abort a gesture before it
+	// happens — the ONE exception `OC_Hook::emit()` does not swallow on its way through,
+	// because `HookConnector` catches it by name. The message it carries does not survive
+	// that catch; {@see OCA\GrafanaSync\DAV\LinkWriteGuardPlugin} is what says why.
 	if (!class_exists(AbortedEventException::class, false)) {
 		class AbortedEventException extends \Exception {
 		}
