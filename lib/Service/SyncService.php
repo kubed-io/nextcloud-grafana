@@ -338,6 +338,12 @@ final class SyncService {
 		$this->guard->enter();
 		try {
 			$targetFolder = $this->storage->ensureFolder($mapping);
+			// PROVISIONING IS WHERE THE ID BECOMES KNOWABLE, and a re-provisioned folder
+			// has a NEW one. Without this the mapping keeps pointing at the folder that
+			// used to be there, `resolveForPath` can no longer place it, and every
+			// path-based question — the link guards above all — silently stops finding
+			// the mapping at all.
+			$this->mappings->bankFolderId($mapping->id, $targetFolder->getId());
 
 			// Bring the Nextcloud folder tree into agreement with Grafana's BEFORE
 			// placing anything, so every dashboard has a folder to land in. The map it
@@ -398,6 +404,11 @@ final class SyncService {
 			// to change. The reconcile refuses to purge anything it cannot prove is gone,
 			// so a mirror it sees mid-flight is simply left for the next tick.
 			$this->trashReconcile->reap($mapping);
+
+			// AND THE FOLDERS, last of all. A folder whose Grafana counterpart is gone
+			// must stop claiming it, and it can only be judged empty once the prune
+			// above has taken the mirrors it held.
+			$this->tree->reapOrphans($targetFolder, $mapping);
 
 			return [
 				'processed' => $processed,

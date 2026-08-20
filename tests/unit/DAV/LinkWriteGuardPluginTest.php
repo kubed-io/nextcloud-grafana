@@ -13,10 +13,13 @@ use OCA\DAV\Connector\Sabre\Directory as DavDirectory;
 use OCA\DAV\Connector\Sabre\File as DavFile;
 use OCA\GrafanaSync\DAV\LinkWriteGuardPlugin;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MoveRules;
 use OCA\GrafanaSync\Service\SyncNotifier;
+use OCP\Files\IRootFolder;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -68,7 +71,20 @@ final class LinkWriteGuardPluginTest extends TestCase {
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
 
-		$this->plugin = new LinkWriteGuardPlugin($this->metadata, $this->mappings, $this->notifier, $session, new NullLogger());
+		$rules = new MoveRules(
+			$this->createStub(FolderMetadata::class),
+			$this->mappings,
+			$this->metadata,
+		);
+		$this->plugin = new LinkWriteGuardPlugin(
+			$this->metadata,
+			$this->mappings,
+			$rules,
+			$this->createStub(IRootFolder::class),
+			$this->notifier,
+			$session,
+			new NullLogger(),
+		);
 	}
 
 	private function davFile(string $name, int $id = 7): DavFile {

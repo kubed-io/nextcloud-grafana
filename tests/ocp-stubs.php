@@ -280,9 +280,10 @@ namespace OCP\EventDispatcher {
 }
 
 namespace OCP\Exceptions {
-	// Thrown by MoveGuardListener to abort a move before it happens; Nextcloud shows
-	// the message to the user. Stubbed so the guard can be unit-tested at all — it
-	// could not be before, which is why its folder branch shipped without one.
+	// Thrown by the copy, create, delete and move guards to abort a gesture before it
+	// happens — the ONE exception `OC_Hook::emit()` does not swallow on its way through,
+	// because `HookConnector` catches it by name. The message it carries does not survive
+	// that catch; {@see OCA\GrafanaSync\DAV\LinkWriteGuardPlugin} is what says why.
 	if (!class_exists(AbortedEventException::class, false)) {
 		class AbortedEventException extends \Exception {
 		}

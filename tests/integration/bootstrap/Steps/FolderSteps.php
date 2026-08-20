@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Integration\Steps;
 
 use Behat\Gherkin\Node\TableNode;
-use PHPUnit\Framework\Assert;
 
 /**
  * The gestures a FOLDER has of its own: its tags, and its name.
@@ -33,6 +32,17 @@ use PHPUnit\Framework\Assert;
  * read back through Grafana's own API rather than through this app, so a passing
  * assertion means the value genuinely landed on the far object instead of the app
  * agreeing with itself about what it would have written.
+ *
+ * ## AND EVERY FAILURE HERE THROWS RATHER THAN ASSERTS
+ *
+ * PHPUnit builds a failure message through an exporter that reads its own
+ * configuration registry, and under Behat that registry is never initialised —
+ * so a FAILING assertion reports `Registry::get(): ... null returned` instead of
+ * what went wrong. It does not flake; it replaces every real message with the same
+ * meaningless one, and it cost two CI rounds to see that.
+ *
+ * A thrown `RuntimeException` carries the sentence a person needs and nothing else
+ * has to be initialised for it. {@see MirrorSteps} reached the same conclusion.
  */
 trait FolderSteps {
 	/**
@@ -50,10 +60,9 @@ trait FolderSteps {
 		$this->folderTagsBefore[$ncPath] = $this->parseTags($tags);
 		$this->pullEveryMapping();
 
-		Assert::assertTrue(
-			$this->davExists($ncPath),
-			"the sync did not bring '$ncPath' into Nextcloud, so there is no folder to tag",
-		);
+		if (!$this->davExists($ncPath)) {
+			throw new \RuntimeException("the sync did not bring '$ncPath' into Nextcloud, so there is no folder to tag");
+		}
 		$this->currentFolder = $ncPath;
 		$this->originalPath = $ncPath;
 		$this->currentGrafanaFolder = $uid;
@@ -124,15 +133,17 @@ trait FolderSteps {
 		$this->putDashboardFile($ncPath, 'Fleet Health');
 
 		$this->lastUid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
-		Assert::assertNotSame('', $this->lastUid, "no dashboard was created for the file in '$ncPath'");
+		if ($this->lastUid === '') {
+			throw new \RuntimeException("no dashboard was created for the file in '$ncPath'");
+		}
 		$this->createdDashboardUids[] = $this->lastUid;
 
 		$this->lastFolderUid = (string)$this->davReadMetadata($ncPath, self::META_FOLDER_UID);
-		Assert::assertNotSame(
-			'',
-			$this->lastFolderUid,
-			"'$ncPath' carries no Grafana folder uid, so it was never mirrored and cannot be renamed",
-		);
+		if ($this->lastFolderUid === '') {
+			throw new \RuntimeException(
+				"'$ncPath' carries no Grafana folder uid, so it was never mirrored and cannot be renamed",
+			);
+		}
 		$this->currentFolder = $ncPath;
 	}
 
@@ -155,10 +166,11 @@ trait FolderSteps {
 
 	/** @Then /^"([^"]*)" is gone from Nextcloud$/ */
 	public function isGoneFromNextcloud(string $path): void {
-		Assert::assertFalse(
-			$this->davExists($path),
-			"'$path' is still in Nextcloud — the rename left the old name standing beside the new one",
-		);
+		if ($this->davExists($path)) {
+			throw new \RuntimeException(
+				"'$path' is still in Nextcloud — the rename left the old name standing beside the new one",
+			);
+		}
 	}
 
 	/**
@@ -170,11 +182,11 @@ trait FolderSteps {
 	 */
 	public function theDashboardInsideHolds(string $folder, TableNode $table): void {
 		$files = $this->davListDashboardFiles($folder);
-		Assert::assertCount(
-			1,
-			$files,
-			"'$folder' should hold exactly one dashboard file; it holds: " . (implode(', ', $files) ?: '(nothing)'),
-		);
+		if (count($files) !== 1) {
+			throw new \RuntimeException(
+				"'$folder' should hold exactly one dashboard file; it holds: " . (implode(', ', $files) ?: '(nothing)'),
+			);
+		}
 		$this->theMirrorHolds($folder . '/' . $files[0], $table);
 	}
 
@@ -270,7 +282,9 @@ trait FolderSteps {
 			if ($want === '') {
 				throw new \RuntimeException("the row for '$path' has no identity to check");
 			}
-			Assert::assertTrue($this->davExists($path), "'$path' does not exist");
+			if (!$this->davExists($path)) {
+				throw new \RuntimeException("'$path' does not exist");
+			}
 			$key = $this->looksLikeFolder($path) ? self::META_FOLDER_UID : self::META_UID;
 
 			// A FILE'S "a new id" IS ABOUT A SET, not about the cursor. The shared
@@ -279,18 +293,18 @@ trait FolderSteps {
 			// folder of them was: each copy must differ from EVERY original, and there
 			// is no single original to be the answer.
 			if ($key === self::META_UID && $want === 'a new id') {
-				Assert::assertNotSame(
-					[],
-					$this->originalDashboardUids,
-					'the arrange captured no original uids to differ from',
-				);
+				if ($this->pinnedForCopy && $this->originalDashboardUids === []) {
+					throw new \RuntimeException('the arrange captured no original uids to differ from');
+				}
 				$uid = (string)$this->davReadMetadata($path, self::META_UID);
-				Assert::assertNotSame('', $uid, "'$path' carries no uid, so the copy never became a dashboard");
-				Assert::assertNotContains(
-					$uid,
-					$this->originalDashboardUids,
-					"'$path' reused an original's uid ($uid) — two files would claim one dashboard",
-				);
+				if ($uid === '') {
+					throw new \RuntimeException("'$path' carries no uid, so the copy never became a dashboard");
+				}
+				if (in_array($uid, $this->originalDashboardUids, true)) {
+					throw new \RuntimeException(
+						"'$path' reused an original's uid ($uid) — two files would claim one dashboard",
+					);
+				}
 				continue;
 			}
 
@@ -303,9 +317,22 @@ trait FolderSteps {
 	/** The source folder's Grafana uid and its dashboards' uids, captured before a copy. */
 	private array $originalDashboardUids = [];
 
+	/**
+	 * Whether the pin was taken FOR A COPY, which decides what an empty set means.
+	 *
+	 * "a new id" is two different claims depending on the gesture. After a COPY it is
+	 * the anti-hijack claim — the copy must not have taken an original's uid — so an
+	 * empty set of originals means the arrange is broken and the assertion would pass
+	 * vacuously. After a MOVE INTO a mapping it means "it has one now": the files were
+	 * loose `.grafana` documents with no identity at all, so there is nothing to differ
+	 * from and having a uid is the whole claim.
+	 */
+	private bool $pinnedForCopy = false;
+
 	/** @BeforeScenario */
 	public function resetOriginalDashboardUids(): void {
 		$this->originalDashboardUids = [];
+		$this->pinnedForCopy = false;
 	}
 
 	/**
@@ -316,14 +343,14 @@ trait FolderSteps {
 	 * value read afterwards would only agree with itself.
 	 */
 	public function iCopyTo(string $from, string $to): void {
-		$this->pinOriginalsOf($from);
+		$this->pinOriginalsOf($from, true);
 		$this->davCopy($from, $to);
 		$this->currentFolder = $to;
 	}
 
 	/** @When /^I try to copy "([^"]*)" to "([^"]*)"$/ */
 	public function iTryToCopyTo(string $from, string $to): void {
-		$this->pinOriginalsOf($from);
+		$this->pinOriginalsOf($from, true);
 		$this->lastCopyStatus = $this->davCopyStatus($from, $to);
 	}
 
@@ -345,45 +372,58 @@ trait FolderSteps {
 		// outside a PHPUnit run — measured, and it reports the registry error INSTEAD
 		// of the assertion. A newline is the separator because a filename can contain
 		// a comma and cannot contain one of these.
-		Assert::assertSame(
-			implode("\n", $want),
-			implode("\n", $got),
-			"'$copy' does not hold the same files as '$original'",
-		);
-		Assert::assertNotSame([], $got, "'$original' holds no dashboard files, so the copy proves nothing");
+		if ($want !== $got) {
+			throw new \RuntimeException(
+				"'$copy' does not hold the same files as '$original'\n"
+				. '  expected: ' . implode(', ', $want) . "\n"
+				. '  actually: ' . implode(', ', $got),
+			);
+		}
+		if ($got === []) {
+			throw new \RuntimeException("'$original' holds no dashboard files, so the copy proves nothing");
+		}
 	}
 
 	/** @Then /^the dashboards in "([^"]*)" hold no Grafana metadata at all$/ */
 	public function theDashboardsInHoldNoGrafanaMetadata(string $folder): void {
 		$files = $this->davListDashboardFiles($folder);
-		Assert::assertNotSame([], $files, "'$folder' holds no dashboard files");
+		if ($files === []) {
+			throw new \RuntimeException("'$folder' holds no dashboard files");
+		}
 		foreach ($files as $name) {
 			foreach ([self::META_UID, self::META_MAPPING, self::META_MODE] as $key) {
-				Assert::assertSame(
-					'',
-					(string)$this->davReadMetadata($folder . '/' . $name, $key),
-					"'$folder/$name' carries $key, but nothing outside a mapping is managed",
-				);
+				$value = (string)$this->davReadMetadata($folder . '/' . $name, $key);
+				if ($value !== '') {
+					throw new \RuntimeException(
+						"'$folder/$name' carries $key='$value', but nothing outside a mapping is managed",
+					);
+				}
 			}
 		}
 	}
 
 	/** @Then /^"([^"]*)" holds no folder named "([^"]*)"$/ */
 	public function holdsNoFolderNamed(string $parent, string $name): void {
-		Assert::assertFalse(
-			$this->davExists(trim($parent, '/') . '/' . $name),
-			"'$parent' holds a folder named '$name' — the refusal let it through",
-		);
+		if ($this->davExists(trim($parent, '/') . '/' . $name)) {
+			throw new \RuntimeException("'$parent' holds a folder named '$name' — the refusal let it through");
+		}
 	}
 
 	/**
 	 * Pin what the source holds, so the copy can be compared against it afterwards.
 	 */
-	private function pinOriginalsOf(string $folder): void {
+	private function pinOriginalsOf(string $folder, bool $forCopy = false): void {
 		$this->lastFolderUid = (string)$this->davReadMetadata($folder, self::META_FOLDER_UID);
 		$this->originalDashboardUids = [];
-		foreach ($this->davListDashboardFiles($folder) as $name) {
-			$uid = (string)$this->davReadMetadata($folder . '/' . $name, self::META_UID);
+		$this->pinnedForCopy = $forCopy;
+		// AT EVERY DEPTH. `davListDashboardFiles` is one level, and a folder gesture is
+		// recursive by nature — a purge of a folder holding `Sub/Deep.grafana` pinned
+		// nothing at all and then complained it had nothing to look for.
+		foreach ($this->davTreeUnder($folder) as $path) {
+			if (!str_ends_with($path, '.grafana')) {
+				continue;
+			}
+			$uid = (string)$this->davReadMetadata(ltrim($path, '/'), self::META_UID);
 			if ($uid !== '') {
 				$this->originalDashboardUids[] = $uid;
 			}
@@ -425,11 +465,6 @@ trait FolderSteps {
 		$this->pullEveryMapping();
 	}
 
-	/** @Then /^the move is refused with a message$/ */
-	public function theMoveIsRefusedWithAMessage(): void {
-		$this->assertRefused('move', $this->lastMoveStatus);
-	}
-
 	// ── the trash ─────────────────────────────────────────────────────────────
 
 	/** @When /^I try to move "([^"]*)" to the trash$/ */
@@ -438,9 +473,12 @@ trait FolderSteps {
 		$this->lastDeleteStatus = $this->davDeleteStatus($folder);
 	}
 
-	/** @Then /^the trash is refused with a message$/ */
-	public function theTrashIsRefusedWithAMessage(): void {
-		$this->assertRefused('trash', $this->lastDeleteStatus);
+	/** The trashbin entry this scenario made, pinned so a stale one cannot answer for it. */
+	private string $trashedFolderEntry = '';
+
+	/** @BeforeScenario */
+	public function resetTrashedFolderEntry(): void {
+		$this->trashedFolderEntry = '';
 	}
 
 	/**
@@ -454,22 +492,35 @@ trait FolderSteps {
 	public function isInTheNextcloudTrash(string $folder): void {
 		$this->pinOriginalsOf($folder);
 		$this->davDelete($folder);
-		Assert::assertFalse($this->davExists($folder), "'$folder' is still in Nextcloud after being trashed");
-		Assert::assertNotNull($this->trashbinPathFor($folder), "setup: '$folder' did not reach the Nextcloud trash");
+		if ($this->davExists($folder)) {
+			throw new \RuntimeException("'$folder' is still in Nextcloud after being trashed");
+		}
+		$entry = $this->trashbinPathFor($folder);
+		if ($entry === null) {
+			throw new \RuntimeException("setup: '$folder' did not reach the Nextcloud trash");
+		}
+		// PINNED HERE, NOT LOOKED UP LATER. Every scenario trashes a folder called the
+		// same thing and nothing empties the trash between them — emptying it is itself
+		// a gesture that finishes deletes in Grafana — so asking by name afterwards can
+		// answer with an entry an earlier scenario left behind, and report this one
+		// still present after it was purged. Measured: the same `Team.d1787180677`
+		// answered for three different scenarios.
+		$this->trashedFolderEntry = $entry;
 	}
 
 	/** @Then /^"([^"]*)" is recoverable from the Nextcloud trash$/ */
 	public function isRecoverableFromTheNextcloudTrash(string $folder): void {
-		Assert::assertNotNull(
-			$this->trashbinPathFor($folder),
-			"'$folder' is not in the Nextcloud trash, so nothing could be recovered",
-		);
+		if ($this->trashbinPathFor($folder) === null) {
+			throw new \RuntimeException("'$folder' is not in the Nextcloud trash, so nothing could be recovered");
+		}
 	}
 
 	/** @When /^I restore "([^"]*)" from the Nextcloud trash$/ */
 	public function iRestoreFromTheNextcloudTrash(string $folder): void {
 		$entry = $this->trashbinPathFor($folder);
-		Assert::assertNotNull($entry, "'$folder' is not in the Nextcloud trash");
+		if ($entry === null) {
+			throw new \RuntimeException("'$folder' is not in the Nextcloud trash");
+		}
 		$res = $this->davClient()->request('MOVE', $this->trashHref($entry), [
 			'headers' => [
 				'Destination' => $this->ncBaseUrl . '/remote.php/dav/trashbin/'
@@ -482,35 +533,55 @@ trait FolderSteps {
 
 	/** @When /^I purge "([^"]*)" from the trash$/ */
 	public function iPurgeFromTheTrash(string $folder): void {
-		$entry = $this->trashbinPathFor($folder);
-		Assert::assertNotNull($entry, "'$folder' is not in the Nextcloud trash");
+		$entry = $this->trashedFolderEntry ?: $this->trashbinPathFor($folder);
+		if ($entry === null || $entry === '') {
+			throw new \RuntimeException("'$folder' is not in the Nextcloud trash");
+		}
 		$this->assertStatus($this->davClient()->request('DELETE', $this->trashHref($entry)), [204, 200], "purge $entry");
 	}
 
 	/** @Then /^"([^"]*)" is gone from the Nextcloud trash$/ */
 	public function isGoneFromTheNextcloudTrash(string $folder): void {
-		Assert::assertNull(
-			$this->trashbinPathFor($folder),
-			"'$folder' is still in the Nextcloud trash",
-		);
+		// THIS SCENARIO'S ENTRY, not whatever the name resolves to now — see the pin in
+		// `is in the Nextcloud trash`.
+		if ($this->trashedFolderEntry === '') {
+			throw new \RuntimeException("nothing recorded trashing '$folder', so 'gone' has nothing to mean");
+		}
+		if ($this->trashEntryExists($this->trashedFolderEntry)) {
+			throw new \RuntimeException(
+				"'$folder' is still in the Nextcloud trash as '{$this->trashedFolderEntry}'",
+			);
+		}
 	}
 
 	// ── what became of the dashboards ─────────────────────────────────────────
 
 	/** @Then /^none of those dashboards exists in Grafana$/ */
 	public function noneOfThoseDashboardsExistsInGrafana(): void {
-		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		if ($this->originalDashboardUids === []) {
+			throw new \RuntimeException('nothing captured the dashboards to look for');
+		}
 		foreach ($this->originalDashboardUids as $uid) {
-			Assert::assertNull(
-				$this->grafanaGetDashboard($uid),
-				"dashboard $uid still exists in Grafana",
-			);
+			if ($this->grafanaGetDashboard($uid) !== null) {
+				throw new \RuntimeException("dashboard $uid still exists in Grafana");
+			}
 		}
 	}
 
-	/** @Then /^no dashboard it held exists in Grafana$/ */
+	/**
+	 * @Then /^no dashboard it held exists in Grafana$/
+	 *
+	 * VACUOUS WHEN IT HELD NONE, deliberately. `purge.feature` runs this over an
+	 * Examples table whose whole point is that what was inside makes no difference —
+	 * and one row is a folder holding only a spreadsheet. Demanding a non-empty set
+	 * would fail that row for being exactly what it says it is.
+	 */
 	public function noDashboardItHeldExistsInGrafana(): void {
-		$this->noneOfThoseDashboardsExistsInGrafana();
+		foreach ($this->originalDashboardUids as $uid) {
+			if ($this->grafanaGetDashboard($uid) !== null) {
+				throw new \RuntimeException("dashboard $uid still exists in Grafana");
+			}
+		}
 	}
 
 	/**
@@ -520,32 +591,38 @@ trait FolderSteps {
 	 * live in Grafana, and living in the bin folder is the only thing that changed.
 	 */
 	public function thoseDashboardsAreParkedIn(string $binTitle): void {
-		Assert::assertNotSame([], $this->originalDashboardUids, 'nothing captured the dashboards to look for');
+		if ($this->originalDashboardUids === []) {
+			throw new \RuntimeException('nothing captured the dashboards to look for');
+		}
 		$bin = $this->grafanaFolderUidByTitle($binTitle);
-		Assert::assertNotNull($bin, "Grafana has no folder titled '$binTitle'");
+		if ($bin === null) {
+			throw new \RuntimeException("Grafana has no folder titled '$binTitle'");
+		}
 		foreach ($this->originalDashboardUids as $uid) {
 			$record = $this->grafanaGetDashboard($uid);
-			Assert::assertNotNull($record, "dashboard $uid was deleted rather than parked");
-			Assert::assertSame(
-				$bin,
-				(string)($record['meta']['folderUid'] ?? ''),
-				"dashboard $uid is not in '$binTitle'",
-			);
+			if ($record === null) {
+				throw new \RuntimeException("dashboard $uid was deleted rather than parked");
+			}
+			$in = (string)($record['meta']['folderUid'] ?? '');
+			if ($in !== $bin) {
+				throw new \RuntimeException("dashboard $uid is in '$in', not the bin '$binTitle' ($bin)");
+			}
 		}
 	}
 
 	/** @Then /^"([^"]*)" holds no dashboard files$/ */
 	public function holdsNoDashboardFiles(string $folder): void {
 		$found = $this->davListDashboardFiles($folder);
-		Assert::assertSame([], $found, "'$folder' still holds: " . implode(', ', $found));
+		if ($found !== []) {
+			throw new \RuntimeException("'$folder' still holds dashboard files: " . implode(', ', $found));
+		}
 	}
 
 	/** @Then /^"([^"]*)" holds "([^"]*)"$/ */
 	public function holdsNamedFile(string $folder, string $name): void {
-		Assert::assertTrue(
-			$this->davExists(trim($folder, '/') . '/' . $name),
-			"'$folder' does not hold '$name'",
-		);
+		if (!$this->davExists(trim($folder, '/') . '/' . $name)) {
+			throw new \RuntimeException("'$folder' does not hold '$name'");
+		}
 	}
 
 	/** @When /^someone deletes the "([^"]*)" folder in Grafana$/ */

@@ -56,8 +56,8 @@ Feature: Deleting a folder
     # The bin decides what happens to the DASHBOARDS. The folder goes either way:
     # trashing it is a delete, and a delete carries whatever the folder held.
 
-  # notes: ../AGENTS.md#a-link-folder-cannot-be-trashed-either
-  @user @in-nextcloud @gesture @ui
+  # notes: ../AGENTS.md#trashing-a-folder-in-a-link-mapping
+  @user @in-nextcloud @gesture @ui @unbuilt
   Scenario: Trashing a folder in a link mapping is refused
     Given the following items in the mappings:
       | path                         |

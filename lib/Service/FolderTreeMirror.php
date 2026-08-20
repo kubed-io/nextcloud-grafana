@@ -121,6 +121,80 @@ final class FolderTreeMirror {
 	}
 
 	/**
+	 * Let go of the folders Grafana no longer has.
+	 *
+	 * ## A STAMP THAT NAMES NOTHING IS WORSE THAN NO STAMP
+	 *
+	 * Delete a folder in Grafana and its dashboards go with it, so the pull prunes
+	 * their mirrors — and left the Nextcloud folder behind still carrying the uid of
+	 * a folder that no longer exists. Measured on a live instance: `observe/ZZ-Del`
+	 * kept `cfvp0jv7k6bk0f` after that folder was deleted, with only a spreadsheet
+	 * left inside it.
+	 *
+	 * That is not merely untidy. The stamp is what
+	 * {@see \OCA\GrafanaSync\Service\SyncService::isManagedFolder} reads before it
+	 * will move a mirror INTO a folder, and what {@see FolderMirror} trusts rather
+	 * than re-checking when it needs somewhere to put a new dashboard — so a dead uid
+	 * invites the next write into a folder Grafana threw away.
+	 *
+	 * ## AND WHAT IS LEFT DECIDES WHETHER IT GOES
+	 *
+	 * A folder holding nothing but mirrors has nothing left once they are pruned, and
+	 * goes. A folder holding a user's own files stays and simply stops being a mirror
+	 * — deleting somebody's spreadsheet because a Grafana folder went away is not
+	 * this app's call, which is the rule `folders/delete.feature` states.
+	 *
+	 * RUNS AFTER THE PRUNE, necessarily: before it, every one of these folders still
+	 * holds the mirrors the prune is about to take, so none of them would look empty.
+	 *
+	 * @return int how many folders stopped being mirrors
+	 */
+	public function reapOrphans(Folder $root, Mapping $mapping): int {
+		$rootUid = $mapping->grafanaFolderUid === '/' ? '' : $mapping->grafanaFolderUid;
+		try {
+			$alive = $this->descendantsOf($rootUid);
+		} catch (\Throwable $e) {
+			// CANNOT ASK GRAFANA → CHANGE NOTHING. Reading an empty answer as "every
+			// folder is orphaned" would unstamp the entire mapping on one bad request.
+			$this->logger->warning('grafana_sync: could not list Grafana folders; leaving the mirrors alone', [
+				'app' => 'grafana_sync',
+				'mapping' => $mapping->id,
+				'exception' => $e,
+			]);
+			return 0;
+		}
+
+		$reaped = 0;
+		foreach ($this->indexMirroredFolders($root) as $uid => $folder) {
+			if (isset($alive[$uid])) {
+				continue;
+			}
+			try {
+				$this->folders->clear($folder->getId());
+				$empty = $folder->getDirectoryListing() === [];
+				if ($empty) {
+					$folder->delete();
+				}
+				$reaped++;
+				$this->logger->info('grafana_sync: a Grafana folder is gone, so its mirror stopped being one', [
+					'app' => 'grafana_sync',
+					'uid' => $uid,
+					'folder' => $folder->getPath(),
+					'deleted' => $empty,
+				]);
+			} catch (\Throwable $e) {
+				$this->logger->warning('grafana_sync: could not release a mirror whose Grafana folder is gone', [
+					'app' => 'grafana_sync',
+					'uid' => $uid,
+					'exception' => $e,
+				]);
+			}
+		}
+		return $reaped;
+	}
+
+	/**
+	 * Grafana's folders beneath `$rootUid`, outermost first.	/**
 	 * Grafana's folders beneath `$rootUid`, outermost first.
 	 *
 	 * {@see GrafanaClient::listFolders()} returns the whole forest in one request —

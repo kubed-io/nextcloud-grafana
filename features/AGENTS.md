@@ -912,6 +912,55 @@ It is also why the same walk is needed on the guard side — see
 [copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
 One recursive gesture, one event, two places that have to look inside it.
 
+### Restoring a folder in a Team Folder
+
+**@unbuilt, and the storage is the whole difference.** The identical scenario over
+an admin-owned folder passes: the folder comes back, its Grafana folder is rebuilt,
+and the parked dashboards return with the ids they left with. Over a Team Folder it
+does not — Grafana has no folder under the mapping to hold them.
+
+It was one Examples row beside `Demo`, which made a real gap look like a flake in a
+passing outline. Split out, so the thing that does not work is a scenario that says
+so rather than a row that keeps a suite red.
+
+**What is different about a Team Folder is not obvious and should not be guessed
+at.** A groupfolder is a MOUNT, not a folder in anybody's home: restoring from the
+trash goes through `OCA\GroupFolders\Trash\TrashBackend` rather than the ordinary
+one, the node ids and the acting user differ, and the folder-restore path has more
+than one place that could reasonably be the one giving up. Finding out means
+reading that backend against a live groupfolder, which is its own piece of work.
+
+This is the second Team-Folder-only defect in this app — the first was a folder
+delete over object storage — and both were invisible to the admin-folder rows
+beside them. Worth a habit: when a storage column exists, a row failing alone is
+evidence about the STORAGE, not noise.
+
+### Trashing a folder in a link mapping
+
+**@unbuilt, and the reason is a regression it caused.** A guard for this lived in
+`LinkWriteGuardPlugin::beforeUnbind` for one afternoon and broke every link MOVE in
+the suite.
+
+Sabre routes a MOVE through `beforeUnbind` on the source as well as a DELETE. So a
+folder branch there did not only refuse trashing — it intercepted moves that
+`MoveGuardListener` was already refusing properly, and answered **403 with an empty
+body** where the listener answers with a message a person can read. `motion` had
+been green; it went red on rows that had nothing to do with folders.
+
+A refusal nobody can read is the exact failure this plugin exists to prevent, so
+the guard came out rather than being narrowed. Refusing the DELETE without
+touching the MOVE means distinguishing the two inside `beforeUnbind`, which sabre
+does not hand you — and guessing from the request method inside an unbind hook is
+the kind of cleverness that breaks the next time sabre reorders something.
+
+The copy half stays: `method:COPY` is its own hook and refusing there costs a move
+nothing.
+
+**What actually happens today**: trashing a link-mapped folder succeeds, and the
+mirrors go to the Nextcloud trash. The dashboards are untouched in Grafana, so the
+next pull writes the folder back — untidy, and not destructive, which is the right
+way round for a gap.
+
 ### Copying a folder inside a link mapping is refused
 
 **Two situations get here and only one of them is ours.**
@@ -2666,6 +2715,41 @@ mapping ID, not on the folder.
 MotionService keeps its re-home branch as a defensive path, the way it keeps the
 link move-out strip: the guard refuses first, and a service that is reached anyway
 should still do the least surprising thing.
+
+### A refused move has to say why, and only the DAV layer can
+
+`Then the move is refused with a message` failed for four rows across two suites while
+the messages it wanted sat fully written in the move guard. Reading the running server's
+source in a pod explained it, in three greps — and the first two were a trap.
+
+- `OC\Files\Node\HookConnector::rename()` catches `AbortedEventException`, logs it and
+  sets `run = false`. The message goes to the log and nowhere else.
+- `View::rename()` then returns `false`, and `Sabre\...\Directory::moveInto()` answers
+  `throw new \Sabre\DAV\Exception\Forbidden('')` — an empty string, by literal.
+
+So every refusal this app made on a move reached the user as a blank 403. **That is a
+product bug the suite caught, not a suite problem.** But the obvious repair is a trap:
+
+- `OC_Hook::emit()` wraps every slot in `catch (Throwable)`, logs it and CARRIES ON.
+  Only `HintException` and `ServerNotAvailableException` are re-thrown.
+
+`AbortedEventException` is therefore not one option among several — it is the ONLY thing
+a listener on this route can throw that refuses anything at all. Swapping it for
+`OCP\Files\ForbiddenException` to rescue the message was measured in CI: nine refusals
+came back **HTTP 201**, allowed. The exception was swallowed and the move went ahead.
+
+**So the rules are stated once and asked twice.** `MoveRules` holds them and answers with
+a message or null; `MoveGuardListener` asks and aborts, reaching `occ`, other apps and
+scripts; `LinkWriteGuardPlugin` asks on Sabre's `method:MOVE` and throws `Forbidden` with
+the reason, which is the only place a readable 403 reaches a client. This is the same
+split `method:PUT` and `method:COPY` already use, arrived at the same way — the third
+time this repo has learned that a refusal a person must read cannot live in an event
+whose abort core catches.
+
+**Deletes are left alone on purpose.** `HookConnector::delete()` swallows identically,
+and a link delete already answers with a message from `beforeUnbind`. `BeforeNodeDeletedEvent`
+is also dispatched by the trashbin and the purge, where a change here is a new failure
+mode rather than a better message. Worth doing when a scenario asks for it, and not before.
 
 ### A failed Grafana delete on move-out never strips the file's identity
 

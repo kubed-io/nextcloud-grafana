@@ -15,6 +15,7 @@ use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MoveRules;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCP\Exceptions\AbortedEventException;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
@@ -34,6 +35,7 @@ use PHPUnit\Framework\TestCase;
  * be dragged out of it.
  */
 #[CoversClass(MoveGuardListener::class)]
+#[CoversClass(MoveRules::class)]
 final class MoveGuardListenerTest extends TestCase {
 	/** @var array<int,string> folder id → banked Grafana uid */
 	private array $stamped = [];
@@ -252,7 +254,8 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($folders, $mappings, $this->createStub(DashboardMetadata::class), new SyncGuard());
+		$rules = new MoveRules($folders, $mappings, $this->createStub(DashboardMetadata::class));
+		$listener = new MoveGuardListener($rules, new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 
@@ -290,7 +293,8 @@ final class MoveGuardListenerTest extends TestCase {
 		$target->method('getPath')->willReturn($to);
 		$target->method('getName')->willReturn(basename($to));
 
-		$listener = new MoveGuardListener($this->createStub(FolderMetadata::class), $mappings, $metadata, new SyncGuard());
+		$rules = new MoveRules($this->createStub(FolderMetadata::class), $mappings, $metadata);
+		$listener = new MoveGuardListener($rules, new SyncGuard());
 		$listener->handle(new BeforeNodeRenamedEvent($source, $target));
 	}
 }

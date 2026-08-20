@@ -16,7 +16,9 @@ use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
+use OCA\GrafanaSync\Service\MoveRules;
 use OCA\GrafanaSync\Service\SyncNotifier;
+use OCP\Files\IRootFolder;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 use Sabre\DAV\Exception\Forbidden;
@@ -53,6 +55,8 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	public function __construct(
 		private DashboardMetadata $metadata,
 		private MappingService $mappings,
+		private MoveRules $rules,
+		private IRootFolder $rootFolder,
 		private SyncNotifier $notifier,
 		private IUserSession $userSession,
 		private LoggerInterface $logger,
@@ -99,6 +103,70 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// layer swallows AbortedEventException exactly as `View::copy()` does. Refusing
 		// from the method handler is the one place a 403 actually reaches the client.
 		$server->on('method:PUT', [$this, 'onPut'], 10);
+		// AND `method:MOVE`, WHICH IS THE THIRD TIME THIS LESSON HAS BEEN LEARNED.
+		// {@see \OCA\GrafanaSync\Listener\MoveGuardListener} stops a refused move on
+		// every route there is — but `HookConnector::rename()` catches the abort by name,
+		// logs the message and sets `run = false`, and `Directory::moveInto()` then
+		// answers `throw new Forbidden('')` with an empty string. So a person dragging a
+		// link into another folder got a failure dialog with nothing in it.
+		//
+		// Nothing else can be thrown from that listener instead: `OC_Hook::emit()` wraps
+		// each slot in `catch (Throwable)` and carries on, so any other exception is
+		// logged and the move SUCCEEDS. Measured, both halves — see MoveGuardListener.
+		// Refusing here is what makes the reason reach the client.
+		$server->on('method:MOVE', [$this, 'onMove'], 10);
+	}
+
+	/**
+	 * Refuse a MOVE the rules refuse, in words the user can read.
+	 *
+	 * @param ResponseInterface $response unused; part of Sabre's `method:*` signature
+	 * @return bool always true — this handler either throws or hands the request on
+	 *
+	 * The rules are {@see MoveRules}, shared with the listener rather than restated, so
+	 * the two answers cannot drift apart. Everything this adds is the translation: Sabre
+	 * works in `files/<uid>/<relative>` and the rest of the app in `/<uid>/files/<relative>`.
+	 *
+	 * FAILING OPEN IS THE RULE HERE, AS EVERYWHERE IN THIS PLUGIN. A source that cannot be
+	 * resolved or a destination Sabre cannot place leaves the move alone — the listener is
+	 * still behind it, and a guard that blocks on doubt is worse than the thing guarded.
+	 */
+	public function onMove(RequestInterface $request, ResponseInterface $response): bool {
+		$destination = $request->getHeader('Destination');
+		if ($destination === null || $destination === '' || $this->server === null) {
+			return true;
+		}
+		$uid = $this->userSession->getUser()?->getUID() ?? '';
+		if ($uid === '') {
+			return true;
+		}
+		try {
+			$targetDav = $this->server->calculateUri($destination);
+			$source = $this->rootFolder->getUserFolder($uid)->get($this->relativeTo($request->getPath()));
+		} catch (\Throwable) {
+			return true;
+		}
+		$targetRelative = $this->relativeTo($targetDav);
+		if ($targetRelative === '') {
+			return true;
+		}
+
+		$refusal = $this->rules->refusalFor($source, '/' . $uid . '/files/' . $targetRelative, basename($targetRelative));
+		if ($refusal === null) {
+			return true;
+		}
+		$this->logger->warning('grafana_sync: refused a WebDAV move', [
+			'app' => Application::APP_ID,
+			'from' => $request->getPath(),
+			'to' => $targetDav,
+		]);
+		throw new Forbidden($refusal);
+	}
+
+	/** `files/<uid>/<relative>` as Sabre spells it → the `<relative>` the app works in. */
+	private function relativeTo(string $davPath): string {
+		$relative = preg_replace('#^files/[^/]+/#', '', ltrim($davPath, '/'));
+		return is_string($relative) ? $relative : '';
 	}
 
 	/**
@@ -172,7 +240,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return;
 		}
-		if ($this->holdsLinkedDashboards($node)) {
+		if ($this->isLinkMappedFolder($source, $node)) {
 			$name = $node->getName();
 			$this->logger->warning('grafana_sync: refused a WebDAV copy of a folder holding linked dashboards', [
 				'app' => Application::APP_ID,
@@ -254,22 +322,15 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		} catch (\Throwable) {
 			return true; // gone already, or not ours to judge — never block on doubt
 		}
-		// THE SAME BLIND SPOT THE COPY HALF HAD. `isLinkFile` sees files, so trashing a
-		// link-mapped FOLDER was waved through — and a folder delete is one recursive
-		// gesture, so the per-file refusal never fires for the pointers inside it
-		// either. Under a link the tree is Grafana's, and deleting a mirror of it here
-		// would leave the dashboards live and their folder gone.
-		if ($node !== null && $this->holdsLinkedDashboards($node)) {
-			$name = $node->getName();
-			$this->logger->warning('grafana_sync: refused a WebDAV delete of a folder holding linked dashboards', [
-				'app' => Application::APP_ID,
-				'folder' => $name,
-			]);
-			throw new Forbidden(
-				'“' . $name . '” holds linked Grafana dashboards — pointers to dashboards that live in Grafana, '
-				. 'so it can’t be deleted here. Delete them in Grafana, or remove the mapping itself.',
-			);
-		}
+		// NO FOLDER BRANCH HERE, AND THAT IS DELIBERATE — see
+		// `features/AGENTS.md#trashing-a-folder-in-a-link-mapping`. Sabre routes a MOVE
+		// through `beforeUnbind` as well as a DELETE, so a folder branch here cannot
+		// tell the two apart: it would refuse every folder move out of a link mapping in
+		// the voice of a delete ("this folder can't be deleted"), over the top of
+		// {@see \OCA\GrafanaSync\Listener\MoveGuardListener}, which refuses the same
+		// gesture and says the right thing about it. Refusing a move as if it were a
+		// delete is worse than the gap: the user is told no for a reason that is not the
+		// reason. Trashing a link folder stays unbuilt until it can be told apart.
 		if (!$this->isLinkFile($node)) {
 			return true; // sync/unmapped files are the user's to delete
 		}
@@ -286,6 +347,56 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			. 'so it can’t be deleted here. Delete the dashboard in Grafana, '
 			. 'or remove the mapping itself.',
 		);
+	}
+
+	/**
+	 * Is this a folder that a LINK MAPPING still covers, holding linked dashboards?
+	 *
+	 * ## THE MAPPING IS HALF THE QUESTION, AND IT WAS MISSING
+	 *
+	 * {@see isLinkFile} reads a FILE's own stamp, which is right for a file: a
+	 * pointer is a pointer wherever it sits. Asking the same of a folder was not,
+	 * because a folder is only "a link folder" while a link mapping says so — and a
+	 * mapping can be removed.
+	 *
+	 * Without this the refusal outlived the mapping. Remove a link mapping and its
+	 * folder became undeletable: the files inside were still stamped `reference`, so
+	 * the guard kept refusing on behalf of a mapping that no longer existed, and the
+	 * only way out was to delete the files one at a time from the inside. The
+	 * integration suite hit it as a teardown that could never clean up after a link
+	 * mapping, which left `Pointers` standing between scenarios.
+	 *
+	 * Unmapped, those files are nobody's pointers any more — they are the user's, and
+	 * so is the folder holding them.
+	 */
+	private function isLinkMappedFolder(string $davPath, ?INode $node): bool {
+		if ($node === null || !$this->holdsLinkedDashboards($node)) {
+			return false;
+		}
+		return $this->linkMappingAt($davPath) !== null;
+	}
+
+	/**
+	 * The link mapping covering a Sabre path, or null.
+	 *
+	 * Shares its spelling with {@see refuseIfDestinationIsALinkMapping}: Sabre works
+	 * in `files/<uid>/<relative>` and the rest of the app in `/<uid>/files/<relative>`.
+	 */
+	private function linkMappingAt(string $davPath): ?Mapping {
+		$uid = $this->userSession->getUser()?->getUID() ?? '';
+		if ($uid === '') {
+			return null;
+		}
+		$relative = preg_replace('#^files/[^/]+/#', '', ltrim($davPath, '/'));
+		if (!is_string($relative) || $relative === '') {
+			return null;
+		}
+		try {
+			$mapping = $this->mappings->resolveForPath('/' . $uid . '/files/' . $relative);
+		} catch (\Throwable) {
+			return null;
+		}
+		return $mapping !== null && $mapping->mode === Mapping::MODE_LINK ? $mapping : null;
 	}
 
 	/**
