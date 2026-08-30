@@ -813,6 +813,84 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @When someone purges :folder from the Grafana recycle bin
+	 *
+	 * NAMES WHAT IS PURGED, and that is the whole point of the sentence. `someone empties
+	 * the Grafana recycle bin` was the same defect as purging the whole Nextcloud trash:
+	 * the bin is shared, so emptying it destroys every other scenario's parked dashboards
+	 * too, and the claim afterwards is about a world the scenario never described.
+	 *
+	 * THE FOLDER IS THE ONE THAT WAS TRASHED IN NEXTCLOUD, not a folder in Grafana —
+	 * there is no folder in Grafana to name. With the bin on, trashing `Demo/Spared`
+	 * parks its dashboards FLAT in the bin and deletes the Grafana folder `Spared`
+	 * ({@see \OCA\GrafanaSync\Service\FolderCascade::trash}). So "purge Spared from the
+	 * bin" means the dashboards that came out of it, which the arrange pinned when it
+	 * trashed the folder.
+	 *
+	 * Done through Grafana's own API with no involvement from this app, exactly as a
+	 * person clearing the bin folder in Grafana's UI would. The pull that follows is
+	 * folded in for the reason it is everywhere else: nobody deletes a dashboard in order
+	 * to run a sync.
+	 */
+	public function someonePurgesFromTheGrafanaRecycleBin(string $folder): void {
+		// THE NAME HAS TO BE LOAD-BEARING, or the sentence is decorative. Without this the
+		// parameter appeared only in error text while the loop worked on everything the
+		// scenario had pinned — the step would purge the right dashboards under the wrong
+		// name, and would silently purge two folders' worth if a scenario ever trashed
+		// two. Naming a subject and then not using it is the defect this sentence was
+		// reworded to fix. Copilot caught that the rewording had not reached the code.
+		$trashed = basename($this->trashedFolderPath);
+		if ($trashed === '') {
+			throw new \RuntimeException("nothing in this scenario has trashed a folder, so '$folder' names nothing");
+		}
+		if ($trashed !== trim($folder, '/')) {
+			throw new \RuntimeException(
+				"this scenario trashed '{$this->trashedFolderPath}', so it cannot purge '$folder' from the bin",
+			);
+		}
+		if ($this->originalDashboardUids === []) {
+			throw new \RuntimeException("nothing pinned what '$folder' held, so there is nothing to purge");
+		}
+		$bin = $this->configuredBinFolder();
+		$binUid = $this->grafanaFolderUidByTitle($bin);
+		if ($binUid === null || $binUid === '') {
+			// FAIL CLOSED. The guard below reads `folderUid !== $binUid`, so a null bin
+			// made it vacuously false and this deleted EVERY pinned dashboard wherever it
+			// lived — the scenario would then pass on a Grafana the arrange never built.
+			// A bin the scenario said was on and Grafana does not have is a broken
+			// premise, not a licence to delete more. Copilot caught it on #74.
+			throw new \RuntimeException(
+				"the recycle bin is configured as '$bin' but Grafana has no folder by that name, "
+				. 'so there is nothing to purge from',
+			);
+		}
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			if ($record === null) {
+				continue; // already gone — the bin-off path, or a previous step took it
+			}
+			// ONLY WHAT IS ACTUALLY IN THE BIN. A dashboard the trash gesture left
+			// somewhere else is not this gesture's to delete, and deleting it anyway
+			// would make the scenario pass for the wrong reason.
+			if ((string)($record['meta']['folderUid'] ?? '') !== $binUid) {
+				continue;
+			}
+			$this->grafanaDeleteDashboard($uid);
+		}
+		$this->pullEveryMapping();
+	}
+
+	/** The bin folder's title, as the app has it configured. */
+	private function configuredBinFolder(): string {
+		$res = $this->occ('config:app:get ' . self::APP_ID . ' bin_folder');
+		$bin = trim($res['output']);
+		if ($bin === '') {
+			throw new \RuntimeException('no Grafana recycle-bin folder is configured');
+		}
+		return $bin;
+	}
+
+	/**
 	 * @Then the file is gone from :folder, leaving no trash entry
 	 *
 	 * BOTH HALVES, BECAUSE THE FOLDER ALONE CANNOT TELL THEM APART. A link removed

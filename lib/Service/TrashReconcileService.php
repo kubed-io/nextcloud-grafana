@@ -215,6 +215,131 @@ final class TrashReconcileService {
 	}
 
 	/**
+	 * The same reap, for the trashed FOLDERS — where the mirrors are one entry down.
+	 *
+	 * ## A PURGE IS A PURGE, AND THE ENTRY IS A SEPARATE QUESTION
+	 *
+	 * Two things can happen to a trashed folder when the dashboards it held are destroyed
+	 * in Grafana, and conflating them is how this got written wrong once already:
+	 *
+	 *   - **every mirror inside goes**, always. Its dashboard has been deleted for good,
+	 *     so the file is a mirror of nothing — offering a restore that reconnects to
+	 *     nothing is the state this whole class exists to close.
+	 *   - **the ENTRY goes only if nothing else was in it.** A spreadsheet has no far
+	 *     side, so nothing that happened in Grafana may destroy it, and the entry is what
+	 *     the user restores to get it back.
+	 *
+	 * So a folder of nothing but finished mirrors is purged whole — one call that takes
+	 * the folder with them, rather than emptying it and leaving an entry whose restore
+	 * puts back an empty folder. A folder holding anything else keeps its entry and loses
+	 * only the mirrors.
+	 *
+	 * **THIS WAS BUILT THE OTHER WAY FIRST**, sparing the whole entry whenever anything
+	 * else was in it — which is what the sibling does. It is wrong here and arguably
+	 * there: it leaves a `.grafana` in the trash whose dashboard was permanently deleted,
+	 * so a purge in Grafana did not purge in Nextcloud. A purge is a purge.
+	 *
+	 * ## A SURVIVOR VETOES THE ENTRY, NOT THE MIRRORS
+	 *
+	 * Anything the app cannot account for — a spreadsheet, a subtree that could not be
+	 * read, one deeper than the walk goes — keeps the entry. So does a mirror that is NOT
+	 * finished: a dashboard still in Grafana (parked, or rescued back out of the bin), or
+	 * one belonging to another mapping, which that mapping's own pull will judge.
+	 *
+	 * @return int mirrors purged
+	 */
+	public function reapFolders(Mapping $mapping): int {
+		$uid = $this->actorUid($mapping);
+		if ($uid === null) {
+			return 0;
+		}
+
+		$purged = 0;
+		foreach ($this->trash->listTrashedFolders($uid) as $folder) {
+			if ($folder->dashboards === []) {
+				continue; // nothing of ours in here to finish
+			}
+
+			$finished = [];
+			$survivors = $folder->holdsOtherFiles;
+			foreach ($folder->dashboards as $mirror) {
+				$managed = $this->metadata->read($mirror->fileId);
+				if (!$managed?->isManaged() || !$managed->isSync() || $managed->mappingId !== $mapping->id) {
+					// Another mapping's mirror, or one that left its mapping. Not ours to
+					// finish, and its presence keeps the entry.
+					$survivors = true;
+					continue;
+				}
+				if (!$this->isGone($managed->uid)) {
+					$survivors = true;
+					continue;
+				}
+				$finished[] = $mirror;
+			}
+
+			if ($finished === []) {
+				continue;
+			}
+
+			if (!$survivors) {
+				// Nothing outlives them, so the entry goes and takes them with it — one
+				// call instead of N, and no empty folder left in the trash.
+				$purged += $this->purgeInTrash(
+					static fn () => $folder->purge(),
+					count($finished),
+					$folder->name,
+					$mapping,
+				);
+				continue;
+			}
+
+			foreach ($finished as $mirror) {
+				$purged += $this->purgeInTrash(
+					static fn () => $mirror->purge(),
+					1,
+					$folder->name . '/' . $mirror->name,
+					$mapping,
+				);
+			}
+		}
+		return $purged;
+	}
+
+	/**
+	 * One purge, under the guard, counted only if it worked.
+	 *
+	 * UNDER THE GUARD for the reason {@see reap()} gives: the purge fires the legacy
+	 * `preDelete` hook and {@see \OCA\GrafanaSync\Listener\TrashPurgeHook} would answer it
+	 * by deleting the dashboard in Grafana. Harmless in itself — that dashboard is the
+	 * thing that is already gone — but it would log the exact opposite of what happened,
+	 * and this app has lost hours to trash diagnostics that said the wrong thing.
+	 *
+	 * A failure is logged and stepped over. The entry is still recoverable, which is the
+	 * failure direction to prefer.
+	 *
+	 * @param \Closure():void $purge
+	 */
+	private function purgeInTrash(\Closure $purge, int $worth, string $what, Mapping $mapping): int {
+		try {
+			$this->guard->run($purge);
+			$this->logger->info('grafana_sync trash: purged a trashed entry whose dashboards no longer exist in Grafana', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'mirrors' => $worth,
+				'mapping' => $mapping->id,
+			]);
+			return $worth;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not purge a trashed entry', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'exception' => $e,
+			]);
+			return 0;
+		}
+	}
+
+	/**
 	 * Whose trash to look in: the sync actor's, or null when there isn't one.
 	 *
 	 * `resolveActorUid()` throws on an instance whose admin group has no members. A pull
