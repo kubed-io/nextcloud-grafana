@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Controller;
 
+use OCA\GrafanaSync\Exception\ExistingDashboardsException;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
@@ -65,12 +66,32 @@ final class MappingController extends Controller {
 			$params = $this->request->getParams();
 			unset($params['id']);
 			$mapping = Mapping::fromArray($params);
+			// `purge_dashboards` IS NOT PART OF THE MAPPING, so it is read off the
+			// request rather than through `Mapping::fromArray()` — it is the admin's
+			// answer to a question, not a field a mapping stores. It defaults to false,
+			// which is the safety: the destructive path cannot be reached by a caller
+			// that does not know about it.
+			$purge = filter_var($params['purge_dashboards'] ?? false, FILTER_VALIDATE_BOOLEAN);
 			// nc_groups travels ALONGSIDE the mapping: applied to the provisioned
 			// folder and read back from it, never stored.
-			$saved = $this->service->add($mapping, $params['nc_groups'] ?? []);
+			$saved = $this->service->add($mapping, $params['nc_groups'] ?? [], $purge);
 			return new JSONResponse(
 				['mapping' => $this->service->describe($saved)],
 				Http::STATUS_CREATED,
+			);
+		} catch (ExistingDashboardsException $e) {
+			// THE COUNT TRAVELS AS A NUMBER. The panel turns this refusal into a
+			// confirmation and re-submits with `purge_dashboards`, so it needs the figure
+			// to put in the warning — parsing it back out of a sentence would break the
+			// first time that sentence is reworded. Caught before the
+			// `InvalidArgumentException` arm below, which it extends.
+			//
+			// 422, NOT 400: the request is well-formed and the mapping is valid. What is
+			// unprocessable is the folder's current contents, and the admin can change
+			// that answer — which is exactly what the panel offers next.
+			return new JSONResponse(
+				['message' => $e->getMessage(), 'dashboards' => $e->dashboards, 'folder' => $e->folder],
+				Http::STATUS_UNPROCESSABLE_ENTITY,
 			);
 		} catch (\InvalidArgumentException $e) {
 			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);

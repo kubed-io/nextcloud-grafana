@@ -187,61 +187,145 @@ mapping in place and then perform the very action that would have created it,
 with the difference visible in the table rather than hidden between two
 differently-worded steps.
 
-`the admin maps the Grafana folder "X" with:` is the same table as a `When`.
+`the admin submits this mapping:` is the same table as a `When`.
+
+**AND THE GRAFANA FOLDER IS A ROW LIKE EVERY OTHER FIELD.** It used to be named in
+the step text — `the admin maps the Grafana folder "observe" with:` — which made
+the mapping's own key the one thing that could not be written the way the rest of
+the form is, and made the required-field refusal spell it as a quoted empty string.
 
 **A BLANK CELL MEANS "THE ADMIN LEFT IT ALONE", NOT "EMPTY".** Blank values are
 dropped from the payload entirely, so the app applies its own default.
 
-This replaced `When the admin adds these mappings:` taking a table of whole
-mappings. That form could only pass or fail as a whole, naming none of its rows
-as the thing that broke — and being a `When`, it could not state a mapping that
-already existed, so the uniqueness scenarios had to add two mappings and assert
-on the second.
+### The Background says what "connected" means
+
+Three facts, not one: the app is enabled, the base URL points at the test
+instance, the token is configured. It was a single `the app is connected to
+Grafana` — a shorthand that asserts all three and names none, so a reader learns
+that the app is ready without learning what ready consists of. The shorthand still
+exists and fifteen other Backgrounds still use it; this feature is where the
+connection is part of the subject, so it spells it out.
+
+### `Given no Grafana folders are mapped` IS GONE, AND WILL NOT COME BACK
+
+Four scenarios opened with it, and it is a lie about the app. **There is no rule
+that the store must be empty before a mapping can be made** — an admin with three
+working mappings is allowed a fourth. The sentence existed because an `Examples`
+table creates a mapping per row and the rows would otherwise collide: a fact about
+the test run, written into the specification as if it were a precondition of the
+feature.
+
+It is the same defect as `there are exactly 0 configured mappings`, read from the
+other end. That one made a claim about the world after the gesture; this one made a
+claim about the world before it. Neither is a rule anybody could point at in the
+code.
+
+**The reset moved into `@BeforeScenario`**, which is where isolation belongs, and
+the step definition was DEMOTED TO A PRIVATE HELPER so the sentence cannot be
+written into a feature file again.
+
+And it paid for itself immediately: with the collision handled by the harness,
+every `Examples` row can name the SAME Grafana folder, so the outline reads as one
+mapping made seven different ways instead of seven folders invented to dodge a
+clash.
 
 ### Creating a mapping saves the form
 
-The mode × format matrix, one Examples row per combination.
+ONE FIELD AT A TIME, AND NOTHING AT ALL — then a couple of rows in combination.
+This replaced a mode × storage matrix, which tested every *combination* while never
+testing the thing a default actually means: one field set and everything else left
+alone. The blank row is the shortest useful call in the app (a Grafana folder and
+nothing else) and it is the first row for that reason.
 
 **THE NEXTCLOUD FOLDER IS OPTIONAL, and that is this app's own rule.** Grafana has
 real folders, so "same name on both sides" is the common case. Left blank it is
 materialised from the Grafana folder's TITLE **at create and stored** — not
 resolved lazily on every read — so the saved mapping and the admin list both show
-two populated fields, and it is visible at a glance that they match because the
-name was left blank. Mappings are immutable, so resolving once is enough.
+two populated fields.
 
-**Mode defaults to `link`, and it did not used to** — omitting it refused the
-whole mapping, so the shortest useful call (a Grafana folder and nothing else)
-could not be written and every caller had to name a mode it had no opinion
-about. `format`, two lines away in the same method, had always defaulted; mode
-was simply the odd one out.
-
-**Writing this table is what found it.** Declaring what every unset field becomes
-forces a value for each, and there was none to put in the `mode` row. That is the
-argument for the table, and it caught the identical gap in the n8n sibling.
-
-`link` is the conservative choice: it downloads nothing and pushes nothing back,
-so a mapping made without an opinion about mode cannot cost anything. An
-*unknown* mode is still refused — saying nothing and saying nonsense are
-different inputs and get different answers.
+**Mode defaults to `link`, and it did not used to** — omitting it refused the whole
+mapping, so the shortest useful call could not be written and every caller had to
+name a mode it had no opinion about. `link` is the conservative choice: it
+downloads nothing and pushes nothing back, so a mapping made without an opinion
+about mode cannot cost anything. An *unknown* mode is still refused — saying
+nothing and saying nonsense are different inputs and get different answers.
 
 **`use_team_folder` defaults to false**, matching Penpot and n8n. A Team Folder
-needs groupfolders, an OPTIONAL app absent from a stock Nextcloud, so defaulting
-to it made the default mapping the one that could not be provisioned: an admin
-who filled in the required fields and touched nothing else got a refusal. A
-default must be the safe choice, not the preferred one. A Team Folder is opted
-into, by naming `| storage | team folder |`.
+needs groupfolders, an OPTIONAL app absent from a stock Nextcloud, so defaulting to
+it made the default mapping the one that could not be provisioned. A default must
+be the safe choice, not the preferred one.
 
 **This note previously argued the opposite, and that is the lesson.** It recorded
 the divergence from Penpot as "real rather than accidental", conceded in the same
 breath that the sibling had changed it because such a default "cannot be
-provisioned on a stock Nextcloud", and declined to follow. Writing the reason
-down is not the same as having one — a documented defect reads as a decision, and
-is much harder to see afterwards than an undocumented one. The inversion came
-from the n8n master and was fixed in both apps in one pass.
+provisioned on a stock Nextcloud", and declined to follow. Writing the reason down
+is not the same as having one — a documented defect reads as a decision.
 
-`MappingTest::testStorageDefaultsToAdminOwned` pins it, and asserts the OMITTED
-flag rather than an explicit `false` — the whole defect lived in what happens
-when nobody says anything.
+### A link mapping may not be made over dashboards that already exist
+
+THE STATE THIS PREVENTS IS ONE THE APP HAS NO ANSWER FOR. A `link` mirror is a
+pointer at a dashboard Grafana owns; a `.grafana` that is nobody's mirror sitting
+inside a link mapping is a contradiction, and every rule that reads one has to
+guess which it is. `MappingTeardownService` asks each file its mode and keeps the
+ones that are not links, while `mapping/delete.feature` promises a link mapping's
+dashboards all go — both correct, about a tree that should not exist.
+
+The sibling reached it on a live instance in three steps: a folder mapped `sync`,
+the mapping removed (leaving real files behind, unmapped), then re-mapped `link`
+over them. CI could not have caught it, because every scenario builds a clean tree.
+
+So the contradiction is designed out at the only moment it can be created.
+
+THE ACKNOWLEDGEMENT IS A SECOND BEAT, NOT A FORM FIELD. It began life in the
+sibling as a `| purge dashboards | yes |` row in the submitted table, which was
+wrong twice over: it is not a setting a mapping stores, and it put the consent
+BEFORE the app had said what it would cost. As an `And` after the `When` it reads
+the way the interaction actually goes — the admin submits, the app answers with a
+count, the admin accepts.
+
+PURGED, NOT TRASHED, and that is the load-bearing word. A trashed file offers a
+restore, and restoring INTO a link mapping is already ruled out: a link folder
+refuses authoring, so there is nowhere for the bytes to go. Rather than invent an
+answer for a restore that cannot work, the files never reach the trash. Which is
+why the confirmation says HOW MANY, that they are not recoverable, and that moving
+them first is the way to keep them: this is the one gesture in the app that
+destroys something outright.
+
+CANCELLING NEEDS NO HANDLING, and that is a design property rather than an
+omission. The admin goes and moves the files, and when they come back the tree
+holds none, so the mapping is created with no warning at all.
+
+THE FILE IS IN A SUBFOLDER ON PURPOSE. A purge that swept only the top level would
+leave the contradiction one folder down, and a top-level-only assertion could never
+say so.
+
+ONLY *UNMAPPED* FILES, ON PURPOSE. A tree already belonging to a mapping cannot
+reach this rule — `A Nextcloud folder may only be mapped once` refuses first — so
+"no `.grafana` anywhere in the tree" holds implicitly for every mapped tree without
+being checked.
+
+SYNC IS UNTOUCHED. A sync mapping pushes what it finds up to Grafana, so nothing is
+destroyed and nothing is confirmed.
+
+### A mapping the app cannot honour is refused, and says why — RETIRED
+
+A `Scenario Outline` with two rows: a blank Grafana folder, and `mode: bogus`.
+
+**Both were already pinned where field validation belongs.**
+`MappingTest::testRejectsAMissingFolderUid()`,
+`testRejectsAWhitespaceOnlyFolderUid()` and `testRejectsAnUnknownMode()` assert the
+same refusals against the value object, in microseconds. The scenario drove a full
+`occ` round trip to re-ask a constructor.
+
+It was also tagged `@ui` while neither row is reachable from the panel — the
+Grafana folder comes from a picker and mode is a two-option `<select>` — and its
+title named the whole CLASS of refusals ("a mapping the app cannot honour") while
+covering two arbitrary members of it. Every other scenario in the file is also a
+mapping the app cannot honour.
+
+What survives is the refusals that are rules about MAPPINGS rather than about
+fields: already mapped, on either side, and the recycle bin. A unit test cannot
+express those as admin behaviour; it can express a required field perfectly.
 
 ### A mapping the app cannot honour is refused, and says why
 
@@ -276,27 +360,33 @@ mappings mean the same thing and every dashboard inside it would belong to both.
 Enforced by `MappingService::assertFolderUnique()` — which, despite the name,
 checks the **Grafana** uid.
 
-### Two mappings may not target the same Nextcloud folder
+### A Nextcloud folder may only be mapped once
 
 **LIVE.** It was `@unbuilt`, then `@todo`, and this note argued the gap was still
-real long after it was closed — `MappingService::assertNcFolderUnique()` had
-landed and nothing came back to say so. That is the same failure the note above
-warns about: a note describing the old behaviour is worse than no note, because
-it will be believed.
+real long after it was closed — `MappingService::assertNcFolderUnique()` had landed
+and nothing came back to say so. That is the same failure the note above warns
+about: a note describing the old behaviour is worse than no note, because it will
+be believed.
 
-Two Grafana folders mirroring into one Nextcloud folder interleave their
-dashboard files, and each mapping-scoped sync prunes what the other just wrote —
-the folder never settles.
+Two Grafana folders mirroring into one Nextcloud folder interleave their dashboard
+files, and each mapping-scoped sync prunes what the other just wrote — the folder
+never settles.
 
 **IT IS GUARDED TWICE, ON TWO DIFFERENT KEYS, AND BOTH ARE NEEDED.**
 `assertNcFolderUnique()` compares the stored folder NAME (case-insensitively,
-because Nextcloud will not create `Demo` beside `demo`), which catches the
-ordinary case before anything is provisioned. `assertNcFolderIdUnique()` then
-compares the folder ID once the folder exists — and the id is what the resolver
-actually keys on, so a mapped folder that has been RENAMED is still caught even
-though its label no longer matches.
+because Nextcloud will not create `Demo` beside `demo`), which catches the ordinary
+case before anything is provisioned. `assertNcFolderIdUnique()` then compares the
+folder ID once the folder exists — and the id is what the resolver actually keys
+on, so a mapped folder that has been RENAMED is still caught even though its label
+no longer matches.
 
-The n8n sibling still has the gap, written in the identical shape.
+**The title is the sibling's**, and it is the rule stated as a rule rather than as
+a fact about two of them. It also puts the two uniqueness scenarios in the same
+shape: one names the Grafana side, one names the Nextcloud side.
+
+This is also what makes `A link mapping may not be made over dashboards that
+already exist` only ever see UNMAPPED files: a folder already in use is refused
+here, one line earlier in `add()`.
 
 ### The Grafana root can be mapped via the reserved "/" folder
 

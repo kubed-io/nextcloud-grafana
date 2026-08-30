@@ -67,8 +67,16 @@ trait MappingSteps {
 	/** @var array<string,string> what an unset field is expected to become */
 	private array $mappingDefaults = [];
 
-	/** @Given no Grafana folders are mapped */
-	public function noGrafanaFoldersAreMapped(): void {
+	/**
+	 * Empty the mapping store.
+	 *
+	 * NO LONGER A STEP, DELIBERATELY. `Given no Grafana folders are mapped` was a
+	 * sentence four scenarios opened with, and it claims a rule the app does not have:
+	 * nothing says the store must be empty before a mapping can be made. Demoting it to
+	 * a helper the `@BeforeScenario` calls means the isolation still happens and the
+	 * sentence cannot be written into a feature file again.
+	 */
+	private function noGrafanaFoldersAreMapped(): void {
 		foreach ($this->listMappings() as $m) {
 			$id = (string)($m['id'] ?? '');
 			if ($id !== '') {
@@ -102,16 +110,33 @@ trait MappingSteps {
 	private ?int $mappingsBeforeCreate = null;
 
 	/**
-	 * Re-arm the once-per-scenario reset. Without it the second scenario in a
-	 * feature would append to the first one's leftovers.
+	 * Empty the mapping store before every scenario.
+	 *
+	 * ## ISOLATION IS THE HARNESS'S JOB, NOT A LINE OF GHERKIN
+	 *
+	 * `mapping/create.feature` used to open four of its scenarios with `Given no
+	 * Grafana folders are mapped`, and that sentence is a lie about the app: there is
+	 * no rule that the store must be empty before a mapping can be made. An admin with
+	 * three working mappings is allowed a fourth. It was there because an Examples
+	 * table creates a mapping per row and the rows would otherwise collide — a fact
+	 * about the test run, stated as if it were a precondition of the feature.
+	 *
+	 * Doing it here says the same thing where it belongs, and it is what lets every
+	 * Examples row name the SAME Grafana folder: the scenario reads as one mapping made
+	 * seven different ways instead of seven folders invented to dodge a clash.
+	 *
+	 * THE FLAG IS SET, NOT CLEARED, so the two lazy arranges below do not repeat the
+	 * clear they used to perform on first use.
 	 *
 	 * @BeforeScenario
 	 */
 	public function armMappingReset(): void {
-		$this->mappingsDeclared = false;
+		$this->noGrafanaFoldersAreMapped();
+		$this->mappingsDeclared = true;
 		$this->mappingsBeforeCreate = null;
 		$this->filesBeforeTeardown = [];
 		$this->dashboardFoldersBeforeTeardown = [];
+		$this->lastSubmittedMapping = [];
 	}
 
 	/**
@@ -184,6 +209,129 @@ trait MappingSteps {
 		$this->trackMappedFolder($ncFolder, (string)($form['storage'] ?? ''));
 	}
 
+	/**
+	 * @Given a Grafana folder named :name exists
+	 *
+	 * The far side of the pair, stated as a fact. This suite is config-only, so a
+	 * mapping stores the folder's name as its own uid and title — but the folder is
+	 * really created in Grafana, because a scenario that names one Grafana has never
+	 * heard of is describing a world that cannot exist.
+	 */
+	public function aGrafanaFolderNamedExists(string $name): void {
+		$this->ensureGrafanaFolder($name);
+	}
+
+	/**
+	 * @Given a folder :folder already exists
+	 *
+	 * ALREADY, which is the whole point: the folder is not the mapping's, it was there
+	 * first. A mapping made over it has to reckon with what it holds.
+	 */
+	public function aFolderAlreadyExists(string $folder): void {
+		$this->davMkdir(trim($folder, '/'));
+		$this->trackMappedFolder(trim($folder, '/'), '');
+	}
+
+	/**
+	 * @Given an unmapped dashboard file at :path
+	 *
+	 * A `.grafana` THIS APP DID NOT WRITE — no metadata, no uid, no mapping. It is the
+	 * state a removed sync mapping leaves behind, and the one a link mapping cannot
+	 * hold. Written straight over WebDAV with its parents made first, because nothing
+	 * is mapped here yet and there is no mirror to seed it through.
+	 */
+	public function anUnmappedDashboardFileAt(string $path): void {
+		$path = ltrim($path, '/');
+		$this->davMkdir($this->parentOf($path));
+		$this->davPut($path, json_encode(
+			['title' => basename($path, '.grafana'), 'panels' => []],
+			JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT,
+		) . "\n");
+	}
+
+	/**
+	 * @Then no ".grafana" dashboards exist under :folder in Nextcloud
+	 *
+	 * AT EVERY DEPTH. The file the scenario seeds sits in a subfolder on purpose — a
+	 * purge that only swept the top level would leave the contradiction it exists to
+	 * prevent one folder down, and a top-level-only assertion could never say so.
+	 */
+	public function noDashboardsExistUnderInNextcloud(string $folder): void {
+		$found = [];
+		foreach ($this->davTreeUnder(trim($folder, '/')) as $child) {
+			if (str_ends_with($child, '.grafana')) {
+				$found[] = ltrim($child, '/');
+			}
+		}
+		if ($found !== []) {
+			$this->fail("'$folder' still holds dashboard files: " . implode(', ', $found));
+		}
+	}
+
+	/**
+	 * @Then :path left no trash entry
+	 *
+	 * PURGED, NOT TRASHED, and this is the line that says so. A trashed file offers a
+	 * restore, and restoring into a link mapping cannot work — a link folder refuses
+	 * authoring, so there is nowhere for the bytes to go. Offering the restore would be
+	 * a worse lie than refusing it, so the file never reaches the trash at all.
+	 */
+	public function leftNoTrashEntry(string $path): void {
+		$name = basename(trim($path, '/'));
+		if ($this->trashEntryExists($name)) {
+			$this->fail("'$path' went to the Nextcloud trash; a purged dashboard file must not");
+		}
+	}
+
+	/** @var array<string,string> the form the scenario last submitted, for the retry */
+	private array $lastSubmittedMapping = [];
+
+	/**
+	 * @When the admin submits this mapping:
+	 *
+	 * THE GRAFANA FOLDER IS A ROW LIKE EVERY OTHER FIELD. It used to be named in the
+	 * step text — `the admin maps the Grafana folder "observe" with:` — which made the
+	 * mapping's own key the one thing that could not be written the way the rest of the
+	 * form is, and made the required-field refusal spell it as a quoted empty string.
+	 * Now the pre-state arrange and the action take the identical table.
+	 */
+	public function theAdminSubmitsThisMapping(TableNode $table): void {
+		$form = $this->formValues($table);
+		$this->lastSubmittedMapping = $form;
+		$uid = (string)($form['grafana folder'] ?? '');
+		unset($form['grafana folder']);
+		$this->lastMappingForm = ['grafana folder' => $uid] + $form;
+		$this->mappingsBeforeCreate = count($this->listMappings());
+		$this->addMappingFromForm($uid, $form);
+	}
+
+	/**
+	 * @When allows the existing unmapped dashboards to be purged
+	 *
+	 * THE SECOND BEAT, NOT A FORM FIELD. It began life in the sibling as a
+	 * `| purge dashboards | yes |` row in the submitted table, which was wrong twice
+	 * over: it is not a setting a mapping stores, and it put the consent BEFORE the app
+	 * had said what it would cost. As an `And` after the `When` it reads the way the
+	 * interaction actually goes — the admin submits, the app answers with a count, the
+	 * admin accepts.
+	 *
+	 * IT ASSERTS THE REFUSAL HAPPENED FIRST. Re-submitting with the flag when the first
+	 * attempt already succeeded would prove nothing at all, quietly: the scenario would
+	 * pass whether or not the app ever warns anybody.
+	 */
+	public function allowsTheExistingUnmappedDashboardsToBePurged(): void {
+		if ($this->lastExit === 0) {
+			$this->fail(
+				"the mapping was accepted without asking about the dashboard files already there, "
+				. "so there was nothing to allow:\n{$this->lastOutput}",
+			);
+		}
+		$form = $this->lastSubmittedMapping;
+		$uid = (string)($form['grafana folder'] ?? '');
+		unset($form['grafana folder']);
+		$this->addMappingFromForm($uid, $form, true);
+	}
+
 	/** @When the admin maps the Grafana folder :uid with: */
 	public function theAdminMapsTheGrafanaFolderWith(string $uid, TableNode $table): void {
 		$form = $this->formValues($table);
@@ -233,6 +381,11 @@ trait MappingSteps {
 
 	/**
 	 * @Given the Nextcloud groups :groups exist
+	 * @Given the Nextcloud groups :groups exists
+	 *
+	 * BOTH VERBS, because the subject reads as either a list or a set depending on the
+	 * sentence around it, and neither reading is worth an edit to the feature files
+	 * that already use the other.
 	 *
 	 * THE GROUPS HAVE TO REALLY EXIST. Nextcloud cannot share a folder with a group
 	 * that is not there, so a scenario that just names one and asserts it comes
@@ -330,6 +483,26 @@ trait MappingSteps {
 				implode(', ', $got) ?: '(none)',
 			));
 		}
+	}
+
+	/**
+	 * @Then the mapping is rejected, explaining :fragment
+	 *
+	 * ONE SENTENCE FOR ONE FACT. A refusal that does not say why is not a behaviour
+	 * anybody wants, so "it was refused" and "it said why" were always asserted
+	 * together — two lines that could never sensibly appear apart.
+	 *
+	 * A FRAGMENT, NOT THE WHOLE MESSAGE. The scenario's job is to prove the refusal
+	 * names what is wrong so an admin knows what to change; pinning the exact sentence
+	 * would make every wording improvement a test failure.
+	 */
+	public function theMappingIsRejectedExplaining(string $fragment): void {
+		Assert::assertNotSame(0, $this->lastExit, "the mapping was unexpectedly accepted:\n{$this->lastOutput}");
+		Assert::assertStringContainsString(
+			$fragment,
+			$this->lastOutput,
+			"the refusal did not mention '$fragment':\n{$this->lastOutput}",
+		);
 	}
 
 	/** @Then the mapping is rejected */
@@ -598,8 +771,13 @@ trait MappingSteps {
 	 * @param array<string,string> $form
 	 * @return array{exit:int, output:string}
 	 */
-	private function addMappingFromForm(string $uid, array $form): array {
+	private function addMappingFromForm(string $uid, array $form, bool $purge = false): array {
 		$data = ['grafana_folder_uid' => $uid, 'grafana_folder_title' => $uid];
+		if ($purge) {
+			// NOT A MAPPING FIELD — the admin's answer to the app's question, sent only
+			// on the retry. See `allows the existing unmapped dashboards to be purged`.
+			$data['purge_dashboards'] = true;
+		}
 		if (array_key_exists('nc folder', $form)) {
 			$data['nc_folder'] = $form['nc folder'];
 		}

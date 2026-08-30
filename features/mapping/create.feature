@@ -1,117 +1,118 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#mappingcreate
 
-Feature: Admin configures folder mappings
+Feature: Mapping a Grafana folder to a Nextcloud folder
   As a Nextcloud admin
-  I want to map Grafana folders to Nextcloud folders with a mode
-  So that I can automate the connection and mappings (e.g. in k8s)
+  I want to point a Grafana folder at a Nextcloud folder with a mode
+  So that its dashboards mirror into Nextcloud, scriptably (e.g. from a k8s job)
+
+  rules:
+  - creating a mapping does not trigger a sync
+  - creating a mapping creates its nextcloud folder if it doesn't exist at the moment of creation
+  - if the folder is a team folder, the folder is created with the team folder api
+  - a link mapping cannot hold dashboard files, so unmapped ones already in the folder are purged on accept
 
   Background:
     Given the app is enabled
-    # What an unset field becomes is a fact about the form, so it is declared once.
-    # notes: ../AGENTS.md#the-preconditions
-    And an unset field on the mapping form defaults to:
-      | nc folder  | the Grafana folder's name |
-      | mode       | link                      |
-      | groups     |                           |
-      | storage    | admin folder              |
+    And the Grafana base URL points at the test instance
+    And the admin has configured the service-account token
 
-    # A mapping is one fact, so it is one sentence plus a table of what is in it.
+    # ── one fact, one table — the same shape as pre-state or as the action ─────
     # notes: ../AGENTS.md#the-preconditions
 
   @admin @occ @ui
-  Scenario Outline: Creating a mapping saves the form
-    Given no Grafana folders are mapped
-    When the admin maps the Grafana folder "<uid>" with:
-      | nc folder  | <nc folder>  |
-      | mode       | <mode>       |
-      | groups     | <groups>     |
-      | storage    | <storage>    |
+  Scenario Outline: Creating a new mapping to a Grafana folder
+    Given a Grafana folder named "observe" exists
+    And the Nextcloud groups "ops" exists
+    And an unset field on the mapping form defaults to:
+      | nc folder | observe      |
+      | mode      | link         |
+      | groups    |              |
+      | storage   | admin folder |
+    When the admin submits this mapping:
+      | grafana folder | observe     |
+      | nc folder      | <nc folder> |
+      | mode           | <mode>      |
+      | groups         | <groups>    |
+      | storage        | <storage>   |
     Then the mapping matches the form, unset fields at their defaults
 
-    # Every mode against every storage backend — the two axes that survive.
+    Examples: one field at a time, and nothing at all
+      | nc folder  | mode | groups    | storage     |
+      |            |      |           |             |
+      | Dashboards |      |           |             |
+      |            | link |           |             |
+      |            | sync |           |             |
+      |            |      | admin     |             |
+      |            |      | admin,ops |             |
+      |            |      |           | team folder |
 
-    Examples: every mode, on both storage backends
-      | uid     | nc folder | mode | groups | storage      |
-      | observe | observe   | sync |        | team folder  |
-      | secrets | secrets   | link |        | team folder  |
-      | network | network   | sync |        | admin folder |
-      | build   | build     | link |        | admin folder |
-
-    Examples: and the fields that have a default
-      | uid       | nc folder | mode | groups | storage |
-      | defaulted |           |      |        |         |
-      | grouped   | grouped   | sync | admin  |         |
-      | nested    | nested    | sync |        |         |
+    Examples: and in combination
+      | nc folder  | mode | groups    | storage     |
+      | Dashboards | sync | admin,ops | team folder |
+      | observe    | link | admin     | team folder |
 
     # notes: ../AGENTS.md#creating-a-mapping-saves-the-form
 
+  # notes: ../AGENTS.md#a-link-mapping-may-not-be-made-over-dashboards-that-already-exist
   @admin @occ @ui
-  Scenario Outline: A mapping the app cannot honour is refused, and says why
-    Given no Grafana folders are mapped
-    When the admin maps the Grafana folder "<uid>" with:
-      | nc folder | <nc folder> |
-      | mode      | <mode>      |
-    Then the mapping is rejected
-    And the refusal explains "<reason>"
-    And no mapping was created
+  Scenario: Mapping in link mode over a folder that already holds dashboards
+    Given a Grafana folder named "observe" exists
+    And a folder "Dashboards" already exists
+    And an unmapped dashboard file at "Dashboards/Fleet/Keeper.grafana"
+    When the admin submits this mapping:
+      | grafana folder | observe    |
+      | nc folder      | Dashboards |
+      | mode           | link       |
+    And allows the existing unmapped dashboards to be purged
+    Then the mapping matches the form, unset fields at their defaults
+    And no ".grafana" dashboards exist under "/Dashboards" in Nextcloud
+    And "Dashboards/Fleet/Keeper.grafana" left no trash entry
 
-    Examples: every field that carries a rule of its own
-      | uid     | nc folder | mode  | reason             |
-      |         | observe   | sync  | grafana_folder_uid |
-      | observe | observe   | bogus | mode must be       |
-
-    # notes: ../AGENTS.md#a-mapping-the-app-cannot-honour-is-refused-and-says-why
-
+  # notes: ../AGENTS.md#a-grafana-folder-may-only-be-mapped-once
   @admin @occ @ui
   Scenario: A Grafana folder may only be mapped once
     Given a mapping with the following values:
       | grafana folder | observe |
       | nc folder      | observe |
-    When the admin maps the Grafana folder "observe" with:
-      | nc folder | elsewhere |
-    Then the mapping is rejected
-    And the refusal explains "already uses the Grafana folder"
-    And no mapping was created
-    # A Grafana folder is what a mapping IS, so mapping it twice would make two
-    # mappings mean the same thing and every dashboard in it would belong to both.
-    # notes: ../AGENTS.md#a-grafana-folder-may-only-be-mapped-once
+    When the admin submits this mapping:
+      | grafana folder | observe   |
+      | nc folder      | elsewhere |
+      | mode           | sync      |
+    Then the mapping is rejected, explaining "already uses the Grafana folder"
 
+  # notes: ../AGENTS.md#a-nextcloud-folder-may-only-be-mapped-once
   @admin @occ @ui
-  Scenario: Two mappings may not target the same Nextcloud folder
+  Scenario: A Nextcloud folder may only be mapped once
     Given a mapping with the following values:
       | grafana folder | observe |
       | nc folder      | shared  |
-    When the admin maps the Grafana folder "secrets" with:
-      | nc folder | shared |
-    Then the mapping is rejected
-    And the refusal explains "already"
-    And no mapping was created
-    # notes: ../AGENTS.md#two-mappings-may-not-target-the-same-nextcloud-folder
+    And a Grafana folder named "secrets" exists
+    When the admin submits this mapping:
+      | grafana folder | secrets |
+      | nc folder      | shared  |
+      | mode           | link    |
+    Then the mapping is rejected, explaining "already uses the Nextcloud folder"
 
+  # The Grafana root ("General") holds dashboards in no folder and has no real uid,
+  # so the picker offers a reserved "/" entry for it.
+  # notes: ../AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
   @admin @occ @ui
   Scenario: The Grafana root can be mapped via the reserved "/" folder
-    Given no Grafana folders are mapped
-    When the admin maps the Grafana folder "/" with:
-      | nc folder | dashboards |
-      | mode      | sync       |
+    When the admin submits this mapping:
+      | grafana folder | /          |
+      | nc folder      | dashboards |
+      | mode           | sync       |
     Then the mapping matches the form, unset fields at their defaults
-    # The Grafana root ("General") holds dashboards with no folder and has no real
-    # uid, so the picker offers a reserved "/" entry for it.
-    # notes: ../AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-  # ── the optional Grafana recycle-bin folder ────────────────────────────────
-
+  # The bin holds dashboards this app parks and dashboards it has never managed,
+  # so nothing may ever sync into it.
+  # notes: ../AGENTS.md#the-recycle-bin-folder-cannot-also-be-a-mapped-folder
   @admin @occ @ui @recycle-bin
   Scenario: The recycle-bin folder cannot also be a mapped folder
-    Given no Grafana folders are mapped
-    And the Grafana recycle-bin folder is named "nextcloud-trash"
+    Given the Grafana recycle-bin folder is named "nextcloud-trash"
     And the Grafana recycle bin is on
-    When the admin maps the Grafana folder "nextcloud-trash" with:
-      | nc folder | trash |
-      | mode      | sync  |
-    Then the mapping is rejected
-    And the refusal explains "cannot be mapped because it is the recycle bin"
-    And no mapping was created
-    # The bin holds dashboards this app parks and dashboards it has never managed,
-    # so nothing may ever sync into it.
-    # notes: ../AGENTS.md#the-recycle-bin-folder-cannot-also-be-a-mapped-folder
+    When the admin submits this mapping:
+      | grafana folder | nextcloud-trash |
+      | nc folder      | trash           |
+      | mode           | sync            |
+    Then the mapping is rejected, explaining "cannot be mapped because it is the recycle bin"

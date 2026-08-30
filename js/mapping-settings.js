@@ -154,7 +154,7 @@
 		};
 	}
 
-	function saveCard(card) {
+	function saveCard(card, purge) {
 		var data = readCard(card);
 		if (!data.grafana_folder_uid) {
 			cardStatus(card, 'error', t('grafana_sync', 'Pick a Grafana folder first.'));
@@ -168,6 +168,13 @@
 		// payload the server is right to ignore, which is exactly how a UI comes to
 		// offer an edit that silently does nothing.
 		var payload = isNew ? data : { nc_groups: data.nc_groups };
+		if (purge) {
+			// A COPY, so a retry cannot leave the flag on the card's own state and
+			// quietly arm the next save. Passed on the RETRY only, never on the first
+			// attempt, so the panel cannot destroy anything the admin has not just been
+			// shown a number for.
+			payload = Object.assign({}, payload, { purge_dashboards: true });
+		}
 		var url = OC.generateUrl(MAP_BASE + (isNew ? '' : '/' + encodeURIComponent(data.id)));
 		api(isNew ? 'POST' : 'PUT', url, payload)
 			.then(function (res) {
@@ -185,8 +192,52 @@
 				cardStatus(card, 'success', t('grafana_sync', 'Saved.'));
 			})
 			.catch(function (err) {
+				// A link mapping over a folder that already holds dashboard files comes
+				// back 422 with a count. Everything else is a dead end and lands in the
+				// card's status line; this one becomes a question, because the admin can
+				// answer it — and answering it destroys files that do NOT go to the trash.
+				if (typeof err.dashboards === 'number' && !purge) {
+					confirmPurge(card, err.dashboards, err.folder || data.nc_folder);
+					return;
+				}
 				cardStatus(card, 'error', err.message || t('grafana_sync', 'Save failed.'));
 			});
+	}
+
+	/**
+	 * Ask before destroying dashboard files, and say how many and that they will not
+	 * come back.
+	 *
+	 * THE COUNT AND THE WORD "PERMANENTLY" ARE THE POINT. This is the only gesture in
+	 * the app that destroys something outright — a link mirror is a pointer, so a
+	 * dashboard file already in the folder cannot survive there, and it may not go to
+	 * the trash either: restoring one into a link mapping cannot work, so offering the
+	 * restore would be a worse lie than refusing it.
+	 *
+	 * Cancelling needs no cleanup, and that is a property of the rule rather than an
+	 * omission. The admin goes and moves the files, and when they come back the folder
+	 * holds none — so the mapping is created with no warning at all.
+	 */
+	function confirmPurge(card, count, folder) {
+		var msg = n(
+			'grafana_sync',
+			'"{folder}" already holds {count} dashboard file. Mapping it in link mode will permanently delete it — it will not go to the trash and cannot be recovered. Move it elsewhere first if you want to keep it.',
+			'"{folder}" already holds {count} dashboard files. Mapping it in link mode will permanently delete them — they will not go to the trash and cannot be recovered. Move them elsewhere first if you want to keep them.',
+			count,
+			{ folder: folder, count: count }
+		);
+
+		window.GrafanaSync.confirmDestructive({
+			title: t('grafana_sync', 'Delete these dashboard files?'),
+			text: msg,
+			confirm: n('grafana_sync', 'Delete {count} file', 'Delete {count} files', count, { count: count }),
+			onConfirm: function () {
+				saveCard(card, true);
+			},
+			onCancel: function () {
+				cardStatus(card, 'error', t('grafana_sync', 'Not saved — the folder still holds dashboard files.'));
+			}
+		});
 	}
 
 	// Per-folder sync isn't wired yet — the button exists for parity with n8n. Show a
@@ -218,18 +269,25 @@
 			? t('grafana_sync', 'Remove the mapping from {grafanaFolder} to {folder}? Its linked files will be removed from Nextcloud. Both folders are kept, and Grafana is left alone.', { grafanaFolder: grafanaFolder, folder: folder })
 			: t('grafana_sync', 'Remove the mapping from {grafanaFolder} to {folder}? Its dashboard files stay in Nextcloud and become unmapped. Both folders are kept, and Grafana is left alone.', { grafanaFolder: grafanaFolder, folder: folder });
 
-		if (!window.confirm(msg)) {
-			return;
-		}
-		var url = OC.generateUrl(MAP_BASE + '/' + encodeURIComponent(id));
-		api('DELETE', url)
-			.then(function () {
-				card.remove();
-				flash('success', t('grafana_sync', 'Removed.'));
-			})
-			.catch(function (err) {
-				cardStatus(card, 'error', err.message || t('grafana_sync', 'Delete failed.'));
-			});
+		// THE SAME MODAL THE PURGE USES. This was `window.confirm` — the browser's own
+		// box, unthemed, unstyled, and a different voice from every other question this
+		// panel asks. One confirmation for the whole app, in `js/dialogs.js`.
+		window.GrafanaSync.confirmDestructive({
+			title: t('grafana_sync', 'Remove this mapping?'),
+			text: msg,
+			confirm: t('grafana_sync', 'Remove mapping'),
+			onConfirm: function () {
+				var url = OC.generateUrl(MAP_BASE + '/' + encodeURIComponent(id));
+				api('DELETE', url)
+					.then(function () {
+						card.remove();
+						flash('success', t('grafana_sync', 'Removed.'));
+					})
+					.catch(function (err) {
+						cardStatus(card, 'error', err.message || t('grafana_sync', 'Delete failed.'));
+					});
+			}
+		});
 	}
 
 	// Per-mapping status, shown to the right of the card's buttons. Sticky — it stays
@@ -324,7 +382,18 @@
 				}
 				if (!res.ok) {
 					var msg = (data && data.message) ? data.message : ('HTTP ' + res.status);
-					return Promise.reject(new Error(msg));
+					var err = new Error(msg);
+					// THE REST OF THE BODY TRAVELS WITH IT. A 422 over existing dashboard
+					// files carries a count and a folder name, and the caller turns those
+					// into a confirmation — reading them back out of the sentence would
+					// break the first time the sentence is reworded. Every other refusal
+					// carries only `message`, so this is a no-op for them.
+					err.status = res.status;
+					if (data && typeof data.dashboards === 'number') {
+						err.dashboards = data.dashboards;
+						err.folder = data.folder || '';
+					}
+					return Promise.reject(err);
 				}
 				return data || {};
 			});

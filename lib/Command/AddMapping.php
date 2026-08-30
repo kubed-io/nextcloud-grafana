@@ -29,6 +29,11 @@ use Symfony\Component\Console\Output\OutputInterface;
  *   {"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe",
  *    "nc_folder":"observe","mode":"sync",
  *    "nc_groups":["admin"],"use_team_folder":true}
+ *
+ * Plus one key that is NOT part of a mapping: `"purge_dashboards":true` answers the
+ * refusal a `link` mapping gets when its folder already holds dashboard files. Those
+ * files are destroyed outright rather than trashed, so it must be asked for
+ * explicitly — omitting it is the same as saying no.
  */
 final class AddMapping extends Command {
 	public function __construct(
@@ -56,10 +61,16 @@ final class AddMapping extends Command {
 		// create endpoint, so a mapping can't get a non-route-safe id (e.g. slashes)
 		// that the admin panel then can't update or delete.
 		unset($data['id']);
+		// `purge_dashboards` IS NOT PART OF THE MAPPING — it is the admin's answer to
+		// a question the app asks, not a field a mapping stores, so it is read off the
+		// payload rather than through `Mapping::fromArray()`. A CLI has nowhere to ask,
+		// so the answer has to arrive with the request; leaving it out is the same as
+		// saying no, and the refusal explains what would have gone.
+		$purge = filter_var($data['purge_dashboards'] ?? false, FILTER_VALIDATE_BOOLEAN);
 		try {
 			// nc_groups travels ALONGSIDE the mapping, not inside it: they are applied
 			// to the provisioned folder and read back from it, never stored.
-			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? []);
+			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? [], $purge);
 		} catch (\InvalidArgumentException $e) {
 			$output->writeln('<error>' . $e->getMessage() . '</error>');
 			return 1;
