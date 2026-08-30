@@ -3467,6 +3467,32 @@ is no trash entry — the same call and the same reasoning the sibling reached. 
 link holds no dashboard of its own, so a trash entry would offer a restore of a
 file that reconnects to nothing: not a recovery, just a way to be confused later.
 
+### A link that will not go must stop being a link
+
+Found by Copilot reviewing the PR that landed this contract, and fixed in it.
+
+`removeLink()` is best-effort: a file that will not delete (a lock, a storage
+error) is logged and left, because removing the mapping must not fail on it. But
+leaving it where it stands is not neutral. The mapping is gone by then, and the
+file is still stamped `link` — and `DeleteToGrafanaListener` refuses to delete ANY
+file stamped `link`. It holds no reference to `MappingService` at all; it decides
+on the stored mode alone, as does `LinkWriteGuardPlugin`. So the file would be
+undeletable from every route, forever: a dead pointer at a mapping that no longer
+exists, and the listener's own advice — *"the way OUT of a link folder is to delete
+the dashboard in Grafana, or to remove the mapping"* — names the very thing that
+has just failed to help.
+
+So a failed removal clears the file's record, and the file becomes an ordinary
+document the app has no opinion about.
+
+**IT IS `clear()`, NOT `unmap()`, AND THE DIFFERENCE IS A DASHBOARD.** Unmapping
+leaves the file managed and still carrying its uid, so the user's next delete would
+take the bin-off branch and delete a dashboard in Grafana that nothing in Nextcloud
+claims any more — trading a stuck file for a destroyed dashboard, which is the
+exact class of defect this whole change exists to remove.
+
+It is still counted as a failure: the file was not removed, and the log says so.
+
 ### Removing a mapping keeps what the mode made worth keeping
 
 The two scenarios are ONE RULE asked of the two modes, which is why they are

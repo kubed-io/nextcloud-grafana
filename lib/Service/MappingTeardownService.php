@@ -193,6 +193,24 @@ final class MappingTeardownService {
 	 * A link holds no dashboard of its own, so a trash entry would offer a restore of a
 	 * file that reconnects to nothing — not a recovery, just a way to be confused later.
 	 * The dashboard it pointed at is untouched in Grafana, which is where it always lived.
+	 *
+	 * ## AND IF IT WILL NOT GO, IT MUST STOP BEING A LINK
+	 *
+	 * Leaving a failed one where it stands is not neutral. The mapping is already gone by
+	 * the time we are here, and {@see \OCA\GrafanaSync\Listener\DeleteToGrafanaListener}
+	 * refuses to delete ANY file stamped `link` — it holds no reference to
+	 * {@see MappingService} at all and decides on the stored mode alone, as does
+	 * {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin}. So the file would be undeletable
+	 * from every route, forever: a dead pointer at a mapping that no longer exists, and the
+	 * listener's own advice — "remove the mapping" — is exactly what has just failed to help.
+	 *
+	 * CLEARING THE RECORD, NOT UNMAPPING IT. `unmapped` would leave the file managed and
+	 * still carrying its uid, so the user's next delete would take the bin-off branch and
+	 * delete a dashboard in Grafana that nothing in Nextcloud claims any more — trading a
+	 * stuck file for a destroyed dashboard. Wiping it makes the file exactly what it has
+	 * become: an ordinary document the app has no opinion about.
+	 *
+	 * Still counted as a failure. The file was not removed, and the log should say so.
 	 */
 	private function removeLink(File $node): bool {
 		$path = $node->getPath();
@@ -207,7 +225,27 @@ final class MappingTeardownService {
 				'file' => $path,
 				'exception' => $e,
 			]);
+			$this->disown($node);
 			return false;
+		}
+	}
+
+	/**
+	 * Best-effort: make a file the app can no longer act on into one it no longer claims.
+	 *
+	 * Its own failure is swallowed deliberately. This runs on the path where something has
+	 * ALREADY gone wrong, and the caller has already reported that; a second exception here
+	 * would replace a logged failure with an unlogged one and abandon the rest of the walk.
+	 */
+	private function disown(File $node): void {
+		try {
+			$this->metadata->clear($node->getId());
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync tear-down: a link that could not be removed is still stamped as one', [
+				'app' => Application::APP_ID,
+				'file' => $node->getPath(),
+				'exception' => $e,
+			]);
 		}
 	}
 

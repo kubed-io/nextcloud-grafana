@@ -219,6 +219,55 @@ final class MappingTeardownServiceTest extends TestCase {
 		$this->service->remove(self::ID);
 	}
 
+	/**
+	 * A LINK THAT WILL NOT GO MUST STOP BEING A LINK, or it can never go at all.
+	 *
+	 * `DeleteToGrafanaListener` refuses to delete any file stamped `link` — it holds no
+	 * reference to MappingService and decides on the stored mode alone — so a failed
+	 * removal would leave a dead pointer nobody can shift, at a mapping that no longer
+	 * exists. Clearing the record makes it an ordinary file the app has no opinion about.
+	 */
+	public function testALinkThatCannotBeRemovedIsDisownedSoItIsDeletableLater(): void {
+		$stuck = $this->dashFile(1);
+		$this->tree([$stuck]);
+		$this->metadata->method('read')->willReturn($this->managed(self::ID, 'link'));
+
+		$stuck->method('delete')->willThrowException(new \RuntimeException('file is locked'));
+		$this->metadata->expects(self::once())->method('clear')->with(1);
+		// NOT `unmapped`: that leaves the file managed and still carrying its uid, so the
+		// user's next delete would take the bin-off branch and destroy a dashboard in
+		// Grafana that nothing in Nextcloud claims any more.
+		$this->metadata->expects(self::never())->method('write');
+
+		$this->service->remove(self::ID);
+	}
+
+	/** A link that removes cleanly is gone, so there is no record left to clear. */
+	public function testASuccessfulLinkRemovalDoesNotTouchMetadata(): void {
+		$connected = $this->dashFile(1);
+		$this->tree([$connected]);
+		$this->metadata->method('read')->willReturn($this->managed(self::ID, 'link'));
+
+		$connected->expects(self::once())->method('delete');
+		$this->metadata->expects(self::never())->method('clear');
+
+		$this->service->remove(self::ID);
+	}
+
+	/** The disown is best-effort: its own failure must not abandon the rest of the walk. */
+	public function testAFailedDisownStillLetsTheWalkFinish(): void {
+		$stuck = $this->dashFile(1);
+		$later = $this->dashFile(2);
+		$this->tree([$stuck, $later]);
+		$this->metadata->method('read')->willReturn($this->managed(self::ID, 'link'));
+
+		$stuck->method('delete')->willThrowException(new \RuntimeException('file is locked'));
+		$this->metadata->method('clear')->willThrowException(new \RuntimeException('metadata backend is down'));
+		$later->expects(self::once())->method('delete');
+
+		$this->service->remove(self::ID);
+	}
+
 	/** The binding goes first, so a throw can never leave it over a dismantled tree. */
 	public function testTheBindingIsDroppedBeforeTheFilesAreTouched(): void {
 		$connected = $this->dashFile(1);
