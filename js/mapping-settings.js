@@ -210,20 +210,13 @@
 		// one an admin actually fears — is still the reassurance it always was.
 		var folder = card.dataset.ncFolder || '';
 		var grafanaFolder = card.dataset.grafanaFolder || '';
+		//
+		// ONE STRING LITERAL PER MESSAGE, NOT A CONCATENATION. `t()` is what the l10n
+		// extractor reads, and it reads the SOURCE — a message assembled with `+` is
+		// not there to be found, so it would ship untranslatable while looking fine.
 		var msg = card.dataset.mode === 'link'
-			? t(
-				'grafana_sync',
-				'Remove the mapping from {grafanaFolder} to {folder}? Its linked files will be '
-					+ 'removed from Nextcloud. Both folders are kept, and Grafana is left alone.',
-				{ grafanaFolder: grafanaFolder, folder: folder }
-			)
-			: t(
-				'grafana_sync',
-				'Remove the mapping from {grafanaFolder} to {folder}? Its dashboard files stay '
-					+ 'in Nextcloud and become unmapped. Both folders are kept, and Grafana is '
-					+ 'left alone.',
-				{ grafanaFolder: grafanaFolder, folder: folder }
-			);
+			? t('grafana_sync', 'Remove the mapping from {grafanaFolder} to {folder}? Its linked files will be removed from Nextcloud. Both folders are kept, and Grafana is left alone.', { grafanaFolder: grafanaFolder, folder: folder })
+			: t('grafana_sync', 'Remove the mapping from {grafanaFolder} to {folder}? Its dashboard files stay in Nextcloud and become unmapped. Both folders are kept, and Grafana is left alone.', { grafanaFolder: grafanaFolder, folder: folder });
 
 		if (!window.confirm(msg)) {
 			return;

@@ -111,6 +111,7 @@ trait MappingSteps {
 		$this->mappingsDeclared = false;
 		$this->mappingsBeforeCreate = null;
 		$this->filesBeforeTeardown = [];
+		$this->dashboardFoldersBeforeTeardown = [];
 	}
 
 	/**
@@ -359,6 +360,9 @@ trait MappingSteps {
 	 */
 	private array $filesBeforeTeardown = [];
 
+	/** @var array<string, string|null> where each seeded dashboard sat in Grafana beforehand */
+	private array $dashboardFoldersBeforeTeardown = [];
+
 	/**
 	 * @When the admin removes the :folder mapping
 	 *
@@ -379,6 +383,16 @@ trait MappingSteps {
 		$ncFolder = trim((string)($mapping['nc_folder'] ?? ''), '/');
 		if ($ncFolder !== '') {
 			$this->filesBeforeTeardown[$ncFolder] = $this->davTreeUnder($ncFolder);
+		}
+		// AND WHERE EACH DASHBOARD SITS IN GRAFANA, for the same reason: "still in the
+		// X Grafana folder" is a claim about what did NOT change, and after the gesture
+		// there is nothing left to compare against.
+		$this->dashboardFoldersBeforeTeardown = [];
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			$this->dashboardFoldersBeforeTeardown[$uid] = $record === null
+				? null
+				: (string)($record['meta']['folderUid'] ?? '');
 		}
 		$this->occ('grafana_sync:remove-mapping ' . escapeshellarg((string)($mapping['id'] ?? '')));
 	}
@@ -435,23 +449,31 @@ trait MappingSteps {
 		if ($this->originalDashboardUids === []) {
 			$this->fail('nothing captured the dashboards to look for');
 		}
-		$want = $this->grafanaFolderUidByTitle($title);
-		if ($want === null || $want === '') {
-			$this->fail("Grafana has no folder titled '$title'");
+		if ($this->dashboardFoldersBeforeTeardown === []) {
+			$this->fail('nothing pinned where the dashboards sat, so "still" has nothing to mean');
 		}
+		$root = $this->grafanaFolderUidByTitle($title);
+		if ($root === null || $root === '') {
+			$this->fail("Grafana has no folder titled '$title', so the mapped folder itself is gone");
+		}
+
 		$wrong = [];
 		foreach ($this->originalDashboardUids as $uid) {
+			$was = $this->dashboardFoldersBeforeTeardown[$uid] ?? null;
 			$record = $this->grafanaGetDashboard($uid);
 			if ($record === null) {
 				$wrong[] = "$uid is gone from Grafana";
 				continue;
 			}
-			$in = (string)($record['meta']['folderUid'] ?? '');
-			// A DASHBOARD IN A SUBFOLDER IS STILL IN THE MAPPING, so a nested one names
-			// its own folder rather than the mapped root. What matters is that it is
-			// where it was, and it is — the tear-down never moves anything in Grafana.
-			if ($in === '') {
-				$wrong[] = "$uid is in no folder at all";
+			$now = (string)($record['meta']['folderUid'] ?? '');
+			// COMPARED AGAINST WHERE IT WAS, not merely against "somewhere". A dashboard
+			// in a SUBFOLDER of the mapping names its own folder rather than the mapped
+			// root, so demanding $root would fail the nested one — and accepting any
+			// non-empty answer, which is what this did first, passes a dashboard moved
+			// clean out of the mapping. Its own former folder is the only value that is
+			// both true for a nested dashboard and false for a moved one.
+			if ($now !== $was) {
+				$wrong[] = sprintf('%s was in %s and is now in %s', $uid, $was ?? '(nowhere)', $now ?: '(no folder)');
 			}
 		}
 		if ($wrong !== []) {
