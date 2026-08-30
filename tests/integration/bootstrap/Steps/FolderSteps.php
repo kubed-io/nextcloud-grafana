@@ -565,7 +565,6 @@ trait FolderSteps {
 		}
 	}
 
-
 	/**
 	 * @Then /^"([^"]*)" is still in the Nextcloud trash$/
 	 *

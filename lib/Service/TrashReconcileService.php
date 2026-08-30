@@ -307,7 +307,6 @@ final class TrashReconcileService {
 		return $purged;
 	}
 
-
 	/**
 	 * Bring back the trashed FOLDERS whose dashboards someone rescued out of the bin.
 	 *

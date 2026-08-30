@@ -812,7 +812,6 @@ trait TrashSteps {
 		$this->pullEveryMapping();
 	}
 
-
 	/**
 	 * @When someone moves :folder from :bin back under :parent in Grafana
 	 *

@@ -304,7 +304,6 @@ final class TrashReconcileServiceTest extends TestCase {
 		self::assertFalse($entryPurged, 'a folder this app never mirrored into was purged');
 	}
 
-
 	// ── restoreFolders: a rescue in Grafana brings the trashed folder back ──────
 
 	/**
