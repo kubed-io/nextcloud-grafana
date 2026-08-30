@@ -203,7 +203,29 @@
 		var id = card.dataset.id || '';
 		if (!id) { card.remove(); return; }
 
-		if (!window.confirm(t('grafana_sync', 'Remove this mapping? The Nextcloud folder and the Grafana dashboards are kept.'))) {
+		// WHAT THE ADMIN LOSES, IN THE WORDS OF THE MODE THEY PICKED. The old message
+		// said the folder and the dashboards are kept — true of both modes, and it left
+		// out the half that differs: a `link` mapping's files DO go. Saying so per mode
+		// is the difference between a warning and a surprise, and the Grafana half — the
+		// one an admin actually fears — is still the reassurance it always was.
+		var folder = card.dataset.ncFolder || '';
+		var grafanaFolder = card.dataset.grafanaFolder || '';
+		var msg = card.dataset.mode === 'link'
+			? t(
+				'grafana_sync',
+				'Remove the mapping from {grafanaFolder} to {folder}? Its linked files will be '
+					+ 'removed from Nextcloud. Both folders are kept, and Grafana is left alone.',
+				{ grafanaFolder: grafanaFolder, folder: folder }
+			)
+			: t(
+				'grafana_sync',
+				'Remove the mapping from {grafanaFolder} to {folder}? Its dashboard files stay '
+					+ 'in Nextcloud and become unmapped. Both folders are kept, and Grafana is '
+					+ 'left alone.',
+				{ grafanaFolder: grafanaFolder, folder: folder }
+			);
+
+		if (!window.confirm(msg)) {
 			return;
 		}
 		var url = OC.generateUrl(MAP_BASE + '/' + encodeURIComponent(id));

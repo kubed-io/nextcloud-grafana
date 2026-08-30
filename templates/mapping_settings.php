@@ -87,7 +87,13 @@ $info = static function (string $tip) use ($icon): string {
 			$selectedGroups = $m['nc_groups'] ?? [];
 			$useTf = filter_var($m['use_team_folder'] ?? $tfAvailable, FILTER_VALIDATE_BOOLEAN);
 			?>
-			<div class="grafana-sync-mappings__card" data-id="<?php p($m['id']); ?>">
+			<?php /* The data- attributes carry the RAW values. The fields render localised
+					 text, which is right for a reader and useless to the delete confirmation
+					 that has to compare against "link" and name both folders. */ ?>
+			<div class="grafana-sync-mappings__card" data-id="<?php p($m['id']); ?>"
+				data-mode="<?php p($modeSel); ?>"
+				data-grafana-folder="<?php p($title !== '' ? $title : $uid); ?>"
+				data-nc-folder="<?php p((string)($m['nc_folder'] ?? '')); ?>">
 				<div class="grafana-sync-mappings__grid">
 					<div class="grafana-sync-field gf-folder">
 						<label><?php p($l->t('Grafana folder'));

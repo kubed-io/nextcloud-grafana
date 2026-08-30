@@ -19,9 +19,12 @@ use Symfony\Component\Console\Output\OutputInterface;
  * `occ grafana_sync:remove-mapping <id>`
  *
  * CLI binding over {@see MappingTeardownService::remove()} — removes a mapping by its id (as the
- * admin Settings panel's delete does). Exits non-zero if the id is unknown. Tearing down a
- * mapping trashes its connected files (their delete rides the recycle-bin setting) and leaves
- * standalone files alone; it never touches Grafana beyond those connected dashboards.
+ * admin Settings panel's delete does). Exits non-zero if the id is unknown — and only then:
+ * tearing a mapping down never fails because a file would not move.
+ *
+ * The tear-down answers each connected file by its MODE (a link is removed, a sync file stays
+ * and becomes unmapped), leaves standalone files alone, keeps both folders, and never contacts
+ * Grafana at all.
  */
 final class RemoveMapping extends Command {
 	public function __construct(
@@ -46,10 +49,6 @@ final class RemoveMapping extends Command {
 		} catch (\OutOfBoundsException) {
 			$output->writeln('<error>No mapping with id "' . $id . '".</error>');
 			return 1;
-		} catch (\RuntimeException $e) {
-			// Partial tear-down: the mapping was kept for retry. Surface why.
-			$output->writeln('<error>' . $e->getMessage() . '</error>');
-			return 2;
 		}
 		$output->writeln('<info>Removed mapping ' . $id . '.</info>');
 		return 0;

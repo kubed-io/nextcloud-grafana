@@ -610,9 +610,22 @@ trait FolderSteps {
 		}
 	}
 
-	/** @Then /^"([^"]*)" holds no dashboard files$/ */
+	/**
+	 * @Then /^"([^"]*)" holds no dashboard files$/
+	 *
+	 * AT EVERY DEPTH, and it was one level until a nested file walked through it.
+	 * `davListDashboardFiles` asks with `Depth: 1`, so this passed on a folder still
+	 * holding `Coast/Latency.grafana` — "holds no dashboard files" that only reads the
+	 * top level is a sentence that cannot fail for the case most worth catching. Same
+	 * correction {@see pinOriginalsOf} already carries, for the same reason.
+	 */
 	public function holdsNoDashboardFiles(string $folder): void {
-		$found = $this->davListDashboardFiles($folder);
+		$found = [];
+		foreach ($this->davTreeUnder($folder) as $path) {
+			if (str_ends_with($path, '.grafana')) {
+				$found[] = ltrim($path, '/');
+			}
+		}
 		if ($found !== []) {
 			throw new \RuntimeException("'$folder' still holds dashboard files: " . implode(', ', $found));
 		}

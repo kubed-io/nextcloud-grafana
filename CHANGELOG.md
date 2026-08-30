@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Removing a mapping no longer costs you anything.** Its sync dashboard files stay where they are and become unmapped — they used to be moved to the trash, which with the recycle bin off *permanently deleted every dashboard in the folder* in Grafana. Linked files still go, both folders are kept on both sides, and Grafana is never contacted.
+- Removing a mapping in link mode works at all: it used to fail outright and leave the mapping in place, because the app refuses to delete a linked file and the teardown was asking it to.
+- The delete confirmation now says what the mode actually costs — a link mapping's files are removed, a sync mapping's are kept. One message covered both and only described the sync half.
 - Refusing to map the recycle-bin folder now says so plainly: *"cannot be mapped because it is the recycle bin"*.
 - The recycle-bin toggle and its folder name moved out of Sync Settings into their own **Recycle Bin** section. They decide whether deleting is reversible, which is not a sync setting and is too consequential to read as a footnote to the pull schedule.
 - **BREAKING:** dashboard files are named `.grafana`, not `.grafana.json`. Nextcloud only ever reads one file extension, so the compound one meant every save wrote the wrong file type for the app to correct afterwards, and a copy made beside its source was named something the app could not recognise at all. Outside Nextcloud a `.grafana` file needs telling once which editor opens it.

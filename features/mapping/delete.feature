@@ -1,50 +1,52 @@
 # Notes, decisions and history for this feature: ../AGENTS.md#mappingdelete
 
-Feature: Removing a folder mapping
+Feature: Removing a mapping tears down the connection without ever touching Grafana
   As a Nextcloud admin
-  I want removing a mapping to remove only the mapping
+  I want removing a mapping to keep whatever each file's mode made worth keeping
   So that disconnecting the two sides can never cost me a dashboard or a file
 
   Background:
     Given the app is connected to Grafana
-    And a mapping with the following values:
-      | grafana folder | Demo |
-      | nc folder      | Demo |
-      | mode           | sync |
-    And a mapping with the following values:
-      | grafana folder | links    |
-      | nc folder      | Pointers |
-      | mode           | link     |
+    And the following mappings were made:
+      | grafana folder | nc folder | mode |
+      | Demo           | Demo      | sync |
+      | links          | Pointers  | link |
 
   # notes: ../AGENTS.md#the-mappings-in-the-background
-  # notes: ../AGENTS.md#removing-a-mapping-removes-only-the-mapping
 
-    # ── RULE: the files stay, and become nobody's ─────────────────────────────
+    # ── RULE: teardown keeps whatever the mode made worth keeping ─────────────
+    # notes: ../AGENTS.md#removing-a-mapping-keeps-what-the-mode-made-worth-keeping
 
-  @admin @in-nextcloud @occ @ui @todo
-  Scenario: Remove a sync mapping
-    Given a dashboard file named "Fleet Health.grafana" in "Demo"
+  @admin @in-nextcloud @occ @ui
+  Scenario: Removing a sync mapping leaves its dashboards behind, unmapped
+    Given the following items in the mappings:
+      | path                       |
+      | /Demo/Fleet Health.grafana |
+      | /Demo/Coast/Tides.grafana  |
     When the admin removes the "Demo" mapping
-    Then "Demo" holds the same files it held before
-    And the file holds:
+    Then the "Demo" mapping is no longer configured
+    And "Demo" holds the same files it held before
+    And "Demo/Coast/Tides.grafana" holds:
       | grafana_uid     | the dashboard's uid |
       | grafana_mapping | absent              |
       | grafana_mode    | "unmapped"          |
-    And the dashboard is in the "Demo" Grafana folder
-    And there is exactly 1 configured mapping
+    And the dashboards are still in the "Demo" Grafana folder
+    And the "Demo" folder and the "Demo" Grafana folder both outlive the mapping
 
-    # It keeps its uid because the dashboard is still there. The file is simply no
-    # longer claimed by anything, which is what an unmapped file is.
+    # A sync file holds the dashboard itself and may be the last copy of it.
+    # Disconnecting is administrative; destroying an archive on the way past is not.
 
-    # ── RULE: a link has nothing of its own, so it goes with its mapping ──────
-
-  @admin @in-nextcloud @occ @ui @todo
-  Scenario: Remove a link mapping
-    Given a dashboard file named "Fleet Health.grafana" in "Pointers"
+  @admin @in-nextcloud @occ @ui
+  Scenario: Removing a link mapping takes its dashboards with it
+    Given the following items in the mappings:
+      | path                            |
+      | /Pointers/Pinned.grafana        |
+      | /Pointers/Coast/Latency.grafana |
     When the admin removes the "links" mapping
-    Then "Pointers" holds no dashboard files
-    And the dashboard is in the "links" Grafana folder
-    And there is exactly 1 configured mapping
+    Then the "links" mapping is no longer configured
+    And "Pointers" holds no dashboard files
+    And the dashboards are still in the "links" Grafana folder
+    And the "Pointers" folder and the "links" Grafana folder both outlive the mapping
 
-    # A link is a pointer at something Grafana owns. Without the mapping it points
-    # nowhere, and there is no content to keep — so it goes, as if never written.
+    # A link is a pointer whose only meaning was the mapping, so once the mapping
+    # is gone there is nothing left for it to be.
