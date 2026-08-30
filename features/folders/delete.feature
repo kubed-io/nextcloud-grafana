@@ -57,15 +57,16 @@ Feature: Deleting a folder
     # trashing it is a delete, and a delete carries whatever the folder held.
 
   # notes: ../AGENTS.md#trashing-a-folder-in-a-link-mapping
-  @user @in-nextcloud @gesture @ui @unbuilt
+  @user @in-nextcloud @gesture @ui
   Scenario: Trashing a folder in a link mapping is refused
     Given the following items in the mappings:
       | path                         |
       | /Pointers/Team/Alpha.grafana |
       | /Pointers/Team/Beta.grafana  |
+    And Grafana has the folder "Pointers/Team"
     When I try to move "Pointers/Team" to the trash
     Then the trash is refused with a message
-    And Grafana mirrors the folder "Pointers/Team"
+    And Grafana has the folder "Pointers/Team"
 
     # The same refusal a single link gets, for the same reason: under a link the
     # tree is Grafana's, and Nextcloud is a read-only mirror of it.

@@ -95,14 +95,3 @@ Feature: Creating a folder
       | metrics/Deep/Down   | Shared/Deep/Down       |
 
     # notes: ../AGENTS.md#grafana-owns-the-tree
-
-    # ── RULE: the recycle bin's folder is the app's, not a user's ─────────────
-    # notes: ../AGENTS.md#the-recycle-bin-folders-name-is-reserved
-
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: Create a dashboard in a folder named after the recycle-bin folder
-    Given the Grafana recycle bin is on
-    And the folder "Demo/nextcloud-trash" holding no dashboards
-    When I create a new dashboard in "Demo/nextcloud-trash"
-    Then the creation is refused with a message, explaining the name is reserved
-    And the recycle-bin folder still holds what it held

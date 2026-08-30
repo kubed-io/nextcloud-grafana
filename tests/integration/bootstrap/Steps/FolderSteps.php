@@ -554,6 +554,99 @@ trait FolderSteps {
 		}
 	}
 
+	/**
+	 * @Then /^"([^"]*)" is still in the Nextcloud trash, holding "([^"]*)"$/
+	 *
+	 * BOTH HALVES, AND THE SECOND IS THE POINT. That the entry survives is only half a
+	 * claim — a folder emptied down to nothing would satisfy it while having destroyed
+	 * exactly what the rule protects. So the file with no far side is named, and found
+	 * inside the entry.
+	 *
+	 * A spreadsheet has no dashboard, so nothing that happened in Grafana may destroy
+	 * it; the same respect the Grafana-side folder delete already shows.
+	 */
+	public function isStillInTheNextcloudTrashHolding(string $folder, string $file): void {
+		if ($this->trashedFolderEntry === '') {
+			throw new \RuntimeException("nothing recorded trashing '$folder', so 'still' has nothing to mean");
+		}
+		if (!$this->trashEntryExists($this->trashedFolderEntry)) {
+			throw new \RuntimeException(
+				"'$folder' was purged from the Nextcloud trash, taking '$file' with it",
+			);
+		}
+		$held = $this->trashEntryChildren($this->trashedFolderEntry);
+		if (!in_array($file, $held, true)) {
+			throw new \RuntimeException(sprintf(
+				"'%s' survived in the trash but no longer holds '%s'; it holds: %s",
+				$folder,
+				$file,
+				implode(', ', $held) ?: '(nothing)',
+			));
+		}
+	}
+
+	/**
+	 * What a trashed FOLDER entry holds, one level down.
+	 *
+	 * The trashbin serves a trashed folder as a collection, so its children are an
+	 * ordinary PROPFIND away — and they are stored under their original names, unlike
+	 * the entry itself, which carries the deletion timestamp.
+	 *
+	 * @return list<string>
+	 */
+	private function trashEntryChildren(string $entry): array {
+		$href = $this->ncBaseUrl . '/remote.php/dav/trashbin/' . rawurlencode($this->ncUser) . '/trash/' . rawurlencode($entry);
+		$res = $this->davClient()->request('PROPFIND', $href, [
+			'headers' => ['Depth' => '1', 'Content-Type' => 'application/xml'],
+			'body' => '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+			'http_errors' => false,
+		]);
+		if ($res->getStatusCode() !== 207) {
+			return [];
+		}
+		$doc = new \SimpleXMLElement((string)$res->getBody());
+		$doc->registerXPathNamespace('d', 'DAV:');
+		$out = [];
+		foreach ($doc->xpath('//d:href') ?: [] as $child) {
+			$name = basename(rtrim(rawurldecode((string)$child), '/'));
+			// The collection lists itself first; everything else is what it holds.
+			if ($name !== '' && $name !== $entry) {
+				$out[] = $name;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * @Then /^Grafana has the folder "([^"]*)"$/
+	 *
+	 * DELIBERATELY WEAKER THAN `Grafana mirrors the folder`, which also checks that
+	 * every Nextcloud folder in the chain carries its Grafana uid. That is the right
+	 * question when a gesture BUILT the mirror; it is the wrong one here, where the
+	 * claim is only that a refused gesture left the far side alone. Asserting mirror
+	 * integrity to say "nothing happened" describes more than the scenario means.
+	 */
+	public function grafanaHasTheFolder(string $ncPath): void {
+		[$parentUid, $segments] = $this->grafanaChainFor($ncPath);
+		if ($segments === []) {
+			throw new \RuntimeException("'$ncPath' is a mapped folder itself — Grafana has it by definition");
+		}
+		$uid = $parentUid;
+		$walked = [];
+		foreach ($segments as $segment) {
+			$walked[] = $segment;
+			$child = $this->grafanaChildUid($uid, $segment);
+			if ($child === null) {
+				throw new \RuntimeException(sprintf(
+					"Grafana has no folder '%s' (looking for '%s')",
+					implode('/', $walked),
+					$ncPath,
+				));
+			}
+			$uid = $child;
+		}
+	}
+
 	// ── what became of the dashboards ─────────────────────────────────────────
 
 	/** @Then /^none of those dashboards exists in Grafana$/ */

@@ -1035,29 +1035,32 @@ evidence about the STORAGE, not noise.
 
 ### Trashing a folder in a link mapping
 
-**@unbuilt, and the reason is a regression it caused.** A guard for this lived in
-`LinkWriteGuardPlugin::beforeUnbind` for one afternoon and broke every link MOVE in
-the suite.
+**LIVE**, and the note below is the history of how it got there rather than a
+description of a gap.
 
-Sabre routes a MOVE through `beforeUnbind` on the source as well as a DELETE. So a
-folder branch there did not only refuse trashing — it intercepted moves that
-`MoveGuardListener` was already refusing properly, and answered **403 with an empty
-body** where the listener answers with a message a person can read. `motion` had
-been green; it went red on rows that had nothing to do with folders.
+A guard for this first lived in `LinkWriteGuardPlugin::beforeUnbind` for one
+afternoon and broke every link MOVE in the suite. Sabre routes a MOVE through
+`beforeUnbind` on the source as well as a DELETE, so a folder branch there did not
+only refuse trashing — it intercepted moves `MoveGuardListener` was already refusing
+properly, and answered **403 with an empty body** where the listener answers with a
+message a person can read. `motion` had been green; it went red on rows that had
+nothing to do with folders. A refusal nobody can read is the exact failure that
+plugin exists to prevent, so the guard came out rather than being narrowed.
 
-A refusal nobody can read is the exact failure this plugin exists to prevent, so
-the guard came out rather than being narrowed. Refusing the DELETE without
-touching the MOVE means distinguishing the two inside `beforeUnbind`, which sabre
-does not hand you — and guessing from the request method inside an unbind hook is
-the kind of cleverness that breaks the next time sabre reorders something.
+**IT CAME BACK IN THE LISTENER, WHICH IS WHERE IT BELONGED.** `FolderDeleteListener`
+sees a typed delete event rather than an unbind, so it never has to guess whether a
+MOVE is passing through — the distinction sabre would not hand you inside
+`beforeUnbind` is simply not a question at this layer. It throws
+`AbortedEventException` with the same readable sentence a single link's delete gets,
+which is what `the trash is refused with a message` reads. Pinned by
+`FolderDeleteListenerTest::testTrashingAMirroredLinkFolderIsRefused()`.
 
-The copy half stays: `method:COPY` is its own hook and refusing there costs a move
-nothing.
+The copy half stays where it was: `method:COPY` is its own hook and refusing there
+costs a move nothing.
 
-**What actually happens today**: trashing a link-mapped folder succeeds, and the
-mirrors go to the Nextcloud trash. The dashboards are untouched in Grafana, so the
-next pull writes the folder back — untidy, and not destructive, which is the right
-way round for a gap.
+So the rule is the one it always should have been — under a link the tree is
+Grafana's, and Nextcloud is a read-only mirror of it — and the way out of a link
+folder is still to delete the dashboard in Grafana, or to remove the mapping.
 
 ### Copying a folder inside a link mapping is refused
 
@@ -1513,11 +1516,21 @@ dashboard being created is already observed. The `TagAssignedEvent` floor of
 Nextcloud 32 that the tag model would have forced is one of the things retiring it
 bought back — `appinfo/info.xml` can stay where it is.
 
-### The recycle-bin folder's name is reserved
+### The recycle-bin folder's name is reserved — RETIRED
 
-The recycle-bin folder holds parked dashboards and dashboards Nextcloud does not
-manage (see `dashboards/delete.feature`). Letting a user's folder resolve to it
-would put the app's own scratch space under user control.
+Its scenario ("Create a dashboard in a folder named after the recycle-bin folder")
+has been removed from `folders/create.feature`, so this section describes a rule no
+feature file states any more.
+
+The reasoning it recorded still holds and is stated where it is now enforced: the
+bin folder holds parked dashboards AND dashboards Nextcloud has never managed, which
+is why `mapping/create.feature` refuses to MAP it — see
+[the recycle-bin folder cannot also be a mapped folder](#the-recycle-bin-folder-cannot-also-be-a-mapped-folder).
+That guard is built and live. Refusing a folder merely NAMED after the bin was a
+separate, weaker idea about the same scratch space, and it was never built.
+
+Kept as a stub rather than deleted so the argument is findable if anyone reaches for
+it again.
 
 ## dashboards/delete
 
@@ -4363,15 +4376,40 @@ restored to and follows them out.
 The respectful half, and it splits into two scenarios for exactly the reason the
 Grafana-side folder delete does — the contents change the END STATE:
 
-| the trashed mirror held | what a Grafana-side purge leaves |
+| the trashed folder held | what a Grafana-side purge leaves |
 |---|---|
-| only dashboards | nothing — the folder goes from the Nextcloud trash too |
-| dashboards and other files | the folder stays in the trash, holding only the others |
+| only dashboards | nothing — the entry goes from the Nextcloud trash too |
+| dashboards and other files | the entry stays, exactly as it was |
 
-A spreadsheet in a trashed folder has no far side. Nothing that happened in Grafana
-can be a reason to destroy it, even though the gesture that triggered this was a
-delete. So the purge takes the dashboard files and stops, and the folder remains in
-the trash — still restorable, just no longer carrying anything Grafana knows about.
+**THE ENTRY GOES WHOLE, OR IT DOES NOT GO — AND THIS NOTE USED TO SAY OTHERWISE.**
+It prescribed *"the purge takes the dashboard files and stops, and the folder remains
+in the trash, still restorable, just no longer carrying anything Grafana knows
+about"*: reach into the trash entry, delete the finished mirrors out of it, leave the
+rest. That was written as specification and never built, and building it was the
+wrong move.
+
+A trash entry is ONE THING. It restores as one thing, so destroying part of it leaves
+an entry whose restore puts back a folder the user never had — they trashed a folder
+holding a spreadsheet and a dashboard, and got back a folder holding a spreadsheet.
+The saving is a trash entry nobody was going to restore; the cost is a restore that
+silently lies about what it is restoring.
+
+So the question is binary: does anything in here deserve to outlive the dashboards? A
+dashboard still in Grafana (parked, or rescued back out of the bin), a file belonging
+to another mapping, an unmapped file, a spreadsheet, a subtree that could not be read
+— any one of them keeps the whole entry, finished mirrors included. Only a folder
+where every mirror is confirmed gone and nothing else lives goes.
+
+`nextcloud-penpot` reached the same answer for the same reason and has been running
+it; `TrashReconcileService::reapFolders()` is ported from it, and the scenarios read
+the same in both apps. The Gherkin never had to change: *"still in the Nextcloud
+trash, holding Budget.xlsx"* is true either way, which is why the difference had to
+be settled by argument rather than by a failing test.
+
+**NOT KNOWING IS A VETO.** `TrashControl::inspect()` answers "there is something else
+in here" for a subtree it cannot read and for one deeper than it walks, so every way
+of being unsure keeps the folder. The same asymmetry `ExistingDashboards` runs on: the
+failure that destroys something is the one worth being wrong about.
 
 This is the same asymmetry recorded below for the Nextcloud-side purge: contents are
 a ROW when the gesture starts in Nextcloud (everything goes either way) and a

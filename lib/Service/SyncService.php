@@ -405,6 +405,12 @@ final class SyncService {
 			// so a mirror it sees mid-flight is simply left for the next tick.
 			$this->trashReconcile->reap($mapping);
 
+			// AND THE TRASHED FOLDERS, which the pass above cannot see either. Trashing a
+			// folder leaves ONE trash entry, named after the folder — so a mirror inside
+			// it is not a trash entry at all and `reap()`'s "is this entry a dashboard
+			// file?" walked straight past a whole tree of them.
+			$this->trashReconcile->reapFolders($mapping);
+
 			// AND THE FOLDERS, last of all. A folder whose Grafana counterpart is gone
 			// must stop claiming it, and it can only be judged empty once the prune
 			// above has taken the mirrors it held.

@@ -44,16 +44,16 @@ Feature: Emptying the trash of a folder
     And the following items in the mappings:
       | path       |
       | <contents> |
-    And "Demo/Team" is in the Nextcloud trash
-    When I purge "Demo/Team" from the trash
+    And "<trashed>" is in the Nextcloud trash
+    When I purge "<trashed>" from the trash
     Then no dashboard it held exists in Grafana
-    And "Demo/Team" is gone from the Nextcloud trash
+    And "<trashed>" is gone from the Nextcloud trash
 
     Examples: recursive is recursive — what was inside makes no difference
-      | contents                    |
-      | /Demo/Team/Alpha.grafana    |
-      | /Demo/Team/Sub/Deep.grafana |
-      | /Demo/Team/Budget.xlsx      |
+      | trashed   | contents                    |
+      | Demo/Team | /Demo/Team/Alpha.grafana    |
+      | Demo/Team | /Demo/Team/Sub/Deep.grafana |
+      | Demo/Team | /Demo/Team/Budget.xlsx      |
 
     # Every parked dashboard is a delete. This is where the bin's promise ends and
     # the cascade it was holding back becomes permanent.
@@ -83,31 +83,31 @@ Feature: Emptying the trash of a folder
     # ── RULE: a purge in the Grafana bin finishes the delete from that side ───
     # notes: ../AGENTS.md#a-purge-in-the-grafana-bin-reaches-back-into-the-nextcloud-trash
 
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
-  Scenario: Purge a trashed folder's dashboards in the Grafana bin
+  @grafana @in-grafana @gesture @ui @recycle-bin
+  Scenario: Empty the Grafana recycle bin while a folder is trashed
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Beta.grafana  |
-    And "Demo/Team" is in the Nextcloud trash
+      | path                        |
+      | /Demo/Emptied/Alpha.grafana |
+      | /Demo/Emptied/Beta.grafana  |
+    And "Demo/Emptied" is in the Nextcloud trash
     When someone empties the Grafana recycle bin
-    Then "Demo/Team" is gone from the Nextcloud trash
+    Then "Demo/Emptied" is gone from the Nextcloud trash
 
     # The parked dashboards were the only thing a restore could have brought back,
     # so with them gone the trashed mirror has nothing left to be restored to.
 
   # notes: ../AGENTS.md#a-grafana-purge-may-not-destroy-what-was-never-grafanas
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
-  Scenario: Purge a trashed folder's dashboards in the Grafana bin, where the mirror holds other files
+  @grafana @in-grafana @gesture @ui @recycle-bin
+  Scenario: Empty the Grafana recycle bin where the trashed folder holds other files
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Budget.xlsx   |
-    And "Demo/Team" is in the Nextcloud trash
+      | path                       |
+      | /Demo/Spared/Alpha.grafana |
+      | /Demo/Spared/Budget.xlsx   |
+    And "Demo/Spared" is in the Nextcloud trash
     When someone empties the Grafana recycle bin
-    Then "Demo/Team" is still in the Nextcloud trash, holding "Budget.xlsx"
+    Then "Demo/Spared" is still in the Nextcloud trash, holding "Budget.xlsx"
 
     # The same respect the Grafana-side folder delete shows: a spreadsheet has no
     # far side, so nothing that happened in Grafana may destroy it.

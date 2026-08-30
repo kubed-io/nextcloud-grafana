@@ -813,6 +813,26 @@ trait TrashSteps {
 	}
 
 	/**
+	 * @When someone empties the Grafana recycle bin
+	 *
+	 * THE BIN BY ITS ROLE, NOT BY ITS NAME. Which folder is the bin is configuration and
+	 * lives in the Background, so a scenario about emptying it should no more restate the
+	 * name than it restates the base URL. It is the same reason the bin's two settings are
+	 * said separately and each scenario says only `the Grafana recycle bin is on`.
+	 *
+	 * Delegates to the by-name gesture, which does it through Grafana's own API with no
+	 * involvement from this app.
+	 */
+	public function someoneEmptiesTheGrafanaRecycleBin(): void {
+		$res = $this->occ('config:app:get ' . self::APP_ID . ' bin_folder');
+		$bin = trim($res['output']);
+		if ($bin === '') {
+			throw new \RuntimeException('no Grafana recycle-bin folder is configured, so there is no bin to empty');
+		}
+		$this->someoneEmptiesTheFolderInGrafana($bin);
+	}
+
+	/**
 	 * @Then the file is gone from :folder, leaving no trash entry
 	 *
 	 * BOTH HALVES, BECAUSE THE FOLDER ALONE CANNOT TELL THEM APART. A link removed

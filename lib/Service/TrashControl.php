@@ -69,6 +69,16 @@ use Psr\Log\LoggerInterface;
  * from reaching for a home-storage-only mechanism.
  */
 final class TrashControl {
+	/**
+	 * How deep the reconcile will descend into a trashed folder.
+	 *
+	 * Far deeper than any mirrored tree. Reaching it means the tree is wrong rather than
+	 * the limit, and stopping leaves the entry alone — the safe direction for a
+	 * reconcile, which is the opposite of {@see ExistingDashboards}, where not knowing
+	 * has to refuse because the next step destroys something.
+	 */
+	private const MAX_TRASH_DEPTH = 32;
+
 	public function __construct(
 		private ContainerInterface $container,
 		private IUserManager $userManager,
@@ -193,6 +203,131 @@ final class TrashControl {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * The FOLDERS in $uid's trash, each with what it holds already sorted.
+	 *
+	 * The companion to {@see listTrashed()}, which answers files only — it skips every
+	 * entry that is not `TYPE_FILE`, so a trashed folder was invisible to everything
+	 * downstream. Trashing a folder produces ONE entry named after the folder, so the
+	 * mirrors inside it can only be reached by descending into it.
+	 *
+	 * @return list<TrashedFolder>
+	 */
+	public function listTrashedFolders(string $uid): array {
+		$manager = $this->trashManager();
+		if ($manager === null) {
+			return [];
+		}
+		$user = $this->userManager->get($uid);
+		if ($user === null) {
+			return [];
+		}
+		\OC_Util::setupFS($uid);
+
+		try {
+			$items = $manager->listTrashRoot($user);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: could not list the trash for folders', [
+				'app' => Application::APP_ID,
+				'user' => $uid,
+				'exception' => $e,
+			]);
+			return [];
+		}
+
+		$out = [];
+		foreach ($items as $item) {
+			if (!$item instanceof ITrashItem || $item->getType() === FileInfo::TYPE_FILE) {
+				continue;
+			}
+			[$ids, $other] = $this->inspect($item, 0);
+			$out[] = new TrashedFolder(
+				basename($item->getOriginalLocation()),
+				$ids,
+				$other,
+				function () use ($manager, $item): void {
+					$manager->removeItem($item);
+				},
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Everything under one trashed folder, as [dashboard file ids, holds anything else].
+	 *
+	 * ## EVERY WAY OF NOT KNOWING ANSWERS "SOMETHING ELSE IS IN HERE"
+	 *
+	 * Past the ceiling, on an unreadable subtree, on a child this app cannot even type —
+	 * the answer is `[[], true]`, which makes the folder un-purgeable. Returning "no ids
+	 * and nothing else" would say the folder is EMPTY of anything worth keeping, and the
+	 * caller would destroy it. Not knowing has to veto, the same asymmetry
+	 * {@see ExistingDashboards} runs on and for the same reason: the failure that
+	 * destroys something is the one worth being wrong about.
+	 *
+	 * ## THE BACKEND DISPATCHES, NOT THE MANAGER
+	 *
+	 * `ITrashItem::getTrashBackend()->listTrashFolder()` — a Team Folder's trash and the
+	 * home trash are different backends, and the item is the only thing that knows which
+	 * one it came out of.
+	 *
+	 * ## AND THE NAME IS THE ORIGINAL ONE, NEVER `getName()`
+	 *
+	 * The same trap {@see listTrashed()} spells out: the trash's own spelling carries the
+	 * deletion stamp AFTER the extension (`Alpha.grafana.d1788058484`), so
+	 * `isDashboardName()` is false for every trashed mirror there has ever been. Every
+	 * `.grafana` in here would be counted as "some other file", making the folder
+	 * permanently un-purgeable — a silent no-op wearing the shape of caution. The sibling
+	 * walked straight into it; this is the fix, ported.
+	 *
+	 * @return array{0: list<int>, 1: bool}
+	 */
+	private function inspect(ITrashItem $folder, int $depth): array {
+		if ($depth >= self::MAX_TRASH_DEPTH) {
+			$this->logger->warning('grafana_sync: a trashed folder was deeper than the reconcile will walk', [
+				'app' => Application::APP_ID,
+				'folder' => $folder->getName(),
+			]);
+			return [[], true];
+		}
+
+		try {
+			$children = $folder->getTrashBackend()->listTrashFolder($folder);
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync: could not look inside a trashed folder', [
+				'app' => Application::APP_ID,
+				'folder' => $folder->getName(),
+				'exception' => $e,
+			]);
+			return [[], true];
+		}
+
+		$ids = [];
+		$other = false;
+		foreach ($children as $child) {
+			if (!$child instanceof ITrashItem) {
+				$other = true;
+				continue;
+			}
+			if ($child->getType() === FileInfo::TYPE_FOLDER) {
+				[$nested, $nestedOther] = $this->inspect($child, $depth + 1);
+				foreach ($nested as $id) {
+					$ids[] = $id;
+				}
+				$other = $other || $nestedOther;
+				continue;
+			}
+			$id = $child->getId();
+			if ($id !== null && FilenameCodec::isDashboardName(basename($child->getOriginalLocation()))) {
+				$ids[] = $id;
+				continue;
+			}
+			$other = true;
+		}
+
+		return [$ids, $other];
 	}
 
 	/**

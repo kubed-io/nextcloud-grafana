@@ -18,6 +18,7 @@ use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\TeamFolderService;
 use OCA\GrafanaSync\Service\TrashControl;
 use OCA\GrafanaSync\Service\TrashedFile;
+use OCA\GrafanaSync\Service\TrashedFolder;
 use OCA\GrafanaSync\Service\TrashReconcileService;
 use OCP\Files\IRootFolder;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -150,6 +151,108 @@ final class TrashReconcileServiceTest extends TestCase {
 		self::assertNull($service->restoreMirror($this->mapping(), 'dash-live'));
 	}
 
+	// ── trashed FOLDERS ───────────────────────────────────────────────────────
+
+	/**
+	 * A folder whose every mirror is finished goes WHOLE — the entry has nothing left a
+	 * restore could reconnect to.
+	 */
+	public function testATrashedFolderWhoseDashboardsAreAllGoneIsPurged(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Emptied', [7, 8], false, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			$this->managed('dash-gone'),
+			static fn (): never => throw new GrafanaApiException('no such dashboard', 404),
+		);
+
+		self::assertSame(2, $service->reapFolders($this->mapping()));
+		self::assertTrue($purged, 'the trashed folder was not purged');
+	}
+
+	/**
+	 * A FILE WITH NO FAR SIDE MAY NOT BE DESTROYED BY SOMETHING THAT HAPPENED IN GRAFANA.
+	 * The entry is one thing, so keeping the spreadsheet means keeping all of it — which
+	 * is what `folders/purge.feature` asserts by naming the file it still holds.
+	 */
+	public function testAFolderHoldingSomethingElseIsLeftWhole(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Spared', [7], true, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			$this->managed('dash-gone'),
+			static fn (): never => throw new GrafanaApiException('no such dashboard', 404),
+		);
+
+		self::assertSame(0, $service->reapFolders($this->mapping()));
+		self::assertFalse($purged, 'a folder holding a file with no far side was destroyed');
+	}
+
+	/**
+	 * ONE SURVIVING DASHBOARD KEEPS THE WHOLE FOLDER. Parked is not gone, and the entry
+	 * is the only thing a restore could bring the parked one back through.
+	 */
+	public function testOneParkedDashboardKeepsTheFolder(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Emptied', [7], false, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			$this->managed('dash-parked'),
+			static fn (): array => ['dashboard' => ['uid' => 'dash-parked']],
+		);
+
+		self::assertSame(0, $service->reapFolders($this->mapping()));
+		self::assertFalse($purged, 'a folder holding a parked dashboard was purged');
+	}
+
+	/** A folder holding another mapping's mirrors is that mapping's to judge, not ours. */
+	public function testAFolderOfAnotherMappingsMirrorsIsLeftAlone(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Theirs', [7], false, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			new ManagedFile('dash-gone', Mapping::MODE_SYNC, '1', 'hash', 'm-other', ''),
+			static fn (): never => throw new GrafanaApiException('no such dashboard', 404),
+		);
+
+		self::assertSame(0, $service->reapFolders($this->mapping()));
+		self::assertFalse($purged, "another mapping's folder was purged");
+	}
+
+	/** Grafana unreachable is not proof, so nothing is destroyed — the file pass's rule. */
+	public function testAnUnreachableGrafanaPurgesNoFolder(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Emptied', [7], false, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			$this->managed('dash-unknown'),
+			static fn (): never => throw new GrafanaApiException('connection refused', 0),
+		);
+
+		self::assertSame(0, $service->reapFolders($this->mapping()));
+		self::assertFalse($purged, 'a folder was purged on an answer Grafana never gave');
+	}
+
+	/** An empty trashed folder has no mirror to finish, so it is not this pass's business. */
+	public function testAFolderWithNoDashboardsIsNotTouched(): void {
+		$purged = false;
+		$service = $this->folderService(
+			[$this->trashedFolder('Photos', [], true, static function () use (&$purged): void {
+				$purged = true;
+			})],
+			$this->managed('dash-gone'),
+			static fn (): never => throw new GrafanaApiException('no such dashboard', 404),
+		);
+
+		self::assertSame(0, $service->reapFolders($this->mapping()));
+		self::assertFalse($purged, 'a folder this app never mirrored into was purged');
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
 
 	private function mapping(): Mapping {
@@ -173,6 +276,41 @@ final class TrashReconcileServiceTest extends TestCase {
 			},
 			$restore ?? static function (): void {
 			},
+		);
+	}
+
+	/**
+	 * @param list<int> $dashboardIds
+	 */
+	private function trashedFolder(string $name, array $dashboardIds, bool $holdsOtherFiles, \Closure $purge): TrashedFolder {
+		return new TrashedFolder($name, $dashboardIds, $holdsOtherFiles, $purge);
+	}
+
+	/**
+	 * @param list<TrashedFolder> $inTrash
+	 * @param \Closure():mixed $readDashboard what Grafana answers for the uid under test
+	 */
+	private function folderService(array $inTrash, ManagedFile $managed, \Closure $readDashboard): TrashReconcileService {
+		$trash = $this->createStub(TrashControl::class);
+		$trash->method('listTrashedFolders')->willReturn($inTrash);
+
+		$metadata = $this->createStub(DashboardMetadata::class);
+		$metadata->method('read')->willReturn($managed);
+
+		$grafana = $this->createStub(GrafanaClient::class);
+		$grafana->method('readDashboard')->willReturnCallback($readDashboard);
+
+		$teamFolders = $this->createStub(TeamFolderService::class);
+		$teamFolders->method('resolveActorUid')->willReturn('admin');
+
+		return new TrashReconcileService(
+			$this->createStub(IRootFolder::class),
+			$trash,
+			$metadata,
+			$grafana,
+			$teamFolders,
+			new SyncGuard(),
+			new NullLogger(),
 		);
 	}
 
