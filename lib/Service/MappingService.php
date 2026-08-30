@@ -451,7 +451,7 @@ final class MappingService {
 		}
 		$refuse = static function (string $bin): never {
 			throw new \InvalidArgumentException(
-				'The Grafana folder "' . $bin . '" is the recycle-bin folder and cannot be mapped. '
+				'The Grafana folder "' . $bin . '" cannot be mapped because it is the recycle bin. '
 				. 'It holds dashboards this app parks and dashboards it does not manage, so nothing may sync into it.',
 			);
 		};

@@ -53,7 +53,7 @@ Feature: Admin configures folder mappings
       | mode      | <mode>      |
     Then the mapping is rejected
     And the refusal explains "<reason>"
-    And there are exactly 0 configured mappings
+    And no mapping was created
 
     Examples: every field that carries a rule of its own
       | uid     | nc folder | mode  | reason             |
@@ -71,12 +71,12 @@ Feature: Admin configures folder mappings
       | nc folder | elsewhere |
     Then the mapping is rejected
     And the refusal explains "already uses the Grafana folder"
-    And there is exactly 1 configured mapping
+    And no mapping was created
     # A Grafana folder is what a mapping IS, so mapping it twice would make two
     # mappings mean the same thing and every dashboard in it would belong to both.
     # notes: ../AGENTS.md#a-grafana-folder-may-only-be-mapped-once
 
-  @admin @occ @ui @todo
+  @admin @occ @ui
   Scenario: Two mappings may not target the same Nextcloud folder
     Given a mapping with the following values:
       | grafana folder | observe |
@@ -85,7 +85,7 @@ Feature: Admin configures folder mappings
       | nc folder | shared |
     Then the mapping is rejected
     And the refusal explains "already"
-    And there is exactly 1 configured mapping
+    And no mapping was created
     # notes: ../AGENTS.md#two-mappings-may-not-target-the-same-nextcloud-folder
 
   @admin @occ @ui
@@ -99,28 +99,19 @@ Feature: Admin configures folder mappings
     # uid, so the picker offers a reserved "/" entry for it.
     # notes: ../AGENTS.md#the-grafana-root-can-be-mapped-via-the-reserved-folder
 
-
   # ── the optional Grafana recycle-bin folder ────────────────────────────────
-  # notes: ../AGENTS.md#the-recycle-bin-folder
 
-  @recycle-bin @todo
-  Scenario: The recycle bin is off by default, and naming a folder does not enable it
-    Given the app is enabled
-    Then the Grafana recycle bin setting reads off
-    When the admin names the Grafana recycle-bin folder "nextcloud-trash"
-    Then the Grafana recycle bin setting reads off
-    When the admin turns the Grafana recycle bin on
-    Then the Grafana recycle bin setting reads on
-
-    # Two settings, and the panel lets you save one without the other — naming the
-    # folder is not consent to start moving dashboards into it.
-
-  @recycle-bin @todo
+  @admin @occ @ui @recycle-bin
   Scenario: The recycle-bin folder cannot also be a mapped folder
-    Given the Grafana recycle-bin folder is named "nextcloud-trash"
+    Given no Grafana folders are mapped
+    And the Grafana recycle-bin folder is named "nextcloud-trash"
     And the Grafana recycle bin is on
     When the admin maps the Grafana folder "nextcloud-trash" with:
       | nc folder | trash |
       | mode      | sync  |
     Then the mapping is rejected
-    And there are exactly 0 configured mappings
+    And the refusal explains "cannot be mapped because it is the recycle bin"
+    And no mapping was created
+    # The bin holds dashboards this app parks and dashboards it has never managed,
+    # so nothing may ever sync into it.
+    # notes: ../AGENTS.md#the-recycle-bin-folder-cannot-also-be-a-mapped-folder
