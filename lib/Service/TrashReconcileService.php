@@ -549,15 +549,27 @@ final class TrashReconcileService {
 			return null;
 		}
 
-		// NO `meta` IS NOT THE GRAFANA ROOT. Grafana has answered 200 with a partial
-		// body before now ({@see GrafanaClient::readDashboard}), and reading that as
-		// "folderUid is empty, so it is out of the bin" would restore on a bad response.
+		// NEITHER A MISSING `meta` NOR AN EMPTY `folderUid` IS THE GRAFANA ROOT. Grafana
+		// has answered 200 with a partial body before now
+		// ({@see GrafanaClient::readDashboard}), and both shapes reduce to the same empty
+		// string — so reading it as "not the bin, therefore rescued" would restore on a
+		// bad response, which is this method's one forbidden answer.
+		//
+		// THE ROOT IS GIVEN UP DELIBERATELY, AND IT COSTS NOTHING REAL. A dashboard whose
+		// `folderUid` is genuinely empty sits at the Grafana root, which under a root
+		// mapping is a place a rescuer could legitimately drop one. It is not, however, a
+		// place that says anything about the trashed SUBFOLDER this pass would be
+		// bringing back: the mirror's home would be the mapping's own root, not the
+		// folder in the trash. Refusing is both the safe answer and the more correct one.
 		$meta = $record['meta'] ?? null;
 		if (!is_array($meta)) {
 			return null;
 		}
 		$folderUid = (string)($meta['folderUid'] ?? '');
-		return $folderUid === $binUid ? null : $folderUid;
+		if ($folderUid === '' || $folderUid === $binUid) {
+			return null;
+		}
+		return $folderUid;
 	}
 
 	/**

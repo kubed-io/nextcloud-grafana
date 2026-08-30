@@ -489,6 +489,34 @@ final class TrashReconcileServiceTest extends TestCase {
 	}
 
 	/**
+	 * AN EMPTY `folderUid` IS NOT PROOF EITHER, and it is the same bad response wearing a
+	 * different shape — a body with `meta` but nothing usable in it reduces to the same
+	 * empty string as a body with no `meta` at all.
+	 *
+	 * It also names the Grafana root, which under a root mapping is somewhere a rescuer
+	 * could really put a dashboard. Given up on purpose: the root says nothing about the
+	 * trashed SUBFOLDER this pass would bring back, so refusing is the more correct
+	 * answer as well as the safe one.
+	 */
+	public function testAnEmptyFolderUidRestoresNothing(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored on a response that named no folder');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Rootless', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-rootless'),
+			static fn (): array => ['meta' => ['folderUid' => '']],
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back on a response that named no folder');
+	}
+
+	/**
 	 * BIN OFF MEANS NOTHING WAS EVER PARKED, so there is nothing to be rescued from and
 	 * no signal to read — the dashboards were destroyed at trash time. A bin that is on
 	 * but unresolvable answers the same way for the opposite reason: the one thing this
