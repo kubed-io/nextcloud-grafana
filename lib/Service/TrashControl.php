@@ -250,6 +250,15 @@ final class TrashControl {
 				function () use ($manager, $item): void {
 					$manager->removeItem($item);
 				},
+				// AS THE USER, for the reason {@see asUser()} spells out: the home trash's
+				// restore reads the SESSION's user rather than taking one, and a pull has
+				// no session. The purge above needs no such thing — `removeItem()` takes
+				// the item and nothing else — which is why only this one is wrapped.
+				function () use ($manager, $item, $user): void {
+					$this->asUser($user, static function () use ($manager, $item): void {
+						$manager->restoreItem($item);
+					});
+				},
 			);
 		}
 		return $out;

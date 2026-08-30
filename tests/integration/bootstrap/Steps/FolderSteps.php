@@ -565,6 +565,70 @@ trait FolderSteps {
 		}
 	}
 
+
+	/**
+	 * @Then /^"([^"]*)" is still in the Nextcloud trash$/
+	 *
+	 * A FILE inside a trashed folder, named by the path it was trashed FROM — the
+	 * sibling of `"…" is still in the Nextcloud trash, holding only "…"`, which names
+	 * the entry. Both exist because a Grafana-side gesture splits a trashed folder in
+	 * two, and which half a scenario means decides which sentence it should use.
+	 *
+	 * ## WHY THE FOLDER IS NOT THE SUBJECT HERE
+	 *
+	 * After the dashboards inside `Demo/Rescued` are rescued in Grafana, there are TWO
+	 * `Demo/Rescued`: a live folder holding the restored mirror, and the trash entry
+	 * still holding the spreadsheet. Nextcloud keeps a trash entry as its own object
+	 * (`Rescued.d<timestamp>`, remembering where it came from), so restoring one child
+	 * out of it does not dissolve it. Neither "is still in the trash" nor "is out of the
+	 * trash" is a true thing to say about that folder, so the sentence talks about files
+	 * instead — and the mapping table beside it says the dashboard is live at its path.
+	 *
+	 * ## AND IT ASSERTS THE MIRROR LEFT, WHICH THE SENTENCE DOES NOT SAY
+	 *
+	 * `Budget.xlsx` still being there is only half the claim; the other half is that
+	 * `Alpha.grafana` is NOT, because a rescue in Grafana brought it back out. Without
+	 * that, the step passes on an app that did nothing at all — which is the failure
+	 * this scenario exists to catch.
+	 */
+	public function isStillInTheNextcloudTrash(string $path): void {
+		$want = trim($path, '/');
+		$file = basename($want);
+		$folder = trim(dirname($want), '/.');
+		if ($file === '' || $folder === '') {
+			throw new \RuntimeException("'$path' does not name a file inside a trashed folder");
+		}
+		if ($this->trashedFolderEntry === '') {
+			throw new \RuntimeException("nothing recorded trashing '$folder', so 'still' has nothing to mean");
+		}
+		if ($this->trashedFolderPath !== $folder) {
+			throw new \RuntimeException(
+				"this scenario trashed '{$this->trashedFolderPath}', so it cannot say anything about '$path'",
+			);
+		}
+		if (!$this->trashEntryExists($this->trashedFolderEntry)) {
+			throw new \RuntimeException("'$folder' is no longer in the Nextcloud trash, so '$file' went with it");
+		}
+		$held = $this->trashEntryChildren($this->trashedFolderEntry);
+		if (!in_array($file, $held, true)) {
+			throw new \RuntimeException(sprintf(
+				"'%s' is not in the trashed '%s'; it holds: %s",
+				$file,
+				$folder,
+				implode(', ', $held) ?: '(nothing)',
+			));
+		}
+		$mirrors = array_values(array_filter($held, static fn (string $name): bool => str_ends_with($name, '.grafana')));
+		if ($mirrors !== []) {
+			throw new \RuntimeException(sprintf(
+				"'%s' kept '%s' but the rescued mirror never left the trash: %s",
+				$folder,
+				$file,
+				implode(', ', $mirrors),
+			));
+		}
+	}
+
 	/**
 	 * @Then /^"([^"]*)" is still in the Nextcloud trash, holding only "([^"]*)"$/
 	 *

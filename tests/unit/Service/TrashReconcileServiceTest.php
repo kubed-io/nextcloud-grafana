@@ -11,9 +11,11 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\FolderMetadata;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
+use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\TeamFolderService;
 use OCA\GrafanaSync\Service\TrashControl;
@@ -26,16 +28,26 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
- * {@see TrashReconcileService} — a mirror stays in the Nextcloud trash only while the
- * dashboard it mirrors still exists.
+ * {@see TrashReconcileService} — a mirror sits in the Nextcloud trash only for as long as
+ * the dashboard it mirrors is out of its mapped folder, and both directions of that are
+ * tested here.
  *
- * THE TESTS THAT MATTER ARE THE ONES THAT DO NOT PURGE. A wrong "yes" here destroys the
- * last copy of a dashboard and Grafana has no undo, so every way of being unsure has to
- * end in leaving the entry alone. Six of the seven below assert exactly that.
+ * THE TESTS THAT MATTER ARE THE ONES WHERE NOTHING MOVES. Both passes run on the same
+ * asymmetry — every way of being unsure has to end in leaving the entry alone — but they
+ * are unsure about opposite things, and the stakes are not equal:
+ *
+ *   - {@see TrashReconcileService::reap()} and `reapFolders()` DESTROY. A wrong "yes"
+ *     takes the last copy of a dashboard, and Grafana has no undo.
+ *   - {@see TrashReconcileService::restoreFolders()} UNDOES A DELETE. A wrong "yes" puts
+ *     back a file the user meant to be gone, for a dashboard still sitting in the bin.
+ *
+ * So the two halves of this file are near mirror images by design, and a case that only
+ * appears on one side is worth asking about.
  */
 #[CoversClass(TrashReconcileService::class)]
 final class TrashReconcileServiceTest extends TestCase {
 	private const MAPPING_ID = 'm-demo';
+	private const BIN_UID = 'gf-bin';
 
 	public function testAMirrorWhoseDashboardIsGoneIsPurged(): void {
 		$purged = false;
@@ -292,7 +304,252 @@ final class TrashReconcileServiceTest extends TestCase {
 		self::assertFalse($entryPurged, 'a folder this app never mirrored into was purged');
 	}
 
+
+	// ── restoreFolders: a rescue in Grafana brings the trashed folder back ──────
+
+	/**
+	 * A folder of nothing but rescued mirrors comes back WHOLE — one call that brings
+	 * the folder and its files together, rather than restoring each file and leaving an
+	 * empty entry in the trash for the user to notice and clear.
+	 *
+	 * The exact mirror of {@see testAFolderOfNothingButFinishedMirrorsIsPurgedWhole()},
+	 * which is the point: the two passes answer the same two-part question, and the only
+	 * difference is which way the dashboard went.
+	 */
+	public function testAFolderOfNothingButRescuedMirrorsIsRestoredWhole(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored individually when the whole entry should have come back');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Revived', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-rescued'),
+			static fn (): array => ['meta' => ['folderUid' => 'gf-revived']],
+		);
+
+		self::assertSame(1, $service->restoreFolders($this->mapping()));
+		self::assertTrue($entryRestored, 'the trashed folder was not restored');
+	}
+
+	/**
+	 * A GESTURE IN GRAFANA SPEAKS FOR DASHBOARDS AND NOTHING ELSE. The spreadsheet has no
+	 * far side, so it stays where the user's own trash gesture put it — and the entry
+	 * stays with it, holding only that. The rescued mirror still comes back.
+	 *
+	 * This is the half the sibling gets wrong in the purge direction and the reason
+	 * `folders/restore.feature` stopped making the FOLDER its subject: after this there
+	 * are two `Rescued`, a live one and a trash entry, and only files can be spoken about
+	 * without contradiction.
+	 */
+	public function testAFolderHoldingSomethingElseKeepsTheEntryAndStillRestoresTheMirror(): void {
+		$entryRestored = false;
+		$mirrorRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function () use (&$mirrorRestored): void {
+			$mirrorRestored = true;
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Rescued', [$alpha], true, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-rescued'),
+			static fn (): array => ['meta' => ['folderUid' => 'gf-rescued']],
+		);
+
+		self::assertSame(1, $service->restoreFolders($this->mapping()));
+		self::assertTrue($mirrorRestored, 'the rescued mirror was left in the trash');
+		self::assertFalse($entryRestored, 'the entry came back, taking a file no Grafana gesture speaks for');
+	}
+
+	/**
+	 * PARKED IS NOT RESCUED, and this is the case the pass exists to get right. A
+	 * dashboard still sitting in the recycle-bin folder answers 200 with the BIN's uid —
+	 * the state where its mirror belongs in the trash exactly where it is. Restoring it
+	 * would undo a delete the user meant.
+	 */
+	public function testAStillParkedDashboardLeavesItsMirrorInTheTrash(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail("a still-parked dashboard's mirror was restored");
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Parked', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-parked'),
+			static fn (): array => ['meta' => ['folderUid' => self::BIN_UID]],
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back for a dashboard that is still in the bin');
+	}
+
+	/**
+	 * ONE STILL-PARKED DASHBOARD KEEPS THE ENTRY, and its own mirror with it. A rescued
+	 * sibling still comes back — the entry has to survive to hold what was left behind.
+	 */
+	public function testAStillParkedDashboardKeepsTheEntryButNotItsRescuedSibling(): void {
+		$entryRestored = false;
+		$rescuedMirror = false;
+		$rescued = $this->trashed('Rescued.grafana', 7, null, static function () use (&$rescuedMirror): void {
+			$rescuedMirror = true;
+		});
+		$parked = $this->trashed('Parked.grafana', 8, null, static function (): void {
+			self::fail("a parked dashboard's mirror was restored");
+		});
+
+		$metadata = $this->createStub(DashboardMetadata::class);
+		$metadata->method('read')->willReturnMap([
+			[7, $this->managed('dash-rescued')],
+			[8, $this->managed('dash-parked')],
+		]);
+		$service = $this->folderService(
+			[$this->trashedFolder('Mixed', [$rescued, $parked], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			null,
+			static fn (string $uid): array => $uid === 'dash-parked'
+				? ['meta' => ['folderUid' => self::BIN_UID]]
+				: ['meta' => ['folderUid' => 'gf-mixed']],
+			$metadata,
+		);
+
+		self::assertSame(1, $service->restoreFolders($this->mapping()));
+		self::assertTrue($rescuedMirror, 'the rescued mirror was left in the trash');
+		self::assertFalse($entryRestored, 'the entry came back while a parked dashboard still needed it');
+	}
+
+	/**
+	 * A 404 IS reap()'S BUSINESS, NOT THIS PASS'S. The dashboard was destroyed rather
+	 * than rescued, so there is nothing to come back to — and restoring the mirror would
+	 * put back a file that mirrors nothing.
+	 */
+	public function testADestroyedDashboardRestoresNothing(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored for a dashboard that no longer exists');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Gone', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-gone'),
+			static fn (): never => throw new GrafanaApiException('no such dashboard', 404),
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back for a dashboard Grafana no longer has');
+	}
+
+	/** Grafana unreachable is not proof either way, so nothing moves. */
+	public function testAnUnreachableGrafanaRestoresNothing(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored on an answer Grafana never gave');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Unknown', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-unknown'),
+			static fn (): never => throw new GrafanaApiException('connection refused', 0),
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back on an answer Grafana never gave');
+	}
+
+	/**
+	 * A PARTIAL BODY IS NOT THE GRAFANA ROOT. Grafana has answered 200 with no `meta`
+	 * before now, and reading that as "folderUid is empty, so it is out of the bin" would
+	 * restore every trashed mirror in the mapping on one bad response.
+	 */
+	public function testAResponseWithNoMetaRestoresNothing(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored on a response that said nothing about where it is');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Partial', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-partial'),
+			static fn (): array => ['dashboard' => ['uid' => 'dash-partial']],
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back on a body that never said where the dashboard is');
+	}
+
+	/**
+	 * BIN OFF MEANS NOTHING WAS EVER PARKED, so there is nothing to be rescued from and
+	 * no signal to read — the dashboards were destroyed at trash time. A bin that is on
+	 * but unresolvable answers the same way for the opposite reason: the one thing this
+	 * pass must be able to recognise is the bin itself.
+	 */
+	public function testAnUnresolvableBinRestoresNothing(): void {
+		$entryRestored = false;
+		$alpha = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail('a mirror was restored without knowing where the bin is');
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('NoBin', [$alpha], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			$this->managed('dash-rescued'),
+			static function (): never {
+				self::fail('Grafana was asked about a dashboard before the bin was resolved');
+			},
+			null,
+			null,
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, 'a folder came back with no bin to have been rescued from');
+	}
+
+	/** Another mapping's mirrors are that mapping's to judge, and they keep the entry. */
+	public function testAFolderOfAnotherMappingsMirrorsIsNotRestored(): void {
+		$entryRestored = false;
+		$theirs = $this->trashed('Alpha.grafana', 7, null, static function (): void {
+			self::fail("another mapping's mirror was restored");
+		});
+		$service = $this->folderService(
+			[$this->trashedFolder('Theirs', [$theirs], false, static function (): void {
+			}, static function () use (&$entryRestored): void {
+				$entryRestored = true;
+			})],
+			new ManagedFile('dash-rescued', Mapping::MODE_SYNC, '1', 'hash', 'm-other', ''),
+			static fn (): array => ['meta' => ['folderUid' => 'gf-theirs']],
+		);
+
+		self::assertSame(0, $service->restoreFolders($this->mapping()));
+		self::assertFalse($entryRestored, "another mapping's folder was restored");
+	}
+
 	// ── harness ────────────────────────────────────────────────────────────────
+
+	/**
+	 * The recycle bin, resolved or not.
+	 *
+	 * Null is BIN OFF — nothing was ever parked, so there is nothing to be rescued
+	 * from. {@see TrashReconcileService::restoreFolders} treats a bin it cannot resolve
+	 * the same way, which is the case worth having a stub for.
+	 */
+	private function bin(?string $uid): RecycleBin {
+		$bin = $this->createStub(RecycleBin::class);
+		$bin->method('activeFolderUid')->willReturn($uid);
+		return $bin;
+	}
 
 	private function mapping(): Mapping {
 		return Mapping::fromArray([
@@ -321,8 +578,15 @@ final class TrashReconcileServiceTest extends TestCase {
 	/**
 	 * @param list<TrashedFile> $dashboards
 	 */
-	private function trashedFolder(string $name, array $dashboards, bool $holdsOtherFiles, \Closure $purge): TrashedFolder {
-		return new TrashedFolder($name, $dashboards, $holdsOtherFiles, $purge);
+	private function trashedFolder(
+		string $name,
+		array $dashboards,
+		bool $holdsOtherFiles,
+		\Closure $purge,
+		?\Closure $restore = null,
+	): TrashedFolder {
+		return new TrashedFolder($name, $dashboards, $holdsOtherFiles, $purge, $restore ?? static function (): void {
+		});
 	}
 
 	/**
@@ -336,6 +600,7 @@ final class TrashReconcileServiceTest extends TestCase {
 		?ManagedFile $managed,
 		\Closure $readDashboard,
 		?DashboardMetadata $metadata = null,
+		?string $binUid = self::BIN_UID,
 	): TrashReconcileService {
 		$trash = $this->createStub(TrashControl::class);
 		$trash->method('listTrashedFolders')->willReturn($inTrash);
@@ -355,7 +620,9 @@ final class TrashReconcileServiceTest extends TestCase {
 			$this->createStub(IRootFolder::class),
 			$trash,
 			$metadata,
+			$this->createStub(FolderMetadata::class),
 			$grafana,
+			$this->bin($binUid),
 			$teamFolders,
 			new SyncGuard(),
 			new NullLogger(),
@@ -366,7 +633,12 @@ final class TrashReconcileServiceTest extends TestCase {
 	 * @param list<TrashedFile> $inTrash
 	 * @param \Closure():mixed $readDashboard what Grafana answers for the uid under test
 	 */
-	private function service(array $inTrash, ManagedFile $managed, \Closure $readDashboard): TrashReconcileService {
+	private function service(
+		array $inTrash,
+		ManagedFile $managed,
+		\Closure $readDashboard,
+		?string $binUid = self::BIN_UID,
+	): TrashReconcileService {
 		$trash = $this->createStub(TrashControl::class);
 		$trash->method('listTrashed')->willReturn($inTrash);
 
@@ -383,7 +655,9 @@ final class TrashReconcileServiceTest extends TestCase {
 			$this->createStub(IRootFolder::class),
 			$trash,
 			$metadata,
+			$this->createStub(FolderMetadata::class),
 			$grafana,
+			$this->bin($binUid),
 			$teamFolders,
 			new SyncGuard(),
 			new NullLogger(),

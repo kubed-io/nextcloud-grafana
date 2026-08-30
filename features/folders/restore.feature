@@ -30,31 +30,18 @@ Feature: Restoring a folder from the trash
       | path                     |
       | /Demo/Team/Alpha.grafana |
       | /Demo/Team/Beta.grafana  |
+      | /Demo/Team/Budget.xlsx   |
     And "Demo/Team" is in the Nextcloud trash
     When I restore "Demo/Team" from the Nextcloud trash
-    Then Grafana mirrors the folder "Demo/Team"
+    Then "Demo/Team" is back in Grafana
     And the mappings hold:
       | path                     | identity        |
       | /Demo/Team/Alpha.grafana | the original id |
       | /Demo/Team/Beta.grafana  | the original id |
+      | /Demo/Team/Budget.xlsx   | NA              |
 
-  # notes: ../AGENTS.md#restoring-a-folder-in-a-team-folder
-  @user @in-nextcloud @gesture @ui @recycle-bin @unbuilt
-  Scenario: Restore a folder in a Team Folder
-    Given the Grafana recycle bin is on
-    And the following items in the mappings:
-      | path                       |
-      | /Shared/Team/Alpha.grafana |
-      | /Shared/Team/Beta.grafana  |
-    And "Shared/Team" is in the Nextcloud trash
-    When I restore "Shared/Team" from the Nextcloud trash
-    Then Grafana mirrors the folder "Shared/Team"
-    And the mappings hold:
-      | path                       | identity        |
-      | /Shared/Team/Alpha.grafana | the original id |
-
-    # Nothing was destroyed, so nothing has to be rebuilt: the dashboards come back
-    # with the ids, URLs and history they always had.
+    # Nothing was destroyed, so nothing is rebuilt — and the folder comes back whole,
+    # spreadsheet included, because the gesture was Nextcloud's own.
 
   @user @in-nextcloud @gesture @ui @recycle-bin
   Scenario: Restore a folder with the recycle bin off
@@ -65,7 +52,7 @@ Feature: Restoring a folder from the trash
       | /Demo/Team/Beta.grafana  |
     And "Demo/Team" is in the Nextcloud trash
     When I restore "Demo/Team" from the Nextcloud trash
-    Then Grafana mirrors the folder "Demo/Team"
+    Then "Demo/Team" is back in Grafana
     And the mappings hold:
       | path                     | identity |
       | /Demo/Team/Alpha.grafana | a new id |
@@ -74,37 +61,60 @@ Feature: Restoring a folder from the trash
     # The dashboards went at trash time, so a restore can only build new ones from
     # the files — the bodies survive, the identities cannot.
 
+  # notes: ../AGENTS.md#restoring-a-folder-in-a-team-folder
+  @user @in-nextcloud @gesture @ui @recycle-bin
+  Scenario: Restore a folder in a Team Folder
+    Given the Grafana recycle bin is on
+    And the following items in the mappings:
+      | path                       |
+      | /Shared/Team/Alpha.grafana |
+      | /Shared/Team/Beta.grafana  |
+    And "Shared/Team" is in the Nextcloud trash
+    When I restore "Shared/Team" from the Nextcloud trash
+    Then "Shared/Team" is back in Grafana
+    And the mappings hold:
+      | path                       | identity        |
+      | /Shared/Team/Alpha.grafana | the original id |
+      | /Shared/Team/Beta.grafana  | the original id |
+
+    # A groupfolder restores through its own trash backend, which emits no typed event —
+    # so the folder branch had to be reachable from the legacy hook as well.
+
     # ── RULE: dashboards coming back in Grafana bring their folder with them ──
     # notes: ../AGENTS.md#dashboards-leaving-the-bin-bring-their-folder-out-of-the-trash
 
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
-  Scenario: Move a trashed folder's dashboards out of the bin in Grafana
+  @grafana @in-grafana @gesture @ui @recycle-bin
+  Scenario: Restore a trashed folder's dashboards from the Grafana bin
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Beta.grafana  |
-    And "Demo/Team" is in the Nextcloud trash
-    When someone moves those dashboards back into "Demo/Team" in Grafana
-    Then Grafana mirrors the folder "Demo/Team"
+      | path                        |
+      | /Demo/Revived/Alpha.grafana |
+      | /Demo/Revived/Beta.grafana  |
+    And "Demo/Revived" is in the Nextcloud trash
+    When someone moves "Revived" from "nextcloud-trash" back under "Demo" in Grafana
+    Then "Demo/Revived" is gone from the Nextcloud trash
     And the mappings hold:
-      | path                     | identity        |
-      | /Demo/Team/Alpha.grafana | the original id |
+      | path                        | identity        |
+      | /Demo/Revived/Alpha.grafana | the original id |
+      | /Demo/Revived/Beta.grafana  | the original id |
 
     # The uids name files that already exist in the trash, so they are restored
     # rather than written a second time beside them.
 
-  # notes: ../AGENTS.md#a-restore-out-of-the-bin-brings-back-whatever-shared-the-folder
-  @grafana @in-grafana @gesture @ui @recycle-bin @unbuilt
-  Scenario: Move a trashed folder's dashboards out of the bin, where the folder held other files
+  # notes: ../AGENTS.md#a-restore-in-grafana-speaks-for-dashboards-and-nothing-else
+  @grafana @in-grafana @gesture @ui @recycle-bin
+  Scenario: Restore a trashed folder's dashboards from the Grafana bin, where the folder held other files
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Budget.xlsx   |
-    And "Demo/Team" is in the Nextcloud trash
-    When someone moves those dashboards back into "Demo/Team" in Grafana
-    Then "Demo/Team" holds "Budget.xlsx"
+      | path                        |
+      | /Demo/Rescued/Alpha.grafana |
+      | /Demo/Rescued/Budget.xlsx   |
+    And "Demo/Rescued" is in the Nextcloud trash
+    When someone moves "Rescued" from "nextcloud-trash" back under "Demo" in Grafana
+    Then "Demo/Rescued/Budget.xlsx" is still in the Nextcloud trash
+    And the mappings hold:
+      | path                        | identity        |
+      | /Demo/Rescued/Alpha.grafana | the original id |
 
-    # A folder comes out of the Nextcloud trash whole — the spreadsheet rode in with
-    # it and rides back out.
+    # A gesture in Grafana speaks for dashboards and nothing else. The spreadsheet has
+    # no far side, so it stays where the user's own trash gesture put it.

@@ -25,49 +25,54 @@ use Psr\Log\NullLogger;
  * {@see TrashRestoreHook} — the restore leg for every trash the typed event never fires
  * for, which in practice means the Team Folders this app's mappings actually use.
  *
- * THE PRE-FILTER IS THE PART WORTH TESTING. This hook fires for EVERY restore on the
- * instance, so the expensive failure is not "the dashboard did not come back" — it is
- * the hook acting on somebody's restored spreadsheet.
+ * WHAT REACHES THE SHARED RULE TABLE IS THE PART WORTH TESTING. This hook fires for
+ * EVERY restore on the instance, and it used to decide on its own what was worth looking
+ * at — by asking whether `$params['filePath']` ended in `.grafana`.
+ *
+ * That filter was wrong in the one direction that mattered. A restored FOLDER's path
+ * ends in a folder name, so it said no to every folder restore there has ever been, and
+ * the folder branch lives in the typed listener that a groupfolder never reaches. The
+ * hook now resolves the node and hands it to
+ * {@see RestoreFromTrashListener::restoreTree()}, which owns the file/folder branch — so
+ * "somebody's restored spreadsheet is ignored" is tested against that method
+ * ({@see RestoreFromTrashListenerTest}) rather than asserted twice in two places that
+ * could disagree.
  */
 #[CoversClass(TrashRestoreHook::class)]
 final class TrashRestoreHookTest extends TestCase {
 	public function testARestoredDashboardIsHandedToTheSharedRuleTable(): void {
 		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::once())->method('restoreOne');
+		$restore->expects(self::once())->method('restoreTree');
 
 		$this->fire($restore, ['filePath' => '/Shared/Fleet Health.grafana'], $this->file());
 	}
 
-	public function testARestoredSpreadsheetIsIgnored(): void {
+	/**
+	 * THE TEAM FOLDER FIX, AND THE REGRESSION TEST FOR THE FILTER THAT CAUSED IT.
+	 *
+	 * A restored folder arrives with a folder path — `/Shared/Team`, no extension — and
+	 * the old pre-filter returned on exactly that, before the node was even resolved. The
+	 * typed listener's folder branch never runs for a groupfolder, so this hook returning
+	 * here meant restoring a folder out of a Team Folder's trash reached Grafana never.
+	 */
+	public function testARestoredFolderIsHandedOverWhole(): void {
 		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::never())->method('restoreOne');
+		$restore->expects(self::once())->method('restoreTree');
 
-		$this->fire($restore, ['filePath' => '/Shared/budget.xlsx'], $this->file());
+		$this->fire($restore, ['filePath' => '/Shared/Team'], $this->createStub(Folder::class));
 	}
 
 	public function testAMissingPathIsIgnored(): void {
 		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::never())->method('restoreOne');
+		$restore->expects(self::never())->method('restoreTree');
 
 		$this->fire($restore, [], $this->file());
-	}
-
-	/**
-	 * A FOLDER restored whole is not this hook's business. The typed listener walks a
-	 * restored folder through the cascade; here the node is not a File and there is
-	 * nothing safe to infer from the name alone.
-	 */
-	public function testARestoredFolderIsIgnored(): void {
-		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::never())->method('restoreOne');
-
-		$this->fire($restore, ['filePath' => '/Shared/Team.grafana'], $this->createStub(Folder::class));
 	}
 
 	/** The app's own writes must never re-enter through a user-facing path. */
 	public function testTheAppsOwnWritesAreIgnored(): void {
 		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::never())->method('restoreOne');
+		$restore->expects(self::never())->method('restoreTree');
 
 		$guard = new SyncGuard();
 		$guard->run(function () use ($restore, $guard): void {
@@ -82,7 +87,7 @@ final class TrashRestoreHookTest extends TestCase {
 	 */
 	public function testAnUnresolvableNodeDoesNotEscape(): void {
 		$restore = $this->createMock(RestoreFromTrashListener::class);
-		$restore->expects(self::never())->method('restoreOne');
+		$restore->expects(self::never())->method('restoreTree');
 
 		$folder = $this->createStub(Folder::class);
 		$folder->method('get')->willThrowException(new \RuntimeException('not found'));

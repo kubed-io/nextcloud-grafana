@@ -110,6 +110,30 @@ final class RestoreFromTrashListenerTest extends TestCase {
 		$this->listener()->handle(new NodeRestoredEvent($file));
 	}
 
+	/**
+	 * THE SECOND ENTRY POINT GETS THE SAME BRANCH, and this is the test the Team Folder
+	 * gap needed. {@see \OCA\GrafanaSync\Listener\TrashRestoreHook} covers the trashes
+	 * `NodeRestoredEvent` never fires for — a groupfolder's above all — and it used to
+	 * call `restoreOne()`, which can only answer a FILE. So the folder branch existed
+	 * only on the path a Team Folder does not take.
+	 */
+	public function testTheHooksEntryPointWalksARestoredFolderToo(): void {
+		$folder = $this->createStub(Folder::class);
+		$this->cascade->method('dashboardFilesIn')->willReturn([$this->file(11), $this->file(12)]);
+		$this->deleteService->expects(self::exactly(2))->method('restore');
+
+		$this->listener()->restoreTree($folder);
+	}
+
+	/** And it filters the same way, so the hook does not have to know how. */
+	public function testTheHooksEntryPointIgnoresANonDashboardFile(): void {
+		$file = $this->createStub(File::class);
+		$file->method('getName')->willReturn('Budget.xlsx');
+		$this->deleteService->expects(self::never())->method('restore');
+
+		$this->listener()->restoreTree($file);
+	}
+
 	/** The pull restores nothing, but its writes must never be read as a user restore. */
 	public function testTheAppsOwnWriteIsNotTreatedAsARestore(): void {
 		$this->deleteService->expects(self::never())->method('restore');

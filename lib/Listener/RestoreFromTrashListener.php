@@ -59,8 +59,24 @@ final class RestoreFromTrashListener implements IEventListener {
 		if ($this->guard->active()) {
 			return;
 		}
-		$target = $event->getTarget();
+		$this->restoreTree($event->getTarget());
+	}
 
+	/**
+	 * One restored node, file or folder, dispatched to the per-file rule table.
+	 *
+	 * PUBLIC FOR THE SAME REASON {@see restoreOne()} IS, and it is the level the second
+	 * entry point actually needs. {@see TrashRestoreHook} covers the trashes the typed
+	 * event never fires for — a Team Folder's above all — and it was calling
+	 * `restoreOne()` directly, which meant it could only ever answer a FILE restore.
+	 *
+	 * So the folder branch below existed only on the path a groupfolder does not take,
+	 * and restoring a folder out of a Team Folder's trash reached Grafana never. That is
+	 * the whole of the `Restore a folder in a Team Folder` gap: not the groupfolder trash
+	 * backend being exotic, just this dispatch living one level too deep for the caller
+	 * that needed it.
+	 */
+	public function restoreTree(\OCP\Files\Node $target): void {
 		// A FOLDER restore is one event for the whole subtree — Nextcloud fires nothing
 		// for the files inside it, exactly as it fires nothing for them on the way in
 		// (see {@see \OCA\GrafanaSync\Service\FolderCascade}). Without this branch a

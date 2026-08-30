@@ -69,7 +69,9 @@ final class TrashReconcileService {
 		private IRootFolder $rootFolder,
 		private TrashControl $trash,
 		private DashboardMetadata $metadata,
+		private FolderMetadata $folders,
 		private GrafanaClient $grafana,
+		private RecycleBin $bin,
 		private TeamFolderService $teamFolders,
 		private SyncGuard $guard,
 		private LoggerInterface $logger,
@@ -303,6 +305,260 @@ final class TrashReconcileService {
 			}
 		}
 		return $purged;
+	}
+
+
+	/**
+	 * Bring back the trashed FOLDERS whose dashboards someone rescued out of the bin.
+	 *
+	 * The mirror image of {@see reapFolders()}, and it answers the same two-part
+	 * question in the same shape — because it is the same question with the sign
+	 * flipped. Somebody went into the recycle-bin folder in Grafana and moved the
+	 * parked dashboards back out; the trashed Nextcloud folder is now describing a
+	 * state that has stopped being true.
+	 *
+	 * ## A RESTORE IS A RESTORE, AND THE ENTRY IS A SEPARATE QUESTION
+	 *
+	 *   - **every rescued mirror inside comes back**, always. Its dashboard is live
+	 *     again and out of the bin, so a file left in the trash is the pull's cue to
+	 *     write a SECOND one beside it — the duplicate {@see restoreMirror()} exists
+	 *     to prevent, one folder deeper.
+	 *   - **the ENTRY comes back only if nothing in it was left behind.** A
+	 *     spreadsheet has no far side and nothing that happened in Grafana speaks for
+	 *     it, so a folder still holding one keeps its entry and the user restores it
+	 *     themselves.
+	 *
+	 * So a folder of nothing but rescued mirrors is restored whole — one call that
+	 * brings the folder and its files back together, rather than restoring each file
+	 * and leaving an empty entry in the trash for the user to notice and clear.
+	 *
+	 * ## AND THE RESTORED FOLDER IS RE-STAMPED, WHICH IS NOT OPTIONAL
+	 *
+	 * Trashing the folder DELETED its Grafana folder (`folders/delete.feature`: the
+	 * folder goes either way). So whatever the rescuer moved those dashboards into is
+	 * a NEW Grafana folder with a new uid, and the Nextcloud folder coming out of the
+	 * trash still carries the dead one.
+	 *
+	 * That is not untidy, it is dangerous, and {@see FolderTreeMirror} already says
+	 * why: the stamp is what decides where the next write goes, so a dead uid invites
+	 * a mirror into a folder Grafana threw away. It is also what stops the very next
+	 * line of the pull from making a mess — `FolderTreeMirror::sync()` looks the
+	 * folder up BY UID, would not find this one, and would try to `newFolder()` a name
+	 * that now exists. The collision is caught and the folder skipped, which quietly
+	 * drops every dashboard in it back to the mapping's root.
+	 *
+	 * ## WHICH IS WHY THIS RUNS BEFORE THE TREE SYNC, NOT AFTER
+	 *
+	 * The other order loses either way: `sync()` creates its own `Revived` first, and
+	 * then the restore lands beside it as `Revived (2)` — two folders, one Grafana
+	 * folder, and the user's file in the one the app is not using.
+	 *
+	 * @return int mirrors brought back
+	 */
+	public function restoreFolders(Mapping $mapping): int {
+		$uid = $this->actorUid($mapping);
+		if ($uid === null) {
+			return 0;
+		}
+
+		// NOTHING WAS EVER PARKED WITH THE BIN OFF, so there is nothing to be rescued
+		// FROM and no signal to read: the dashboards were destroyed at trash time. A bin
+		// that is on but unresolvable is the same answer for the opposite reason — the
+		// one thing this pass has to be able to recognise is the bin itself, and
+		// guessing would restore mirrors whose dashboards are still parked.
+		try {
+			$binUid = $this->bin->activeFolderUid();
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not resolve the recycle-bin folder; leaving the trashed folders alone', [
+				'app' => Application::APP_ID,
+				'mapping' => $mapping->id,
+				'exception' => $e,
+			]);
+			return 0;
+		}
+		if ($binUid === null || $binUid === '') {
+			return 0;
+		}
+
+		$restored = 0;
+		foreach ($this->trash->listTrashedFolders($uid) as $folder) {
+			if ($folder->dashboards === []) {
+				continue; // nothing of ours in here to bring back
+			}
+
+			$rescued = [];
+			$leftBehind = $folder->holdsOtherFiles;
+			foreach ($folder->dashboards as $mirror) {
+				$managed = $this->metadata->read($mirror->fileId);
+				if (!$managed?->isManaged() || !$managed->isSync() || $managed->mappingId !== $mapping->id) {
+					// Another mapping's mirror, or one that left its mapping. Not ours to
+					// bring back, and its presence keeps the entry.
+					$leftBehind = true;
+					continue;
+				}
+				$into = $this->rescuedInto($managed->uid, $binUid);
+				if ($into === null) {
+					$leftBehind = true;
+					continue;
+				}
+				$rescued[] = [$mirror, $into];
+			}
+
+			if ($rescued === []) {
+				continue;
+			}
+
+			// THE RE-STAMP FOLLOWS THE RESTORE THAT WORKED, never the one that was
+			// merely attempted. Stamping a folder for a file still sitting in the trash
+			// would point a live folder at a Grafana folder holding nothing of ours.
+			$back = [];
+			if (!$leftBehind) {
+				// Nothing was left behind, so the entry comes back whole and takes them
+				// with it — one call instead of N, and no empty folder left in the trash.
+				if ($this->restoreInTrash(static fn () => $folder->restore(), count($rescued), $folder->name, $mapping) > 0) {
+					$back = $rescued;
+				}
+			} else {
+				foreach ($rescued as $one) {
+					[$mirror] = $one;
+					$worked = $this->restoreInTrash(
+						static fn () => $mirror->restore(),
+						1,
+						$folder->name . '/' . $mirror->name,
+						$mapping,
+					);
+					if ($worked > 0) {
+						$back[] = $one;
+					}
+				}
+			}
+
+			$restored += count($back);
+			foreach ($back as [$mirror, $into]) {
+				$this->reclaimFolderOf($uid, $mirror->fileId, $into, $mapping);
+			}
+		}
+		return $restored;
+	}
+
+	/**
+	 * Point the folder a restored mirror landed in at the Grafana folder holding its
+	 * dashboard now.
+	 *
+	 * See {@see restoreFolders()} for why this is load-bearing rather than tidy. Read
+	 * off the DASHBOARD rather than assumed, because the rescuer chose where to put it
+	 * and may not have reproduced the tree the trash remembers.
+	 *
+	 * Silent when there is nothing to do: a mapping's own root folder is not a mirror
+	 * of anything and is never stamped, and a folder already carrying the right uid is
+	 * left alone rather than written for the sake of it.
+	 */
+	private function reclaimFolderOf(string $actor, int $fileId, string $grafanaFolderUid, Mapping $mapping): void {
+		if ($grafanaFolderUid === '' || $grafanaFolderUid === $mapping->grafanaFolderUid) {
+			return; // the dashboard sits in the mapped folder itself, which nothing stamps
+		}
+		$file = $this->resolve($actor, $fileId);
+		if ($file === null) {
+			return;
+		}
+		try {
+			$parent = $file->getParent();
+			if ($this->folders->uidOf($parent->getId()) === $grafanaFolderUid) {
+				return;
+			}
+			$this->folders->stamp($parent->getId(), $grafanaFolderUid);
+		} catch (\Throwable $e) {
+			// The file is back either way, which is the part the user asked for. A wrong
+			// stamp is the next pull's problem and it re-reads this every tick.
+			$this->logger->warning('grafana_sync trash: restored a mirror but could not re-stamp the folder it landed in', [
+				'app' => Application::APP_ID,
+				'fileId' => $fileId,
+				'grafanaFolderUid' => $grafanaFolderUid,
+				'exception' => $e,
+			]);
+		}
+	}
+
+	/**
+	 * One restore, under the guard, counted only if it worked.
+	 *
+	 * UNDER THE GUARD for the reason {@see restoreMirror()} gives: a restore emits
+	 * `post_restore`, and {@see \OCA\GrafanaSync\Listener\TrashRestoreHook} answers it
+	 * by pushing the dashboard back into its mapped folder — which is where the rescuer
+	 * has already put it, and which is the news this whole pass is downstream of.
+	 *
+	 * A failure is logged and stepped over. The entry stays in the trash, which is the
+	 * failure direction to prefer: the next tick asks again, and nothing was destroyed.
+	 *
+	 * @param \Closure():void $restore
+	 */
+	private function restoreInTrash(\Closure $restore, int $worth, string $what, Mapping $mapping): int {
+		try {
+			$this->guard->run($restore);
+			$this->logger->info('grafana_sync trash: brought a trashed entry back for dashboards rescued out of the bin', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'mirrors' => $worth,
+				'mapping' => $mapping->id,
+			]);
+			return $worth;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not restore a trashed entry', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'exception' => $e,
+			]);
+			return 0;
+		}
+	}
+
+	/**
+	 * The Grafana folder $uid sits in now, or null if that is not a rescue.
+	 *
+	 * The counterpart of {@see isGone()} and it runs on the same asymmetry: **answers
+	 * null whenever it cannot tell.** A wrong null leaves a trash entry for the next
+	 * tick to look at again; a wrong answer restores a file whose dashboard is still
+	 * parked, undoing a delete the user meant. So an unreachable Grafana, a 404, a
+	 * partial body — every one means "leave it".
+	 *
+	 * A dashboard still in the recycle-bin folder answers with the bin's own uid, which
+	 * is the whole test: parked is not rescued, and its mirror belongs in the trash
+	 * exactly where it is.
+	 */
+	private function rescuedInto(string $uid, string $binUid): ?string {
+		if ($uid === '') {
+			return null;
+		}
+		try {
+			$record = $this->grafana->readDashboard($uid);
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus !== 404) {
+				$this->logger->warning('grafana_sync trash: could not ask where a dashboard is; leaving its mirror in the trash', [
+					'app' => Application::APP_ID,
+					'uid' => $uid,
+					'status' => $e->httpStatus,
+					'exception' => $e,
+				]);
+			}
+			return null; // a 404 is reap()'s business, not this pass's
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not reach Grafana; leaving the mirror in the trash', [
+				'app' => Application::APP_ID,
+				'uid' => $uid,
+				'exception' => $e,
+			]);
+			return null;
+		}
+
+		// NO `meta` IS NOT THE GRAFANA ROOT. Grafana has answered 200 with a partial
+		// body before now ({@see GrafanaClient::readDashboard}), and reading that as
+		// "folderUid is empty, so it is out of the bin" would restore on a bad response.
+		$meta = $record['meta'] ?? null;
+		if (!is_array($meta)) {
+			return null;
+		}
+		$folderUid = (string)($meta['folderUid'] ?? '');
+		return $folderUid === $binUid ? null : $folderUid;
 	}
 
 	/**

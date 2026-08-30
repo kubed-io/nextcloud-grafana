@@ -48,9 +48,10 @@ namespace OCA\GrafanaSync\Service;
  * `nextcloud-penpot` defers this walk behind a memoised closure, because its revive path
  * asks for trashed folders on EVERY PULL and wants only the id off the folder itself —
  * so an eager walk made the cheap caller pay the expensive caller's bill for an answer
- * it discards. That reason does not exist here: {@see TrashReconcileService::reapFolders}
- * is the only caller and it always wants the contents. If a second caller ever appears
- * that does not, take the sibling's closure rather than re-deriving why.
+ * it discards. That reason does not exist here: both callers —
+ * {@see TrashReconcileService::reapFolders} and {@see TrashReconcileService::restoreFolders}
+ * — always want the contents, because the contents are what they judge. If a caller ever
+ * appears that does not, take the sibling's closure rather than re-deriving why.
  */
 final class TrashedFolder {
 	/**
@@ -60,17 +61,32 @@ final class TrashedFolder {
 	 * @param bool $holdsOtherFiles anything in the tree that is not one of those — see
 	 *                              the class docblock: a veto on purging the ENTRY
 	 * @param \Closure():void $purge destroy the entry, and everything that went in with it
+	 * @param \Closure():void $restore put the entry back where it came from, whole
 	 */
 	public function __construct(
 		public readonly string $name,
 		public readonly array $dashboards,
 		public readonly bool $holdsOtherFiles,
 		private readonly \Closure $purge,
+		private readonly \Closure $restore,
 	) {
 	}
 
 	/** Destroy the whole trash entry, folder and everything under it. */
 	public function purge(): void {
 		($this->purge)();
+	}
+
+	/**
+	 * Put the whole entry back at the path it was trashed from.
+	 *
+	 * THE COUNTERPART OF {@see purge()}, AND IT ANSWERS THE SAME TWO-PART QUESTION.
+	 * When every mirror inside has been rescued and nothing else is in the entry, this
+	 * is one call that brings the folder and its files back together — rather than
+	 * restoring each file and leaving an empty entry behind that the user has to
+	 * notice and clear themselves.
+	 */
+	public function restore(): void {
+		($this->restore)();
 	}
 }

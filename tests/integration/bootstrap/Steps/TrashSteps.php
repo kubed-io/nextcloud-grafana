@@ -812,6 +812,109 @@ trait TrashSteps {
 		$this->pullEveryMapping();
 	}
 
+
+	/**
+	 * @When someone moves :folder from :bin back under :parent in Grafana
+	 *
+	 * THE RESCUE, and the exact mirror of {@see someonePurgesFromTheGrafanaRecycleBin()}
+	 * — same subject, same pinned dashboards, opposite verb. It names the FOLDER for the
+	 * reason that one does: the bin is shared, so a sentence that said "someone moves the
+	 * dashboards out of the bin" would be describing every scenario's parked dashboards
+	 * at once.
+	 *
+	 * ## THERE IS NO FOLDER IN THE BIN TO MOVE, AND THE SENTENCE IS STILL RIGHT
+	 *
+	 * With the bin on, trashing `Demo/Revived` parks its dashboards FLAT in the bin and
+	 * DELETES the Grafana folder `Revived`
+	 * ({@see \OCA\GrafanaSync\Service\FolderCascade::trash}). So a person putting that
+	 * folder back in Grafana makes a folder of that name under the parent and drags the
+	 * dashboards into it — which is what this does, in that order, through Grafana's own
+	 * API with no involvement from this app.
+	 *
+	 * The new folder gets a NEW uid, necessarily: the old one was destroyed and Grafana
+	 * does not let a folder be created with a chosen uid. That is not an artefact of the
+	 * harness, it is the situation the app has to survive — the Nextcloud folder coming
+	 * out of the trash still carries the dead one
+	 * ({@see \OCA\GrafanaSync\Service\TrashReconcileService::restoreFolders}).
+	 *
+	 * ## ONLY WHAT IS ACTUALLY IN THE BIN
+	 *
+	 * A pinned dashboard the trash gesture left somewhere else is not this gesture's to
+	 * move, and moving it anyway would make the scenario pass for the wrong reason. The
+	 * same guard the purge twin runs, and the same fail-closed answer when the bin cannot
+	 * be resolved: a bin the scenario said was on and Grafana does not have is a broken
+	 * premise, not a licence to move more.
+	 *
+	 * The pull that follows is folded in for the reason it is everywhere else: nobody
+	 * drags a dashboard in order to run a sync.
+	 */
+	public function someoneMovesFromBackUnderInGrafana(string $folder, string $bin, string $parent): void {
+		$trashed = basename($this->trashedFolderPath);
+		if ($trashed === '') {
+			throw new \RuntimeException("nothing in this scenario has trashed a folder, so '$folder' names nothing");
+		}
+		if ($trashed !== trim($folder, '/')) {
+			throw new \RuntimeException(
+				"this scenario trashed '{$this->trashedFolderPath}', so it cannot move '$folder' back",
+			);
+		}
+		if ($this->originalDashboardUids === []) {
+			throw new \RuntimeException("nothing pinned what '$folder' held, so there is nothing to move back");
+		}
+		// NAMED IN THE SENTENCE AND CHECKED AGAINST THE SETTING, so the scenario cannot
+		// quietly say one bin while the app is configured with another.
+		$configured = $this->configuredBinFolder();
+		if (trim($bin, '/') !== $configured) {
+			throw new \RuntimeException(
+				"the scenario says the bin is '$bin' but the app is configured with '$configured'",
+			);
+		}
+		$binUid = $this->grafanaFolderUidByTitle($configured);
+		if ($binUid === null || $binUid === '') {
+			throw new \RuntimeException(
+				"the recycle bin is configured as '$configured' but Grafana has no folder by that name, "
+				. 'so there is nothing to move out of',
+			);
+		}
+
+		// The parent is a NEXTCLOUD path — `Demo` is the mapped folder — and the Grafana
+		// folder mirroring it is what a person would drop the new folder into.
+		$parentUid = $this->grafanaFolderUidForNcPath(trim($parent, '/'), false);
+		$rebuilt = $this->grafanaCreateFolder($trashed, $parentUid);
+		$this->createdGrafanaFolders[] = $rebuilt;
+
+		$moved = 0;
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			if ($record === null) {
+				continue; // already gone — a previous step took it
+			}
+			if ((string)($record['meta']['folderUid'] ?? '') !== $binUid) {
+				continue;
+			}
+			$res = $this->grafanaClient()->request('POST', '/api/dashboards/db', [
+				'json' => [
+					'dashboard' => ['id' => null] + ($record['dashboard'] ?? []),
+					'folderUid' => $rebuilt,
+					'overwrite' => true,
+					'message' => "rescued out of the bin and back into '$trashed' by a Grafana user",
+				],
+			]);
+			if ($res->getStatusCode() !== 200) {
+				throw new \RuntimeException('moving a dashboard out of the bin failed: ' . (string)$res->getBody());
+			}
+			$moved++;
+		}
+		if ($moved === 0) {
+			// THE ARRANGE DID NOT PARK ANYTHING, so the When performed no gesture and
+			// whatever the Then finds would be about a world nobody built.
+			throw new \RuntimeException(
+				"none of the dashboards '$folder' held were in '$configured', so nothing was moved back",
+			);
+		}
+		$this->pullEveryMapping();
+	}
+
 	/**
 	 * @When someone purges :folder from the Grafana recycle bin
 	 *

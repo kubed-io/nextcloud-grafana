@@ -425,6 +425,19 @@ trait ResourceSteps {
 
 	/**
 	 * @Then /^Grafana mirrors the folder "([^"]*)"$/
+	 * @Then /^"([^"]*)" is back in Grafana$/
+	 *
+	 * TWO SENTENCES, ONE CLAIM, and the second one is what a RESTORE means. "Grafana
+	 * mirrors the folder" reads as a statement about the mapping, which the Background
+	 * already made; `folders/restore.feature` wants to say which SIDE the folder is on
+	 * and that it is there again. The strength is identical because the question is —
+	 * a restore rebuilt the mirror, so the uid stamps are exactly what must be checked.
+	 *
+	 * NOT `Grafana has the folder "…"`, which is the deliberately weaker step
+	 * `folders/delete.feature` uses to say a refused gesture left the far side alone.
+	 * Asserting mirror integrity to mean "nothing happened" describes more than that
+	 * scenario means; asserting only existence to mean "it came back" describes less
+	 * than this one does.
 	 *
 	 * THE CHAIN, NOT JUST THE LEAF, and at whatever depth the scenario used. A
 	 * dashboard five folders deep needs all five, and asserting only the innermost
