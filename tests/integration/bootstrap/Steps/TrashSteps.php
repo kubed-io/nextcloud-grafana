@@ -836,7 +836,19 @@ trait TrashSteps {
 		if ($this->originalDashboardUids === []) {
 			throw new \RuntimeException("nothing pinned what '$folder' held, so there is nothing to purge");
 		}
-		$binUid = $this->grafanaFolderUidByTitle($this->configuredBinFolder());
+		$bin = $this->configuredBinFolder();
+		$binUid = $this->grafanaFolderUidByTitle($bin);
+		if ($binUid === null || $binUid === '') {
+			// FAIL CLOSED. The guard below reads `folderUid !== $binUid`, so a null bin
+			// made it vacuously false and this deleted EVERY pinned dashboard wherever it
+			// lived — the scenario would then pass on a Grafana the arrange never built.
+			// A bin the scenario said was on and Grafana does not have is a broken
+			// premise, not a licence to delete more. Copilot caught it on #74.
+			throw new \RuntimeException(
+				"the recycle bin is configured as '$bin' but Grafana has no folder by that name, "
+				. 'so there is nothing to purge from',
+			);
+		}
 		foreach ($this->originalDashboardUids as $uid) {
 			$record = $this->grafanaGetDashboard($uid);
 			if ($record === null) {
@@ -845,7 +857,7 @@ trait TrashSteps {
 			// ONLY WHAT IS ACTUALLY IN THE BIN. A dashboard the trash gesture left
 			// somewhere else is not this gesture's to delete, and deleting it anyway
 			// would make the scenario pass for the wrong reason.
-			if ($binUid !== null && (string)($record['meta']['folderUid'] ?? '') !== $binUid) {
+			if ((string)($record['meta']['folderUid'] ?? '') !== $binUid) {
 				continue;
 			}
 			$this->grafanaDeleteDashboard($uid);
