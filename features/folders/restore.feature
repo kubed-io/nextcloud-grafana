@@ -24,61 +24,52 @@ Feature: Restoring a folder from the trash
     # notes: ../AGENTS.md#the-recycle-bin-folder
 
   @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario: Restore a folder with the recycle bin on
+  Scenario Outline: Restore a folder with the recycle bin on
     Given the Grafana recycle bin is on
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Beta.grafana  |
-      | /Demo/Team/Budget.xlsx   |
-    And "Demo/Team" is in the Nextcloud trash
-    When I restore "Demo/Team" from the Nextcloud trash
-    Then "Demo/Team" is back in Grafana
+      | path                         |
+      | /<folder>/Team/Alpha.grafana |
+      | /<folder>/Team/Beta.grafana  |
+      | /<folder>/Team/Budget.xlsx   |
+    And "<folder>/Team" is in the Nextcloud trash
+    When I restore "<folder>/Team" from the Nextcloud trash
+    Then "<folder>/Team" is back in Grafana
     And the mappings hold:
-      | path                     | identity        |
-      | /Demo/Team/Alpha.grafana | the original id |
-      | /Demo/Team/Beta.grafana  | the original id |
-      | /Demo/Team/Budget.xlsx   | NA              |
+      | path                         | identity        |
+      | /<folder>/Team/Alpha.grafana | the original id |
+      | /<folder>/Team/Beta.grafana  | the original id |
+      | /<folder>/Team/Budget.xlsx   | NA              |
+
+    Examples: the storage a mapping uses makes no difference to what a restore is
+      | folder |
+      | Demo   |
+      | Shared |
 
     # Nothing was destroyed, so nothing is rebuilt — and the folder comes back whole,
     # spreadsheet included, because the gesture was Nextcloud's own.
 
   @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario: Restore a folder with the recycle bin off
+  Scenario Outline: Restore a folder with the recycle bin off
     Given the Grafana recycle bin is off
     And the following items in the mappings:
-      | path                     |
-      | /Demo/Team/Alpha.grafana |
-      | /Demo/Team/Beta.grafana  |
-    And "Demo/Team" is in the Nextcloud trash
-    When I restore "Demo/Team" from the Nextcloud trash
-    Then "Demo/Team" is back in Grafana
+      | path                         |
+      | /<folder>/Team/Alpha.grafana |
+      | /<folder>/Team/Beta.grafana  |
+    And "<folder>/Team" is in the Nextcloud trash
+    When I restore "<folder>/Team" from the Nextcloud trash
+    Then "<folder>/Team" is back in Grafana
     And the mappings hold:
-      | path                     | identity |
-      | /Demo/Team/Alpha.grafana | a new id |
-      | /Demo/Team/Beta.grafana  | a new id |
+      | path                         | identity |
+      | /<folder>/Team/Alpha.grafana | a new id |
+      | /<folder>/Team/Beta.grafana  | a new id |
+
+    Examples: and it makes none to a rebuild either
+      | folder |
+      | Demo   |
+      | Shared |
 
     # The dashboards went at trash time, so a restore can only build new ones from
     # the files — the bodies survive, the identities cannot.
-
-  # notes: ../AGENTS.md#restoring-a-folder-in-a-team-folder
-  @user @in-nextcloud @gesture @ui @recycle-bin
-  Scenario: Restore a folder in a Team Folder
-    Given the Grafana recycle bin is on
-    And the following items in the mappings:
-      | path                       |
-      | /Shared/Team/Alpha.grafana |
-      | /Shared/Team/Beta.grafana  |
-    And "Shared/Team" is in the Nextcloud trash
-    When I restore "Shared/Team" from the Nextcloud trash
-    Then "Shared/Team" is back in Grafana
-    And the mappings hold:
-      | path                       | identity        |
-      | /Shared/Team/Alpha.grafana | the original id |
-      | /Shared/Team/Beta.grafana  | the original id |
-
-    # A groupfolder restores through its own trash backend, which emits no typed event —
-    # so the folder branch had to be reachable from the legacy hook as well.
 
     # ── RULE: dashboards coming back in Grafana bring their folder with them ──
     # notes: ../AGENTS.md#dashboards-leaving-the-bin-bring-their-folder-out-of-the-trash

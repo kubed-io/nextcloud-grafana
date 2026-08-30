@@ -1010,40 +1010,44 @@ It is also why the same walk is needed on the guard side — see
 [copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
 One recursive gesture, one event, two places that have to look inside it.
 
-### Restoring a folder in a Team Folder
+### RETIRED — Restoring a folder in a Team Folder
 
-**LIVE**, and the note below is the history of how it got there. It was `@unbuilt`
-for a while on a theory that turned out to be wrong, which is the part worth keeping.
+**It is a row again, and the note is kept for the wrong turn it records.**
 
-It was one Examples row beside `Demo`, which made a real gap look like a flake in a
-passing outline. Split out, so the thing that did not work was a scenario that said
-so rather than a row that kept a suite red. That much was right.
+The scenario was split out of an `Examples` row when it failed, on the grounds that
+a real gap looked like a flake in a passing outline. That much was right. What went
+with it was a THEORY: that the groupfolder trash backend was doing something exotic
+— a mount rather than a folder in anybody's home, restoring through
+`OCA\GroupFolders\Trash\TrashBackend`, different node ids, a different acting user —
+and that finding out meant reading that backend against a live groupfolder.
 
-**The theory was that the groupfolder trash backend was doing something exotic** —
-a mount rather than a folder in anybody's home, restoring through
-`OCA\GroupFolders\Trash\TrashBackend`, different node ids, a different acting user
-— and that finding out meant reading that backend against a live groupfolder. That
-guess is written into the previous version of this section, and it sent the work in
-the wrong direction for two rounds.
+**It was none of those things, and the theory is what cost the time.** `post_restore`
+is the one signal both trashes emit and `TrashRestoreHook` reads it — but it began by
+filtering on `isDashboardName(basename($params['filePath']))`. A restored FOLDER's
+path ends in a folder name, so that filter said no to every folder restore there has
+ever been, and returned before the node was even resolved. The folder branch existed
+the whole time, in `RestoreFromTrashListener` — on the path a groupfolder never takes.
+Both entry points now go through `RestoreFromTrashListener::restoreTree()`.
 
-**It was none of those things. The dispatch was one level too deep.** `post_restore`
-is the one signal both trashes emit and `TrashRestoreHook` is what reads it — but it
-began by filtering on `isDashboardName(basename($params['filePath']))`. A restored
-FOLDER's path ends in a folder name, so that filter said no to every folder restore
-there has ever been, and returned before the node was even resolved. The folder
-branch existed the whole time, in `RestoreFromTrashListener` — on the path a
-groupfolder never takes.
+With the same end state on both storages, the scenario earns no more than the row it
+came from. It is one now, on BOTH bin modes — `Demo` and `Shared`, the same
+`Examples: the storage a mapping uses makes no difference…` that `folders/delete`,
+`folders/copy` and `folders/move` already carry, and the same shape `nextcloud-penpot`
+uses for the identical question.
 
-Both entry points now hand the whole node to `RestoreFromTrashListener::restoreTree()`,
-which owns the file/folder branch. The cost is one `get()` per restore gesture in the
-instance, which is what the typed listener already paid.
+**Both bins get the row, and that is not symmetry for its own sake.** The two take
+different branches: bin-on MOVES the dashboard back out of the recycle-bin folder,
+bin-off RE-CREATES it from the file and resolves the mapping with
+`resolveForPath($target->getPath())`. That path is the one thing a groupfolder mount
+actually changes, so it is the branch most worth running over both storages — and it
+was the one the split-out scenario never covered, being bin-on only.
 
-**The habit this earns is not the one the old note wrote down.** "When a storage
-column exists, a row failing alone is evidence about the STORAGE" is true and was
-not enough — it named the right symptom and then invited a story about groupfolder
-internals to explain it. The cheaper question is which of the two entry points a
-storage actually uses, and whether they cover the same shapes. Here they did not,
-and nothing about groupfolders had to be understood to see it.
+**The habit the old note wrote down was the wrong one.** "When a storage column
+exists, a row failing alone is evidence about the STORAGE" is true, and it was not
+enough: it named the right symptom and then invited a story about groupfolder
+internals to explain it. The cheaper question is which of the two ENTRY POINTS that
+storage uses, and whether they cover the same shapes. Here they did not, and nothing
+about groupfolders had to be understood to see it.
 
 ### Trashing a folder in a link mapping
 
