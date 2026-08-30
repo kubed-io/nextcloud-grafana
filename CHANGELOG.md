@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Mapping a folder in **link** mode when it already holds dashboard files now warns you first, says how many, and offers to move them out instead. A link mapping holds pointers, so those files cannot survive there — before, the mapping was made anyway and left a folder the app had two contradictory answers about.
+- The admin panel asks destructive questions in a proper Nextcloud dialog now, themed like the rest of the instance, instead of the browser's grey alert box.
 - Copying a folder now duplicates the dashboards inside it: each copy is a new dashboard in a new Grafana folder, and the originals are untouched. Copying a folder used to do nothing in Grafana at all.
 - Copying a folder of linked dashboards out of its mapping is refused, with a message. Only a copy *into* a link mapping was ever caught, so the three pointers inside landed in the destination as if someone had authored them there.
 - **Sync to Grafana** now makes dashboards of files that have never been pushed — map a folder that already holds `.grafana` files, press the button, and they become real. It used to skip them and say so only in the log.

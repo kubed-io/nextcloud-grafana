@@ -87,9 +87,29 @@ trait AdminSteps {
 		Assert::assertSame(0, $res['exit'], "storing the (invalid) token failed:\n{$res['output']}");
 	}
 
-	/** @Given the admin has set the Grafana base URL */
+	/**
+	 * @Given the admin has set the Grafana base URL
+	 * @Given the Grafana base URL points at the test instance
+	 *
+	 * TWO PHRASINGS, ONE FACT. The first belongs to `connection/connection.feature`,
+	 * where setting the URL is the gesture under test; the second is the pre-state a
+	 * Background states — "it points at the test instance", which is what a reader
+	 * needs to know and says nothing about who set it or when.
+	 */
 	public function theAdminHasSetTheGrafanaBaseUrl(): void {
 		$this->theAdminSetsTheGrafanaBaseUrl();
+	}
+
+	/**
+	 * @Given the admin has configured the service-account token
+	 *
+	 * The positive twin of `no service-account token is set`. A Background that spells
+	 * its connection out needs all three facts — enabled, a URL, a token — and only
+	 * the negative form existed, so the third could only be said by the one-line
+	 * `the app is connected to Grafana` shorthand that says all three at once.
+	 */
+	public function theAdminHasConfiguredTheServiceAccountToken(): void {
+		$this->theAdminProvidesTheGrafanaToken();
 	}
 
 	/** @Given no service-account token is set */

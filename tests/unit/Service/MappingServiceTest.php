@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\Exception\ExistingDashboardsException;
+use OCA\GrafanaSync\Service\ExistingDashboards;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\StorageService;
+use OCP\Files\File;
 use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
@@ -54,8 +57,22 @@ final class MappingServiceTest extends TestCase {
 		return $config;
 	}
 
+	/**
+	 * An {@see ExistingDashboards} that finds nothing.
+	 *
+	 * The default for every test here, because "the folder already holds dashboard
+	 * files" is one rule among many and the rest must not have to think about it. The
+	 * tests that DO care build their own with {@see existingDashboardsHolding()}; the
+	 * sweep itself is covered by {@see ExistingDashboardsTest}.
+	 */
+	private function existingDashboards(): ExistingDashboards {
+		$existing = $this->createStub(ExistingDashboards::class);
+		$existing->method('under')->willReturn([]);
+		return $existing;
+	}
+
 	private function service(): MappingService {
-		return new MappingService($this->config(), $this->storage(), $this->recycleBin());
+		return new MappingService($this->config(), $this->storage(), $this->recycleBin(), $this->existingDashboards());
 	}
 
 	/**
@@ -243,7 +260,7 @@ final class MappingServiceTest extends TestCase {
 	 * dashboards out of the bin.
 	 */
 	public function testTheRecycleBinFolderCannotBeMapped(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'));
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards());
 
 		$this->expectException(\InvalidArgumentException::class);
 		$this->expectExceptionMessageMatches('/cannot be mapped because it is the recycle bin/');
@@ -256,7 +273,7 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	public function testTheRecycleBinClashIsCaseInsensitive(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'));
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards());
 
 		$this->expectException(\InvalidArgumentException::class);
 		$svc->add(Mapping::fromArray([
@@ -267,9 +284,142 @@ final class MappingServiceTest extends TestCase {
 		]));
 	}
 
+	// ── a link mapping over a folder that already holds dashboard files ───────
+
+	/**
+	 * An {@see ExistingDashboards} that finds $files and records what it was asked to
+	 * purge, so a test can tell "refused" from "destroyed" without either being mocked
+	 * into existence.
+	 *
+	 * @param list<File> $files
+	 */
+	private function existingDashboardsHolding(array $files, ?array &$purged = null): ExistingDashboards {
+		$existing = $this->createMock(ExistingDashboards::class);
+		$existing->method('under')->willReturn($files);
+		$existing->method('purge')->willReturnCallback(static function (array $f) use (&$purged): int {
+			$purged = $f;
+			return count($f);
+		});
+		return $existing;
+	}
+
+	private function dashFile(): File {
+		$f = $this->createMock(File::class);
+		$f->method('getName')->willReturn('Keeper.grafana');
+		return $f;
+	}
+
+	private function linkMapping(): Mapping {
+		return Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a',
+			'grafana_folder_title' => 'observe',
+			'nc_folder' => 'Dashboards',
+			'mode' => 'link',
+		]);
+	}
+
+	/**
+	 * REFUSED BY DEFAULT, AND THAT IS THE SAFETY. The destructive path cannot be
+	 * reached by a caller that does not know about it — an older panel, a script, a
+	 * curl. The refusal carries the count as a NUMBER because the panel puts it in a
+	 * warning, and parsing it back out of a sentence would break the first time that
+	 * sentence is reworded.
+	 */
+	public function testALinkMappingOverExistingDashboardsIsRefusedWithTheCount(): void {
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding([$this->dashFile(), $this->dashFile()]),
+		);
+
+		try {
+			$svc->add($this->linkMapping());
+			self::fail('a link mapping over two dashboard files was accepted');
+		} catch (ExistingDashboardsException $e) {
+			self::assertSame(2, $e->dashboards);
+			self::assertSame('Dashboards', $e->folder);
+			self::assertStringContainsString('permanently deleted', $e->getMessage());
+			self::assertStringContainsString('Move them elsewhere first', $e->getMessage());
+		}
+		self::assertSame([], $svc->list(), 'the refused mapping was stored anyway');
+	}
+
+	/** The admin answered, so the files go — and the mapping is saved. */
+	public function testAcknowledgingThePurgeCreatesTheMappingAndDestroysTheFiles(): void {
+		$purged = null;
+		$files = [$this->dashFile()];
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding($files, $purged),
+		);
+
+		$svc->add($this->linkMapping(), [], true);
+
+		self::assertCount(1, $svc->list());
+		self::assertSame($files, $purged, 'the acknowledged files were not the ones destroyed');
+	}
+
+	/**
+	 * A SYNC MAPPING IS UNTOUCHED. It pushes what it finds up to Grafana, so nothing is
+	 * destroyed and nothing is confirmed — the rule is about links alone, and asking a
+	 * sync mapping the question would refuse the ordinary case of mapping a folder that
+	 * already holds work.
+	 */
+	public function testASyncMappingOverTheSameFilesIsNotEvenAsked(): void {
+		$purged = null;
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding([$this->dashFile()], $purged),
+		);
+
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a',
+			'grafana_folder_title' => 'observe',
+			'nc_folder' => 'Dashboards',
+			'mode' => 'sync',
+		]));
+
+		self::assertCount(1, $svc->list());
+		self::assertNull($purged, 'a sync mapping destroyed files it should have adopted');
+	}
+
+	/**
+	 * NOTHING IS DESTROYED FOR A MAPPING THAT WAS NEVER MADE. The purge runs after the
+	 * mapping is persisted, so an admin who acknowledges the files and then hits a
+	 * different refusal keeps both the files and the absence of the mapping.
+	 */
+	public function testAMappingRefusedForAnotherReasonPurgesNothing(): void {
+		$purged = null;
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding([$this->dashFile()], $purged),
+		);
+		$svc->add(Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-taken',
+			'grafana_folder_title' => 'other',
+			'nc_folder' => 'Dashboards',
+			'mode' => 'sync',
+		]));
+
+		// Same Nextcloud folder as the one just mapped — refused before anything else.
+		$this->expectException(\InvalidArgumentException::class);
+		try {
+			$svc->add($this->linkMapping(), [], true);
+		} finally {
+			self::assertNull($purged, 'files were destroyed for a mapping that was refused');
+		}
+	}
+
 	/** With no bin configured nothing is reserved, so an ordinary mapping still saves. */
 	public function testWithNoBinConfiguredNothingIsReserved(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(''));
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(''), $this->existingDashboards());
 
 		$svc->add(Mapping::fromArray([
 			'grafana_folder_uid' => 'uid-a',
@@ -455,7 +605,7 @@ final class MappingServiceTest extends TestCase {
 			},
 		);
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
 		$mapping = $service->add(
 			Mapping::fromArray(['id' => 'm1', 'grafana_folder_uid' => 'a', 'nc_folder' => 'a', 'mode' => 'sync']),
 			['design', 'admin'],
@@ -472,7 +622,7 @@ final class MappingServiceTest extends TestCase {
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 		$config->expects(self::never())->method('setValueString');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame(['design'], $this->appliedGroups['m1']);
 	}
@@ -482,7 +632,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
 		$service->updateGroups('m1', 'design,admin,sales');
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame([], $service->updateGroups('m1', ''));
@@ -493,7 +643,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
 		$service->updateGroups('m1', 'design');
 		$mapping = $service->getById('m1');
 		self::assertNotNull($mapping);
@@ -513,7 +663,7 @@ final class MappingServiceTest extends TestCase {
 			'[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync","nc_groups":["devs"]}]',
 		);
 
-		$mappings = (new MappingService($config, $this->storage(), $this->recycleBin()))->list();
+		$mappings = (new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards()))->list();
 		self::assertCount(1, $mappings);
 		self::assertArrayNotHasKey('nc_groups', $mappings[0]->toArray());
 	}

@@ -46,6 +46,9 @@ final class MappingSettings implements IDelegatedSettings {
 
 	#[\Override]
 	public function getForm(): TemplateResponse {
+		// BEFORE the page script: it defines `window.GrafanaSync.confirmDestructive`,
+		// which the panel's delete and purge confirmations both call.
+		Util::addScript(Application::APP_ID, 'dialogs');
 		Util::addScript(Application::APP_ID, 'mapping-settings');
 		Util::addStyle(Application::APP_ID, 'mapping-settings');
 

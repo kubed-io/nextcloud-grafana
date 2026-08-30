@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Service;
 
 use OCA\GrafanaSync\AppInfo\Application;
+use OCA\GrafanaSync\Exception\ExistingDashboardsException;
 use OCP\IAppConfig;
 
 /**
@@ -50,6 +51,7 @@ final class MappingService {
 		private readonly IAppConfig $config,
 		private StorageService $storage,
 		private RecycleBin $recycleBin,
+		private ExistingDashboards $existing,
 	) {
 	}
 
@@ -98,14 +100,44 @@ final class MappingService {
 	 * without groupfolders used to save happily and then fail on every sync, which
 	 * reads as "the sync is broken" rather than "that backend is not installed".
 	 *
+	 * A LINK MAPPING MAY NOT BE MADE OVER DASHBOARD FILES THAT ALREADY EXIST, and
+	 * `$purgeDashboards` is the admin's answer to that — see
+	 * {@see ExistingDashboards} for what the state would be and why it is destroyed
+	 * rather than trashed. It defaults to FALSE, and that is the safety: the
+	 * destructive path cannot be reached by a caller that does not know about it —
+	 * an older panel, a script, a curl.
+	 *
 	 * @param array<array-key, mixed>|string $groups
+	 * @throws ExistingDashboardsException when a link mapping would bury existing files
 	 */
-	public function add(Mapping $mapping, array|string $groups = []): Mapping {
+	public function add(Mapping $mapping, array|string $groups = [], bool $purgeDashboards = false): Mapping {
 		$all = $this->list();
 		$this->assertFolderUnique($all, $mapping->grafanaFolderUid, null);
 		$this->assertNcFolderUnique($all, $mapping->ncFolder, null);
 		$this->assertNotTheRecycleBin($mapping);
 		$this->assertIdUnique($all, $mapping->id);
+
+		// READ BEFORE ANYTHING IS PROVISIONED, so a refusal costs nothing and the
+		// number the admin is shown is the number that would go.
+		//
+		// AFTER `assertNcFolderUnique()`, WHICH IS WHY THIS ONLY EVER SEES UNMAPPED
+		// FILES. A folder already in use is refused one line up, so a tree belonging
+		// to another mapping never reaches this check.
+		$existing = $mapping->mode === Mapping::MODE_LINK ? $this->existing->under($mapping) : [];
+		if ($existing !== [] && !$purgeDashboards) {
+			// THE FOLDER NAME AS THE APP RESOLVED IT, not as the admin typed it — they
+			// may have typed nothing at all and taken the Grafana folder's title as the
+			// default. `"" already holds 3 dashboards` is a poor sentence to read just
+			// before destroying something.
+			throw new ExistingDashboardsException(sprintf(
+				'"%s" already holds %d dashboard file%s. A link mapping holds pointers rather '
+				. 'than dashboards, so they would be permanently deleted — not moved to the '
+				. 'trash, and not recoverable. Move them elsewhere first, or confirm the deletion.',
+				$mapping->ncFolder,
+				count($existing),
+				count($existing) === 1 ? '' : 's',
+			), count($existing), $mapping->ncFolder);
+		}
 		// Provisioning is where the Nextcloud half of the pair becomes knowable, so
 		// bank the folder id here rather than leaving the first resolve to discover it.
 		// A backend that cannot say (id 0) leaves the mapping to self-heal instead —
@@ -123,6 +155,16 @@ final class MappingService {
 		}
 		$all[] = $mapping;
 		$this->persist($all);
+
+		// LAST, AND ONLY ONCE THE MAPPING IS REAL. The files are destroyed to make way
+		// for a mapping, so destroying them before the mapping is stored would leave an
+		// admin who hits a later refusal with neither the files nor the mapping. `$existing`
+		// is the set the admin was shown a count for — re-walking here could pick up a
+		// file that arrived in between, which nobody acknowledged.
+		if ($existing !== []) {
+			$this->existing->purge($existing);
+		}
+
 		return $mapping;
 	}
 
