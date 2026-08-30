@@ -361,7 +361,7 @@ trait MappingSteps {
 	public function allowsTheExistingUnmappedDashboardsToBePurged(): void {
 		if ($this->lastExit === 0) {
 			$this->fail(
-				"the mapping was accepted without asking about the dashboard files already there, "
+				'the mapping was accepted without asking about the dashboard files already there, '
 				. "so there was nothing to allow:\n{$this->lastOutput}",
 			);
 		}

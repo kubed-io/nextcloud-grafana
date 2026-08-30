@@ -119,6 +119,25 @@ final class ExistingDashboardsTest extends TestCase {
 		$this->existing->under($this->mapping());
 	}
 
+	/**
+	 * THE OTHER WAY OF NOT KNOWING, AND IT HAS TO ANSWER THE SAME. A tree deeper than
+	 * the ceiling used to end the walk with `[]` while an unreadable folder threw — the
+	 * class failing closed on one and open on the other, which leaves the guard with a
+	 * door in it: the files really are down there, and the link mapping would be made
+	 * over them.
+	 */
+	public function testATreeTooDeepToScanIsRefusedRatherThanCalledEmpty(): void {
+		// A folder that is its own child, so the walk can only end at the ceiling.
+		$loop = $this->createMock(Folder::class);
+		$loop->method('getName')->willReturn('Deep');
+		$loop->method('getDirectoryListing')->willReturnCallback(static fn (): array => [$loop]);
+		$this->storage->method('findFolder')->willReturn($loop);
+
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessageMatches('/nested more than \d+ levels deep/');
+		$this->existing->under($this->mapping());
+	}
+
 	/** Destroyed outright: a restore into a link mapping cannot work, so none is offered. */
 	public function testPurgeDeletesWithoutATrashEntry(): void {
 		$keeper = $this->dashFile();

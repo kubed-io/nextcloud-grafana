@@ -69,9 +69,14 @@ final class ExistingDashboards {
 	 * How deep the sweep will go.
 	 *
 	 * A ceiling rather than a limit anyone should reach: a mapped tree mirrors a
-	 * Grafana folder, and Grafana's own nesting is far shallower than this. It is
-	 * here so a symlink loop or a pathological tree cannot spin forever while an
-	 * admin waits on a form.
+	 * Grafana folder, and Grafana's own nesting is far shallower than this. It is here
+	 * so a symlink loop or a pathological tree cannot spin forever while an admin waits
+	 * on a form.
+	 *
+	 * REACHING IT REFUSES THE MAPPING, it does not quietly end the walk. See
+	 * {@see dashboardsBelow()}: not knowing what is down there is the same answer as
+	 * not being able to read it, and both have to fail closed or the guard has a door
+	 * in it.
 	 */
 	private const MAX_DEPTH = 32;
 
@@ -158,7 +163,28 @@ final class ExistingDashboards {
 	 */
 	private function dashboardsBelow(Folder $folder, int $depth): array {
 		if ($depth >= self::MAX_DEPTH) {
-			return [];
+			// A FOLDER TOO DEEP TO SCAN IS NOT AN EMPTY FOLDER, which is the identical
+			// reasoning to the unreadable case below — and this branch answered `[]`
+			// while that one threw, so the class failed closed on one way of not knowing
+			// and open on the other. Copilot caught it on the PR that added it.
+			//
+			// Answering "nothing found" here lets a link mapping be created over
+			// dashboard files that really are there, just deeper than the ceiling. That
+			// is the exact state this class exists to prevent, reached through the one
+			// door left unlocked.
+			$this->logger->error('grafana_sync: a folder tree was too deep to scan for existing dashboard files', [
+				'app' => Application::APP_ID,
+				'folder' => $folder->getPath(),
+				'depth' => $depth,
+			]);
+
+			throw new \InvalidArgumentException(sprintf(
+				'"%s" is nested more than %d levels deep, so it is not possible to tell whether it '
+				. 'already holds dashboard files. Nothing was changed — map a folder nearer the top, '
+				. 'or flatten the tree.',
+				$folder->getName(),
+				self::MAX_DEPTH,
+			));
 		}
 
 		try {
