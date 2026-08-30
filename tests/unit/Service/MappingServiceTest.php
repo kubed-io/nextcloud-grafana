@@ -246,7 +246,7 @@ final class MappingServiceTest extends TestCase {
 		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'));
 
 		$this->expectException(\InvalidArgumentException::class);
-		$this->expectExceptionMessageMatches('/recycle-bin folder and cannot be mapped/');
+		$this->expectExceptionMessageMatches('/cannot be mapped because it is the recycle bin/');
 		$svc->add(Mapping::fromArray([
 			'grafana_folder_uid' => 'uid-bin',
 			'grafana_folder_title' => 'nextcloud-trash',

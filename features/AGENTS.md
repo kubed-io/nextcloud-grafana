@@ -259,6 +259,16 @@ behaviour, and writing one up as if it were invents an actor to do it.
 `the refusal explains "<fragment>"` matches a FRAGMENT. Pinning the exact
 sentence would make every wording improvement a test failure.
 
+**AND "NOTHING WAS STORED" IS ASKED RELATIVELY: `no mapping was created`.** It
+replaced `there are exactly 0 configured mappings`, which reads as a claim about
+the whole app rather than about this create — an admin with ten working mappings
+can still be refused an eleventh, and the old sentence says the opposite. It only
+ever held because the scenario emptied the store first, so it pinned the arrange
+rather than the behaviour, and it could not be written at all for a refusal that
+has to happen ALONGSIDE existing mappings — which is exactly what both uniqueness
+scenarios are. Those two said `there is exactly 1 configured mapping` for the same
+reason and are now asked the same way.
+
 ### A Grafana folder may only be mapped once
 
 A Grafana folder is what a mapping IS, so mapping it twice would make two
@@ -268,13 +278,25 @@ checks the **Grafana** uid.
 
 ### Two mappings may not target the same Nextcloud folder
 
-`@unbuilt`, **and the gap is real.** `assertFolderUnique()` checks the Grafana
-uid and says nothing whatsoever about the Nextcloud folder, so today the second
-mapping is accepted. Two Grafana folders mirroring into one Nextcloud folder
-interleave their dashboard files, and each mapping-scoped sync prunes what the
-other just wrote — the folder never settles.
+**LIVE.** It was `@unbuilt`, then `@todo`, and this note argued the gap was still
+real long after it was closed — `MappingService::assertNcFolderUnique()` had
+landed and nothing came back to say so. That is the same failure the note above
+warns about: a note describing the old behaviour is worse than no note, because
+it will be believed.
 
-The n8n sibling has the identical gap, written in the identical shape.
+Two Grafana folders mirroring into one Nextcloud folder interleave their
+dashboard files, and each mapping-scoped sync prunes what the other just wrote —
+the folder never settles.
+
+**IT IS GUARDED TWICE, ON TWO DIFFERENT KEYS, AND BOTH ARE NEEDED.**
+`assertNcFolderUnique()` compares the stored folder NAME (case-insensitively,
+because Nextcloud will not create `Demo` beside `demo`), which catches the
+ordinary case before anything is provisioned. `assertNcFolderIdUnique()` then
+compares the folder ID once the folder exists — and the id is what the resolver
+actually keys on, so a mapped folder that has been RENAMED is still caught even
+though its label no longer matches.
+
+The n8n sibling still has the gap, written in the identical shape.
 
 ### The Grafana root can be mapped via the reserved "/" folder
 
@@ -379,21 +401,33 @@ bin is on` would be ONE step registered twice — which Behat refuses, failing e
 scenario in the suite. Worse, whichever registration won would SET the value while
 a `Then` was asking it to be checked, so the assertion could never fail. The old
 `Then the Grafana recycle-bin folder is off` in `mapping/create.feature` had exactly
-that shape and escaped notice only because the scenario is `@todo`. The assertion is
-now `the Grafana recycle bin setting reads on|off`.
+that shape and escaped notice only because its scenario was `@todo` — that scenario
+has since been removed from the file. The assertion is now
+`the Grafana recycle bin setting reads on|off`.
 
-### The recycle bin is off by default, and naming a folder does not enable it
+### The recycle-bin folder cannot also be a mapped folder
 
-Off by default: a move-out or delete is a true Grafana delete. Turned on, the
-admin names an existing Grafana folder to act as the bin, so a delete MOVES
-the dashboard there with its uid intact and a restore returns the same
-dashboard. It is a setting of the app, not a property of a mapping — which is
-why the bin folder may not itself be mapped.
+**LIVE**, and the last scenario in this file to go from written to run.
 
-The scenario walks the two settings **one at a time**, because that is the order
-the panel allows and because the middle state is the interesting one: after naming
-the folder the bin is still off, and nothing has started moving dashboards into it.
-Naming a folder is not consent.
+`MappingService::assertNotTheRecycleBin()` refuses it, and it checks BOTH the
+title and the uid. The title is what the admin sets, so it is the natural
+comparison — but a mapping added over `occ` may carry only a uid, the title being
+optional, so comparing names alone left the guard bypassable by simply omitting
+one.
+
+**RESERVED FROM THE MOMENT IT IS NAMED, not from the moment the bin is switched
+on.** The guard asks `RecycleBin::configuredFolderUid()`, which answers whether or
+not the feature is enabled — deliberately NOT `activeFolderUid()`, which is right
+for the delete path and wrong here (it answers null when the bin is off). An admin
+who has typed a bin folder but not ticked the box must still not be able to map
+it, or enabling the bin later would point it at a folder that is already mirroring.
+
+**A SCENARIO THIS FILE USED TO CARRY, AND NO LONGER DOES.** "The recycle bin is off
+by default, and naming a folder does not enable it" walked the two settings one at
+a time. It was a test of the two settings, not of mapping, and it sat in the wrong
+file — the create feature is about what a mapping may bind to. What it was really
+protecting is stated once, above: naming a folder is not consent, which is why the
+guard reads the CONFIGURED folder rather than the active one.
 
 
 ## mapping/manage-groups
