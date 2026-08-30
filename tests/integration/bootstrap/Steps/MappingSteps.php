@@ -110,6 +110,8 @@ trait MappingSteps {
 	public function armMappingReset(): void {
 		$this->mappingsDeclared = false;
 		$this->mappingsBeforeCreate = null;
+		$this->filesBeforeTeardown = [];
+		$this->dashboardFoldersBeforeTeardown = [];
 	}
 
 	/**
@@ -348,6 +350,159 @@ trait MappingSteps {
 			$this->lastOutput,
 			"the refusal did not mention '$fragment':\n{$this->lastOutput}",
 		);
+	}
+
+	// ── removing a mapping ────────────────────────────────────────────────────
+
+	/**
+	 * @var array<string, list<string>> the tree a mapped folder held before the tear-down,
+	 *                                  keyed by the Nextcloud folder
+	 */
+	private array $filesBeforeTeardown = [];
+
+	/** @var array<string, string|null> where each seeded dashboard sat in Grafana beforehand */
+	private array $dashboardFoldersBeforeTeardown = [];
+
+	/**
+	 * @When the admin removes the :folder mapping
+	 *
+	 * NAMED BY ITS GRAFANA FOLDER, because that is what a mapping IS — the id is a
+	 * server-minted string no scenario should have to know. The Nextcloud folder is
+	 * looked up from the stored mapping rather than restated, so a scenario never has
+	 * to say the pair twice.
+	 *
+	 * IT PINS THE TREE FIRST. `holds the same files it held before` has nothing to
+	 * compare against once the gesture has run, and the whole point of the sync half of
+	 * this rule is that the tree is untouched.
+	 */
+	public function theAdminRemovesTheMapping(string $folder): void {
+		$mapping = $this->findMapping($folder);
+		if ($mapping === null) {
+			$this->fail("no mapping uses the Grafana folder '$folder'");
+		}
+		$ncFolder = trim((string)($mapping['nc_folder'] ?? ''), '/');
+		if ($ncFolder !== '') {
+			$this->filesBeforeTeardown[$ncFolder] = $this->davTreeUnder($ncFolder);
+		}
+		// AND WHERE EACH DASHBOARD SITS IN GRAFANA, for the same reason: "still in the
+		// X Grafana folder" is a claim about what did NOT change, and after the gesture
+		// there is nothing left to compare against.
+		$this->dashboardFoldersBeforeTeardown = [];
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			$this->dashboardFoldersBeforeTeardown[$uid] = $record === null
+				? null
+				: (string)($record['meta']['folderUid'] ?? '');
+		}
+		$this->occ('grafana_sync:remove-mapping ' . escapeshellarg((string)($mapping['id'] ?? '')));
+	}
+
+	/**
+	 * @Then the :folder mapping is no longer configured
+	 *
+	 * ASKED BY NAME, not by counting what is left. A total is a claim about the whole
+	 * app rather than about this removal — the same reason `no mapping was created`
+	 * replaced `there are exactly 0 configured mappings`.
+	 */
+	public function theMappingIsNoLongerConfigured(string $folder): void {
+		if ($this->findMapping($folder) !== null) {
+			$this->fail("the '$folder' mapping is still configured after the admin removed it");
+		}
+	}
+
+	/**
+	 * @Then /^"([^"]*)" holds the same files it held before$/
+	 *
+	 * THE SYNC HALF OF THE TEAR-DOWN, and the assertion the old code failed. A sync
+	 * file holds the dashboard JSON itself and may be the last copy of it, so removing
+	 * the mapping drops the connection and nothing else — every file, at every depth,
+	 * still exactly where it was.
+	 */
+	public function holdsTheSameFilesItHeldBefore(string $folder): void {
+		$folder = trim($folder, '/');
+		if (!array_key_exists($folder, $this->filesBeforeTeardown)) {
+			$this->fail("nothing pinned what '$folder' held, so there is nothing to compare against");
+		}
+		$before = $this->filesBeforeTeardown[$folder];
+		$after = $this->davTreeUnder($folder);
+		sort($before);
+		sort($after);
+		if ($before !== $after) {
+			$this->fail(sprintf(
+				"'%s' no longer holds what it held.\n  before: %s\n   after: %s",
+				$folder,
+				implode(', ', $before) ?: '(nothing)',
+				implode(', ', $after) ?: '(nothing)',
+			));
+		}
+	}
+
+	/**
+	 * @Then the dashboards are still in the :title Grafana folder
+	 *
+	 * THE FAR SIDE, WHICH IS THE HALF AN ADMIN ACTUALLY FEARS. Grafana has no undo, and
+	 * the old tear-down trashed its connected files — which, with the recycle bin off,
+	 * deleted every one of these dashboards. The plural of `the dashboard is in the
+	 * :title Grafana folder`, asked of every dashboard the arrange seeded.
+	 */
+	public function theDashboardsAreStillInTheGrafanaFolder(string $title): void {
+		if ($this->originalDashboardUids === []) {
+			$this->fail('nothing captured the dashboards to look for');
+		}
+		if ($this->dashboardFoldersBeforeTeardown === []) {
+			$this->fail('nothing pinned where the dashboards sat, so "still" has nothing to mean');
+		}
+		$root = $this->grafanaFolderUidByTitle($title);
+		if ($root === null || $root === '') {
+			$this->fail("Grafana has no folder titled '$title', so the mapped folder itself is gone");
+		}
+
+		$wrong = [];
+		foreach ($this->originalDashboardUids as $uid) {
+			$was = $this->dashboardFoldersBeforeTeardown[$uid] ?? null;
+			$record = $this->grafanaGetDashboard($uid);
+			if ($record === null) {
+				$wrong[] = "$uid is gone from Grafana";
+				continue;
+			}
+			$now = (string)($record['meta']['folderUid'] ?? '');
+			// COMPARED AGAINST WHERE IT WAS, not merely against "somewhere". A dashboard
+			// in a SUBFOLDER of the mapping names its own folder rather than the mapped
+			// root, so demanding $root would fail the nested one — and accepting any
+			// non-empty answer, which is what this did first, passes a dashboard moved
+			// clean out of the mapping. Its own former folder is the only value that is
+			// both true for a nested dashboard and false for a moved one.
+			if ($now !== $was) {
+				$wrong[] = sprintf('%s was in %s and is now in %s', $uid, $was ?? '(nowhere)', $now ?: '(no folder)');
+			}
+		}
+		if ($wrong !== []) {
+			$this->fail("the tear-down changed Grafana:\n  " . implode("\n  ", $wrong));
+		}
+	}
+
+	/**
+	 * @Then the :ncFolder folder and the :grafanaFolder Grafana folder both outlive the mapping
+	 *
+	 * REMOVING A MAPPING NEVER REMOVES A FOLDER, on either side. It is what lets the
+	 * admin map the pair again and have it land straight back onto itself, and it is
+	 * the invariant a tear-down is most likely to break on the way past — a walk that
+	 * empties a tree is one line away from removing the tree.
+	 *
+	 * Two names because the two sides genuinely have two names: a mapping binds
+	 * `links` to `Pointers`, and only one scenario in this file has them agree.
+	 */
+	public function bothFoldersOutliveTheMapping(string $ncFolder, string $grafanaFolder): void {
+		$problems = [];
+		if (!$this->davExists(trim($ncFolder, '/'))) {
+			$problems[] = "the Nextcloud folder '$ncFolder' is gone";
+		}
+		if (($this->grafanaFolderUidByTitle($grafanaFolder) ?? '') === '') {
+			$problems[] = "the Grafana folder '$grafanaFolder' is gone";
+		}
+		if ($problems !== []) {
+			$this->fail('removing the mapping took a folder with it: ' . implode('; ', $problems));
+		}
 	}
 
 	/**

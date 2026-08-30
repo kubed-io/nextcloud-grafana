@@ -3312,36 +3312,6 @@ The behaviour is that someone edited a dashboard. The body arriving and the pill
 matching are both end states of that, which is why they are `Then`s here rather
 than a scenario in a file about tags.
 
-### Removing a mapping removes only the mapping
-
-**Nothing is trashed, nothing is deleted, nothing is sent to Grafana.** Removing a
-mapping deletes one row of configuration; the files stay exactly where they are and
-become unmapped, and every dashboard in Grafana is untouched.
-
-The feature used to describe the opposite — the connected files were trashed, their
-dashboards deleted or parked depending on the recycle-bin setting, and re-mapping
-plus restoring from the trash was how you got back. Six scenarios, most of them
-about undoing the damage the first one did.
-
-That was a lot of destruction in service of a gesture that means "stop syncing
-these". An unmapped file is already a well-defined thing everywhere else in this
-app: it keeps its `grafana_uid`, loses its `grafana_mapping`, and reads as
-`unmapped`. Removing a mapping simply produces that state for everything under the
-folder, which is the smallest thing the gesture could possibly mean.
-
-**Links are the one exception, and only because they hold nothing.** A link file is
-a pointer at a dashboard Grafana owns; with no mapping it points nowhere and there
-is no body to preserve, so it goes. Nothing is lost that a later re-map would not
-rebuild on the next sync.
-
-Re-connecting is therefore not this feature's problem. Adding a mapping over a
-folder of unmapped files is `mapping/create.feature`'s business, and it adopts them
-by uid like any other sync.
-
-OPEN — whether a removed link file lands in the Nextcloud trash on its way out.
-Nextcloud's own delete path would put it there; "as if the mapping was never there"
-argues it should not clutter the trash with pointers. Not decided.
-
 ## mapping/rename
 
 `features/mapping/rename.feature`
@@ -3389,42 +3359,157 @@ for lookup again.
 
 Removing a folder mapping — the admin deletes a mapping from the list (or
 `occ grafana_sync:remove-mapping <id>`). This is NOT the "Purge Nextcloud files"
-button (that keeps the mapping + never touches Grafana — see purge.feature). Removing
-a MAPPING tears down the connection, and the question is: what happens to the files
-and dashboards that were connected through it?
+button (that keeps the mapping and never touches Grafana — see purge.feature).
+Removing a MAPPING tears down the connection, and the question is: what happens to
+the files that were connected through it?
 
-THE CONTRACT (resolved with Dr K) — trash the connected, leave the rest, lose nothing:
-  • Every file ACTIVELY CONNECTED to the mapping (a managed sync/link file whose
-    grafana_mapping is this mapping) is moved to the **Nextcloud trash** — it becomes
-    unmapped and goes to the bin. Because a trash move rides the delete contract
-    (delete-dashboard.feature), the Grafana side follows automatically:
-      - recycle-bin OFF → the connected dashboard is deleted in Grafana at trash-time
-        and the file's metadata is stripped (restore re-creates with a new uid);
-      - recycle-bin ON  → the connected dashboard is MOVED into the bin folder, uid
-        kept (restore moves it back, same uid).
-  • Files that are NOT connected are LEFT ALONE, untouched: an `unmapped`/`untracked`
-    standalone `.grafana` only ever existed in Nextcloud, so removing a mapping
-    it was never part of must never move or delete it — no data loss.
-  • The Nextcloud trash is the safety net: we don't surgically decide what to keep —
-    we trash exactly the connected files, and the trash is fully recoverable. Fully
-    **emptying the trash** then does the permanent clean-up (recycle-bin ON → the
-    matching dashboards are deleted from the Grafana bin; OFF → already gone).
-  • RECONNECTION: if a new mapping to the same Grafana/Nextcloud folder is created
-    later, the trashed files can simply be **restored (untrashed)** to reconnect —
-    cleanest with the recycle bin ON (the dashboards were only parked, so restore
-    re-links the SAME uids); with the bin OFF, a restore is a re-create (new uids).
+### THE CONTRACT THIS SECTION USED TO STATE, AND WHY IT IS GONE
 
-STATUS: the tear-down cascade IS cooked (Course 4 · Slice 3) — MappingTeardownService trashes
-the mapping's connected files (their delete rides the recycle-bin setting via the delete
-listener) and leaves standalone files alone, wired to both `occ remove-mapping` and the admin
-panel. The whole feature stays @todo — CI skips it — until the occ+WebDAV step definitions are
-written; until then the delete-engine unit suite + the live smoke carry the proof.
+It said: **every** connected file is moved to the Nextcloud trash, in both modes,
+and the Grafana side then follows the recycle-bin setting — bin off deletes the
+dashboard, bin on parks it. The trash was the safety net, and re-mapping plus
+restoring was the reconnection story.
 
-### Re-mapping and restoring reconnects by re-creating the dashboards (bin off)
+It was wrong in a way that cost dashboards, and the feature file said so all
+along — its own narrative is *"disconnecting the two sides can never cost me a
+dashboard or a file"*, and with the recycle bin OFF that contract deleted every
+dashboard in the mapped folder. "Recoverable" was doing work it could not do:
+the Nextcloud file comes back, the dashboard's uid, URL and history do not.
 
-With the bin OFF the reconnection still works, but the dashboards are re-created
-(their originals were permanently deleted at trash-time), so the restored files come
-back under NEW uids — same content, new identity. Pinned for live-verify.
+**AND THE LINK HALF COULD NOT RUN AT ALL.** `DeleteToGrafanaListener` refuses to
+delete a link ("This file is a link to a dashboard in Grafana, so it cannot be
+deleted from Nextcloud"), so every link file threw, the tear-down counted them as
+failures, and removing a link mapping errored out and KEPT the mapping. Nothing
+caught it: `MappingTeardownServiceTest` built its files with a hardcoded `sync`
+mode, so no test had ever torn down a link.
+
+Written down, both defects read as decisions — which is exactly the failure this
+notes file warns about on line one. The contract below is the one the app now
+implements, and it is the sibling's.
+
+### THE CONTRACT
+
+**The mode decides, and it is asked of each FILE.** Not of the mapping: reading
+the mapping's mode gives one answer for a tree holding both, and one of the two
+would be wrong — an archive destroyed, or a dead pointer left behind.
+
+  • **link** — the file GOES, with no trash entry. A link is a pointer whose only
+    meaning was the mapping; once the mapping is gone there is nothing left for it
+    to be, and a trash entry would offer a restore that reconnects to nothing.
+  • **sync** — the file STAYS and becomes unmapped, keeping its `grafana_uid`. It
+    holds the dashboard JSON itself and may be the last copy of it. Removing a
+    mapping is an administrative act about a connection; destroying somebody's
+    archive on the way past is not something it gets to do. The uid stays not as a
+    claim on the dashboard — that is still in Grafana, untouched — but because a
+    file carrying one is distinguishable from a file that was never a mirror.
+  • **anything else** — left strictly alone. A `.grafana` somebody dropped in
+    themselves carries no mapping id and is not this app's to remove or relabel;
+    a file belonging to a mapping nested inside the tree is somebody else's.
+  • **GRAFANA IS NEVER CONTACTED.** Nothing about a mapping exists on Grafana's
+    side, so there is no remote state to reconcile.
+  • **NEITHER FOLDER IS EVER REMOVED**, on either side. That is what lets the
+    admin map the pair again and have it land straight back onto itself, and it
+    is the invariant a tear-down is most likely to break on the way past — a walk
+    that empties a tree is one line away from removing the tree. Both scenarios
+    assert it.
+
+**IT RUNS UNDER `SyncGuard`, AND THAT IS NOT A DETAIL.** Removing a link is a
+`Node::delete()`, which fires the same event a person's delete does, and the
+delete listener answers that by reaching into Grafana. The guard is what makes
+both halves of the contract true at once, and it is asserted directly rather than
+assumed — `testTheWalkRunsWithTheSyncGuardActive`.
+
+**AND IT NEVER FAILS THE REMOVAL.** Removing the mapping is the act the admin
+asked for. There used to be a partial-teardown branch that kept the binding and
+reported "retry" (409 on the panel, exit 2 on the CLI); it existed because a
+connected file's delete reached Grafana and could fail there. It cannot now, so
+the branch is gone rather than left as an unreachable apology. The binding is
+dropped FIRST — it is the only half that can throw, and torn down first a throw
+would leave the mapping configured over a tree already dismantled — then each
+file is its own try, and one that resists is logged and left where it is.
+
+Ported from `kubed-io/nextcloud-penpot`, whose `MappingTeardownService` had all
+of this already. The parity was the point: a scenario's answer should be the same
+question in both apps.
+
+### The decision was already written down, in the wrong place
+
+A section titled *"Removing a mapping removes only the mapping"* stated this exact
+contract — nothing trashed, sync files unmapped, links gone — and had been sitting
+under `## dashboards/edit`, three thousand lines from the feature it describes,
+while `## mapping/delete` said the opposite. Two sections, two answers, and the
+code implemented neither. It is folded in here, because the argument it makes is
+the one that won:
+
+> That was a lot of destruction in service of a gesture that means "stop syncing
+> these". An unmapped file is already a well-defined thing everywhere else in this
+> app: it keeps its `grafana_uid`, loses its `grafana_mapping`, and reads as
+> `unmapped`. Removing a mapping simply produces that state for everything under
+> the folder, which is the smallest thing the gesture could possibly mean.
+
+The feature it replaced ran to **six scenarios, most of them about undoing the
+damage the first one did** — re-mapping, restoring from the trash, and a bin-off
+variant in which the restored dashboards came back under new uids because their
+originals had been permanently deleted. None of that is needed by a teardown that
+destroys nothing, and none of it survives here.
+
+**Re-connecting is therefore not this feature's problem.** Adding a mapping over a
+folder of unmapped files is `mapping/create.feature`'s business, and it adopts them
+by uid like any other sync.
+
+**AND IT CARRIED AN OPEN QUESTION, WHICH IS NOW ANSWERED.** *"Whether a removed
+link file lands in the Nextcloud trash on its way out. Nextcloud's own delete path
+would put it there; 'as if the mapping was never there' argues it should not
+clutter the trash with pointers. Not decided."*
+
+**It does not.** The removal runs inside `TrashControl::withoutTrash()`, so there
+is no trash entry — the same call and the same reasoning the sibling reached. A
+link holds no dashboard of its own, so a trash entry would offer a restore of a
+file that reconnects to nothing: not a recovery, just a way to be confused later.
+
+### Removing a mapping keeps what the mode made worth keeping
+
+The two scenarios are ONE RULE asked of the two modes, which is why they are
+shaped identically and differ only in what they assert at the end.
+
+Each seeds TWO files, one of them in a subfolder. That is not decoration: the
+walk is recursive by nature and a top-level-only arrange never exercises it. It
+caught a real hole in the harness on the way in — `"X" holds no dashboard files`
+asked with `Depth: 1`, so it passed on a folder still holding
+`Coast/Latency.grafana`. An assertion that only reads the top level cannot fail
+for the case most worth catching.
+
+**WHATEVER ELSE THE FOLDER HELD IS NOT PART OF THE QUESTION**, which is why
+neither scenario puts an ordinary file in the tree. Files this app never mirrored
+were never the mapping's to touch in either mode, so a row proving it would be
+proving something about Nextcloud rather than about the teardown. The unit suite
+covers it (`testEverythingElseIsLeftStrictlyAlone`), where it costs nothing.
+
+**The Background is the neighbourhood.** Both mappings are declared once, as one
+`the following mappings were made:` table — this file used to carry two upright
+`a mapping with the following values:` tables instead, which is the singular form
+and the only Background in the repo not using the plural. Each scenario then names
+the mapping it removes, and the other one is simply there, which is the honest
+setting for a rule about not touching what you were not asked to touch.
+
+**`there is exactly 1 configured mapping` is gone from both scenarios**, replaced
+by `the "X" mapping is no longer configured`. It is the same correction
+`mapping/create.feature` took: a total is a claim about the whole app rather than
+about this removal, and here it was also asking the wrong question — that the
+OTHER mapping survived, which is a fact about the Background.
+
+### The confirmation names what the mode costs
+
+The panel's delete has always confirmed, but with one mode-blind sentence: *"The
+Nextcloud folder and the Grafana dashboards are kept."* True of both modes, and it
+left out the half that differs — a link mapping's files DO go. It is now written
+per mode, from the card's `data-mode`, which is why the card carries the raw
+values as data attributes: the rendered fields are localised text, which is right
+for a reader and useless to a comparison.
+
+Saying so per mode is the difference between a warning and a surprise. The Grafana
+half — the one an admin actually fears — is still the reassurance it always was,
+and is now true.
 
 ## dashboards/rename
 

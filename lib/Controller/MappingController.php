@@ -118,16 +118,19 @@ final class MappingController extends Controller {
 	#[AuthorizedAdminSetting(settings: MappingSettings::class)]
 	public function destroy(string $id): JSONResponse {
 		try {
-			// Tear-down cascade: trash the mapping's connected files (their delete rides the
-			// recycle-bin setting) before dropping the binding. Standalone files are left alone.
+			// Tear-down cascade: the binding goes, then each connected file is answered by its
+			// MODE — a link is removed, a sync file stays and becomes unmapped. Standalone files
+			// are left alone, and neither folder is touched. Grafana is never contacted.
+			//
+			// NO 409 ANY MORE. There used to be a partial-teardown branch here that reported
+			// "the mapping was kept, retry" — it existed because a connected file's delete
+			// reached Grafana and could fail there. It cannot now (the walk runs under
+			// SyncGuard), and a file that will not move is the admin's to deal with rather than
+			// a reason to refuse the removal they asked for.
 			$this->teardown->remove($id);
 			return new JSONResponse(['status' => 'ok']);
 		} catch (\OutOfBoundsException) {
 			return new JSONResponse(['message' => 'Mapping not found'], Http::STATUS_NOT_FOUND);
-		} catch (\RuntimeException $e) {
-			// Partial tear-down (a connected file couldn't be removed, e.g. Grafana unreachable):
-			// the mapping was kept for retry. 409 conveys "not done, try again".
-			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_CONFLICT);
 		}
 	}
 
