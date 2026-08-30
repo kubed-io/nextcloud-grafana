@@ -813,23 +813,54 @@ trait TrashSteps {
 	}
 
 	/**
-	 * @When someone empties the Grafana recycle bin
+	 * @When someone purges :folder from the Grafana recycle bin
 	 *
-	 * THE BIN BY ITS ROLE, NOT BY ITS NAME. Which folder is the bin is configuration and
-	 * lives in the Background, so a scenario about emptying it should no more restate the
-	 * name than it restates the base URL. It is the same reason the bin's two settings are
-	 * said separately and each scenario says only `the Grafana recycle bin is on`.
+	 * NAMES WHAT IS PURGED, and that is the whole point of the sentence. `someone empties
+	 * the Grafana recycle bin` was the same defect as purging the whole Nextcloud trash:
+	 * the bin is shared, so emptying it destroys every other scenario's parked dashboards
+	 * too, and the claim afterwards is about a world the scenario never described.
 	 *
-	 * Delegates to the by-name gesture, which does it through Grafana's own API with no
-	 * involvement from this app.
+	 * THE FOLDER IS THE ONE THAT WAS TRASHED IN NEXTCLOUD, not a folder in Grafana —
+	 * there is no folder in Grafana to name. With the bin on, trashing `Demo/Spared`
+	 * parks its dashboards FLAT in the bin and deletes the Grafana folder `Spared`
+	 * ({@see \OCA\GrafanaSync\Service\FolderCascade::trash}). So "purge Spared from the
+	 * bin" means the dashboards that came out of it, which the arrange pinned when it
+	 * trashed the folder.
+	 *
+	 * Done through Grafana's own API with no involvement from this app, exactly as a
+	 * person clearing the bin folder in Grafana's UI would. The pull that follows is
+	 * folded in for the reason it is everywhere else: nobody deletes a dashboard in order
+	 * to run a sync.
 	 */
-	public function someoneEmptiesTheGrafanaRecycleBin(): void {
+	public function someonePurgesFromTheGrafanaRecycleBin(string $folder): void {
+		if ($this->originalDashboardUids === []) {
+			throw new \RuntimeException("nothing pinned what '$folder' held, so there is nothing to purge");
+		}
+		$binUid = $this->grafanaFolderUidByTitle($this->configuredBinFolder());
+		foreach ($this->originalDashboardUids as $uid) {
+			$record = $this->grafanaGetDashboard($uid);
+			if ($record === null) {
+				continue; // already gone — the bin-off path, or a previous step took it
+			}
+			// ONLY WHAT IS ACTUALLY IN THE BIN. A dashboard the trash gesture left
+			// somewhere else is not this gesture's to delete, and deleting it anyway
+			// would make the scenario pass for the wrong reason.
+			if ($binUid !== null && (string)($record['meta']['folderUid'] ?? '') !== $binUid) {
+				continue;
+			}
+			$this->grafanaDeleteDashboard($uid);
+		}
+		$this->pullEveryMapping();
+	}
+
+	/** The bin folder's title, as the app has it configured. */
+	private function configuredBinFolder(): string {
 		$res = $this->occ('config:app:get ' . self::APP_ID . ' bin_folder');
 		$bin = trim($res['output']);
 		if ($bin === '') {
-			throw new \RuntimeException('no Grafana recycle-bin folder is configured, so there is no bin to empty');
+			throw new \RuntimeException('no Grafana recycle-bin folder is configured');
 		}
-		$this->someoneEmptiesTheFolderInGrafana($bin);
+		return $bin;
 	}
 
 	/**

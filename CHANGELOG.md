@@ -102,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Emptying the Grafana recycle bin now clears the trashed **folders** whose dashboards it destroyed, not just individual files. A folder trashed in Nextcloud is one trash entry, so every mirror inside it was invisible to the reconcile and the entry sat there forever offering a restore that could reconnect to nothing.
-- A trashed folder that also holds something this app never managed — a spreadsheet, a note — is left completely alone when the Grafana bin is emptied. A file with no dashboard cannot be destroyed by something that happened in Grafana.
+- A trashed folder that also holds something this app never managed — a spreadsheet, a note — keeps its trash entry when its dashboards are purged in Grafana, so the file with no dashboard is still there to restore. The dashboard files themselves go, because their dashboards did.
+- Trashing a folder in a link mapping now tells you why it was refused. The refusal was already there and correct; the message never reached the client, so the Files app showed a bare failure.
 - Dragging a dashboard file onto one that already exists **inside the same mapping** left two dashboards in Grafana with one file between them — and the tags you had put on the destination stayed with the copy that no longer had a file. The overwrite now keeps one dashboard, whichever folders the two files were in.
 - **Restoring a dashboard file from the trash permanently deleted the dashboard it was restoring**, then silently replaced it with a new one — a different URL, and no history. Restoring now brings back the dashboard you had.
 - Deleting a dashboard file on an instance with the Nextcloud trash turned off now deletes the dashboard, instead of hiding it in the recycle-bin folder behind a file that can never come back for it.

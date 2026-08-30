@@ -242,10 +242,10 @@ final class TrashControl {
 			if (!$item instanceof ITrashItem || $item->getType() === FileInfo::TYPE_FILE) {
 				continue;
 			}
-			[$ids, $other] = $this->inspect($item, 0);
+			[$mirrors, $other] = $this->inspect($item, 0, $user);
 			$out[] = new TrashedFolder(
 				basename($item->getOriginalLocation()),
-				$ids,
+				$mirrors,
 				$other,
 				function () use ($manager, $item): void {
 					$manager->removeItem($item);
@@ -256,7 +256,7 @@ final class TrashControl {
 	}
 
 	/**
-	 * Everything under one trashed folder, as [dashboard file ids, holds anything else].
+	 * Everything under one trashed folder, as [the mirrors, holds anything else].
 	 *
 	 * ## EVERY WAY OF NOT KNOWING ANSWERS "SOMETHING ELSE IS IN HERE"
 	 *
@@ -282,9 +282,13 @@ final class TrashControl {
 	 * permanently un-purgeable — a silent no-op wearing the shape of caution. The sibling
 	 * walked straight into it; this is the fix, ported.
 	 *
-	 * @return array{0: list<int>, 1: bool}
+	 * EACH MIRROR CARRIES ITS OWN PURGE, because the reconcile destroys them one at a
+	 * time when the entry has to survive — a folder holding a spreadsheet keeps its entry
+	 * and still loses the dashboard whose far side is gone.
+	 *
+	 * @return array{0: list<TrashedFile>, 1: bool}
 	 */
-	private function inspect(ITrashItem $folder, int $depth): array {
+	private function inspect(ITrashItem $folder, int $depth, IUser $user): array {
 		if ($depth >= self::MAX_TRASH_DEPTH) {
 			$this->logger->warning('grafana_sync: a trashed folder was deeper than the reconcile will walk', [
 				'app' => Application::APP_ID,
@@ -304,7 +308,7 @@ final class TrashControl {
 			return [[], true];
 		}
 
-		$ids = [];
+		$found = [];
 		$other = false;
 		foreach ($children as $child) {
 			if (!$child instanceof ITrashItem) {
@@ -312,22 +316,34 @@ final class TrashControl {
 				continue;
 			}
 			if ($child->getType() === FileInfo::TYPE_FOLDER) {
-				[$nested, $nestedOther] = $this->inspect($child, $depth + 1);
-				foreach ($nested as $id) {
-					$ids[] = $id;
+				[$nested, $nestedOther] = $this->inspect($child, $depth + 1, $user);
+				foreach ($nested as $mirror) {
+					$found[] = $mirror;
 				}
 				$other = $other || $nestedOther;
 				continue;
 			}
 			$id = $child->getId();
-			if ($id !== null && FilenameCodec::isDashboardName(basename($child->getOriginalLocation()))) {
-				$ids[] = $id;
+			$name = basename($child->getOriginalLocation());
+			if ($id !== null && FilenameCodec::isDashboardName($name)) {
+				$found[] = new TrashedFile(
+					$id,
+					$name,
+					function () use ($child): void {
+						$child->getTrashBackend()->removeItem($child);
+					},
+					function () use ($child, $user): void {
+						$this->asUser($user, static function () use ($child): void {
+							$child->getTrashBackend()->restoreItem($child);
+						});
+					},
+				);
 				continue;
 			}
 			$other = true;
 		}
 
-		return [$ids, $other];
+		return [$found, $other];
 	}
 
 	/**

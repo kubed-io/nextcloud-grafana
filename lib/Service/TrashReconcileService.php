@@ -217,28 +217,36 @@ final class TrashReconcileService {
 	/**
 	 * The same reap, for the trashed FOLDERS — where the mirrors are one entry down.
 	 *
-	 * ## THE FOLDER GOES WHOLE, OR IT DOES NOT GO
+	 * ## A PURGE IS A PURGE, AND THE ENTRY IS A SEPARATE QUESTION
 	 *
-	 * There is no purging of files INSIDE a trashed folder, and that is a decision
-	 * rather than a simplification. A trash entry is one thing: it restores as one
-	 * thing, and reaching in to destroy part of it would leave an entry whose restore
-	 * puts back a folder the user never had. So the question is binary — does anything
-	 * in here deserve to outlive the dashboards?
+	 * Two things can happen to a trashed folder when the dashboards it held are destroyed
+	 * in Grafana, and conflating them is how this got written wrong once already:
 	 *
-	 *   - **Nothing does** — every mirror inside is confirmed gone from Grafana and the
-	 *     folder holds nothing else. The entry has nothing left a restore could
-	 *     reconnect, so it goes.
-	 *   - **Something does** — a dashboard still in Grafana (parked, or rescued back out
-	 *     of the bin), a file belonging to another mapping, an unmapped file, a
-	 *     spreadsheet, a subtree that could not be read. The entry stays, intact,
-	 *     including the mirrors that are finished. They cost a trash entry nobody will
-	 *     restore; destroying a file with no far side costs somebody their file.
+	 *   - **every mirror inside goes**, always. Its dashboard has been deleted for good,
+	 *     so the file is a mirror of nothing — offering a restore that reconnects to
+	 *     nothing is the state this whole class exists to close.
+	 *   - **the ENTRY goes only if nothing else was in it.** A spreadsheet has no far
+	 *     side, so nothing that happened in Grafana may destroy it, and the entry is what
+	 *     the user restores to get it back.
 	 *
-	 * That second rule is what `folders/purge.feature` means by *"still in the Nextcloud
-	 * trash, holding Budget.xlsx"* — the same respect the Grafana-side folder delete
-	 * already shows.
+	 * So a folder of nothing but finished mirrors is purged whole — one call that takes
+	 * the folder with them, rather than emptying it and leaving an entry whose restore
+	 * puts back an empty folder. A folder holding anything else keeps its entry and loses
+	 * only the mirrors.
 	 *
-	 * @return int mirrors whose trash entry this purged
+	 * **THIS WAS BUILT THE OTHER WAY FIRST**, sparing the whole entry whenever anything
+	 * else was in it — which is what the sibling does. It is wrong here and arguably
+	 * there: it leaves a `.grafana` in the trash whose dashboard was permanently deleted,
+	 * so a purge in Grafana did not purge in Nextcloud. A purge is a purge.
+	 *
+	 * ## A SURVIVOR VETOES THE ENTRY, NOT THE MIRRORS
+	 *
+	 * Anything the app cannot account for — a spreadsheet, a subtree that could not be
+	 * read, one deeper than the walk goes — keeps the entry. So does a mirror that is NOT
+	 * finished: a dashboard still in Grafana (parked, or rescued back out of the bin), or
+	 * one belonging to another mapping, which that mapping's own pull will judge.
+	 *
+	 * @return int mirrors purged
 	 */
 	public function reapFolders(Mapping $mapping): int {
 		$uid = $this->actorUid($mapping);
@@ -248,57 +256,87 @@ final class TrashReconcileService {
 
 		$purged = 0;
 		foreach ($this->trash->listTrashedFolders($uid) as $folder) {
-			if ($folder->dashboardIds === [] || $folder->holdsOtherFiles) {
-				// Nothing of ours to finish, or something in here vetoes it.
-				continue;
+			if ($folder->dashboards === []) {
+				continue; // nothing of ours in here to finish
 			}
 
-			$finished = 0;
-			foreach ($folder->dashboardIds as $fileId) {
-				$managed = $this->metadata->read($fileId);
+			$finished = [];
+			$survivors = $folder->holdsOtherFiles;
+			foreach ($folder->dashboards as $mirror) {
+				$managed = $this->metadata->read($mirror->fileId);
 				if (!$managed?->isManaged() || !$managed->isSync() || $managed->mappingId !== $mapping->id) {
-					// Not ours to judge — another mapping's pull will, or nobody will.
-					$finished = 0;
-					break;
+					// Another mapping's mirror, or one that left its mapping. Not ours to
+					// finish, and its presence keeps the entry.
+					$survivors = true;
+					continue;
 				}
 				if (!$this->isGone($managed->uid)) {
-					$finished = 0;
-					break;
+					$survivors = true;
+					continue;
 				}
-				$finished++;
+				$finished[] = $mirror;
 			}
 
-			if ($finished === 0) {
+			if ($finished === []) {
 				continue;
 			}
 
-			try {
-				// UNDER THE GUARD, because the purge fires the legacy `preDelete` hook and
-				// {@see \OCA\GrafanaSync\Listener\TrashPurgeHook} would answer it by deleting
-				// the dashboards in Grafana. Harmless in itself — they are the things that
-				// are already gone — but it would log the exact opposite of what happened,
-				// and this app has lost hours to trash diagnostics that said the wrong thing.
-				$this->guard->run(static function () use ($folder): void {
-					$folder->purge();
-				});
-				$purged += $finished;
-				$this->logger->info('grafana_sync trash: purged a trashed folder whose dashboards no longer exist in Grafana', [
-					'app' => Application::APP_ID,
-					'folder' => $folder->name,
-					'mirrors' => $finished,
-					'mapping' => $mapping->id,
-				]);
-			} catch (\Throwable $e) {
-				// Leave it alone and say so. Still recoverable, which is the failure
-				// direction to prefer.
-				$this->logger->warning('grafana_sync trash: could not purge a trashed folder', [
-					'app' => Application::APP_ID,
-					'folder' => $folder->name,
-					'exception' => $e,
-				]);
+			if (!$survivors) {
+				// Nothing outlives them, so the entry goes and takes them with it — one
+				// call instead of N, and no empty folder left in the trash.
+				$purged += $this->purgeInTrash(
+					static fn () => $folder->purge(),
+					count($finished),
+					$folder->name,
+					$mapping,
+				);
+				continue;
+			}
+
+			foreach ($finished as $mirror) {
+				$purged += $this->purgeInTrash(
+					static fn () => $mirror->purge(),
+					1,
+					$folder->name . '/' . $mirror->name,
+					$mapping,
+				);
 			}
 		}
 		return $purged;
+	}
+
+	/**
+	 * One purge, under the guard, counted only if it worked.
+	 *
+	 * UNDER THE GUARD for the reason {@see reap()} gives: the purge fires the legacy
+	 * `preDelete` hook and {@see \OCA\GrafanaSync\Listener\TrashPurgeHook} would answer it
+	 * by deleting the dashboard in Grafana. Harmless in itself — that dashboard is the
+	 * thing that is already gone — but it would log the exact opposite of what happened,
+	 * and this app has lost hours to trash diagnostics that said the wrong thing.
+	 *
+	 * A failure is logged and stepped over. The entry is still recoverable, which is the
+	 * failure direction to prefer.
+	 *
+	 * @param \Closure():void $purge
+	 */
+	private function purgeInTrash(\Closure $purge, int $worth, string $what, Mapping $mapping): int {
+		try {
+			$this->guard->run($purge);
+			$this->logger->info('grafana_sync trash: purged a trashed entry whose dashboards no longer exist in Grafana', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'mirrors' => $worth,
+				'mapping' => $mapping->id,
+			]);
+			return $worth;
+		} catch (\Throwable $e) {
+			$this->logger->warning('grafana_sync trash: could not purge a trashed entry', [
+				'app' => Application::APP_ID,
+				'entry' => $what,
+				'exception' => $e,
+			]);
+			return 0;
+		}
 	}
 
 	/**

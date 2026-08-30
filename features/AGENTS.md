@@ -4379,41 +4379,59 @@ Grafana-side folder delete does — the contents change the END STATE:
 | the trashed folder held | what a Grafana-side purge leaves |
 |---|---|
 | only dashboards | nothing — the entry goes from the Nextcloud trash too |
-| dashboards and other files | the entry stays, exactly as it was |
+| dashboards and other files | the entry stays, holding **only** the other files |
 
-**THE ENTRY GOES WHOLE, OR IT DOES NOT GO — AND THIS NOTE USED TO SAY OTHERWISE.**
-It prescribed *"the purge takes the dashboard files and stops, and the folder remains
-in the trash, still restorable, just no longer carrying anything Grafana knows
-about"*: reach into the trash entry, delete the finished mirrors out of it, leave the
-rest. That was written as specification and never built, and building it was the
-wrong move.
+**A PURGE IS A PURGE, AND THE ENTRY IS A SEPARATE QUESTION.** Two things happen and
+conflating them is how this got built wrong once:
 
-A trash entry is ONE THING. It restores as one thing, so destroying part of it leaves
-an entry whose restore puts back a folder the user never had — they trashed a folder
-holding a spreadsheet and a dashboard, and got back a folder holding a spreadsheet.
-The saving is a trash entry nobody was going to restore; the cost is a restore that
-silently lies about what it is restoring.
+  - **every mirror inside goes, always.** Its dashboard has been permanently deleted
+    in Grafana, so the file mirrors nothing. Leaving it offers a restore that
+    reconnects to nothing — the state this whole chapter exists to close.
+  - **the ENTRY goes only if nothing else was in it.** A spreadsheet has no far side,
+    so nothing that happened in Grafana may destroy it, and the entry is what the
+    user restores to get it back.
 
-So the question is binary: does anything in here deserve to outlive the dashboards? A
-dashboard still in Grafana (parked, or rescued back out of the bin), a file belonging
-to another mapping, an unmapped file, a spreadsheet, a subtree that could not be read
-— any one of them keeps the whole entry, finished mirrors included. Only a folder
-where every mirror is confirmed gone and nothing else lives goes.
+So a folder of nothing but finished mirrors is purged whole — one call that takes
+the folder with them, rather than emptying it and leaving an entry whose restore
+puts back an empty folder.
 
-`nextcloud-penpot` reached the same answer for the same reason and has been running
-it; `TrashReconcileService::reapFolders()` is ported from it, and the scenarios read
-the same in both apps. The Gherkin never had to change: *"still in the Nextcloud
-trash, holding Budget.xlsx"* is true either way, which is why the difference had to
-be settled by argument rather than by a failing test.
+**IT WAS BUILT THE OTHER WAY FIRST, ON THE SIBLING'S AUTHORITY.**
+`nextcloud-penpot`'s `reapProjects()` spares the WHOLE entry whenever anything else
+is in it — *"one spreadsheet is enough"* — and this was ported to match. That is
+wrong here and arguably there: it leaves a `.grafana` in the trash whose dashboard
+was permanently deleted, so a purge in Grafana did not purge in Nextcloud. Parity
+with a sibling is worth a lot and it is not worth that.
 
-**NOT KNOWING IS A VETO.** `TrashControl::inspect()` answers "there is something else
-in here" for a subtree it cannot read and for one deeper than it walks, so every way
-of being unsure keeps the folder. The same asymmetry `ExistingDashboards` runs on: the
-failure that destroys something is the one worth being wrong about.
+**AND THE GHERKIN COULD NOT SETTLE IT, WHICH IS WHY IT NOW SAYS `only`.** *"still in
+the Nextcloud trash, holding Budget.xlsx"* is true whether the mirror was purged or
+left sitting beside it, so the scenario passed under both behaviours and the choice
+had to be made by argument. `holding only "Budget.xlsx"` discriminates. A spec that
+cannot tell two behaviours apart is not describing one of them.
+
+**NOT KNOWING IS A VETO ON THE ENTRY.** `TrashControl::inspect()` answers "there is
+something else in here" for a subtree it cannot read and for one deeper than it
+walks, so every way of being unsure keeps the entry. The same asymmetry
+`ExistingDashboards` runs on: the failure that destroys something is the one worth
+being wrong about. It does NOT veto the mirrors — those are judged one at a time, by
+uid, against Grafana.
 
 This is the same asymmetry recorded below for the Nextcloud-side purge: contents are
 a ROW when the gesture starts in Nextcloud (everything goes either way) and a
 SCENARIO when it starts in Grafana (the answer differs).
+
+### The Grafana-side purge names what it purges
+
+`someone purges "Spared" from the Grafana recycle bin`, not `someone empties the
+Grafana recycle bin`. The bin is ONE folder shared by every scenario in the suite, so
+emptying it destroys other scenarios' parked dashboards and the assertion afterwards
+is about a world the scenario never described — the same defect as purging the whole
+Nextcloud trash instead of `I purge "<trashed>" from the trash`.
+
+**THE NAME IS THE NEXTCLOUD FOLDER, AND THERE IS NO GRAFANA FOLDER TO NAME.** With
+the bin on, trashing `Demo/Spared` parks its dashboards FLAT in the bin and deletes
+the Grafana folder `Spared` ({@see FolderCascade::trash}). So the sentence names what
+the admin would recognise — the folder those dashboards came out of — and the step
+resolves it to the uids the arrange pinned when it trashed the folder.
 
 ### What the folder held is an example, not a scenario
 

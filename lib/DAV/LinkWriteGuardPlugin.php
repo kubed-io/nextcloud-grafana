@@ -115,6 +115,64 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// logged and the move SUCCEEDS. Measured, both halves — see MoveGuardListener.
 		// Refusing here is what makes the reason reach the client.
 		$server->on('method:MOVE', [$this, 'onMove'], 10);
+		// AND `method:DELETE`, WHICH IS THE FOURTH TIME, AND THE ONE THE NOTES SAID
+		// COULD NOT BE DONE. {@see \OCA\GrafanaSync\Listener\FolderDeleteListener}
+		// already refuses to trash a link-mapped folder and says why — but
+		// `Directory::delete()` goes through `View::rmdir()`, whose hook layer swallows
+		// the abort and answers a bare **403 with no body**. Measured in CI: the log held
+		// the whole sentence and the client was told nothing at all.
+		//
+		// A guard for this once lived in `beforeUnbind` and broke every link MOVE, because
+		// sabre routes a MOVE through the source's unbind as well as a DELETE. That is the
+		// lesson `method:COPY` above already encodes: a `method:*` hook fires for ONE verb,
+		// so refusing here cannot touch a move. Same fix, same shape, fourth verb.
+		$server->on('method:DELETE', [$this, 'onDelete'], 10);
+	}
+
+	/**
+	 * Refuse a DELETE of a link-mapped FOLDER, in words the user can read.
+	 *
+	 * THE LISTENER IS STILL THE GUARD; this is the voice. `FolderDeleteListener` stops the
+	 * delete on every route there is, including the ones that never touch Sabre — and it
+	 * stays exactly as it is, because a plugin cannot cover `occ`, a background job or the
+	 * Files app's own internals. What it cannot do is get its sentence to the client, so
+	 * this refuses first, with the same sentence, and the listener never runs.
+	 *
+	 * FILES NEED NOTHING HERE. A link FILE's delete already reaches the user readably —
+	 * `beforeUnbind` covers it, and it is only the folder path through `View::rmdir()`
+	 * that loses the message.
+	 *
+	 * FAILING OPEN IS THE RULE HERE, AS EVERYWHERE IN THIS PLUGIN: a path that cannot be
+	 * resolved is left to the listener, which is behind this and refuses anyway.
+	 *
+	 * @param ResponseInterface $response unused; part of Sabre's `method:*` signature
+	 * @return bool always true — this handler either throws or hands the request on
+	 */
+	public function onDelete(RequestInterface $request, ResponseInterface $response): bool {
+		if ($this->server === null) {
+			return true;
+		}
+		$path = $request->getPath();
+		try {
+			$node = $this->server->tree->getNodeForPath($path);
+		} catch (\Throwable) {
+			return true;
+		}
+		if (!$this->isLinkMappedFolder($path, $node)) {
+			return true;
+		}
+		$this->logger->warning('grafana_sync: refused a WebDAV delete of a link-mapped folder', [
+			'app' => Application::APP_ID,
+			'path' => $path,
+		]);
+		// THE SAME SENTENCE THE LISTENER THROWS, deliberately duplicated rather than
+		// shared: the listener's copy has to survive whether or not this plugin is even
+		// loaded, and a constant shared between a DAV plugin and an event listener would
+		// tie the two lifetimes together for one string.
+		throw new Forbidden(
+			'This folder mirrors Grafana, which owns the folders under a link mapping. '
+			. 'Delete it in Grafana and the mirror will follow.',
+		);
 	}
 
 	/**

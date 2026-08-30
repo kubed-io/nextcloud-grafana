@@ -26,20 +26,22 @@ namespace OCA\GrafanaSync\Service;
  * emptying the Grafana bin left its trashed mirror behind forever
  * (`folders/purge.feature`).
  *
- * ## THE CONTENTS ARE FILE IDS, AND THE OTHER FLAG IS THE VETO
+ * ## THE CONTENTS ARE THE MIRRORS THEMSELVES, AND THE OTHER FLAG IS THE VETO
  *
  * A trashed folder's children are not separate trash entries and its node is not
  * resolvable by path — the home trash and a Team Folder's trash live on different
  * mounts. The only door is `ITrashItem::getTrashBackend()->listTrashFolder()`, which is
  * the trash app's own type dispatching on its own backend: exactly what
  * {@see TrashControl} exists to keep at that boundary. So the walk happens there and
- * only the ANSWERS travel here — ids, which the reconcile reads metadata by.
+ * only the ANSWERS travel here — each mirror as a {@see TrashedFile} carrying its own
+ * purge, because the reconcile has to be able to destroy ONE of them.
  *
- * `$holdsOtherFiles` is a VETO, not a statistic. It is true for a spreadsheet, for a
- * subtree that could not be read, and for one deeper than the walk goes — every way of
- * holding something that is not a mirror this app can account for. A folder with it set
- * may never be purged whole, because a file with no far side cannot be destroyed by
- * something that happened in Grafana.
+ * `$holdsOtherFiles` is a VETO ON PURGING THE ENTRY, not on purging the mirrors. It is
+ * true for a spreadsheet, for a subtree that could not be read, and for one deeper than
+ * the walk goes — every way of holding something this app cannot account for. A folder
+ * with it set keeps its entry, because a file with no far side cannot be destroyed by
+ * something that happened in Grafana. The mirrors inside it still go: a purge is a
+ * purge, and the dashboard they mirror is gone.
  *
  * ## WALKED EAGERLY, UNLIKE THE SIBLING
  *
@@ -53,14 +55,15 @@ namespace OCA\GrafanaSync\Service;
 final class TrashedFolder {
 	/**
 	 * @param string $name the ORIGINAL basename, not the trash's timestamped spelling
-	 * @param list<int> $dashboardIds filecache ids of every `.grafana` at any depth
+	 * @param list<TrashedFile> $dashboards every `.grafana` at any depth, each able to
+	 *                                      destroy itself without taking the entry
 	 * @param bool $holdsOtherFiles anything in the tree that is not one of those — see
-	 *                              the class docblock: this is a veto on purging whole
+	 *                              the class docblock: a veto on purging the ENTRY
 	 * @param \Closure():void $purge destroy the entry, and everything that went in with it
 	 */
 	public function __construct(
 		public readonly string $name,
-		public readonly array $dashboardIds,
+		public readonly array $dashboards,
 		public readonly bool $holdsOtherFiles,
 		private readonly \Closure $purge,
 	) {

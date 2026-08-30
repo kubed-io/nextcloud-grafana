@@ -555,15 +555,15 @@ trait FolderSteps {
 	}
 
 	/**
-	 * @Then /^"([^"]*)" is still in the Nextcloud trash, holding "([^"]*)"$/
+	 * @Then /^"([^"]*)" is still in the Nextcloud trash, holding only "([^"]*)"$/
 	 *
-	 * BOTH HALVES, AND THE SECOND IS THE POINT. That the entry survives is only half a
-	 * claim — a folder emptied down to nothing would satisfy it while having destroyed
-	 * exactly what the rule protects. So the file with no far side is named, and found
-	 * inside the entry.
+	 * ONLY, AND THAT WORD IS THE WHOLE ASSERTION. Without it the sentence is true whether
+	 * the mirror was purged or left sitting there, so it could not tell the two
+	 * behaviours apart — and the file had to settle that question by argument instead.
 	 *
-	 * A spreadsheet has no dashboard, so nothing that happened in Grafana may destroy
-	 * it; the same respect the Grafana-side folder delete already shows.
+	 * Both halves are the rule: a purge is a purge, so the mirror whose dashboard was
+	 * destroyed goes; and a spreadsheet has no far side, so nothing that happened in
+	 * Grafana may destroy it.
 	 */
 	public function isStillInTheNextcloudTrashHolding(string $folder, string $file): void {
 		if ($this->trashedFolderEntry === '') {
@@ -575,9 +575,10 @@ trait FolderSteps {
 			);
 		}
 		$held = $this->trashEntryChildren($this->trashedFolderEntry);
-		if (!in_array($file, $held, true)) {
+		sort($held);
+		if ($held !== [$file]) {
 			throw new \RuntimeException(sprintf(
-				"'%s' survived in the trash but no longer holds '%s'; it holds: %s",
+				"'%s' survived in the trash but should hold ONLY '%s'; it holds: %s",
 				$folder,
 				$file,
 				implode(', ', $held) ?: '(nothing)',
