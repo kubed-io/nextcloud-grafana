@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Refusing to map the recycle-bin folder now says so plainly: *"cannot be mapped because it is the recycle bin"*.
 - The recycle-bin toggle and its folder name moved out of Sync Settings into their own **Recycle Bin** section. They decide whether deleting is reversible, which is not a sync setting and is too consequential to read as a footnote to the pull schedule.
 - **BREAKING:** dashboard files are named `.grafana`, not `.grafana.json`. Nextcloud only ever reads one file extension, so the compound one meant every save wrote the wrong file type for the app to correct afterwards, and a copy made beside its source was named something the app could not recognise at all. Outside Nextcloud a `.grafana` file needs telling once which editor opens it.
 

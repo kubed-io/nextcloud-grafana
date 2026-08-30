@@ -98,6 +98,9 @@ trait MappingSteps {
 	/** Whether this scenario has already reset the store — see the step's docblock. */
 	private bool $mappingsDeclared = false;
 
+	/** How many mappings were stored when the last create was attempted. */
+	private ?int $mappingsBeforeCreate = null;
+
 	/**
 	 * Re-arm the once-per-scenario reset. Without it the second scenario in a
 	 * feature would append to the first one's leftovers.
@@ -106,6 +109,7 @@ trait MappingSteps {
 	 */
 	public function armMappingReset(): void {
 		$this->mappingsDeclared = false;
+		$this->mappingsBeforeCreate = null;
 	}
 
 	/**
@@ -182,6 +186,9 @@ trait MappingSteps {
 	public function theAdminMapsTheGrafanaFolderWith(string $uid, TableNode $table): void {
 		$form = $this->formValues($table);
 		$this->lastMappingForm = ['grafana folder' => $uid] + $form;
+		// COUNTED BEFORE THE ATTEMPT, so `no mapping was created` can be relative.
+		// See that step for why an absolute count is the wrong assertion.
+		$this->mappingsBeforeCreate = count($this->listMappings());
 		$this->addMappingFromForm($uid, $form);
 	}
 
@@ -341,6 +348,36 @@ trait MappingSteps {
 			$this->lastOutput,
 			"the refusal did not mention '$fragment':\n{$this->lastOutput}",
 		);
+	}
+
+	/**
+	 * @Then no mapping was created
+	 *
+	 * THE REFUSAL LEFT THE STORE AS IT FOUND IT — asked RELATIVE to whatever was
+	 * already configured, which is the only form of the question that survives a
+	 * real instance.
+	 *
+	 * It replaced `there are exactly 0 configured mappings`. That reads as a claim
+	 * about the whole app rather than about this create: an admin with ten working
+	 * mappings can still be refused an eleventh, and the old sentence says the
+	 * opposite. It only ever held because the scenario emptied the store first, so
+	 * it was pinning the arrange rather than the behaviour — and it could not be
+	 * written at all for a refusal that has to happen ALONGSIDE existing mappings,
+	 * which is what both uniqueness scenarios are.
+	 */
+	public function noMappingWasCreated(): void {
+		if ($this->mappingsBeforeCreate === null) {
+			$this->fail('nothing tried to create a mapping, so "no mapping was created" proves nothing');
+		}
+		$now = count($this->listMappings());
+		if ($now !== $this->mappingsBeforeCreate) {
+			$this->fail(sprintf(
+				"the refused mapping was stored anyway: %d configured before the attempt, %d after.\n%s",
+				$this->mappingsBeforeCreate,
+				$now,
+				$this->lastOutput,
+			));
+		}
 	}
 
 	/**
