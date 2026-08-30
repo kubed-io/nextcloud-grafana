@@ -327,32 +327,6 @@ What survives is the refusals that are rules about MAPPINGS rather than about
 fields: already mapped, on either side, and the recycle bin. A unit test cannot
 express those as admin behaviour; it can express a required field perfectly.
 
-### A mapping the app cannot honour is refused, and says why
-
-One scenario, not four, because the behaviour is identical every time: refused,
-nothing stored, and the message names the field at fault. The rules are the
-Examples.
-
-**`nc_folder is required` has no row, and that is deliberate.** It is unreachable
-from this form: a blank Nextcloud folder defaults from the Grafana folder's
-title, and the step supplies a title whenever it supplies a uid. It is reachable
-only by an API caller sending a uid with no title at all. **A refusal earns a row
-only when someone can provoke it**; a validator no input can reach is not a
-behaviour, and writing one up as if it were invents an actor to do it.
-
-`the refusal explains "<fragment>"` matches a FRAGMENT. Pinning the exact
-sentence would make every wording improvement a test failure.
-
-**AND "NOTHING WAS STORED" IS ASKED RELATIVELY: `no mapping was created`.** It
-replaced `there are exactly 0 configured mappings`, which reads as a claim about
-the whole app rather than about this create — an admin with ten working mappings
-can still be refused an eleventh, and the old sentence says the opposite. It only
-ever held because the scenario emptied the store first, so it pinned the arrange
-rather than the behaviour, and it could not be written at all for a refusal that
-has to happen ALONGSIDE existing mappings — which is exactly what both uniqueness
-scenarios are. Those two said `there is exactly 1 configured mapping` for the same
-reason and are now asked the same way.
-
 ### A Grafana folder may only be mapped once
 
 A Grafana folder is what a mapping IS, so mapping it twice would make two

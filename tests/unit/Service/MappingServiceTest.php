@@ -62,7 +62,8 @@ final class MappingServiceTest extends TestCase {
 	 *
 	 * The default for every test here, because "the folder already holds dashboard
 	 * files" is one rule among many and the rest must not have to think about it. The
-	 * tests that DO care build their own — see {@see MappingServiceExistingTest}.
+	 * tests that DO care build their own with {@see existingDashboardsHolding()}; the
+	 * sweep itself is covered by {@see ExistingDashboardsTest}.
 	 */
 	private function existingDashboards(): ExistingDashboards {
 		$existing = $this->createStub(ExistingDashboards::class);

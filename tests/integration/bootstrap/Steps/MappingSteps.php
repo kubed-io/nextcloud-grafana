@@ -77,13 +77,48 @@ trait MappingSteps {
 	 * sentence cannot be written into a feature file again.
 	 */
 	private function noGrafanaFoldersAreMapped(): void {
-		foreach ($this->listMappings() as $m) {
+		foreach ($this->mappingRows() as $m) {
 			$id = (string)($m['id'] ?? '');
 			if ($id !== '') {
 				$this->occ('grafana_sync:remove-mapping ' . escapeshellarg($id));
 			}
 		}
-		Assert::assertSame([], $this->listMappings(), 'the mapping store did not empty');
+
+		// A PLAIN THROW, NOT A PHPUnit ASSERTION, AND IT READS A TOLERANT LIST.
+		//
+		// This runs before EVERY scenario in EVERY suite now, so it reaches
+		// `grafana_sync:list-mappings` before that is a command that exists — the first
+		// scenario of a run, and every one in `lifecycle.feature` that disables the app.
+		// {@see mappingRows()} answers `[]` there, so nothing is cleared and nothing is
+		// claimed, which is right: a store that cannot be read holds nothing to clear.
+		//
+		// What survives is the real check — the store WAS readable and did not empty —
+		// and it throws rather than asserts because a PHPUnit assertion inside Behat
+		// reports `Registry::get(): … null returned` instead of its own message. Failing
+		// every scenario in the suite is bad; failing them all illegibly is worse.
+		// Measured: 13 legs red at once, none of them naming a cause.
+		if ($this->mappingRows() !== []) {
+			$this->fail("could not clear the existing mappings:\n{$this->lastOutput}");
+		}
+	}
+
+	/**
+	 * The configured mappings, or `[]` when the app cannot answer.
+	 *
+	 * The tolerant twin of {@see listMappings()}, which asserts and belongs in a step
+	 * where a failure has a scenario to blame. This one is for the hook. Same shape the
+	 * sibling's harness settled on, for the same reason.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function mappingRows(): array {
+		$res = $this->occ('grafana_sync:list-mappings');
+		if ($res['exit'] !== 0) {
+			return [];
+		}
+		$decoded = json_decode(trim($res['output']), true);
+
+		return is_array($decoded) ? array_values(array_filter($decoded, 'is_array')) : [];
 	}
 
 	/**
@@ -167,15 +202,19 @@ trait MappingSteps {
 	 * @param array<string, string> $form
 	 */
 	private function declareMapping(array $form): void {
+		// PIN THE WRITEBACK TO INLINE. Without this every PUT is handed to a background
+		// job, so a file's uid is not stamped by the time the next step reads it and
+		// every assertion downstream sees an empty uid.
+		//
+		// OUTSIDE THE FLAG, and that is not tidying. It used to sit inside the
+		// once-per-scenario branch below, which the @BeforeScenario hook now pre-sets —
+		// so moving the clear into the hook silently took the writeback pin with it, and
+		// every arrange that declares a mapping went back to deferred writes. Idempotent
+		// and cheap, so running it per declared mapping costs an occ call and removes a
+		// coupling between two things that were never related.
+		$this->forceInlineWriteback();
 		if (!$this->mappingsDeclared) {
 			$this->noGrafanaFoldersAreMapped();
-			// PIN THE WRITEBACK TO INLINE. Without this every PUT is handed to a
-			// background job, so a file's uid is not stamped by the time the next step
-			// reads it and every assertion downstream sees an empty uid. The older
-			// `a folder mapped as … ` arrange has always done this; the table form was
-			// added without it, which is why it could only ever be used by scenarios
-			// that never looked at a uid.
-			$this->forceInlineWriteback();
 			$this->mappingsDeclared = true;
 		}
 		// RECORD THE MODE. Without it no arrange can tell a link mapping from a sync
@@ -336,8 +375,9 @@ trait MappingSteps {
 	public function theAdminMapsTheGrafanaFolderWith(string $uid, TableNode $table): void {
 		$form = $this->formValues($table);
 		$this->lastMappingForm = ['grafana folder' => $uid] + $form;
-		// COUNTED BEFORE THE ATTEMPT, so `no mapping was created` can be relative.
-		// See that step for why an absolute count is the wrong assertion.
+		// COUNTED BEFORE THE ATTEMPT, so the refusal step can check the store is
+		// unchanged RELATIVE to whatever was already configured. See
+		// `the mapping is rejected, explaining` for why an absolute count is wrong.
 		$this->mappingsBeforeCreate = count($this->listMappings());
 		$this->addMappingFromForm($uid, $form);
 	}
@@ -503,6 +543,29 @@ trait MappingSteps {
 			$this->lastOutput,
 			"the refusal did not mention '$fragment':\n{$this->lastOutput}",
 		);
+
+		// AND NOTHING WAS STORED — CHECKED HERE RATHER THAN ASKED FOR IN A SENTENCE.
+		//
+		// A refusal that half-saved is not a refusal, so this is part of what the word
+		// MEANS rather than a separate claim a scenario has to remember to make. It was
+		// an `And no mapping was created` line on every refusal; a step definition can
+		// assert more than the sentence literally says, and a scenario reads better for
+		// not spelling out the obvious half of a rule it already named.
+		//
+		// RELATIVE, so it holds with mappings already configured. `mappingsBeforeCreate`
+		// is pinned by the submit step, which is the only thing that can precede this.
+		if ($this->mappingsBeforeCreate === null) {
+			return;
+		}
+		$now = count($this->listMappings());
+		if ($now !== $this->mappingsBeforeCreate) {
+			$this->fail(sprintf(
+				"the mapping was refused and stored anyway: %d configured before the attempt, %d after.\n%s",
+				$this->mappingsBeforeCreate,
+				$now,
+				$this->lastOutput,
+			));
+		}
 	}
 
 	/** @Then the mapping is rejected */
@@ -574,8 +637,9 @@ trait MappingSteps {
 	 * @Then the :folder mapping is no longer configured
 	 *
 	 * ASKED BY NAME, not by counting what is left. A total is a claim about the whole
-	 * app rather than about this removal — the same reason `no mapping was created`
-	 * replaced `there are exactly 0 configured mappings`.
+	 * app rather than about this removal — the same defect `there are exactly 0
+	 * configured mappings` had, and an admin with ten mappings removing one is not
+	 * doing anything the count could describe.
 	 */
 	public function theMappingIsNoLongerConfigured(string $folder): void {
 		if ($this->findMapping($folder) !== null) {
@@ -675,36 +739,6 @@ trait MappingSteps {
 		}
 		if ($problems !== []) {
 			$this->fail('removing the mapping took a folder with it: ' . implode('; ', $problems));
-		}
-	}
-
-	/**
-	 * @Then no mapping was created
-	 *
-	 * THE REFUSAL LEFT THE STORE AS IT FOUND IT — asked RELATIVE to whatever was
-	 * already configured, which is the only form of the question that survives a
-	 * real instance.
-	 *
-	 * It replaced `there are exactly 0 configured mappings`. That reads as a claim
-	 * about the whole app rather than about this create: an admin with ten working
-	 * mappings can still be refused an eleventh, and the old sentence says the
-	 * opposite. It only ever held because the scenario emptied the store first, so
-	 * it was pinning the arrange rather than the behaviour — and it could not be
-	 * written at all for a refusal that has to happen ALONGSIDE existing mappings,
-	 * which is what both uniqueness scenarios are.
-	 */
-	public function noMappingWasCreated(): void {
-		if ($this->mappingsBeforeCreate === null) {
-			$this->fail('nothing tried to create a mapping, so "no mapping was created" proves nothing');
-		}
-		$now = count($this->listMappings());
-		if ($now !== $this->mappingsBeforeCreate) {
-			$this->fail(sprintf(
-				"the refused mapping was stored anyway: %d configured before the attempt, %d after.\n%s",
-				$this->mappingsBeforeCreate,
-				$now,
-				$this->lastOutput,
-			));
 		}
 	}
 
