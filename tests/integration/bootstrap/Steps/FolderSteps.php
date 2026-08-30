@@ -476,9 +476,19 @@ trait FolderSteps {
 	/** The trashbin entry this scenario made, pinned so a stale one cannot answer for it. */
 	private string $trashedFolderEntry = '';
 
+	/**
+	 * The folder this scenario trashed, as the scenario spelled it.
+	 *
+	 * The plain path, beside {@see $trashedFolderEntry}'s timestamped trash spelling.
+	 * A later gesture that NAMES a folder is checked against this, so the name in the
+	 * sentence has to be the folder the scenario actually trashed.
+	 */
+	private string $trashedFolderPath = '';
+
 	/** @BeforeScenario */
 	public function resetTrashedFolderEntry(): void {
 		$this->trashedFolderEntry = '';
+		$this->trashedFolderPath = '';
 	}
 
 	/**
@@ -506,6 +516,7 @@ trait FolderSteps {
 		// still present after it was purged. Measured: the same `Team.d1787180677`
 		// answered for three different scenarios.
 		$this->trashedFolderEntry = $entry;
+		$this->trashedFolderPath = trim($folder, '/');
 	}
 
 	/** @Then /^"([^"]*)" is recoverable from the Nextcloud trash$/ */

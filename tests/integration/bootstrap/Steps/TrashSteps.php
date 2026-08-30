@@ -833,6 +833,21 @@ trait TrashSteps {
 	 * to run a sync.
 	 */
 	public function someonePurgesFromTheGrafanaRecycleBin(string $folder): void {
+		// THE NAME HAS TO BE LOAD-BEARING, or the sentence is decorative. Without this the
+		// parameter appeared only in error text while the loop worked on everything the
+		// scenario had pinned — the step would purge the right dashboards under the wrong
+		// name, and would silently purge two folders' worth if a scenario ever trashed
+		// two. Naming a subject and then not using it is the defect this sentence was
+		// reworded to fix. Copilot caught that the rewording had not reached the code.
+		$trashed = basename($this->trashedFolderPath);
+		if ($trashed === '') {
+			throw new \RuntimeException("nothing in this scenario has trashed a folder, so '$folder' names nothing");
+		}
+		if ($trashed !== trim($folder, '/')) {
+			throw new \RuntimeException(
+				"this scenario trashed '{$this->trashedFolderPath}', so it cannot purge '$folder' from the bin",
+			);
+		}
 		if ($this->originalDashboardUids === []) {
 			throw new \RuntimeException("nothing pinned what '$folder' held, so there is nothing to purge");
 		}
