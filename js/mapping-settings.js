@@ -178,16 +178,14 @@
 		var url = OC.generateUrl(MAP_BASE + (isNew ? '' : '/' + encodeURIComponent(data.id)));
 		api(isNew ? 'POST' : 'PUT', url, payload)
 			.then(function (res) {
-				if (res.mapping && res.mapping.id) {
-					card.dataset.id = res.mapping.id;
-				}
-				// Reflect the materialised Nextcloud folder back into the field so a blank
-				// entry shows the name the backend filled in.
-				if (res.mapping && res.mapping.nc_folder) {
-					var ncEl = card.querySelector('.js-nc-folder');
-					if (ncEl && 'value' in ncEl && !ncEl.value.trim()) {
-						ncEl.value = res.mapping.nc_folder;
-					}
+				// A CREATE IS A STATE TRANSITION, NOT A FIELD UPDATE. The card stops being
+				// a form and becomes a saved mapping, and everything that makes it one has
+				// to happen here — see sealCard().
+				if (isNew && res.mapping && res.mapping.id) {
+					sealCard(card, res.mapping);
+				} else if (res.mapping && Array.isArray(res.mapping.nc_groups)) {
+					// A groups-only save re-ticks for the same reason sealCard does.
+					showGroups(card, res.mapping.nc_groups);
 				}
 				cardStatus(card, 'success', t('grafana_sync', 'Saved.'));
 			})
@@ -310,6 +308,125 @@
 		var e = escapeHtml(tip);
 		return ' <span class="grafana-sync-info" tabindex="0" role="note" aria-label="' + e + '" data-tip="' + e + '">'
 			+ (ICONS.info || '') + '</span>';
+	}
+
+	/**
+	 * Turn a just-created card into a saved one, in the same state the server would
+	 * have rendered it in.
+	 *
+	 * ## WHY THIS EXISTS AT ALL
+	 *
+	 * The create path used to set `card.dataset.id` and stop, which left the card
+	 * looking and behaving like the blank form it had been a moment earlier. Two
+	 * things were wrong with that, and only the first is cosmetic:
+	 *
+	 *   - **Every immutable field stayed editable.** A mapping is immutable except
+	 *     for its groups — not by a guard, but because the PUT endpoint accepts
+	 *     `nc_groups` and nothing else. So an admin could change the Grafana folder,
+	 *     the Nextcloud folder or the mode, press Save, and be told "Saved." while
+	 *     the server ignored all of it. This file's own comment in saveCard() names
+	 *     that failure exactly — "which is exactly how a UI comes to offer an edit
+	 *     that silently does nothing" — and then the create path went and offered it.
+	 *   - **The delete confirmation lied.** It reads `data-mode`, `data-nc-folder`
+	 *     and `data-grafana-folder` off the CARD, and a freshly created card carried
+	 *     none of them. So deleting a `link` mapping you had just made showed the
+	 *     SYNC warning — "its dashboard files stay in Nextcloud and become unmapped"
+	 *     — about a mapping whose files are about to be removed, and named neither
+	 *     folder: "Remove the mapping from  to ?".
+	 *
+	 * ## WHY NOT `window.location.reload()`, WHICH IS WHAT THE SIBLING DOES
+	 *
+	 * `nextcloud-penpot` solves this by reloading the page so the server's own
+	 * renderer draws the saved card, and its reasoning is sound: one renderer, no
+	 * drift. It is rejected here because **the Add button appends without a guard**,
+	 * so a panel can hold several unsaved cards at once — and a reload throws away
+	 * every one of them, along with the scroll position, as the price of saving one.
+	 * (The sibling has that cost too; it has not been paid there yet.)
+	 *
+	 * What makes the local redraw safe is that the read path was ALREADY built for
+	 * both shapes: {@see fieldValue} takes `data-value` from a span or `.value` from
+	 * a control, deliberately, because the server has always rendered saved cards as
+	 * text. This function emits exactly that shape — the same classes, the same
+	 * `data-` attributes, the same CSS hook — so the card it produces is the one the
+	 * template would have produced.
+	 *
+	 * The values come from the RESPONSE rather than from what was submitted. The
+	 * backend materialises a blank Nextcloud folder into the Grafana folder's name,
+	 * and it applies the groups to the folder and reads back what actually stuck — a
+	 * group that does not exist cannot be shared with, and showing it still ticked
+	 * would claim a share that was never made.
+	 */
+	function sealCard(card, mapping) {
+		var uid = mapping.grafana_folder_uid || '';
+		var title = mapping.grafana_folder_title || '';
+		var ncFolder = mapping.nc_folder || '';
+		var mode = mapping.mode === 'link' ? 'link' : 'sync';
+
+		// The card's own data- attributes, which the delete confirmation reads.
+		card.dataset.id = mapping.id;
+		card.dataset.mode = mode;
+		card.dataset.grafanaFolder = title !== '' ? title : uid;
+		card.dataset.ncFolder = ncFolder;
+
+		// THE IMMUTABLE THREE, as text. A control implies it might save, which is the
+		// reason the server renders them this way (see templates/mapping_settings.php).
+		var label = title !== '' ? title + ' (' + uid + ')' : uid;
+		fixField(card, '.js-grafana-folder', uid, label, { uid: uid, title: title });
+		fixField(card, '.js-nc-folder', ncFolder, ncFolder);
+		fixField(card, '.js-mode', mode, mode === 'sync' ? t('grafana_sync', 'Sync') : t('grafana_sync', 'Link'));
+
+		// The storage backend is immutable too, but it stays a checkbox so the choice
+		// remains legible — disabled, exactly as the template renders it.
+		var tf = card.querySelector('.js-use-team-folder');
+		if (tf) {
+			tf.checked = !!mapping.use_team_folder;
+			tf.disabled = true;
+		}
+
+		// THE GROUPS ARE RE-TICKED FROM THE RESPONSE, NOT LEFT AS SUBMITTED. They are
+		// the one mutable field, and the server does not simply store them: it applies
+		// them to the folder and reads back what actually stuck. The two can differ —
+		// a group that does not exist cannot be shared with — and leaving a box ticked
+		// for a share that was never made is the panel claiming access nobody has.
+		if (Array.isArray(mapping.nc_groups)) {
+			showGroups(card, mapping.nc_groups);
+		}
+	}
+
+	/**
+	 * Tick exactly the groups in $groups, clearing the rest.
+	 *
+	 * @param {Element} card
+	 * @param {string[]} groups
+	 */
+	function showGroups(card, groups) {
+		Array.prototype.forEach.call(
+			card.querySelectorAll('.js-groups input[type="checkbox"]'),
+			function (cb) { cb.checked = groups.indexOf(cb.value) !== -1; }
+		);
+	}
+
+	/**
+	 * Replace one control with the fixed-text span the server renders for a saved
+	 * mapping, keeping the class the rest of this file finds it by.
+	 *
+	 * @param {Element} card
+	 * @param {string} selector
+	 * @param {string} value the RAW value, for `fieldValue` and the confirmations
+	 * @param {string} text  what a reader sees, which may be localised
+	 * @param {Object} [data] extra data- attributes (the folder carries uid + title)
+	 */
+	function fixField(card, selector, value, text, data) {
+		var el = card.querySelector(selector);
+		if (!el || el.tagName === 'SPAN') { return; }
+		var span = document.createElement('span');
+		span.className = 'grafana-sync-fixed ' + selector.replace('.', '');
+		span.dataset.value = value;
+		if (data) {
+			Object.keys(data).forEach(function (k) { span.dataset[k] = data[k]; });
+		}
+		span.textContent = text;
+		el.parentNode.replaceChild(span, el);
 	}
 
 	// The Grafana folder control for a new card: a <select> when we have the folder
