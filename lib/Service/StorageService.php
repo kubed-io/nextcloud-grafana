@@ -409,8 +409,11 @@ final class StorageService {
 				if ($share->getSharedWith() !== $gid) {
 					continue;
 				}
+				// ONE SHARE PER (NODE, GROUP), so this is the only one that can match
+				// and there is nothing left to look at once it is handled — including
+				// when it is already accepted or rejected. Raised by Copilot on #77.
 				if ($share->getStatus() !== IShare::STATUS_PENDING) {
-					continue;
+					break;
 				}
 				try {
 					$this->shareManager->acceptShare($share, $uid);
@@ -426,6 +429,7 @@ final class StorageService {
 						'exception' => $e,
 					]);
 				}
+				break;
 			}
 		}
 	}
