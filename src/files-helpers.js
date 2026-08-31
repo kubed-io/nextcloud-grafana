@@ -65,7 +65,7 @@ export function isDashboardFile(context) {
  * or an untracked file).
  *
  * @param {{attributes?: Record<string, unknown>}} [node]
- * @return {string}  '' | 'sync' | 'link' | 'unmapped' | 'ignored'
+ * @return {string}  '' | 'sync' | 'link' | 'unmapped'
  */
 export function getGrafanaMode(node) {
   const a = node?.attributes ?? {}
@@ -76,8 +76,8 @@ export function getGrafanaMode(node) {
 
 /**
  * Should "Open in Grafana" be offered for a file in this mode? It is meaningful
- * only when a live dashboard exists to open: `sync`/`link` have one, `unmapped`/
- * `ignored` do not (their dashboard was deleted / never created — nothing to jump
+ * only when a live dashboard exists to open: `sync`/`link` have one, `unmapped`
+ * does not (its dashboard was deleted, or was never created — nothing to jump
  * to). An absent mode (the first-load race, or an untracked file) stays permissive
  * → shown, matching the pre-mode behaviour; the action no-ops harmlessly if there
  * is no uid to resolve.
@@ -86,13 +86,13 @@ export function getGrafanaMode(node) {
  * @return {boolean}
  */
 export function canOpenInGrafana(mode) {
-  return mode !== 'unmapped' && mode !== 'ignored'
+  return mode !== 'unmapped'
 }
 
 /**
  * Which opener a plain row-click uses, by mode. `sync`/`link` (and the permissive
- * absent case) → the live dashboard in Grafana; `unmapped`/`ignored` → the text
- * editor on the local JSON. Mirrors {@see canOpenInGrafana} so the default click
+ * absent case) → the live dashboard in Grafana; `unmapped` → the text editor on
+ * the local JSON. Mirrors {@see canOpenInGrafana} so the default click
  * and the action visibility never disagree.
  *
  * @param {string} mode
@@ -106,9 +106,9 @@ export function defaultOpener(mode) {
  * Should "Open with text editor" be offered for a file in this mode? Every mode
  * holds the full dashboard JSON on disk EXCEPT `link`, which is only a small
  * pointer (uid/title/url) — there is nothing meaningful to edit, and any change
- * would just break the pointer. So `sync`, `unmapped`, `ignored` (and the
- * permissive absent case, matching {@see canOpenInGrafana}) → shown; `link` →
- * hidden. This is what makes "open as text" the user-visible difference between a
+ * would just break the pointer. So `sync` and `unmapped` (and the permissive
+ * absent case, matching {@see canOpenInGrafana}) → shown; `link` → hidden. This
+ * is what makes "open as text" the user-visible difference between a
  * `sync` file (editable JSON) and a `link` (open in Grafana only).
  *
  * @param {string} mode
