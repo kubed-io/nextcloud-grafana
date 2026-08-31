@@ -1,7 +1,7 @@
 <?php
 
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
@@ -109,12 +109,12 @@ final class InstanceSettings implements IDeclarativeSettingsFormWithHandlers {
 			// path did: a plain string for the url, ICrypto for the sensitive token.
 			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => 'Instance',
-			'description' => 'The Grafana instance the app is scoped to — its base URL and the service-account token used to reach it.',
+			'description' => 'The Grafana instance this app talks to, and the service-account token it authenticates with.',
 			'fields' => [
 				[
 					'id' => self::FIELD_URL,
 					'title' => 'Grafana base URL',
-					'description' => 'e.g. https://grafana.example.com (no trailing slash). In-cluster URLs like http://grafana-service.observe.svc:3000 also work.',
+					'description' => 'e.g. https://grafana.example.com — no trailing slash.',
 					'type' => DeclarativeSettingsTypes::URL,
 					'placeholder' => 'https://grafana.example.com',
 					'default' => '',

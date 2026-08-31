@@ -3,7 +3,7 @@ description: 'PHP / Nextcloud backend conventions for review'
 applyTo: "**/*.php"
 ---
 <!--
-  SPDX-FileCopyrightText: 2026 Kelly Ferrone
+  SPDX-FileCopyrightText: 2026 kubed-io
   SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 # PHP / Nextcloud backend conventions

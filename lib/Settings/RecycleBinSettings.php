@@ -1,7 +1,7 @@
 <?php
 
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
@@ -75,12 +75,12 @@ final class RecycleBinSettings implements IDeclarativeSettingsFormWithHandlers {
 			// class docblock for why INTERNAL cannot carry the checkbox.
 			'storage_type' => DeclarativeSettingsTypes::STORAGE_TYPE_EXTERNAL,
 			'title' => 'Recycle Bin',
-			'description' => 'What happens to a dashboard in Grafana when you delete its file in Nextcloud. Grafana has no trash of its own, so if you want a delete to be reversible, this is where you say so.',
+			'description' => 'What happens in Grafana when you delete a dashboard file here. Grafana has no trash of its own, so this is where you give it one.',
 			'fields' => [
 				[
 					'id' => self::FIELD_BIN_ENABLED,
 					'title' => 'Keep deleted dashboards in a Grafana folder',
-					'description' => 'Off (default): trashing a synced dashboard file deletes its dashboard in Grafana right then; restoring re-creates it with a new id (its full JSON is safe in the file). On: trashing instead moves the dashboard into the Grafana folder named below, keeping its id; restoring moves it back, and only emptying the Nextcloud trash deletes it for good.',
+					'description' => 'On: trashing a dashboard file parks its dashboard in the folder below, keeping its id, and restoring moves it back. Off: trashing deletes it in Grafana, and restoring rebuilds it with a new id.',
 					'type' => DeclarativeSettingsTypes::CHECKBOX,
 					// Real bool — and the one whose failure destroys dashboards. See
 					// the class docblock.
@@ -89,7 +89,7 @@ final class RecycleBinSettings implements IDeclarativeSettingsFormWithHandlers {
 				[
 					'id' => self::FIELD_BIN_FOLDER,
 					'title' => 'Which Grafana folder to use',
-					'description' => 'The name of an existing Grafana folder to use as the recycle bin (e.g. nextcloud-trash). Used only when the option above is on. This folder must not be one you map — it has special meaning.',
+					'description' => 'An existing Grafana folder to park them in. It cannot also be a mapped folder.',
 					'type' => DeclarativeSettingsTypes::TEXT,
 					'placeholder' => 'nextcloud-trash',
 					'default' => '',

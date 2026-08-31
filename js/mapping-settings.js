@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Folder-mapping admin handlers (vanilla JS, no build step). Laid out to match the

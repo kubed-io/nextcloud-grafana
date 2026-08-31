@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Files-app integration for grafana_sync.
@@ -96,8 +96,8 @@ async function resolveUrl(node) {
  * WHY AN ASYNC MODE EXISTS AT ALL. `enabled()` is synchronous, so it can only
  * ever see what the listing carried, and on the first folder after a page load
  * that is nothing (the race documented at the top of this file). The editor's
- * unknown-mode default is deliberately PERMISSIVE, so that `unmapped`/`ignored`
- * files — whose only opener is the text editor — are never left with no way to
+ * unknown-mode default is deliberately PERMISSIVE, so that `unmapped` files —
+ * whose only opener is the text editor — are never left with no way to
  * open at all. The cost of that choice is that a `link` can slip into the menu
  * for exactly one folder per session, and editing a link is meaningless: the
  * server refuses to push it (NodeWrittenListener) and the next pull overwrites
@@ -200,7 +200,7 @@ registerFileAction({
   displayName: () => t(APP_ID, 'Open in Grafana'),
   iconSvgInline: () => grafanaMarkIcon,
 
-  // Offered for sync/link (a live dashboard to open); HIDDEN for unmapped/ignored
+  // Offered for sync/link (a live dashboard to open); HIDDEN for unmapped
   // (deleted / never created — nothing live to jump to) and when no Grafana base URL is
   // configured (there's nowhere to jump — so we hide it rather than show a no-op click).
   // The opener set follows the file's MODE, not its type (open-with.feature / saga §14.1).
@@ -214,27 +214,27 @@ registerFileAction({
     return true
   },
 
-  // Default click for sync/link; for unmapped/ignored this action is disabled, so
+  // Default click for sync/link; for unmapped this action is disabled, so
   // the lower-priority "Open with text editor" default wins instead (see below).
   default: DefaultType.DEFAULT,
   order: -50, // above other JSON claimers (Text ~0) and above the text opener
 })
 
 // "Open with text editor" — edit the raw JSON. Offered for every mode that holds
-// the full dashboard on disk (sync / unmapped / ignored), and the DEFAULT click for
-// unmapped/ignored (no live dashboard to open). HIDDEN for `link`: a link is only a
+// the full dashboard on disk (sync / unmapped), and the DEFAULT click for
+// unmapped (no live dashboard to open). HIDDEN for `link`: a link is only a
 // pointer, so there is nothing to edit and any change would break it. To edit a
 // link's dashboard you change its folder mapping to sync — the mapping's mode is the
 // single source of truth, there is no per-file toggle (saga §15.3).
 // It is also marked DEFAULT, but at a *lower* priority (order -49) than "Open in
-// Grafana" (-50): for sync both are enabled and Grafana wins; for unmapped/ignored
+// Grafana" (-50): for sync both are enabled and Grafana wins; for unmapped
 // "Open in Grafana" is disabled, so this becomes the default click; for link this
 // action is disabled and Grafana is the only opener. (open-with.feature)
 registerFileAction({
   id: 'grafana_sync.edit',
   displayName: () => t(APP_ID, 'Open with text editor'),
   iconSvgInline: () => textIcon,
-  // Offered for any dashboard file that holds editable JSON (sync/unmapped/ignored,
+  // Offered for any dashboard file that holds editable JSON (sync/unmapped,
   // and the permissive loading case); hidden for `link` (a pointer — nothing to edit).
   enabled: (context) => isDashboardFile(context) && canEditAsText(getGrafanaMode(context?.nodes?.[0])),
   async exec(context) {
@@ -252,7 +252,7 @@ registerFileAction({
     return (await openInText(node)) ? null : false
   },
   default: DefaultType.DEFAULT,
-  order: -49, // below "Open in Grafana"; the fallback default for unmapped/ignored
+  order: -49, // below "Open in Grafana"; the fallback default for unmapped
 })
 
 // ── "New → Grafana dashboard" ──────────────────────────────────────────────

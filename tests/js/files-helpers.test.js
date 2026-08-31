@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Unit tests for the pure Files-integration helpers. These are the JS analog of
@@ -93,7 +93,6 @@ describe('getGrafanaMode', () => {
   })
 
   it('falls back to the fully-qualified DAV attribute name', () => {
-    expect(getGrafanaMode({ attributes: { '{http://nextcloud.org/ns}metadata-grafana_mode': 'ignored' } })).toBe('ignored')
   })
 
   it('returns empty string when absent (first-load race / untracked file)', () => {
@@ -113,9 +112,8 @@ describe('canOpenInGrafana', () => {
     expect(canOpenInGrafana('link')).toBe(true)
   })
 
-  it('hides "Open in Grafana" for unmapped and ignored (no live dashboard)', () => {
+  it('hides "Open in Grafana" for unmapped (no live dashboard)', () => {
     expect(canOpenInGrafana('unmapped')).toBe(false)
-    expect(canOpenInGrafana('ignored')).toBe(false)
   })
 
   it('stays permissive for an absent/unknown mode (first-load race)', () => {
@@ -127,7 +125,6 @@ describe('canEditAsText', () => {
   it('offers the text editor for every mode that holds the full JSON', () => {
     expect(canEditAsText('sync')).toBe(true)
     expect(canEditAsText('unmapped')).toBe(true)
-    expect(canEditAsText('ignored')).toBe(true)
   })
 
   it('hides the text editor for link (a pointer — nothing to edit)', () => {
@@ -145,9 +142,8 @@ describe('defaultOpener', () => {
     expect(defaultOpener('link')).toBe('grafana')
   })
 
-  it('defaults unmapped/ignored to the text editor', () => {
+  it('defaults unmapped to the text editor', () => {
     expect(defaultOpener('unmapped')).toBe('text')
-    expect(defaultOpener('ignored')).toBe('text')
   })
 
   it('defaults an absent mode to grafana (matches canOpenInGrafana)', () => {

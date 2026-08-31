@@ -3,7 +3,7 @@ description: 'Gherkin and Behat conventions for review — how a feature file mu
 applyTo: "{features/**/*.feature,features/README.md,tests/integration/**}"
 ---
 <!--
-  SPDX-FileCopyrightText: 2026 Kelly Ferrone
+  SPDX-FileCopyrightText: 2026 kubed-io
   SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 # Gherkin conventions — the spec, and whether it is real
