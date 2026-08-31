@@ -345,6 +345,15 @@ final class SyncService {
 			// the mapping at all.
 			$this->mappings->bankFolderId($mapping->id, $targetFolder->getId());
 
+			// AND THE TRASHED FOLDERS SOMEBODY RESCUED, BEFORE THE TREE IS TOUCHED.
+			// A folder trashed with the bin on parked its dashboards; move them back out
+			// in Grafana and the trashed Nextcloud folder has stopped describing
+			// anything true. Bringing it back here rather than after `sync()` is the
+			// difference between the file landing in the folder the app is using and
+			// landing beside it in a `Revived (2)` — see
+			// {@see TrashReconcileService::restoreFolders} for the whole argument.
+			$this->trashReconcile->restoreFolders($mapping);
+
 			// Bring the Nextcloud folder tree into agreement with Grafana's BEFORE
 			// placing anything, so every dashboard has a folder to land in. The map it
 			// returns is grafana folder uid → the Nextcloud folder mirroring it.

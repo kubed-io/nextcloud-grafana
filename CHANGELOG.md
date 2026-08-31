@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dragging parked dashboards out of the Grafana recycle-bin folder now brings their trashed Nextcloud folder back with them, keeping the ids and URLs they left with. Nothing noticed before, so the next sync wrote a second copy of every file beside the one still sitting in the trash.
 - Mapping a folder in **link** mode when it already holds dashboard files now warns you first, says how many, and offers to move them out instead. A link mapping holds pointers, so those files cannot survive there — before, the mapping was made anyway and left a folder the app had two contradictory answers about.
 - The admin panel asks destructive questions in a proper Nextcloud dialog now, themed like the rest of the instance, instead of the browser's grey alert box.
 - Copying a folder now duplicates the dashboards inside it: each copy is a new dashboard in a new Grafana folder, and the originals are untouched. Copying a folder used to do nothing in Grafana at all.
@@ -100,6 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test connection moved into Sync Actions.
 
 ### Fixed
+
+- Restoring a folder from a Team Folder's trash now reaches Grafana. Only single files did — a folder came back in Nextcloud while its dashboards stayed in the recycle bin, and the next sync trashed the files again.
 
 - Emptying the Grafana recycle bin now clears the trashed **folders** whose dashboards it destroyed, not just individual files. A folder trashed in Nextcloud is one trash entry, so every mirror inside it was invisible to the reconcile and the entry sat there forever offering a restore that could reconnect to nothing.
 - A trashed folder that also holds something this app never managed — a spreadsheet, a note — keeps its trash entry when its dashboards are purged in Grafana, so the file with no dashboard is still there to restore. The dashboard files themselves go, because their dashboards did.

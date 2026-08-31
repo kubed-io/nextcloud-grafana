@@ -10,9 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Listener;
 
 use OCA\GrafanaSync\AppInfo\Application;
-use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\SyncGuard;
-use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
@@ -60,6 +58,20 @@ use Psr\Log\LoggerInterface;
  * cannot: both entry points read the metadata fresh, so whichever runs second sees the
  * uid the first one stamped and takes the upsert branch instead.
  *
+ * ## AND IT COVERS FOLDER RESTORES, WHICH IT DID NOT
+ *
+ * This class read `$params['filePath']` and returned unless the basename looked like a
+ * dashboard file. A restored FOLDER's path ends in a folder name, so that filter said no
+ * to every one of them — and since the folder branch lives in the typed listener, which
+ * a groupfolder never reaches, restoring a folder out of a Team Folder's trash reached
+ * Grafana never.
+ *
+ * `folders/restore.feature` carried that as `@unbuilt` on the theory that the groupfolder
+ * trash backend was doing something exotic. It is not: the dispatch was one level too
+ * deep. Both entry points now hand the whole node to
+ * {@see RestoreFromTrashListener::restoreTree()} and the file/folder branch is decided in
+ * one place.
+ *
  * Failures are logged and swallowed, exactly as the typed listener does. The file is
  * already back; stranding it because Grafana is down would be worse than a dashboard one
  * manual sync away from correct.
@@ -91,10 +103,7 @@ final class TrashRestoreHook {
 		}
 
 		$path = $params['filePath'] ?? '';
-		// Cheap pre-filter. Unlike the purge hook's, the restored name is the ORIGINAL
-		// one — the deletion timestamp came off on the way out of the trash — so the
-		// extension really is last here.
-		if ($path === '' || !FilenameCodec::isDashboardName(basename($path))) {
+		if ($path === '') {
 			return;
 		}
 
@@ -121,13 +130,23 @@ final class TrashRestoreHook {
 			]);
 			return;
 		}
-		if (!$node instanceof File) {
-			return;
-		}
-
-		// The stamp read, the mapping lookup and the log-and-swallow error policy all
-		// live in restoreOne — shared with the typed listener, on purpose.
-		$this->restore->restoreOne($node);
+		// THE FOLDER BRANCH IS THE WHOLE OF THE TEAM FOLDER FIX, and it is why the cheap
+		// name pre-filter had to go. `post_restore` carries the restored PATH, and for a
+		// folder that path ends in a folder name — so `isDashboardName()` said no to
+		// every folder restore there has ever been, and returned before the node was
+		// even resolved.
+		//
+		// The typed listener has had the folder branch since folders/restore.feature was
+		// written. It just never runs for a groupfolder: `NodeRestoredEvent` is
+		// `files_trashbin`'s, and a Team Folder restores through its own backend. So
+		// restoring a folder out of a Team Folder's trash reached Grafana never, and the
+		// scenario was carried as @unbuilt on a theory about the groupfolder backend
+		// being exotic. It is not exotic; this dispatch was one level too deep.
+		//
+		// The cost of dropping the pre-filter is one `get()` per restore gesture in the
+		// instance, and a tree walk on a restored folder — the same walk the typed
+		// listener already does for home storage, and bounded by what the user restored.
+		$this->restore->restoreTree($node);
 	}
 
 	/**

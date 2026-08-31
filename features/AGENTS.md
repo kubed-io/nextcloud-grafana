@@ -1010,28 +1010,44 @@ It is also why the same walk is needed on the guard side — see
 [copying a folder inside a link mapping](#copying-a-folder-inside-a-link-mapping-is-refused).
 One recursive gesture, one event, two places that have to look inside it.
 
-### Restoring a folder in a Team Folder
+### RETIRED — Restoring a folder in a Team Folder
 
-**@unbuilt, and the storage is the whole difference.** The identical scenario over
-an admin-owned folder passes: the folder comes back, its Grafana folder is rebuilt,
-and the parked dashboards return with the ids they left with. Over a Team Folder it
-does not — Grafana has no folder under the mapping to hold them.
+**It is a row again, and the note is kept for the wrong turn it records.**
 
-It was one Examples row beside `Demo`, which made a real gap look like a flake in a
-passing outline. Split out, so the thing that does not work is a scenario that says
-so rather than a row that keeps a suite red.
+The scenario was split out of an `Examples` row when it failed, on the grounds that
+a real gap looked like a flake in a passing outline. That much was right. What went
+with it was a THEORY: that the groupfolder trash backend was doing something exotic
+— a mount rather than a folder in anybody's home, restoring through
+`OCA\GroupFolders\Trash\TrashBackend`, different node ids, a different acting user —
+and that finding out meant reading that backend against a live groupfolder.
 
-**What is different about a Team Folder is not obvious and should not be guessed
-at.** A groupfolder is a MOUNT, not a folder in anybody's home: restoring from the
-trash goes through `OCA\GroupFolders\Trash\TrashBackend` rather than the ordinary
-one, the node ids and the acting user differ, and the folder-restore path has more
-than one place that could reasonably be the one giving up. Finding out means
-reading that backend against a live groupfolder, which is its own piece of work.
+**It was none of those things, and the theory is what cost the time.** `post_restore`
+is the one signal both trashes emit and `TrashRestoreHook` reads it — but it began by
+filtering on `isDashboardName(basename($params['filePath']))`. A restored FOLDER's
+path ends in a folder name, so that filter said no to every folder restore there has
+ever been, and returned before the node was even resolved. The folder branch existed
+the whole time, in `RestoreFromTrashListener` — on the path a groupfolder never takes.
+Both entry points now go through `RestoreFromTrashListener::restoreTree()`.
 
-This is the second Team-Folder-only defect in this app — the first was a folder
-delete over object storage — and both were invisible to the admin-folder rows
-beside them. Worth a habit: when a storage column exists, a row failing alone is
-evidence about the STORAGE, not noise.
+With the same end state on both storages, the scenario earns no more than the row it
+came from. It is one now, on BOTH bin modes — `Demo` and `Shared`, the same
+`Examples: the storage a mapping uses makes no difference…` that `folders/delete`,
+`folders/copy` and `folders/move` already carry, and the same shape `nextcloud-penpot`
+uses for the identical question.
+
+**Both bins get the row, and that is not symmetry for its own sake.** The two take
+different branches: bin-on MOVES the dashboard back out of the recycle-bin folder,
+bin-off RE-CREATES it from the file and resolves the mapping with
+`resolveForPath($target->getPath())`. That path is the one thing a groupfolder mount
+actually changes, so it is the branch most worth running over both storages — and it
+was the one the split-out scenario never covered, being bin-on only.
+
+**The habit the old note wrote down was the wrong one.** "When a storage column
+exists, a row failing alone is evidence about the STORAGE" is true, and it was not
+enough: it named the right symptom and then invited a story about groupfolder
+internals to explain it. The cheaper question is which of the two ENTRY POINTS that
+storage uses, and whether they cover the same shapes. Here they did not, and nothing
+about groupfolders had to be understood to see it.
 
 ### Trashing a folder in a link mapping
 
@@ -4250,16 +4266,38 @@ recycle-bin setting exists, and it is at its most expensive here.
 
 ── STATUS ───────────────────────────────────────────────────────────────────────
 
-The per-file restore path is built and unit-tested, so "does the per-file rule hold
-when a folder is the gesture" is @todo. The aggregate behaviour — reporting what
-came back, and what came back with a different identity — is @unbuilt: nothing in
-`lib/` treats a folder restore as one event.
+**Every scenario in the file runs.** Both doors are built: the user restoring the
+folder in Nextcloud, and someone dragging the parked dashboards back out of the bin
+in Grafana (`TrashReconcileService::restoreFolders()`, the mirror image of
+`reapFolders()`).
+
+What is still only recorded, not written: the AGGREGATE report — telling the user
+that a bin-off restore just handed forty dashboards forty new ids. Every file is
+restored correctly and nobody is told what the gesture cost. It has no scenario,
+deliberately, because there is no decision yet about where such a report would go;
+see the section at the end of this file.
 
 ### Dashboards leaving the bin bring their folder out of the trash
 
 The other door into a restore, and the mirror of the Grafana-side purge: someone
 moves the parked dashboards out of the bin folder in Grafana, and the reconcile
 notices they are live again. The trashed Nextcloud folder follows them out.
+
+**AND IT RUNS BEFORE THE TREE SYNC, WHICH IS NOT A DETAIL.** Trashing the folder
+DELETED its Grafana folder, so whatever the rescuer moved those dashboards into is a
+new Grafana folder with a new uid. Run the restore after `FolderTreeMirror::sync()`
+and that pass has already made its own `Revived` from the Grafana side — so the
+trash entry comes back beside it as `Revived (2)`, and the user's file is in the one
+the app is not using. Run it before, and the restored folder is there to be
+recognised.
+
+Which is why `restoreFolders()` re-stamps it. The folder coming out of the trash
+carries the uid of the Grafana folder that was destroyed, and `sync()` looks folders
+up BY UID — it would not find this one, would try to `newFolder()` a name that now
+exists, catch the collision, skip the folder, and quietly drop every dashboard in it
+back to the mapping's root. The stamp is read off the rescued DASHBOARD rather than
+assumed, because the rescuer chose where to put it and may not have rebuilt the tree
+the trash remembers.
 
 Bin-on only, for the same reason the Grafana-side purge is: with the bin off the
 dashboards were destroyed at trash time, so there is nothing in Grafana to move and
@@ -4277,15 +4315,55 @@ the dashboards sit in one folder with no hierarchy, and the restore rebuilds the
 Grafana folders from the Nextcloud tree and re-files each dashboard by its uid. Two
 sides, and only the one that already had the structure has to remember it.
 
-### A restore out of the bin brings back whatever shared the folder
+### A restore in Grafana speaks for dashboards and nothing else
 
-A folder comes out of the Nextcloud trash **whole**. A spreadsheet that rode into the
-trash inside the folder rides back out with it, because Nextcloud restores the node
-and everything under it — this app is not selectively reassembling a folder.
+**THE SIDE THE GESTURE HAPPENED ON DECIDES WHAT COMES BACK, and the two answers are
+opposite.** Same folder, same spreadsheet:
 
-That is the restore being unsurprising rather than clever, and it is the counterpart
-to the delete rule: a Grafana-side delete may not destroy a user's non-dashboard
-files, and a Grafana-side restore does not leave them behind either.
+| the restore happened in | what comes out of the Nextcloud trash |
+|---|---|
+| **Nextcloud** — the user restores the folder | the folder **whole**, spreadsheet included |
+| **Grafana** — someone drags the dashboards out of the bin | the **mirrors only**; the spreadsheet stays |
+
+The first is the restore being unsurprising rather than clever: Nextcloud restores the
+node and everything under it, and this app is not selectively reassembling a folder.
+`folders/restore.feature` says it in one table row — `/Demo/Team/Budget.xlsx | NA` —
+sitting between two dashboards that came back with the ids they left with.
+
+The second is the same rule the Grafana-side PURGE runs on, pointed the other way: a
+gesture in Grafana speaks for dashboards, because dashboards are the only thing Grafana
+has ever heard of. A spreadsheet has no far side, so nothing that happened over there
+may move it — not destroy it, and not restore it either.
+
+**THIS SECTION USED TO SAY THE OPPOSITE**, under the anchor
+`a-restore-out-of-the-bin-brings-back-whatever-shared-the-folder`. It argued the
+symmetry one level too high — "a Grafana-side delete may not destroy a user's
+non-dashboard files, and a Grafana-side restore does not leave them behind either" —
+which sounds like the same principle and is its inverse. Not destroying somebody's file
+is restraint. Restoring it is a decision made on their behalf, out of a system that does
+not know the file exists.
+
+That is the second time the "one gesture, whole entry" instinct got this backwards; the
+first was the purge, recorded under
+[a Grafana purge may not destroy what was never Grafana's](#a-grafana-purge-may-not-destroy-what-was-never-grafanas).
+Both times the fix was the same shape: **stop making the ENTRY the subject.**
+
+### The trashed folder is in two places at once, so the scenarios talk about files
+
+After a Grafana-side restore there are two `Demo/Rescued`: a live folder holding the
+restored mirror, and a trash entry still holding the spreadsheet. Nextcloud keeps a trash
+entry as its own object — `Rescued.d<timestamp>`, remembering where it came from — so
+restoring one child out of it does not dissolve it.
+
+Which means neither *"is still in the trash"* nor *"is out of the trash"* is a true thing
+to say about that folder, and a scenario that asserts either is asserting half a state.
+So the Grafana-side scenarios name FILES: `"Demo/Rescued/Budget.xlsx" is still in the
+Nextcloud trash`, beside a mapping row saying the dashboard is live at its own path. The
+Nextcloud-side ones can still name the folder, because there the entry really does go.
+
+`Revived` keeps `is gone from the Nextcloud trash` for the same reason: everything in it
+came out, so nothing is left to hold the entry open. That asymmetry between the two
+scenarios is the behaviour, not a wording accident.
 
 ### A folder restore reports which dashboards came back with new identities
 

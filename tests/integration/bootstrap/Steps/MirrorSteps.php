@@ -559,6 +559,24 @@ trait MirrorSteps {
 				return ($actual ?? '') !== '' ? null : 'expected a value, found nothing';
 			case 'absent':
 				return ($actual ?? '') === '' ? null : "expected it not to be stored, found '{$actual}'";
+			case 'NA':
+				// NOT A SYNONYM FOR `absent`, THOUGH IT PASSES WHERE `absent` WOULD.
+				// `absent` says a key that COULD have been stored was not — a real claim
+				// about a mirror. `NA` says the column does not apply to this row at all:
+				// a spreadsheet has no identity to be missing, and it is in the table so
+				// that one glance covers everything a restore brought back.
+				//
+				// The row still asserts the file EXISTS — `the mappings hold:` checks the
+				// path before it reads anything off it — which is the whole reason a
+				// spreadsheet is worth a row. `folders/restore.feature` reads it against
+				// its own opposite: the same file, restored from Nextcloud, stays in the
+				// trash when the gesture happened in Grafana instead.
+				if (str_ends_with($path, '.grafana')) {
+					throw new \RuntimeException(
+						"'{$path}' is a dashboard file, so '{$property}' applies to it — say what it should be, not NA",
+					);
+				}
+				return ($actual ?? '') === '' ? null : "expected nothing to be stored on a file that is not a mirror, found '{$actual}'";
 			default:
 				// LITERALS ARE QUOTED, by the convention in this trait's docblock. An
 				// unquoted value that reached here is a phrase the table vocabulary does
