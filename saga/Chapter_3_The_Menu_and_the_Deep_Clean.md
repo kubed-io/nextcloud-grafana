@@ -262,6 +262,28 @@ on humans; see below.
 
 ---
 
+## Carried — findings recorded rather than acted on
+
+### A mapped folder's name is ambiguous when two Grafana folders share a title
+
+Raised by Copilot on #77 against `sealCard()`, and declined **there** for a
+specific reason: the card's `data-grafana-folder` holds the title alone while the
+visible field reads `title (uid)`, and that asymmetry is the SERVER's convention
+(`templates/mapping_settings.php` lines 86 and 95). `sealCard()` copies it
+deliberately, because a card the JS builds has to be the one the template would
+have built — changing only the JS would reintroduce the drift the function exists
+to close.
+
+**The underlying point survives the decline.** The delete confirmation reads
+*"Remove the mapping from observe to Observe?"*, and with two Grafana folders
+sharing a title that names neither of them. It is equally ambiguous on a
+server-rendered card, so a fix belongs on the template and the JS together.
+
+Not done, because it is a trade rather than a win: `observe (af397c9y8enswf)`
+buys clarity in a rare case by making every common case uglier. It wants a
+decision, not a patch — which is why it is written here instead of left in a
+review thread nobody will read again.
+
 ## What this chapter is not
 
 It is not a rewrite. Chapter 2's code works, is covered, and is in daily use; the
