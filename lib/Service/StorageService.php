@@ -13,6 +13,7 @@ use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Constants;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\IGroupManager;
 use OCP\Share\IManager as IShareManager;
 use OCP\Share\IShare;
 use Psr\Log\LoggerInterface;
@@ -50,6 +51,7 @@ final class StorageService {
 		private TeamFolderService $teamFolders,
 		private IRootFolder $rootFolder,
 		private IShareManager $shareManager,
+		private IGroupManager $groupManager,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -318,6 +320,11 @@ final class StorageService {
 						]);
 					}
 				}
+				// ON THE EXISTING BRANCH TOO, and that is the recovery path rather
+				// than belt-and-braces: a share left PENDING by an earlier save is
+				// already there, so nothing below would create it, and only this
+				// makes re-saving the mapping's groups put the folder back.
+				$this->acceptForMembers($folder, $gid);
 				continue;
 			}
 
@@ -329,6 +336,7 @@ final class StorageService {
 				$share->setSharedBy($ownerUid);
 				$share->setPermissions(self::CONTENT_PERMISSIONS);
 				$this->shareManager->createShare($share);
+				$this->acceptForMembers($folder, $gid);
 			} catch (\Throwable $e) {
 				// Most likely the group does not exist (admin-managed / LDAP). Log
 				// and carry on — a missing content group must not fail the sync.
@@ -337,6 +345,88 @@ final class StorageService {
 					'group' => $gid,
 					'exception' => $e,
 				]);
+			}
+		}
+	}
+
+
+	/**
+	 * Make a group share VISIBLE to the group, which creating it does not do.
+	 *
+	 * ## WHY THIS EXISTS AT ALL
+	 *
+	 * `DefaultShareProvider::create()` writes `accepted = STATUS_PENDING` for every
+	 * share it makes, unconditionally — there is no auto-accept flag to set and no
+	 * argument to `createShare()` that changes it. `Files_Sharing`'s mount provider
+	 * then builds the super-share for that pending group share and **silently
+	 * declines to mount it**:
+	 *
+	 *     if ($parentShare->getStatus() !== IShare::STATUS_ACCEPTED
+	 *         && ($parentShare->getShareType() === IShare::TYPE_GROUP || …)) {
+	 *         continue;
+	 *     }
+	 *
+	 * So the folder a mapping provisions is correct, shared, and carries the right
+	 * permissions — and is invisible to every member of the group, **with nothing
+	 * to click**, because a group share raises no acceptance prompt the way a user
+	 * share does. There is no error, no notification and no log line anywhere.
+	 *
+	 * MEASURED ON A LIVE INSTANCE, not reasoned about. A mapping was re-created in
+	 * link mode; its folder held two dashboards and vanished from the admin's Files
+	 * app entirely. Every layer checked out — the share rows were byte-identical in
+	 * shape to a working folder's, the parent chain was sound, the owner could
+	 * PROPFIND it (207), group membership resolved, and `getSharedWith()` returned
+	 * the shares. `MountProvider::getMountsForUser()` returned two mounts where
+	 * three were due. Accepting the three pending shares and asking again produced
+	 * the mount, with nothing else changed.
+	 *
+	 * ## THE SIBLING HAD ALREADY PAID FOR THIS
+	 *
+	 * `nextcloud-penpot` hit it, diagnosed it identically, and fixed it — and the
+	 * fix never crossed over to here or to `nextcloud-n8n`, which still has it.
+	 * This is that method ported, including the Copilot finding from its #56.
+	 *
+	 * ## A REJECTION IS LEFT ALONE
+	 *
+	 * Someone who removed the folder from their own Files view holds a share at
+	 * STATUS_REJECTED, and re-accepting that on their behalf would put it back
+	 * every time an admin so much as re-saved the mapping's groups. Only PENDING is
+	 * accepted — the state in which nobody has expressed an opinion yet.
+	 */
+	private function acceptForMembers(Folder $folder, string $gid): void {
+		$group = $this->groupManager->get($gid);
+		if ($group === null) {
+			return;
+		}
+
+		foreach ($group->getUsers() as $user) {
+			$uid = $user->getUID();
+			foreach ($this->shareManager->getSharedWith($uid, IShare::TYPE_GROUP, $folder, -1) as $share) {
+				// THIS GROUP'S SHARE, not every group share this user has to this
+				// folder. The prune above deletes a dropped group's share and only
+				// LOGS a failure, so an unwanted share can still be sitting there —
+				// and accepting it for someone who happens to be in both groups
+				// would hand back the access an admin just took away.
+				if ($share->getSharedWith() !== $gid) {
+					continue;
+				}
+				if ($share->getStatus() !== IShare::STATUS_PENDING) {
+					continue;
+				}
+				try {
+					$this->shareManager->acceptShare($share, $uid);
+				} catch (\Throwable $e) {
+					// NEVER FATAL TO PROVISIONING. The share itself exists and is
+					// correct; the member can still accept it by hand. Losing the
+					// whole mapped folder over one unacceptable share would be the
+					// worse trade by a distance.
+					$this->logger->warning('grafana_sync: failed to accept a group share for a member', [
+						'app' => Application::APP_ID,
+						'group' => $gid,
+						'user' => $uid,
+						'exception' => $e,
+					]);
+				}
 			}
 		}
 	}
