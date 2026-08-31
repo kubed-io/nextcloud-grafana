@@ -3,7 +3,7 @@ description: 'GitHub Actions workflow conventions for this repo'
 applyTo: '.github/workflows/*.yml,.github/workflows/*.yaml,.github/actions/*/*.yml'
 ---
 <!--
-  SPDX-FileCopyrightText: 2026 Kelly Ferrone
+  SPDX-FileCopyrightText: 2026 kubed-io
   SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 # GitHub Actions workflow conventions

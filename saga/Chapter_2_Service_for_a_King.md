@@ -12,6 +12,43 @@
 
 ---
 
+## Status: **CLOSED** — 2026-08-31
+
+> **Closed by Dr K.** The chapter opened with one standard — *feature parity with
+> the master, cooked on our ingredient, good enough to send to the king's table* —
+> and it closes having sent the whole tasting menu.
+>
+> **Every course is plated.** Both directions of sync. The complete dashboard verb
+> set — create, edit, rename, move, copy, delete, restore, purge, tag, view, open.
+> The **folder** verb set beside it, which the master never had to cook at all,
+> because his ingredient has no folders: create, rename, move, copy, delete,
+> restore, purge, tag. Mappings in both storage kinds and both modes, the admin
+> surface complete to the last garnish, and every button with an `occ` twin.
+>
+> **129 scenarios, 110 of them running against a real Nextcloud and a real
+> Grafana** on every pull request, across thirteen suites. 542 unit tests behind
+> them.
+>
+> **And two dishes we invented rather than re-cooked.** The master had no folders,
+> so the whole `features/folders/` tree is ours. And Grafana has no trash at all —
+> a folder delete there cascades through an arbitrarily deep subtree in one
+> request, with no undo, because a service account has nothing to undo *into*. The
+> **Grafana recycle bin** is this chapter's own answer to that: an ordinary folder
+> pressed into service as a holding pen, which turns an irreversible cascade into a
+> move. Nothing on the master's menu corresponds to it.
+>
+> **The queue that remains is written down and honest**: 4 `@todo`, 2 `@unbuilt`,
+> 12 `@blocked`, 1 `@decision`. Nineteen of 129, and the shape of it is more
+> interesting than the count — **seven of the twelve `@blocked` are the same
+> sentence**, *"while Grafana is unreachable"*, waiting on one harness capability
+> nobody has built. Three more are `open-with`, waiting on a second. The blocked
+> queue is two missing tools wearing twelve hats.
+>
+> Chapter 1 was mise en place. Chapter 2 was service. **Chapter 3 is the room
+> nobody has swept, and the menu nobody outside the kitchen has read.**
+
+---
+
 ## The occasion — we're not cooking for the room, we're cooking for the king
 
 Mise en place earns you the right to a real service. But this isn't a Tuesday lunch.
@@ -2266,6 +2303,45 @@ because the file will be just as invalid then. Open questions, none of them crea
 Named here rather than answered, and filed against **move / copy / edit** where it
 belongs. The n8n sibling has the identical hole, so whatever is settled should be
 settled in one conversation across both apps.
+
+---
+
+---
+
+## The pass is clear — what Chapter 2 actually sent
+
+The rounds above are the cooking. This is the ticket rail at the end of service,
+for anyone who arrives at this file and needs the state rather than the story.
+
+| Course | State |
+|---|---|
+| The dining room — admin panel, every card, every control live | ✅ |
+| The pull — Grafana → Nextcloud, scheduled and on demand | ✅ |
+| The writeback — Nextcloud → Grafana, on save | ✅ |
+| The file lifecycle — create, copy, move, rename, delete, restore, purge | ✅ |
+| The **folder** lifecycle — the same eight verbs, one level up | ✅ |
+| Tags — three surfaces, both directions, dashboards and folders | ✅ |
+| Modes — sync, link, and the unmapped state you don't configure | ✅ |
+| The Grafana recycle bin — both doors, both trashes | ✅ |
+| `occ` parity — every admin action scriptable | ✅ |
+| The store listing | ⛔ Chapter 3 |
+| The outward-facing documentation | ⛔ Chapter 3 |
+
+**Two things this chapter is deliberately not claiming.**
+
+It is not claiming the code is tidy. It is claiming the code *works*, which is a
+different sentence and the only one nine rounds of cooking earns. Eighty-nine
+classes in `lib/`, several of them grown a listener at a time, and nobody has yet
+walked the whole tree asking what is duplicated and what is dead. That walk is
+Chapter 3's, and it is written into its brief rather than left as an intention.
+
+And it is not claiming anyone outside this kitchen could find the place. The
+README, the store listing and the admin panel's own copy were all written by the
+people who already knew the answer — which is exactly the defect the sibling
+`nextcloud-penpot` opened its Chapter 4 to fix, and which this chapter's close
+hands to Chapter 3 to fix here.
+
+**Continues in [Chapter 3 — The Menu and the Deep Clean](Chapter_3_The_Menu_and_the_Deep_Clean.md).**
 
 ---
 

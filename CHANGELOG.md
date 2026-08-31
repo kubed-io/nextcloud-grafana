@@ -60,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The admin panel's field help is one sentence per field now, and the base-URL example no longer assumes you run Grafana in Kubernetes.
+- The README, the app-store description and the copyright headers were rewritten for someone who has not read the source. The README called tag sync *planned* while it had been shipping for weeks.
+
 - **Removing a mapping no longer costs you anything.** Its sync dashboard files stay where they are and become unmapped — they used to be moved to the trash, which with the recycle bin off *permanently deleted every dashboard in the folder* in Grafana. Linked files still go, both folders are kept on both sides, and Grafana is never contacted.
 - Removing a mapping in link mode works at all: it used to fail outright and leave the mapping in place, because the app refuses to delete a linked file and the teardown was asking it to.
 - The delete confirmation now says what the mode actually costs — a link mapping's files are removed, a sync mapping's are kept. One message covered both and only described the sync half.

@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * THE ONE CONFIRMATION EVERY ADMIN SURFACE IN THIS APP USES.

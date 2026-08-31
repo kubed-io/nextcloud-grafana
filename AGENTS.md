@@ -115,8 +115,10 @@ without a real reason documented in the saga:
   the unauthenticated `/api/health`, so a green result proves the token, not just
   reachability.
 - **Mapping unit is a Grafana folder → a Nextcloud folder** (folder-to-folder
-  mirror). Grafana has real folders, so there is **no tag scheme** — this is the
-  headline simplification over the n8n master.
+  mirror). Grafana has real folders, so **nothing is mapped by tag** — this is the
+  headline simplification over the n8n master. Tags themselves are a synced
+  ATTRIBUTE on both dashboards and folders (`features/*/tags.feature`); they just
+  have nothing to do with which folder a mapping points at.
 - **The metadata key is `grafana_mode = link|sync`.**
 - **Loop prevention is a content-hash guard.** Pulls must not trigger pushes; hash
   the spec we *sent*, not Grafana's echoed-back object (Grafana bumps a `version`

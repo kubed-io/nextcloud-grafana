@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Kelly Ferrone
+// SPDX-FileCopyrightText: 2026 kubed-io
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // ESLint flat config. Flat config has to live in a real .js file — ESLint 9+

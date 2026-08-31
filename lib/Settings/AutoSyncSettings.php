@@ -1,7 +1,7 @@
 <?php
 
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
@@ -100,7 +100,7 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 				[
 					'id' => self::FIELD_SCHEDULE_ENABLED,
 					'title' => 'Grafana → Nextcloud: scheduled sync',
-					'description' => 'Nextcloud periodically pulls dashboards from Grafana (read-only — nothing changes in Grafana). Optional; when off, use the manual “Sync from Grafana” button.',
+					'description' => 'Nextcloud periodically pulls dashboards from Grafana; nothing in Grafana changes. A change made in Grafana appears here within the interval below. When off, use Sync from Grafana in Sync Actions.',
 					'type' => DeclarativeSettingsTypes::CHECKBOX,
 					// A real bool: this is what the frontend round-trips. It is safe
 					// here only because EXTERNAL storage never feeds it to
@@ -110,7 +110,7 @@ final class AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers {
 				[
 					'id' => self::FIELD_SCHEDULE_INTERVAL,
 					'title' => 'Schedule — how often',
-					'description' => 'How often to pull, as a number + unit (s/m/h/d). Examples: 15m, 1h, 6h, 1d. A plain number = seconds. Minimum 1m.',
+					'description' => 'Number + unit (s/m/h/d), e.g. 15m, 1h, 6h, 1d. A plain number means seconds. Minimum 1m.',
 					'type' => DeclarativeSettingsTypes::TEXT,
 					'placeholder' => self::DEFAULT_INTERVAL,
 					'default' => self::DEFAULT_INTERVAL,

@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Vitest config, kept separate from vite.config.js (which is a lib/IIFE *build*

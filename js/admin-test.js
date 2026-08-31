@@ -1,5 +1,5 @@
 /**
- * SPDX-FileCopyrightText: 2026 Kelly Ferrone
+ * SPDX-FileCopyrightText: 2026 kubed-io
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * "Test connection" handler — one button that calls the authenticated test
