@@ -349,7 +349,6 @@ final class StorageService {
 		}
 	}
 
-
 	/**
 	 * Make a group share VISIBLE to the group, which creating it does not do.
 	 *
