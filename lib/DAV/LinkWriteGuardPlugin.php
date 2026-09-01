@@ -154,24 +154,21 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		}
 		// THE FILE BRANCH, WHICH USED TO LIVE IN `beforeUnbind` AND COULD NOT STAY THERE.
 		//
-		// Sabre routes a MOVE through the source's unbind as well as a DELETE, so that
-		// hook refused every move of a link file — including the one {@see MoveRules}
-		// expressly allows, "anywhere under the same mapping". The app was contradicting
-		// itself in the plainest way available: `refusalFor` tells the user to "move it
-		// within that folder instead", and the unbind hook then refused exactly that,
-		// in the voice of a delete, for a gesture that deletes nothing. The same move
-		// through the Files API went through, so the rule depended on which door the
-		// user came in by.
+		// Sabre routes a MOVE through the source's unbind as well as a DELETE, so a
+		// refusal in that hook answered both — and answered the move in the voice of a
+		// delete, telling the user a link "can't be deleted here" for a gesture that
+		// deletes nothing. A link move IS refused, by {@see MoveRules}; being refused
+		// for the wrong reason is its own defect, because the sentence is the only part
+		// of a refusal the user can act on.
 		//
 		// This is the lesson `method:COPY` and the folder branch below already encode,
 		// now applied to the last hook that had not learned it: a `method:*` handler
-		// fires for ONE verb, so a refusal made here cannot touch a move. `onMove` has
-		// already adjudicated every move by the time one gets this far.
+		// fires for ONE verb, so each gesture is answered in its own words. `onMove` has
+		// adjudicated every move by the time one gets this far.
 		//
-		// Nothing is lost by leaving `beforeUnbind` behind. A COPY landing on an
-		// existing link is refused by {@see onCopy} at both ends, and a MOVE landing on
-		// one is refused by `onMove` — a link file only ever lives in a link mapping,
-		// and nothing may be moved into one.
+		// Nothing is lost by leaving `beforeUnbind` behind. Every move of a link is
+		// refused by `onMove`, and a COPY landing on an existing link is refused by
+		// {@see onCopy} at both ends.
 		if ($this->isLinkFile($node)) {
 			$name = $node->getName();
 			$this->logger->warning('grafana_sync: refused a WebDAV delete of a link-mode dashboard file', [
