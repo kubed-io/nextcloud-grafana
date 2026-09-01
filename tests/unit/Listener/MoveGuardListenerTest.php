@@ -66,7 +66,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
 
 		$this->expectException(AbortedEventException::class);
-		$this->expectExceptionMessageMatches('/only pointers/');
+		$this->expectExceptionMessageMatches('/comes from Grafana/u');
 		$this->guard('/alice/files/Pointers/Team', '/alice/files/Scratch/Team', 20);
 	}
 
@@ -138,7 +138,7 @@ final class MoveGuardListenerTest extends TestCase {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK, 'Mirrors' => Mapping::MODE_LINK];
 
 		$this->expectException(AbortedEventException::class);
-		$this->expectExceptionMessageMatches('/only a pointer/');
+		$this->expectExceptionMessageMatches('/comes from Grafana/u');
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Mirrors/Fleet.grafana', Mapping::MODE_LINK);
 	}
 
@@ -165,14 +165,38 @@ final class MoveGuardListenerTest extends TestCase {
 	}
 
 	/**
-	 * THE INVARIANT ABOUT NOT REFUSING, which is the one worth breaking a build over.
-	 * A link may be renamed and filed into a subfolder like anything else — nothing
-	 * about its membership changes, so the guard must key on the mapping, not the folder.
+	 * A LINK DOES NOT MOVE, AND ITS OWN MAPPING IS NOT AN EXCEPTION.
+	 *
+	 * This test asserted the opposite, and called it "the invariant worth breaking a
+	 * build over" — the wrong rule, written down as the most important thing in the
+	 * file. A link is read-only in Nextcloud: WHERE a mirror sits is decided by which
+	 * Grafana folder its dashboard is in, so a file dragged into a subfolder here
+	 * disagrees with Grafana until the next pull puts it back. To file a link into a
+	 * subfolder, move the DASHBOARD there in Grafana and the mirror follows.
+	 *
+	 * It never covered the rename it claimed to, either: the path keeps the same
+	 * basename, so `$renamed` was false and the link-rename refusal — which has always
+	 * been correct, and sits above the where-is-it-going rules for exactly this reason —
+	 * was never reached. The file refused a link rename while allowing a link move, and
+	 * this test documented only the half that was wrong.
 	 */
-	public function testALinkMayMoveWithinItsOwnMapping(): void {
+	public function testALinkMayNotMoveWithinItsOwnMapping(): void {
 		$this->mapped = ['Pointers' => Mapping::MODE_LINK];
 
+		$this->expectException(AbortedEventException::class);
+		$this->expectExceptionMessageMatches('/comes from Grafana/u');
 		$this->guardFile('/alice/files/Pointers/Fleet.grafana', '/alice/files/Pointers/Sub/Fleet.grafana', Mapping::MODE_LINK);
+	}
+
+	/**
+	 * AND THE SHORTCUT IT USED TO GUARD IS STILL THERE, for sync files, which is all it
+	 * ever correctly covered. A sync file is authored here and its folder is the user's
+	 * to arrange.
+	 */
+	public function testASyncFileMayMoveWithinItsOwnMapping(): void {
+		$this->mapped = ['Demo' => Mapping::MODE_SYNC];
+
+		$this->guardFile('/alice/files/Demo/Fleet.grafana', '/alice/files/Demo/Sub/Fleet.grafana', Mapping::MODE_SYNC);
 
 		self::assertTrue(true, 'not refused');
 	}
