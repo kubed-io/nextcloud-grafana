@@ -63,7 +63,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	) {
 	}
 
-	/** Kept from {@see initialize} so {@see beforeUnbind} and {@see onCopy} can resolve paths. */
+	/** Kept from {@see initialize} so {@see onDelete} and {@see onCopy} can resolve paths. */
 	private ?Server $server = null;
 
 	#[\Override]
@@ -75,13 +75,6 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 		// The other half of the same door: refusing an OVERWRITE is no use if a link
 		// folder will happily accept a brand-new file beside the pointers.
 		$server->on('beforeCreateFile', [$this, 'beforeCreateFile'], 10);
-		// EXISTENCE IS THE OTHER HALF OF READ-ONLY, and it needs its own hook. The
-		// delete IS refused without this — {@see \OCA\GrafanaSync\Listener\DeleteToGrafanaListener}
-		// throws `AbortedEventException` from `BeforeNodeDeletedEvent` — but that
-		// surfaces over DAV as a bare 403 with no `<s:message>`, so the Files app shows
-		// the user a failure with nothing in it. Sabre's `beforeUnbind` is where a
-		// refusal can still say why.
-		$server->on('beforeUnbind', [$this, 'beforeUnbind'], 10);
 		// COPY IS NEITHER A WRITE NOR AN UNBIND, so neither hook above sees it, and the
 		// typed `BeforeNodeCopiedEvent` is no help on its own: aborting it stops the copy
 		// but Sabre still answers 201, so the user is told it worked and no file appears.
@@ -138,9 +131,10 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	 * Files app's own internals. What it cannot do is get its sentence to the client, so
 	 * this refuses first, with the same sentence, and the listener never runs.
 	 *
-	 * FILES NEED NOTHING HERE. A link FILE's delete already reaches the user readably —
-	 * `beforeUnbind` covers it, and it is only the folder path through `View::rmdir()`
-	 * that loses the message.
+	 * FILES ARE REFUSED HERE TOO, in the branch above the folder one. That refusal used
+	 * to live in `beforeUnbind`, which Sabre also emits for the source of a MOVE — so it
+	 * refused every link move as though it were a delete. One verb per handler is what
+	 * keeps the two gestures apart.
 	 *
 	 * FAILING OPEN IS THE RULE HERE, AS EVERYWHERE IN THIS PLUGIN: a path that cannot be
 	 * resolved is left to the listener, which is behind this and refuses anyway.
@@ -157,6 +151,39 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			$node = $this->server->tree->getNodeForPath($path);
 		} catch (\Throwable) {
 			return true;
+		}
+		// THE FILE BRANCH, WHICH USED TO LIVE IN `beforeUnbind` AND COULD NOT STAY THERE.
+		//
+		// Sabre routes a MOVE through the source's unbind as well as a DELETE, so that
+		// hook refused every move of a link file — including the one {@see MoveRules}
+		// expressly allows, "anywhere under the same mapping". The app was contradicting
+		// itself in the plainest way available: `refusalFor` tells the user to "move it
+		// within that folder instead", and the unbind hook then refused exactly that,
+		// in the voice of a delete, for a gesture that deletes nothing. The same move
+		// through the Files API went through, so the rule depended on which door the
+		// user came in by.
+		//
+		// This is the lesson `method:COPY` and the folder branch below already encode,
+		// now applied to the last hook that had not learned it: a `method:*` handler
+		// fires for ONE verb, so a refusal made here cannot touch a move. `onMove` has
+		// already adjudicated every move by the time one gets this far.
+		//
+		// Nothing is lost by leaving `beforeUnbind` behind. A COPY landing on an
+		// existing link is refused by {@see onCopy} at both ends, and a MOVE landing on
+		// one is refused by `onMove` — a link file only ever lives in a link mapping,
+		// and nothing may be moved into one.
+		if ($this->isLinkFile($node)) {
+			$name = $node->getName();
+			$this->logger->warning('grafana_sync: refused a WebDAV delete of a link-mode dashboard file', [
+				'app' => Application::APP_ID,
+				'fileId' => $node->getId(),
+				'file' => $name,
+			]);
+			throw new Forbidden(
+				'“' . $name . '” is a linked Grafana dashboard — only a pointer to a dashboard that lives in Grafana, '
+				. 'so it can’t be deleted here. Delete the dashboard in Grafana, '
+				. 'or remove the mapping itself.',
+			);
 		}
 		if (!$this->isLinkMappedFolder($path, $node)) {
 			return true;
@@ -237,7 +264,7 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 	 * **A link is not copyable.** It is a read-only projection of a dashboard that lives
 	 * in Grafana; duplicating the pointer does not duplicate anything, it just makes a
 	 * second file claiming the same dashboard. The same reasoning already refuses editing
-	 * one ({@see beforeWriteContent}) and deleting one ({@see beforeUnbind}) — copy was
+	 * one ({@see beforeWriteContent}) and deleting one ({@see onDelete}) — copy was
 	 * the hole left in a rule the other two state.
 	 *
 	 * **A link mapping is not a destination.** Its folder is filled from the Grafana
@@ -362,48 +389,6 @@ final class LinkWriteGuardPlugin extends ServerPlugin {
 			'“' . $mapping->ncFolder . '” mirrors a Grafana folder in link mode, so its contents come from Grafana '
 			. 'and files can’t be added here. Create the dashboard in Grafana instead, or switch the mapping '
 			. 'to sync mode to author dashboards in Nextcloud.',
-		);
-	}
-
-	/**
-	 * Refuse DELETE on a link file, with a message.
-	 *
-	 * A link is a read-only projection of a dashboard that lives in Grafana and is
-	 * perfectly fine. Removing the pointer only makes the mapped folder disagree with
-	 * the Grafana folder it mirrors, and the next pull writes the file straight back —
-	 * so the delete was never durable, it was just silent. The listener is the backstop
-	 * that catches every route (occ, another app, a script); this is the one the user sees.
-	 */
-	public function beforeUnbind(string $path): bool {
-		try {
-			$node = $this->server?->tree->getNodeForPath($path);
-		} catch (\Throwable) {
-			return true; // gone already, or not ours to judge — never block on doubt
-		}
-		// NO FOLDER BRANCH HERE, AND THAT IS DELIBERATE — see
-		// `features/AGENTS.md#trashing-a-folder-in-a-link-mapping`. Sabre routes a MOVE
-		// through `beforeUnbind` as well as a DELETE, so a folder branch here cannot
-		// tell the two apart: it would refuse every folder move out of a link mapping in
-		// the voice of a delete ("this folder can't be deleted"), over the top of
-		// {@see \OCA\GrafanaSync\Listener\MoveGuardListener}, which refuses the same
-		// gesture and says the right thing about it. Refusing a move as if it were a
-		// delete is worse than the gap: the user is told no for a reason that is not the
-		// reason. Trashing a link folder stays unbuilt until it can be told apart.
-		if (!$this->isLinkFile($node)) {
-			return true; // sync/unmapped files are the user's to delete
-		}
-
-		$name = $node->getName();
-		$this->logger->warning('grafana_sync: refused a WebDAV delete of a link-mode dashboard file', [
-			'app' => Application::APP_ID,
-			'fileId' => $node->getId(),
-			'file' => $name,
-		]);
-
-		throw new Forbidden(
-			'“' . $name . '” is a linked Grafana dashboard — only a pointer to a dashboard that lives in Grafana, '
-			. 'so it can’t be deleted here. Delete the dashboard in Grafana, '
-			. 'or remove the mapping itself.',
 		);
 	}
 

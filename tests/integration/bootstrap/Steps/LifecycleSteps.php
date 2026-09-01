@@ -128,7 +128,7 @@ trait LifecycleSteps {
 				$matches,
 				$matches === []
 					? "the pull did not bring dashboard '$uid' into the '$mapping' mapping as a stamped mirror"
-					: "the pull wrote " . count($matches) . " mirrors all claiming dashboard '$uid': "
+					: 'the pull wrote ' . count($matches) . " mirrors all claiming dashboard '$uid': "
 						. implode(', ', $matches),
 			);
 			$this->currentFilePath = $matches[0];
