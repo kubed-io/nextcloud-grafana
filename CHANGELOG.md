@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Store listing now ships screenshots — the mirrored folder from both sides, the two openers, the recycle bin and the three admin panels — wired into `info.xml` with thumbnails.
 - Dragging parked dashboards out of the Grafana recycle-bin folder now brings their trashed Nextcloud folder back with them, keeping the ids and URLs they left with. Nothing noticed before, so the next sync wrote a second copy of every file beside the one still sitting in the trash.
 - Mapping a folder in **link** mode when it already holds dashboard files now warns you first, says how many, and offers to move them out instead. A link mapping holds pointers, so those files cannot survive there — before, the mapping was made anyway and left a folder the app had two contradictory answers about.
 - The admin panel asks destructive questions in a proper Nextcloud dialog now, themed like the rest of the instance, instead of the browser's grey alert box.

@@ -11,6 +11,10 @@
 
 ---
 
+![A mapped Nextcloud folder named observe, listing Grafana dashboards as .grafana files with the Grafana icon, their Grafana tags, and their real last-modified dates](screenshots/nextcloud-folders.png)
+
+---
+
 ## The whole idea, in one breath
 
 Point the app at your Grafana instance, bind a Grafana **folder** to a Nextcloud **folder**, and everything inside it shows up: subfolders become folders, dashboards become `.grafana` files.
@@ -69,6 +73,15 @@ It runs both ways. Make a folder in Grafana and it appears here; make one here a
 
 A folder holding **no** dashboards stays an ordinary folder, however much else is in it — notes, runbooks, whatever you like. The app claims what it mirrors and nothing else.
 
+![The same observe folder in Grafana, showing the subfolders critical and morton, the dashboards under them, and their Grafana tags](screenshots/grafana-folders.png)
+
+*The same folder in Grafana — the one at the top of this page. Same dashboards, same
+tags, and `morton` and `critical` are folders on both sides. `Kubernetes / Views /
+Pods` is the file called `Kubernetes _ Views _ Pods.grafana`, because a `/` in a
+Grafana title cannot be one in a filename. And `stuff` is a Nextcloud folder with no
+dashboards in it, so Grafana has never heard of it — the `Runbooks/` rule above,
+in the wild.*
+
 🗂️ [`folders/create.feature`](features/folders/create.feature) · 🚚 [`folders/move.feature`](features/folders/move.feature) · 🔤 [`folders/rename.feature`](features/folders/rename.feature)
 
 ---
@@ -108,6 +121,10 @@ That turns an irreversible cascade into a move, and it is the moment you say you
 It works from the Grafana side too, in both directions: purge the parked dashboards in Grafana and the trashed file follows them out of existence; drag them back out of the bin and the trashed folder comes **back**, files and uids intact.
 
 The safety rails you'd hope for are all here. A **link** can't be trashed at all — a pointer is Grafana's to remove, not yours. A purge in Grafana never destroys a file it has never heard of, so the spreadsheet that rode into the trash beside your dashboards is still there. And when the app can't *prove* a dashboard is gone, it leaves your file exactly where it is.
+
+![The Recycle Bin admin setting: a "Keep deleted dashboards in a Grafana folder" toggle, switched on, and a field naming which Grafana folder to park them in](screenshots/recycle-bin-setting.png)
+
+*One toggle and the name of an ordinary Grafana folder. That is the whole safety rail.*
 
 🗑️ [`delete.feature`](features/dashboards/delete.feature) · ↩️ [`restore.feature`](features/dashboards/restore.feature) · 💥 [`purge.feature`](features/dashboards/purge.feature) · 📁 [`folders/delete.feature`](features/folders/delete.feature)
 
@@ -158,6 +175,17 @@ Two openers, and you pick per click:
 
 A **link** file only ever opens Grafana. There is nothing on this side to edit.
 
+<table>
+<tr>
+<td width="40%"><img src="screenshots/context-menu.png" alt="The Files app right-click menu on a .grafana file, showing Open in Grafana above Open with text editor"></td>
+<td width="60%"><img src="screenshots/json-editor.png" alt="A .grafana dashboard open in the Nextcloud text editor showing the raw Grafana dashboard JSON, with a Save button"></td>
+</tr>
+<tr>
+<td><em>Right-click: straight to Grafana, or straight to the JSON.</em></td>
+<td><em>Hit <strong>Save</strong> and Grafana has it — panels, datasources, the lot.</em></td>
+</tr>
+</table>
+
 🖱️ [`dashboards/open-with.feature`](features/dashboards/open-with.feature)
 
 ---
@@ -183,9 +211,15 @@ There's a third state you don't configure: **unmapped**. That's what a sync file
 
 **1. Point it at Grafana.** Base URL and a service-account token, stored encrypted and never echoed back. That is the whole connection.
 
+![The Grafana Sync admin settings: an Instance card holding the base URL and service-account token, and a Sync Settings card with the scheduled pull and its interval](screenshots/connection.png)
+
 **2. Map a folder to a folder.** Pick the Grafana folder from a live picker, name the Nextcloud folder, choose the mode, and pick which groups get to see it. Backed by a Team Folder or an admin-owned shared folder, your call. The subfolders come along automatically — there is nothing per-folder to configure and nothing that can drift from what Grafana actually contains.
 
+![The Folder mappings admin panel showing two mapping cards, each with its Grafana folder and uid, the Nextcloud folder, the mode, a Team Folder flag and group checkboxes](screenshots/mappings.png)
+
 **3. Sync it.** Scheduled pulls on whatever interval you like, plus one-shot **Sync from Grafana** and **Sync to Grafana** buttons whenever you're impatient — and "Test connection" so you're never guessing whether it works.
+
+![The Sync Actions admin panel with Sync to Grafana, Sync from Grafana and Test connection buttons](screenshots/sync-actions.png)
 
 🔌 [`connection.feature`](features/connection/connection.feature) · 🗂️ [`mapping/create.feature`](features/mapping/create.feature) · 🔄 [`sync-now.feature`](features/connection/sync-now.feature)
 
