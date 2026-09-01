@@ -88,13 +88,50 @@ trait LifecycleSteps {
 			// A link file is authored by the PULL, not by a local write — a link mapping
 			// never adopts a file the user drops in. Seed a dashboard through Grafana's
 			// own API (no involvement from this app), then pull it down.
-			$this->seedGrafanaDashboard($mapping, 'Linked ' . bin2hex(random_bytes(3)));
+			$uid = $this->seedGrafanaDashboard($mapping, 'Linked ' . bin2hex(random_bytes(3)));
 			$this->pullEveryMapping();
-			$files = $this->davListDashboardFiles($this->mappedFolder($mapping));
-			$this->check($files !== [], "the pull produced no link file in the '$mapping' mapping");
-			$this->currentFilePath = $this->mappedFolder($mapping) . '/' . $files[0];
-			$uid = $this->davReadMetadata($this->currentFilePath, self::META_UID);
-			Assert::assertNotNull($uid, 'the pulled link file carries no uid');
+
+			// RESOLVED BY THE UID, NOT BY TAKING THE FIRST FILE IN THE FOLDER.
+			//
+			// `$files[0]` is a guess that is usually right, which is the worst kind. One
+			// pull can bring down more than one file — a folder that already held
+			// dashboards, or a mirror the previous pull never finished — and the listing
+			// has no meaningful order, so the arrange could point `currentFilePath` at
+			// one file and `lastUid` at another: green, and testing two different things.
+			//
+			// The seed already returns the uid it minted; it was simply thrown away.
+			// Asking for the file BY that uid also asserts the thing worth asserting —
+			// that the pull stamped the mirror at all — where the old `assertNotNull`
+			// only proved SOME file in the folder carried SOME uid.
+			//
+			// Found by Copilot in the n8n sibling (#88), whose link arrange was ported
+			// from this one and had the identical weakness.
+			$folder = $this->mappedFolder($mapping);
+			$matches = [];
+			foreach ($this->davListDashboardFiles($folder) as $name) {
+				if ($this->davReadMetadata($folder . '/' . $name, self::META_UID) === $uid) {
+					$matches[] = $folder . '/' . $name;
+				}
+			}
+
+			// EVERY MATCH, THEN EXACTLY ONE — not the first match and a break.
+			//
+			// Breaking on the first would pick a file and go green even if the pull had
+			// written TWO mirrors carrying the same uid, which is the precise failure this
+			// app has had before: a gesture that re-creates rather than updates leaves the
+			// old mirror behind, and two files claiming one dashboard is the giveaway.
+			// `there is exactly one file for that dashboard` exists as a step for that
+			// reason, and an ARRANGE that hides it makes every scenario downstream weaker.
+			// Raised by Copilot on #79.
+			Assert::assertCount(
+				1,
+				$matches,
+				$matches === []
+					? "the pull did not bring dashboard '$uid' into the '$mapping' mapping as a stamped mirror"
+					: 'the pull wrote ' . count($matches) . " mirrors all claiming dashboard '$uid': "
+						. implode(', ', $matches),
+			);
+			$this->currentFilePath = $matches[0];
 			$this->lastUid = $uid;
 			return;
 		}

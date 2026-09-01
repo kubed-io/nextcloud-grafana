@@ -98,24 +98,35 @@ final class MoveRules {
 				. 'and can’t be changed here. Rename the dashboard in Grafana instead.';
 		}
 
+		// A LINK DOES NOT MOVE, AND THAT INCLUDES INSIDE ITS OWN MAPPING.
+		//
+		// JUDGED BEFORE THE WHERE-IS-IT-GOING RULES, exactly as the rename above is, and
+		// for the same reason. This used to sit AFTER the same-mapping shortcut below,
+		// so a link could be dragged into a subfolder of its own mapped folder — and the
+		// message then told the user to do just that. It was wrong twice over: a link is
+		// read-only in Nextcloud, so no gesture here moves it; and WHERE a mirror sits is
+		// decided by which GRAFANA folder its dashboard is in, so a file dragged into a
+		// subfolder here disagrees with Grafana until the next pull puts it back.
+		//
+		// The way to file a link into a subfolder is to move the DASHBOARD into that
+		// subfolder in Grafana; the mirror then moves down on this side to follow it.
+		// That is the same shape as every other link gesture: the far side decides, and
+		// Nextcloud reflects.
+		if ($mode === Mapping::MODE_LINK) {
+			return '“' . $source->getName() . '” is a linked Grafana dashboard, so where it sits comes from '
+				. 'Grafana and it can’t be moved here. Move the dashboard in Grafana instead, and the '
+				. 'mirror will follow.';
+		}
+
 		// WITHIN its own mapping, anything goes — a rename, a subfolder, anywhere under
 		// the same mapping. Nothing about the file's membership changes, so there is
 		// nothing here to protect. Keyed on the mapping ID rather than the folder,
 		// because a subfolder resolves to the same mapping and must stay allowed.
+		//
+		// SYNC FILES ONLY, because the link refusal above has already returned. A sync
+		// file is authored here and its folder is the user's to arrange; a link is not.
 		if ($tgtMapping !== null && $tgtMapping->id === $srcMapping->id) {
 			return null;
-		}
-
-		// A LINK IS NOT MOVABLE, AND THERE IS NOWHERE IT MAY GO. It is a read-only
-		// projection of a dashboard that lives in Grafana, and its membership is decided
-		// by which GRAFANA folder that dashboard sits in — never by where the file sits
-		// here. So moving it to another link mapping does not re-home it, it just
-		// disagrees with Grafana until the next pull prunes it from the destination and
-		// writes it back at the source. Refusing is the only answer that is not a silent
-		// undo one sync later.
-		if ($mode === Mapping::MODE_LINK) {
-			return 'A linked Grafana dashboard can’t be moved out of its mapped folder ("'
-				. $srcMapping->ncFolder . '") — it’s only a pointer. Move it within that folder instead.';
 		}
 
 		// AND A LINK MAPPING IS NOT A DESTINATION. Its folder is filled from the Grafana
@@ -160,15 +171,33 @@ final class MoveRules {
 		}
 		$tgtMapping = $this->mappings->resolveForPath($targetPath);
 
+		// A MIRRORED FOLDER IN A LINK MAPPING DOES NOT MOVE EITHER, AND FOR THE SAME
+		// REASON AS THE FILE. It exists because a Grafana folder does, and WHERE it sits
+		// is Grafana's to say — `Move a folder in Grafana` is the gesture that relocates
+		// one, and this side follows. Asked before the destination is looked at, because
+		// the destination does not enter into it.
+		//
+		// This used to refuse only a move OUT of the mapped set, which left two holes
+		// either side of it: a mirrored folder could be dragged into a subfolder of its
+		// own mapping, and — because that test compared MODES rather than mappings — into
+		// a different link mapping as well, where the next pull would prune it. The old
+		// message told the user to "move it within that folder instead", which was the
+		// first of those holes written down as advice.
+		//
+		// AND IT REACHES ONLY MIRRORED FOLDERS, which is what makes the rule safe to
+		// state this broadly. A folder is not part of a mapping until a dashboard lands
+		// in it, and the stamp check at the top has already let every unstamped one go —
+		// so a "Notes" folder someone made inside a link mapping is still theirs to move
+		// anywhere. Being INSIDE a link mapping is not what binds a folder; mirroring a
+		// Grafana folder is.
+		if ($srcMapping->mode === Mapping::MODE_LINK) {
+			return '“' . $source->getName() . '” mirrors a Grafana folder in “' . $srcMapping->ncFolder
+				. '”, so where it sits comes from Grafana and it can’t be moved here. '
+				. 'Move the folder in Grafana instead, and the mirror will follow.';
+		}
+
 		if ($tgtMapping === null) {
-			// Leaving the mapped set. Allowed for sync (the cascade handles it); refused
-			// for link, whose dashboards are pointers with nothing to rebuild from.
-			if ($srcMapping->mode === Mapping::MODE_LINK) {
-				return '“' . $source->getName() . '” can’t be moved out of “' . $srcMapping->ncFolder
-					. '” — that folder mirrors Grafana in link mode, so its dashboards are only pointers. '
-					. 'Move it within that folder instead.';
-			}
-			return null;
+			return null; // a sync folder leaving the mapped set — the cascade handles it
 		}
 
 		if ($srcMapping->mode !== $tgtMapping->mode) {
