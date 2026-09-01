@@ -278,7 +278,7 @@ final class FeatureContext implements Context {
 		// It used to be the other way round, so that deleting a mapped folder would
 		// cascade its dashboards out of Grafana. Then the link guard learned to refuse
 		// deleting a folder that holds linked dashboards
-		// ({@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin::beforeUnbind}) — which is
+		// ({@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin::onDelete}) — which is
 		// correct, and which meant teardown could no longer clean up after a link
 		// mapping at all. `Pointers` survived every scenario, and the next pull wrote
 		// `Pinned (1).grafana`, then `(2)`, beside what was already there.

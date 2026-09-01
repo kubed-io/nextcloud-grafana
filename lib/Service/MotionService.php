@@ -25,7 +25,9 @@ use Psr\Log\LoggerInterface;
  *  - **mapped → a different mapped folder** → a genuine Grafana **folder move**: the file's
  *    dashboard is re-parented into the destination mapping's folder (upsert with the new
  *    `folderUid`), the **uid is kept** (both sides are real folders, no delete), and the file
- *    re-stamps `grafana_mapping`. A `link` file just re-homes its pointer (Grafana untouched).
+ *    re-stamps `grafana_mapping`. SYNC FILES ONLY: a link never reaches here, because a link
+ *    does not move at all — {@see MoveRules} refuses the gesture wherever it is headed, its
+ *    own mapping included. Where a mirror sits is decided in Grafana and followed here.
  *  - **mapped → out of every mapping** → the file's content is already safe in Nextcloud, so
  *    (recycle-bin OFF, the default) we **delete** the dashboard in Grafana and **strip the
  *    file's identity** — it becomes a plain, untracked `.grafana`. Moving it back into a

@@ -284,6 +284,32 @@ buys clarity in a rare case by making every common case uglier. It wants a
 decision, not a patch — which is why it is written here instead of left in a
 review thread nobody will read again.
 
+### An arrange that resolved the wrong file, carried back from n8n
+
+The `link` arrange in `LifecycleSteps::aManagedDashboardFile()` seeded a dashboard
+through Grafana, pulled, and then took **`$files[0]`** from the folder listing.
+
+`nextcloud-n8n` ported that arrange, Copilot caught it there on #88, and the
+finding comes home: one pull can bring down more than one file — a folder that
+already held dashboards, or a mirror the previous pull never finished — and the
+listing has no meaningful order. So `currentFilePath` and `lastUid` could point at
+**different files**: green, and testing two different things, which is the worst
+outcome available to a harness.
+
+`seedGrafanaDashboard()` already returned the uid it minted; the arrange threw it
+away. Resolving by that uid also asserts the thing worth asserting — that the pull
+stamped the mirror at all — where `assertNotNull($uid)` only proved SOME file in
+the folder carried SOME uid.
+
+**The doctrine in both directions.** Chapter 6 of the n8n saga opens on *a fix that
+stays in the app that found it is half a fix*; this is the same sentence with the
+apps swapped. The defect travelled to n8n with the port, was found there, and came
+back.
+
+**The other `$files[0]` in this suite is fine** and was checked rather than
+assumed: `the dashboard inside "…" holds:` asserts `count($files) === 1` first, so
+the index is unambiguous by construction.
+
 ## What this chapter is not
 
 It is not a rewrite. Chapter 2's code works, is covered, and is in daily use; the

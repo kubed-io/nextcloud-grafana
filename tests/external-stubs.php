@@ -31,7 +31,7 @@ namespace Sabre\DAV {
 		class Server {
 			/**
 			 * The node tree. A real public property on Sabre's Server, and the only route
-			 * from the PATH that `beforeUnbind` / `method:COPY` hand a plugin to the NODE
+			 * from the PATH that `method:DELETE` / `method:COPY` hand a plugin to the NODE
 			 * itself — {@see \OCA\GrafanaSync\DAV\LinkWriteGuardPlugin}. Declared here
 			 * because neither Psalm nor the unit suite ships Sabre.
 			 *
