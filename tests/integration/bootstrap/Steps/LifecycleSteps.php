@@ -107,18 +107,31 @@ trait LifecycleSteps {
 			// Found by Copilot in the n8n sibling (#88), whose link arrange was ported
 			// from this one and had the identical weakness.
 			$folder = $this->mappedFolder($mapping);
-			$path = null;
+			$matches = [];
 			foreach ($this->davListDashboardFiles($folder) as $name) {
 				if ($this->davReadMetadata($folder . '/' . $name, self::META_UID) === $uid) {
-					$path = $folder . '/' . $name;
-					break;
+					$matches[] = $folder . '/' . $name;
 				}
 			}
-			Assert::assertNotNull(
-				$path,
-				"the pull did not bring dashboard '$uid' into the '$mapping' mapping as a stamped mirror",
+
+			// EVERY MATCH, THEN EXACTLY ONE — not the first match and a break.
+			//
+			// Breaking on the first would pick a file and go green even if the pull had
+			// written TWO mirrors carrying the same uid, which is the precise failure this
+			// app has had before: a gesture that re-creates rather than updates leaves the
+			// old mirror behind, and two files claiming one dashboard is the giveaway.
+			// `there is exactly one file for that dashboard` exists as a step for that
+			// reason, and an ARRANGE that hides it makes every scenario downstream weaker.
+			// Raised by Copilot on #79.
+			Assert::assertCount(
+				1,
+				$matches,
+				$matches === []
+					? "the pull did not bring dashboard '$uid' into the '$mapping' mapping as a stamped mirror"
+					: "the pull wrote " . count($matches) . " mirrors all claiming dashboard '$uid': "
+						. implode(', ', $matches),
 			);
-			$this->currentFilePath = $path;
+			$this->currentFilePath = $matches[0];
 			$this->lastUid = $uid;
 			return;
 		}
