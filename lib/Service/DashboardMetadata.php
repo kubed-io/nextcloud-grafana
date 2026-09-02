@@ -27,9 +27,9 @@ use OCP\FilesMetadata\Model\IMetadataValueWrapper;
  *   grafana_syncedHash  — sha1 of the spec WE SENT at the last pull/push (the
  *                         writeback loop guard — never Grafana's echoed-back object).
  *   grafana_mapping     — id of the originating mapping. INDEXED.
- *   grafana_folderUid   — source Grafana folder uid (nested-folder breadcrumb).
- *                         BANKED: registered + readable now, written by the subfolder
- *                         course.
+ *   grafana_folderUid   — the Grafana folder the dashboard was last written to. A
+ *                         record, not an instruction: the file's own path decides where
+ *                         a push places it ({@see PushService}).
  *
  * Why this is the cleanest layer (same as the master):
  *  - **Server-side reads** (listeners, occ commands) call ::read() directly — zero
@@ -61,7 +61,7 @@ final class DashboardMetadata {
 	public const KEY_SYNCED_HASH = 'grafana_syncedHash';
 	/** Id of the originating mapping — INDEXED so files can be targeted by mapping. */
 	public const KEY_MAPPING = 'grafana_mapping';
-	/** Source Grafana folder uid (nested-folder breadcrumb). Banked — written by the subfolder course. */
+	/** The Grafana folder the dashboard was last written to — a record, not an instruction. */
 	public const KEY_FOLDER_UID = 'grafana_folderUid';
 
 	/** File-mode values not covered by {@see Mapping} (which only configures sync/link). */
@@ -98,9 +98,7 @@ final class DashboardMetadata {
 	 * Called once from {@see \OCA\GrafanaSync\AppInfo\Application::boot()}. After this
 	 * runs, the keys are surfaced over DAV as `{nc:}metadata-<key>`, and the
 	 * INDEXED_KEYS (mode + mapping) are SEARCH/REPORT-queryable — so "find every sync /
-	 * unmapped file" is a fast indexed query, not a folder walk. Registering
-	 * the two banked keys now (before anything writes them) means the subfolder / YAML
-	 * courses drop in without a metadata migration.
+	 * unmapped file" is a fast indexed query, not a folder walk.
 	 */
 	public function register(): void {
 		foreach (self::KEYS as $key) {
@@ -154,8 +152,9 @@ final class DashboardMetadata {
 	 * body — hashing Grafana's echoed-back object (which carries the bumped `version`)
 	 * would make a push→pull look like a change and loop (saga Ch1 risk #6).
 	 *
-	 * The banked key `grafana_folderUid` is intentionally NOT stamped here — the
-	 * subfolder course writes it via {@see write()}.
+	 * `grafana_folderUid` is intentionally NOT stamped here: a sync does not decide which
+	 * folder a dashboard lives in. {@see \OCA\GrafanaSync\Service\MotionService} writes it
+	 * via {@see write()} when a move does.
 	 */
 	public function stampSynced(int $fileId, string $uid, string $mode, string $version, string $spec, string $mappingId): void {
 		$this->write($fileId, [

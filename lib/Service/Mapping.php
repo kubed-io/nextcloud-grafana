@@ -55,13 +55,9 @@ use JsonSerializable;
  * (a read-only pointer that opens the dashboard in Grafana — the natural fit for
  * operator/GitOps-provisioned dashboards owned elsewhere).
  *
- * THERE IS NO FORMAT OPTION. A mapping used to carry `format` — `json` or `yaml` —
- * for a k8s-style App Platform (`v2`) serialization that was never built: nothing
- * in the app ever read the value, no serializer existed, and the only thing the
- * suite could prove was that the string survived a config round trip. It was a
- * question put to the admin whose answer changed nothing. Dashboards are JSON.
- * If the v2 cut is picked up later it will be decided by what Grafana serves, not
- * by a per-folder switch set before anyone knows the answer.
+ * THERE IS NO FORMAT OPTION, because dashboards are JSON. If Grafana's v2 App
+ * Platform serialization is ever picked up it will be decided by what Grafana serves,
+ * not by a per-folder switch set before anyone knows the answer.
  *
  * Storage model (mirrors the n8n master's Mapping, so the two reduce cleanly into a
  * shared base later): `useTeamFolder` picks the backend — an ownerless Team Folder
@@ -87,11 +83,9 @@ use JsonSerializable;
  *
  * ## WHAT IS NOT ON THIS OBJECT: A SUBFOLDER TOGGLE
  *
- * There was a `syncSubfolders` flag here, stored and validated and read by nothing.
- * It is gone. A subfolder is in Grafana exactly when a dashboard lives beneath it
- * — that is the whole rule, it is per-folder, and it needs no per-mapping switch
- * (`features/folders/create.feature`). A flag would only be able to say "never
- * mirror subfolders", which is not a thing anyone asked for.
+ * A subfolder is in Grafana exactly when a dashboard lives beneath it — the whole
+ * rule, per folder, needing no per-mapping switch (`features/folders/create.feature`).
+ * Depth is chosen by WHICH folder you map: map a leaf to mirror one level.
  *
  * Invariants:
  *  - `grafanaFolderUid` MUST be non-empty.
@@ -221,9 +215,6 @@ final class Mapping implements JsonSerializable {
 		if (!in_array($mode, [self::MODE_SYNC, self::MODE_LINK], true)) {
 			throw new \InvalidArgumentException('mode must be "sync" or "link"');
 		}
-		// A stored `format` from before the option was removed is IGNORED rather than
-		// rejected: fromArray drops every key it does not know, and refusing one would
-		// make an existing mapping row unreadable for a value nothing consumes.
 		return new self($id, $uid, $title, $ncFolder, $mode, $useTeamFolder, $ncFolderId);
 	}
 

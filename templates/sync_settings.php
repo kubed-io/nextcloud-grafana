@@ -10,11 +10,9 @@
  *   • Manual bulk sync — "Sync to Grafana" / "Sync from Grafana"
  *   • Connection test — "Test connection" (wired by admin-test.js)
  *
- * Every button here is LIVE. A disabled "Purge Nextcloud files" button used to sit
- * between them, promising a bulk delete that was never built — the n8n sibling
- * removed the same thing for the same reason: a control that asks for something it
- * cannot do reads as a feature that works. Purge means one thing now, and it is the
- * Nextcloud one: emptying the trash (see features/dashboards/purge.feature).
+ * Every button here is LIVE — a control that asks for something it cannot do reads as
+ * a feature that works. Purge means one thing in this app, and it is the Nextcloud one:
+ * emptying the trash (see features/dashboards/purge.feature).
  *
  * @var \OCP\IL10N $l
  */

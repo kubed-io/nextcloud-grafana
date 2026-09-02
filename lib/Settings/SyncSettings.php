@@ -26,8 +26,8 @@ use OCP\Util;
  *
  * Holds the button layout — **Sync to Grafana** / **Sync from Grafana** plus
  * **Test connection** (handler in `admin-test.js`, endpoint gated by
- * {@see AdminTest}). Every button here is live; a disabled "Purge Nextcloud files"
- * button used to sit alongside them promising a bulk delete that was never built.
+ * {@see AdminTest}). Every button here is live — a control that asks for something it
+ * cannot do reads as a feature that is merely switched off.
  */
 final class SyncSettings implements IDelegatedSettings {
 	#[\Override]

@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Service;
 
-use OCA\GrafanaSync\AppInfo\Application;
 use OCP\Files\File;
 use Psr\Log\LoggerInterface;
 

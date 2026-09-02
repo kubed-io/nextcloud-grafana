@@ -90,10 +90,9 @@ ignore you.
   reachability.
 - The managed-file extension is a **single segment, `.grafana`**. Nextcloud reads only
   the last extension (`detectPath()` uses `strrchr`, and the collision counter goes
-  immediately before it), so the retired compound `.grafana.json` cost a filecache
-  correction on every write and made a copy the app could not recognise. Do not
-  re-add a `.json` tail, and do not "simplify" to plain `.json` either. `format`
-  (json/yaml) says what is INSIDE the file; both are written as `.grafana`.
+  immediately before it), so a compound `.grafana.json` costs a filecache correction on
+  every write and makes a copy the app cannot recognise. Do not re-add a `.json` tail,
+  and do not "simplify" to plain `.json` either.
 - A mapping binds a **Grafana folder → a Nextcloud folder** (real folders, no tag
   scheme).
 - **No `External Storage` / `OCP\Files\Storage` backend** — wrong tool, already rejected.

@@ -366,8 +366,8 @@ here, one line earlier in `add()`.
 
 The Grafana root ("General") holds dashboards that are in no folder. It has no
 real uid, so the folder picker offers a reserved `/` entry for it. Mapping `/`
-pulls the no-folder dashboards; `/` with subfolder sync on mirrors the whole
-instance (see `sync-now.feature`).
+mirrors the whole instance — the no-folder dashboards and every folder under them,
+since subfolders always mirror (see `sync-now.feature`).
 
 ### There is no way to change a mapping except its groups
 
@@ -378,9 +378,9 @@ Immutability is enforced by the API SHAPE rather than by guards.
 `MappingService::updateGroups()` takes an id and groups; the PUT endpoint takes
 `nc_groups` and nothing else; there is no update command. A caller cannot
 *express* a change to the Grafana folder, the Nextcloud folder, the storage
-backend, subfolder-sync, the mode or the format — so there is no rejection to
-observe. Guarding is weaker than not offering, because a guard has to enumerate
-what it protects and this one left `mode` and `format` out.
+backend or the mode — so there is no rejection to observe. Guarding is weaker than
+not offering, because a guard has to enumerate what it protects and the guard this
+replaced left `mode` out.
 
 Each field is fixed for the reason it always was — every change would force a
 live migration:
@@ -390,11 +390,8 @@ live migration:
   metadata (doubly fiddly when both change at once);
 - the **Team Folder** flag — switching backend migrates the provisioned folder
   and all of its shares;
-- **subfolder-sync** — flipping it restructures the far side (on→off flattens
-  mirrored Grafana subfolders and re-parents their dashboards; off→on lazily
-  grows them);
-- **mode** and **format** — both decided how every existing file under the
-  mapping was written, so changing one silently invalidates what is on disk.
+- **mode** — it decided how every existing file under the mapping was written, so
+  changing it silently invalidates what is on disk.
 
 This replaced a scenario that performed four `When`s in a row against a
 full-mapping `update()`. It read as a script rather than as instances of one
@@ -493,14 +490,12 @@ file — the create feature is about what a mapping may bind to. What it was rea
 protecting is stated once, above: naming a folder is not consent, which is why the
 guard reads the CONFIGURED folder rather than the active one.
 
-
 ## mapping/manage-groups
 
 `features/mapping/manage-groups.feature`
 
 THE ONE FIELD A MAPPING LETS YOU EDIT. Everything else — the Grafana folder, the
-Nextcloud folder, the storage backend, subfolder sync, the mode, the format — is
-fixed at creation, and not by a guard that rejects a change but by the API shape:
+Nextcloud folder, the storage backend, the mode — is fixed at creation, and not by a guard that rejects a change but by the API shape:
 `updateGroups()` takes an id and groups, the PUT takes `nc_groups` and nothing
 else, and there is no update command. A caller cannot express any other change.
 
@@ -550,9 +545,8 @@ statement about a tree: it passes whatever the file is called and wherever it
 sits. `the mapped folder … holds:` is the tree, and the metadata table is what
 the file arrived carrying — the shape `kubed-io/nextcloud-penpot` settled on.
 
-The root mapping came with the split for the same reason the card did: `/` with
-subfolder sync on is still ONE mapping, and syncing it is the card's button doing
-the largest job it can do.
+The root mapping came with the split for the same reason the card did: `/` is still
+ONE mapping, and syncing it is the card's button doing the largest job it can do.
 
 ### Three mappings shaped alike
 
@@ -1385,7 +1379,6 @@ managed. Creating the dashboard in Grafana is how a link folder gains a file.
 The scenario is @unbuilt: today the app accepts the file and leaves it unmanaged,
 which is the "creates no dashboard" claim the old scenario made. That claim was
 true and useless — it described what did not happen rather than what should.
-
 
 MEASURED, AND THE GUARD DOES NOT FIRE ON A REAL PUT. `LinkWriteGuardPlugin::beforeCreateFile`
 implements this rule and `testANewDashboardFileInALinkFolderIsRefused` covers it, which is
@@ -2420,13 +2413,12 @@ crashes core's PROPFIND — the only place in this app where a wire value differ
 from the name of the thing it carries, so it is an Examples column rather than a
 footnote, and the row shows both what the admin chose and what a client reads.
 
-**The table says nothing about storage or format.** Naming a field is a claim
-that it matters, and what a mirror publishes over DAV is identical on an
-admin-owned folder and a Team Folder. So the mapping takes the app's own
-defaults, which is the one shape that exists on every install. `storage` and
-`format` are named where provisioning IS the behaviour, in
-`admin-mapping.feature`, and a scenario that wants a Team Folder or the YAML cut
-asks for one there.
+**The table says nothing about storage.** Naming a field is a claim that it
+matters, and what a mirror publishes over DAV is identical on an admin-owned folder
+and a Team Folder. So the mapping takes the app's own defaults, which is the one
+shape that exists on every install. `storage` is named where provisioning IS the
+behaviour, in `admin-mapping.feature`, and a scenario that wants a Team Folder asks
+for one there.
 
 **The outline lost two rows** (`unmapped`, `ignored`) when it was reshaped around
 a mapping. That is deliberate and not a coverage regression: a mapping only ever
@@ -2475,7 +2467,6 @@ the only part of it a client can observe.
 
 Its visible consequence (a mapped folder that looks like dashboards) belongs to
 `view-dashboard.feature`; its removal belongs to `uninstall.feature`.
-
 
 ### Removing the app
 
@@ -3218,8 +3209,6 @@ that served it are deleted rather than parked.
 
 The original account of the surviving behaviour follows.
 
-
-
 THE PUSH COULD NOT SEE PAST THE FIRST LEVEL. `pushOne` walked
 `getDirectoryListing()` on the mapping's folder and stopped, while the pull walked
 the whole tree — so a dashboard living in a Grafana subfolder had a mirror the pull
@@ -3392,8 +3381,6 @@ The uid is the thread, so the edit lands on the dashboard the file already names
 
 The bravo folder rather than alpha, so an edit here never mutates the fixture
 `sync-now.feature` asserts an untouched mirror against.
-
-
 
 ### An edit in Grafana reaches the mirrored file
 
