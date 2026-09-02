@@ -11,10 +11,6 @@
 
 ---
 
-![A mapped Nextcloud folder named observe, listing Grafana dashboards as .grafana files with the Grafana icon, their Grafana tags, and their real last-modified dates](screenshots/nextcloud-folders.png)
-
----
-
 ## The whole idea, in one breath
 
 Point the app at your Grafana instance, bind a Grafana **folder** to a Nextcloud **folder**, and everything inside it shows up: subfolders become folders, dashboards become `.grafana` files.
@@ -28,9 +24,42 @@ folder   "Observe"          ⟶    Observe/
     └ dashboard "Latency"   ⟶        └── Latency.grafana
 ```
 
-Edit one in the Files app and Grafana has it seconds later. Rename it in Grafana and the file renames itself. And since Nextcloud is holding the complete dashboard JSON, your mapped folder is quietly also the easiest backup you'll never have to think about. 💾
+<table>
+<tr>
+<td width="57%" valign="top">
 
-Nothing is matched on filename. Every file carries its dashboard's **uid**, so renaming, moving, copying, trashing and restoring never break the link — and re-running a sync never duplicates a thing. Ever. 🙅
+<img src="screenshots/nextcloud-folders.png" alt="A mapped Nextcloud folder named observe, listing Grafana dashboards as .grafana files with the Grafana icon, their Grafana tags and their real last-modified dates">
+
+<em>The mirror. Every Grafana folder is a folder; every dashboard is a file.</em>
+
+<p>👉 <code>Kubernetes _ Views _ Pods.grafana</code> is the dashboard Grafana calls
+<code>Kubernetes / Views / Pods</code>. A <code>/</code> is a path separator over here,
+so it can't be part of a name — it's the one place a title can't survive the trip
+verbatim.</p>
+
+<p>And <code>stuff</code>? A folder with no dashboards in it, so Grafana has never
+heard of it. It is yours, and it stays yours.</p>
+
+<p>Edit one in the Files app and Grafana has it seconds later. Rename it in Grafana and
+the file renames itself. And since Nextcloud is holding the complete dashboard JSON,
+your mapped folder is quietly also the easiest backup you'll never have to think
+about. 💾</p>
+
+<p>Nothing is matched on filename. Every file carries its dashboard's <strong>uid</strong>,
+so renaming, moving, copying, trashing and restoring never break the link — and
+re-running a sync never duplicates a thing. Ever. 🙅</p>
+
+</td>
+<td width="43%" valign="top">
+
+<img src="screenshots/grafana-folders.png" alt="The same observe folder in Grafana, showing the subfolders critical and morton, the dashboards under them, and their Grafana tags">
+
+<em>The same folder in Grafana: <code>critical</code> and <code>morton</code> as real
+folders, and the dashboards that are the files on the left.</em>
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -72,15 +101,6 @@ Observe/                        ← the mapped folder
 It runs both ways. Make a folder in Grafana and it appears here; make one here and drop a dashboard in, and Grafana has the folder. Move a folder and every dashboard under it is re-parented in one gesture, uids intact — not deleted and re-created to get there. Rename it on either side and the other side follows, because the link is the folder's **uid**, not its name.
 
 A folder holding **no** dashboards stays an ordinary folder, however much else is in it — notes, runbooks, whatever you like. The app claims what it mirrors and nothing else.
-
-![The same observe folder in Grafana, showing the subfolders critical and morton, the dashboards under them, and their Grafana tags](screenshots/grafana-folders.png)
-
-*The same folder in Grafana — the one at the top of this page. Same dashboards, same
-tags, and `morton` and `critical` are folders on both sides. `Kubernetes / Views /
-Pods` is the file called `Kubernetes _ Views _ Pods.grafana`, because a `/` in a
-Grafana title cannot be one in a filename. And `stuff` is a Nextcloud folder with no
-dashboards in it, so Grafana has never heard of it — the `Runbooks/` rule above,
-in the wild.*
 
 🗂️ [`folders/create.feature`](features/folders/create.feature) · 🚚 [`folders/move.feature`](features/folders/move.feature) · 🔤 [`folders/rename.feature`](features/folders/rename.feature)
 
