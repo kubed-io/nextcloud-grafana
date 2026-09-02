@@ -176,7 +176,7 @@ final class MotionService {
 	 * the new subfolder into existence. Moving back to the mapping root resolves to the
 	 * mapping's own folder, so the dashboard comes back out of the subfolder too.
 	 *
-	 * The banked `grafana_folderUid` is deliberately NOT consulted and is re-stamped
+	 * `grafana_folderUid` is deliberately NOT consulted and is re-stamped
 	 * from the answer: it records where the dashboard was PULLED to, and a move is
 	 * exactly the gesture that makes that stale. Leaving it would send the next push
 	 * straight back to the old folder.

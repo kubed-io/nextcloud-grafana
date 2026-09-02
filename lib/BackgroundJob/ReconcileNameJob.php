@@ -36,11 +36,9 @@ use Psr\Log\LoggerInterface;
  * - `filename_from_title` (the JSON `title` was edited + saved): rename the file to match (the
  *   original save already pushed the title to Grafana via the writeback).
  *
- * NEITHER ACTION RENAMES A COPY ANY MORE. Under the old `.grafana.json` extension a copy was
- * born `Board.grafana (1).json` — Nextcloud counts before the LAST extension — so this job
- * also had to move the file into a spelling the app could read. With `.grafana` the counter
- * already lands where {@see FilenameCodec::format()} puts it, so the copy arrives correctly
- * named and only its title needs settling.
+ * NEITHER ACTION RENAMES A COPY. Nextcloud's collision counter already lands where
+ * {@see FilenameCodec::format()} puts it, so a copy arrives correctly named and only its
+ * title needs settling.
  *
  * The stem this job reads is the filename's `display` name — the counter INCLUDED. A file
  * called `Board (1).grafana` is a dashboard called `Board (1)` when Nextcloud is the one

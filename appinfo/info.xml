@@ -109,6 +109,19 @@ This is a community integration and is not affiliated with, endorsed by, or spon
   <website>https://github.com/kubed-io/nextcloud-grafana</website>
   <bugs>https://github.com/kubed-io/nextcloud-grafana/issues</bugs>
   <repository type="git">https://github.com/kubed-io/nextcloud-grafana.git</repository>
+  <!-- Order is the store's carousel order: the payoff first, the admin surface last,
+       and the admin four in the order the settings page itself shows them.
+       Every file here must exist in screenshots/ AND screenshots/thumbnails/ on main —
+       the store fetches them by raw URL, so a rename that misses this list shows the
+       listing a broken image. Thumbnails are 600px wide, aspect kept, never upscaled. -->
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/nextcloud-folders.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/nextcloud-folders.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/grafana-folders.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/grafana-folders.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/json-editor.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/json-editor.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/context-menu.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/context-menu.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/connection.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/connection.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/mappings.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/mappings.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/recycle-bin-setting.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/recycle-bin-setting.png</screenshot>
+  <screenshot small-thumbnail="https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/thumbnails/sync-actions.png">https://raw.githubusercontent.com/kubed-io/nextcloud-grafana/main/screenshots/sync-actions.png</screenshot>
   <dependencies>
     <!-- The FLOOR IS 31 BY CAPABILITY AND 32 BY SUPPORT, and it declares 32.
          AutoSyncSettings implements IDeclarativeSettingsFormWithHandlers (@since

@@ -37,9 +37,7 @@ use Psr\Log\LoggerInterface;
  * STEP 1 IS WHAT MAKES STEP 3 A ONE-OFF. `Detection::detectPath()` reads the LAST
  * extension only, so once `grafana` is a key in `mimetypemapping.json`, core detects
  * every dashboard file correctly at write time and the filecache never needs
- * correcting again. Under the old compound `.grafana.json` extension the detector saw
- * `.json`, and this same UPDATE had to be re-run from the pull, the create, and every
- * single file write to undo it.
+ * correcting again.
  */
 final class RegisterMimetype implements IRepairStep {
 	private const APP_MIMETYPE = 'application/grafana+json';

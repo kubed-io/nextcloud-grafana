@@ -24,12 +24,10 @@ namespace OCA\GrafanaSync\Service;
  * stored `reference` wire value is already translated back to `link` by
  * {@see DashboardMetadata::read()} before it reaches here.
  *
- * `folderUid` is a banked key (saga Ch2 Fork A): registered and readable now, but
- * only *written* by the subfolder mirror course. It reads back as `''` until then.
- *
- * There used to be an `apiVersion` beside it, banked for a v2/YAML serialization
- * course. That course is not happening — dashboards are JSON — so the key is gone
- * rather than left registered against a decision nobody is going to make.
+ * `folderUid` records which Grafana folder the dashboard was last written to. It is
+ * stamped on FOLDERS by {@see FolderMetadata::stamp()} and re-stamped on a file by
+ * {@see MotionService} when a move changes the answer; {@see DashboardMetadata::stampSynced()}
+ * deliberately leaves it alone, so on a file that has only ever been synced it reads `''`.
  */
 final class ManagedFile {
 	public function __construct(

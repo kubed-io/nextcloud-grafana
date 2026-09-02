@@ -5,13 +5,7 @@
  * classes; buttons use `.button`. One card per mapping (a repeating form), ported
  * from the n8n master so the two apps look the same:
  *
- *   col 1: Grafana folder (row 1) · Nextcloud folder (row 2)
- *   col 2: Mode (row 1) · Format (row 2) · Team Folder (row 3)
- *   col 3: Groups selector (spans every row — it's the big one)
- *   row 4: Save / Sync / Delete action buttons (spanning cols 1–2)
- *
- * (Team Folder + Groups + per-folder Sync are here for interface parity with n8n;
- * their behaviour lands with the sync engine.)
+ * The grid itself is described where it is declared, on `__grid` below.
  */
 
 .grafana-sync-mappings {
@@ -37,11 +31,7 @@
 /* grafana-folder | mode      (row 1)
  * nc-folder      | tf        (row 2)
  * actions                    (row 3, spans the two left columns)
- * groups spans all three rows in the third (wider) column.
- *
- * Team Folder moved up into the slot Format used to hold: with the format
- * option gone there are four fields, and leaving a hole in column 2 while a
- * lone checkbox sat on its own row read as a rendering fault. */
+ * groups spans all three rows in the third (wider) column. */
 .grafana-sync-mappings__grid {
 	display: grid;
 	grid-template-columns: minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(340px, 2.2fr);

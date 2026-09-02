@@ -67,12 +67,10 @@ final class NodeWrittenListener implements IEventListener {
 			return;
 		}
 
-		// NO MIMETYPE RE-STAMP HERE ANY MORE. Under the old `.grafana.json` extension this
-		// listener re-ran a table-wide filecache UPDATE on every single write, because NC's
-		// scanner re-detected the mime off the path's last extension (`.json` →
-		// application/json) and clobbered our row each time. `.grafana` is the last
-		// extension, so core's own detector returns application/grafana+json and there is
-		// nothing left to correct. The registration in RegisterMimetype is the whole story.
+		// NO MIMETYPE RE-STAMP HERE. `.grafana` is the last extension, which is the only one
+		// core's detector reads, so it returns application/grafana+json at write time and
+		// there is nothing to correct. {@see \OCA\GrafanaSync\Migration\RegisterMimetype}
+		// is the whole story.
 		if ($this->guard->active()) {
 			return;
 		}

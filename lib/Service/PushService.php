@@ -231,22 +231,13 @@ final class PushService {
 	 * The Grafana folder uid a push should place the dashboard in, so a writeback never
 	 * yanks a dashboard out of its folder.
 	 *
-	 * **THE BANKED `grafana_folderUid` NO LONGER WINS — ITS CONDITION EXPIRED.** It used
-	 * to short-circuit this method, and the reason was written down: the pull did not
-	 * mirror Grafana's folder tree, so a dashboard three folders deep in Grafana arrived
-	 * flat in the mapping root, and resolving from the file's Nextcloud location would
-	 * have pushed it out of its Grafana subfolder. The note ended "when the pull mirrors
-	 * the tree, the two answers converge and it can be dropped then, not before".
+	 * **THE FILE'S LOCATION IS THE ANSWER, ALWAYS**, and {@see FolderMirror} brings any
+	 * missing level into existence to receive it.
 	 *
-	 * The pull mirrors the tree. So the file's LOCATION is the answer, always, and
-	 * {@see FolderMirror} brings any missing level into existence to receive it.
-	 *
-	 * Keeping it would now be the bug rather than the guard: the banked value records
-	 * where a dashboard was PULLED to, so after a user moves the file it names the old
-	 * folder — and every later push would drag the dashboard back out of the subfolder
-	 * it was just filed into. The key is still WRITTEN (the move paths re-stamp it, and
-	 * the pull records it) because it remains a useful record of where the dashboard
-	 * actually sits; it is simply no longer consulted ahead of the file's own path.
+	 * `grafana_folderUid` is deliberately NOT consulted ahead of it. The key records
+	 * where a dashboard was PULLED to, so the moment a user moves the file it names the
+	 * old folder — reading it would drag the dashboard back out of the subfolder it was
+	 * just filed into. It is still written, as a record of where the dashboard sits.
 	 *
 	 * General placement (null → {@see DashboardBody::toUpsertBody} omits folderUid) is
 	 * reached **only** via an explicit reserved-root (`/`) mapping. Any "can't determine

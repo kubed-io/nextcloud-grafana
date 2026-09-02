@@ -180,20 +180,11 @@ final class MappingService {
 	 * of them could change. Now no caller can EXPRESS a change to anything but the
 	 * groups, so there is no path to check.
 	 *
-	 * Each field the old guards protected is still fixed, for the reason it always
-	 * was — every one would force a live migration:
-	 *
-	 *   - the **Grafana folder** and the **Nextcloud folder** — re-pointing either
-	 *     renames or moves a whole tree of already-synced files and re-stamps their
-	 *     metadata (doubly fiddly when both change at once);
-	 *   - the **Team Folder** flag — switching backend migrates the provisioned
-	 *     folder and all of its shares;
-	 *   - **subfolder-sync** — flipping it restructures the far side (on→off
-	 *     flattens mirrored Grafana subfolders and re-parents their dashboards;
-	 *     off→on lazily grows them).
-	 *
-	 * `mode` joins them: it decides how every existing file under the
-	 * mapping was written, so changing one silently invalidates what is on disk.
+	 * Every other field stays fixed because changing one would force a live migration —
+	 * the folders re-point a whole tree of synced files, the Team Folder flag migrates
+	 * the backend and its shares, and `mode` decides how every file under the mapping
+	 * was written. Field by field, that reasoning is in
+	 * `features/AGENTS.md#there-is-no-way-to-change-a-mapping-except-its-groups`.
 	 *
 	 * To change any of it: delete the mapping and add a new one. That makes the
 	 * migration cost visible instead of hiding it behind a dropdown.

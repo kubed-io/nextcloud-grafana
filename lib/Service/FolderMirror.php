@@ -23,9 +23,7 @@ use Psr\Log\LoggerInterface;
  * Grafana folder at the moment a dashboard lands somewhere beneath it, and then its
  * parents come with it: a dashboard three folders deep needs all three to exist.
  *
- * This replaced a per-mapping "sync subfolders" toggle, which could only ever say
- * *mirror this folder but nothing under it* — something already expressible by
- * mapping a leaf folder instead. Depth is chosen by WHICH folder you map.
+ * Depth is chosen by WHICH folder you map: map a leaf folder to mirror one level.
  *
  * ## WHY THE UID IS ASKED FOR, NOT THE NAME
  *

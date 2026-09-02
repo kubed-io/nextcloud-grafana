@@ -70,18 +70,9 @@ use Psr\Log\LoggerInterface;
  * The title is a file write, so it is deferred to {@see ReconcileNameJob} — see the lock
  * above. Grafana is correct within the request; the file catches up a tick later.
  *
- * **THE FILE ITSELF NEEDS NO CORRECTING, and that is the single-segment extension's
- * doing.** Nextcloud's counter goes before the LAST extension, so the retired
- * `.grafana.json` made a copy `Board.grafana (1).json` — a name ending in `.json` that
- * matched none of this app's predicates, leaving a file that looked like a dashboard
- * and pointed at somebody else's.
- * Reading it took a `canonicalise()` pass in front of every predicate, un-writing it took a
- * second deferred rename, and pulling that rename forward into the request (a Sabre plugin
- * rewriting the COPY `Destination`) broke the Files app outright: it stats the path IT
- * chose the instant the copy returns, and only for a copy landing in the folder it came
- * from — precisely and only the case that collides. Measured live: intercepting gives COPY
- * 201 then STAT 404; deferring gives 201 then 207. With one segment the counter lands where
- * {@see FilenameCodec::format()} puts it and none of that machinery has anything to do.
+ * **THE FILE ITSELF NEEDS NO CORRECTING.** Nextcloud's collision counter lands exactly
+ * where {@see FilenameCodec::format()} puts it, so a copy is born wearing a name this app
+ * already reads.
  *
  * Failures are logged and swallowed: the NC copy already happened, and a copy that
  * failed to register is just an untracked `.grafana` the user can re-save to retry.

@@ -123,9 +123,8 @@ without a real reason documented in the saga:
 - **Loop prevention is a content-hash guard.** Pulls must not trigger pushes; hash
   the spec we *sent*, not Grafana's echoed-back object (Grafana bumps a `version`
   int on every save — see saga risk #6).
-- **Custom mimetype `application/grafana+json`** drives the icon and the row click
-  (deferred to the sync chapter; don't switch to extension-only detection when it
-  lands).
+- **Custom mimetype `application/grafana+json`** drives the icon and the row click.
+  Don't switch to extension-only detection.
 - **The file extension is a single segment, `.grafana` — locked, don't re-add the
   `.json` tail.** Nextcloud reads exactly ONE extension: `detectPath()` takes the
   last segment (`strrchr`) and the collision counter goes immediately before it. The
@@ -134,8 +133,6 @@ without a real reason documented in the saga:
   as `Board.grafana (1).json`, which matched none of the app's own predicates. One
   segment gets native detection and a copy that is born correctly named. The price is
   a one-time editor association off-Nextcloud, paid per machine instead of per write.
-  (The v2 YAML cut is the same `.grafana` — `format` says what is inside the file, not
-  what it is called.)
 
 ---
 
