@@ -36,9 +36,13 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 ---
 
-## Status: **OPEN** — 2026-08-31
+## Status: **CLOSING** — 2026-09-03
 
-Round 1 is landed. What follows is the plan and the record.
+Round 1 is landed, the shopfront is built, and **the certificate request is
+filed** ([PR #1220](https://github.com/nextcloud/app-certificate-requests/pull/1220)).
+Both gates this chapter said it could not close alone are closed. What is left is
+a countersign nobody here controls, and then two commands. See *§Reaching the
+store* below.
 
 ---
 
@@ -245,20 +249,97 @@ unreachable"* — and 3 more are `open-with`. Twelve blocked scenarios are two
 missing tools. Building them turns most of the queue green without writing a line
 of `lib/`.
 
-### Round 6 — the shopfront
+### Round 6 — the shopfront *(landed)*
 
-`screenshots/`, the `<screenshot>` carousel, and the store submission path. Gated
-on humans; see below.
+`screenshots/`, the `<screenshot>` carousel, and the store submission path.
+
+**Eight screenshots, where penpot §D4.5 asked for five** — the two folder views
+side by side, the JSON editor, the context menu, the connection card, the
+mappings panel, the recycle-bin setting and the Sync Actions panel. Each is
+committed at full size with a 600px-wide thumbnail beside it, and every
+`<screenshot>` element pairs a full image with the thumbnail of the *same* name.
+All sixteen URLs are live on `raw.githubusercontent.com`, which is what the store
+actually fetches — a listing whose images 404 is a listing nobody scrolls.
+
+The two extra over penpot's five are the ones this app has and penpot cannot: the
+JSON editor (§D3.2's first brag — a dashboard here is editable text, where a
+`.penpot` is an opaque archive) and the recycle-bin setting (the second).
 
 ---
 
 ## The gates — what this chapter cannot do alone
 
-| Gate | Why it needs Dr K |
-|---|---|
-| **Screenshots** | Nobody can take them but a person at a browser. Five, per penpot §D4.5: the mapped folder, the Grafana side, the mapping panel, the connection card, the Sync Actions panel |
-| **The store listing** | An app-id registration and a signing identity — penpot §D4.9/§D4.10 has the restored steps; they are not re-derived here |
-| **Any behaviour change the deep clean uncovers** | §D3.6's guard rail: if a refactor wants a `.feature` edited, it stops and asks |
+| Gate | Why it needs Dr K | State |
+|---|---|---|
+| **Screenshots** | Nobody can take them but a person at a browser | ✅ **closed** — eight, not the five §D4.5 asked for |
+| **The store listing** | An app-id registration and a signing identity | ✅ **closed on our side** — CSR filed, everything else waits on the countersign |
+| **Any behaviour change the deep clean uncovers** | §D3.6's guard rail: if a refactor wants a `.feature` edited, it stops and asks | open, and stays open — it is a standing rule, not a task |
+
+---
+
+## Reaching the store
+
+The store's one hard requirement is that **every release is signed by a
+certificate Nextcloud themselves countersigned**. That countersign is the only
+step here nobody controls, so it is filed first and everything else overlaps the
+wait.
+
+| # | Gate | Owner | State |
+|---|------|-------|-------|
+| 1 | App id `grafana_sync` consistent across `info.xml`, `package.json`, namespace | — | ✅ |
+| 2 | Signing keypair + CSR minted, gitignored, verified | agent | ✅ RSA 4096, `CN=grafana_sync`, self-signature verifies |
+| 3 | Release pipeline carries sign + upload | agent | ✅ `publish.yml`, same shape as the siblings |
+| 4 | **CSR filed** with `nextcloud/app-certificate-requests` | Dr K | ✅ [PR #1220](https://github.com/nextcloud/app-certificate-requests/pull/1220), from `kubed-io` |
+| 5 | **Countersigned `.crt` committed back** | Nextcloud | ⬜ **the wait** — n8n took ~2 days, penpot 4 |
+| 6 | Private key in `NEXTCLOUD_STORE_KEY` | Dr K | ✅ |
+| 7 | Durable backup of the private key | Dr K | ✅ GCP `nextcloud-grafana`, round-tripped by modulus |
+| 8 | `NEXTCLOUD_STORE_TOKEN` set | Dr K | ✅ |
+| 9 | Register the app id | either | ⬜ needs gate 5 |
+| 10 | Cut the release | either | ⬜ needs 9 |
+
+### The three things the CSR PR needed, and this one got right first try
+
+Both siblings tripped here, in different places, and #1220 is the first of the
+three to pass on the first push. Recorded as a checklist because the failures are
+not guessable:
+
+1. **Signed.** n8n's landed unsigned and needed an amend and a force-push.
+   Verified by reading the raw object for its `gpgsig` header — `git log
+   --show-signature` reports *"No signature"* on a perfectly signed commit
+   whenever `gpg.ssh.allowedSignersFile` is unset, so **the obvious check looks
+   exactly like the failure**.
+2. **`Signed-off-by:`, matching the author byte for byte.** Penpot's first push
+   was rejected by the DCO bot for missing it, and the guidance describing that
+   gotcha did not mention it. The trailer must carry the *commit author's* email
+   — `4399427+kferrone@users.noreply.github.com`, not the `kellyferrone@gmail.com`
+   this repo's `user.email` is normally set to.
+3. **From `kubed-io`, on a branch off `upstream/master`.** n8n's went from a
+   personal account and could not be corrected afterwards. The kubed-io fork was
+   24 commits behind, so branching off the fork's own tip would have dragged two
+   dozen unrelated commits into the diff.
+
+The general lesson is penpot's and it holds: **read the artefact, not the
+description of the artefact.** One `gh api …/pulls/1213/commits` call gave the
+exact shape to copy, including the two things the prose had left out.
+
+### One thing grafana already has that penpot did not
+
+Penpot's first release attempt died with *"Changes must be made through a pull
+request"*: `publish.yml` pushes the version bump straight to `main` as the
+**`kubed-io` GitHub App**, and penpot's `default` ruleset had no bypass actor for
+it. n8n had one from the start, so it was invisible — **workflow parity is not
+release parity, and the gap was in repo settings, which no diff of the tree can
+see.**
+
+This repository's `default` ruleset already carries the `Integration` bypass, so
+gate 10 will not hit that wall. Checked rather than assumed.
+
+### What is deliberately still not done
+
+**`appinfo/signature.json`** — Nextcloud's *in-tarball* integrity manifest, a
+different thing from the tarball signature the store checks. Optional for
+acceptance, and generating it faithfully needs `occ integrity:sign-app` against a
+real Nextcloud. Deferred exactly as it is in both siblings.
 
 ---
 
@@ -319,8 +400,12 @@ It is not a feature chapter. Nothing here adds a verb. The one thing that looks
 like a feature — Round 5's harness tools — adds no behaviour at all; it lets
 already-written specs finally run.
 
-And it is not the store. Reaching the store is Round 6 and it is gated on a human.
-This chapter's job is to make the app *worth arriving at* first.
+~~And it is not the store.~~ **It became the store.** This bullet said reaching it
+was Round 6's problem and gated on a human, and both halves stopped being true on
+2026-09-03: the shopfront is built and the request is filed. The bullet is struck
+rather than deleted, because a chapter that outgrew its own scope is more useful
+on the page than off it. The job it named — making the app *worth arriving at* —
+is the part that got done first, and that ordering was right.
 
 ---
 
