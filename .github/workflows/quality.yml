@@ -122,7 +122,16 @@ jobs:
           # psalm.xml doesn't abort generation.
           vendor/bin/psalm --no-cache --threads=4 --ignore-baseline \
             --set-baseline=tests/psalm-baseline.xml || true
-          echo "seeded=true" >> "$GITHUB_OUTPUT"
+          # Only claim success if a file actually appeared. Announcing
+          # seeded=true regardless makes the NEXT step fail on a missing
+          # artifact, which reads as an upload problem and buries the real
+          # Psalm error one step up.
+          if [ -f tests/psalm-baseline.xml ]; then
+            echo "seeded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Psalm could not generate tests/psalm-baseline.xml — see the step output above"
+            exit 1
+          fi
         fi
 
     - name: Upload regenerated baseline

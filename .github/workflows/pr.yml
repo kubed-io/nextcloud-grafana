@@ -1,6 +1,6 @@
 name: 🔀 PR
 
-# Ensure the PR owner is set and they added to the changleog. 
+# Ensure the PR owner is set and they added to the changelog.
 
 on:
   pull_request:

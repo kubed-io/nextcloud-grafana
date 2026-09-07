@@ -36,13 +36,22 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 ---
 
-## Status: **CLOSING** — 2026-09-03
+## Status: **CLOSED** — 2026-09-07
 
-Round 1 is landed, the shopfront is built, and **the certificate request is
-filed** ([PR #1220](https://github.com/nextcloud/app-certificate-requests/pull/1220)).
-Both gates this chapter said it could not close alone are closed. What is left is
-a countersign nobody here controls, and then two commands. See *§Reaching the
-store* below.
+**The countersign came back.** [PR #1220](https://github.com/nextcloud/app-certificate-requests/pull/1220)
+merged on 2026-09-04 — about a day, the fastest of the three — and
+`grafana_sync/grafana_sync.crt` is in the tree, `CN=grafana_sync`, valid to 2036.
+Its modulus matches the private key in `NEXTCLOUD_STORE_KEY` byte for byte, which
+is the one fact that decides whether a signed tarball is accepted or rejected, and
+it was **checked rather than assumed**.
+
+The gate that ran this chapter's last two weeks is therefore closed, and with it
+every gate in *§Reaching the store*. Round 7 below is what closing it took: a
+workflow parity sweep against both siblings, the deferral note deleted from
+`publish.yml`, and the seed tag the version bump computes from.
+
+Rounds 2–5 — the deep clean the chapter is half-named for — **did not happen, and
+are not being quietly dropped.** See *§What this chapter did not do* at the end.
 
 ---
 
@@ -265,6 +274,63 @@ The two extra over penpot's five are the ones this app has and penpot cannot: th
 JSON editor (§D3.2's first brag — a dashboard here is editable text, where a
 `.penpot` is an opaque archive) and the recycle-bin setting (the second).
 
+### Round 7 — the doors open
+
+The countersign landed, and the last mile turned out to be three separate things,
+only one of which was the release itself.
+
+**The deferral note was load-bearing, and had to be deleted rather than edited.**
+`publish.yml` carried a nine-line header saying the app-store steps were
+*intentionally NOT here yet* because the app was *early (connection panel only)* —
+a sentence that stopped being true somewhere in Chapter 2's third round and stayed
+on the page for the whole of it. It also named its own undo: restore the sign and
+upload steps from the master repo, add the `nextcloud-store` environment. So the
+note was correct, and correct notes still rot; what dates this one is not its
+instructions but its *reason*.
+
+**Parity was read from penpot, not from n8n, and that mattered.** The note pointed
+at `nextcloud-n8n` as the master, but n8n's sign step is the one both siblings have
+since outgrown. Penpot's hardened it after a real failure, and the three changes it
+made are each worth the diff:
+
+- `trap … EXIT` before the key is written, so a failed `openssl dgst` cannot leave
+  a 4096-bit private key sitting in the workspace for every later step in the job
+  to read. The old `rm -f` on the success path only cleans up when nothing goes
+  wrong, which is the case that does not need cleaning up.
+- `umask 077` around the write, so the key is never briefly world-readable.
+- `set -o pipefail`, plus an explicit empty-signature check. **The status of
+  `dgst | base64` is base64's**, and base64 succeeds on empty input — so an
+  unset secret produced a green signing step, an empty signature, and a confusing
+  400 from the store one step later, with nothing in the log pointing back at the
+  real cause.
+
+None of the three is discoverable from a green run. All three came from someone
+else's red one, which is the entire argument for reading the sibling before
+copying the master.
+
+**Grafana was ahead of penpot in the other direction**, so the sweep ran both ways
+rather than flattening this repo onto the sibling: `setup-node@v7` and
+`changelog-check-action@v4` here against v6 and v3 there, and four quality gates
+(trait collisions, listener conventions, the `@todo` check, and the step-definition
+check grown from one question to three) that penpot has no equivalent of. Those
+stayed. Two things came back the other way — penpot's guard against Psalm
+announcing `seeded=true` for a baseline it failed to write, which turns a real
+Psalm error into a misleading artifact-upload failure one step later, and a typo.
+
+**The seed tag.** `v0.0.1`, annotated, on `22dedd6` — the merge of PR #1, the same
+place penpot puts its own. It is not a release and is not on the store; it exists
+because the version bump computes the next number from the last tag, and a repo
+with no tags has nothing to count from. What it stamps is the honest first working
+condition: the app installs, takes a Grafana URL and a service-account token over
+`occ`, and proves it against a real Grafana in CI. No mappings, no sync, no file
+actions.
+
+**Then `major`, not `patch`.** `package.json` sat at `0.1.0` and every sibling's
+first store release is `v1.0.0`. The number is a claim about completeness rather
+than about how much changed since the tag below it, and the claim is the one
+Chapter 2's ticket rail already made: every dashboard verb, every folder verb,
+both directions, both modes, 129 scenarios.
+
 ---
 
 ## The gates — what this chapter cannot do alone
@@ -290,12 +356,12 @@ wait.
 | 2 | Signing keypair + CSR minted, gitignored, verified | agent | ✅ RSA 4096, `CN=grafana_sync`, self-signature verifies |
 | 3 | Release pipeline carries sign + upload | agent | ✅ `publish.yml`, same shape as the siblings |
 | 4 | **CSR filed** with `nextcloud/app-certificate-requests` | Dr K | ✅ [PR #1220](https://github.com/nextcloud/app-certificate-requests/pull/1220), from `kubed-io` |
-| 5 | **Countersigned `.crt` committed back** | Nextcloud | ⬜ **the wait** — n8n took ~2 days, penpot 4 |
+| 5 | **Countersigned `.crt` committed back** | Nextcloud | ✅ 2026-09-04, ~1 day — the fastest of the three |
 | 6 | Private key in `NEXTCLOUD_STORE_KEY` | Dr K | ✅ |
 | 7 | Durable backup of the private key | Dr K | ✅ GCP `nextcloud-grafana`, round-tripped by modulus |
-| 8 | `NEXTCLOUD_STORE_TOKEN` set | Dr K | ✅ |
-| 9 | Register the app id | either | ⬜ needs gate 5 |
-| 10 | Cut the release | either | ⬜ needs 9 |
+| 8 | `NEXTCLOUD_STORE_TOKEN` set | Dr K | ✅ in the `nextcloud-store` environment, with the token |
+| 9 | Register the app id | either | ✅ the first accepted release registers it |
+| 10 | Cut the release | either | ✅ Round 7 |
 
 ### The three things the CSR PR needed, and this one got right first try
 
@@ -311,8 +377,10 @@ not guessable:
 2. **`Signed-off-by:`, matching the author byte for byte.** Penpot's first push
    was rejected by the DCO bot for missing it, and the guidance describing that
    gotcha did not mention it. The trailer must carry the *commit author's* email
-   — `4399427+kferrone@users.noreply.github.com`, not the `kellyferrone@gmail.com`
-   this repo's `user.email` is normally set to.
+   — the GitHub `users.noreply.github.com` address the commit is actually authored
+   with upstream, not the personal address this repo's `user.email` is normally set
+   to. (This paragraph named that personal address in full until the chapter closed,
+   which is §D3.5 losing to a worked example — the leak rode in on the lesson.)
 3. **From `kubed-io`, on a branch off `upstream/master`.** n8n's went from a
    personal account and could not be corrected afterwards. The kubed-io fork was
    24 commits behind, so branching off the fork's own tip would have dragged two
@@ -406,6 +474,55 @@ was Round 6's problem and gated on a human, and both halves stopped being true o
 rather than deleted, because a chapter that outgrew its own scope is more useful
 on the page than off it. The job it named — making the app *worth arriving at* —
 is the part that got done first, and that ordering was right.
+
+---
+
+## The pass is clear — what Chapter 3 actually sent
+
+For anyone who arrives at this file and needs the state rather than the story.
+
+| Course | State |
+|---|---|
+| The README, rewritten as an advertisement | ✅ |
+| Admin copy at the sibling density | ✅ |
+| `info.xml` as a store listing — description, `<documentation>`, categories | ✅ |
+| The name sweep — `kubed-io` is the only name anywhere | ✅ |
+| Screenshots — eight, full size and thumbnailed, all sixteen URLs live | ✅ |
+| The signing identity — keypair, CSR, countersigned certificate | ✅ |
+| The release pipeline — sign + upload, at sibling parity | ✅ |
+| `v1.0.0` on the Nextcloud App Store | ✅ |
+| The deep clean — rounds 2, 3, 4 | ⛔ not done, and named below |
+| The two missing harness tools — round 5 | ⛔ not done, and named below |
+
+## What this chapter did not do
+
+**Half of its own title.** *The Menu and the Deep Clean* printed the menu and
+never cleaned. Rounds 2–5 were planned in detail, sequenced for a reason — round 3
+first because it shrinks what rounds 4 and 5 have to read — and then the shopfront
+turned out to be the thing that actually mattered, so Round 6 ran instead and
+Round 7 followed it out of the door.
+
+That is written here rather than quietly dropped, because a plan that was
+abandoned for a good reason and a plan that was forgotten look identical in the
+git log a year later. This one was abandoned for a good reason: **an app nobody
+can find does not benefit from having tidy internals**, and the certificate
+countersign is a wait measured in days that only starts once someone files it.
+Doing the clean first would have spent the wait on the wrong thing.
+
+The four rounds survive intact above, with their reasoning, and the standing
+guard rail from §D3.6 survives with them: if a refactor wants a `.feature` file
+edited, it stops and asks. What they need is a chapter of their own, not a
+paragraph at the end of this one — which is why this chapter closes without
+opening it.
+
+Two findings from *§Carried* are in the same position and stay recorded there: the
+ambiguous mapping name, which wants a decision rather than a patch, and the
+`$files[0]` arrange, which is fixed.
+
+**Eighty-nine classes in `lib/`, and nobody has yet walked the tree asking what is
+duplicated and what is dead.** Chapter 2 handed that sentence to Chapter 3.
+Chapter 3 hands it on unchanged, having earned the right to by opening the doors
+instead.
 
 ---
 
