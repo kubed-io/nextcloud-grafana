@@ -64,7 +64,7 @@ Requires a Grafana service-account token with access to the folders you map. Thi
 
 This is a community integration and is not affiliated with, endorsed by, or sponsored by Grafana Labs. "Grafana" and the Grafana logo are trademarks of Grafana Labs, used here only to identify the service this app integrates with.
   ]]></description>
-  <version>0.1.0</version>
+  <version>1.0.0</version>
   <licence>agpl</licence>
   <author>kubed-io</author>
   <namespace>GrafanaSync</namespace>

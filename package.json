@@ -1,6 +1,6 @@
 {
   "name": "grafana_sync",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Grafana Sync — Nextcloud frontend (Files row icon + Open in Grafana action)",
   "private": true,
   "license": "AGPL-3.0-or-later",

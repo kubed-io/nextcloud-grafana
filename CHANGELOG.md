@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-07
+
 The first release. Everything is new, which is why there is no *Changed* or
 *Fixed* below — both are relative to a version somebody is running, and there
 isn't one. The build history is in [`saga/`](saga/).
