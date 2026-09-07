@@ -48,7 +48,8 @@ it was **checked rather than assumed**.
 The gate that ran this chapter's last two weeks is therefore closed, and with it
 every gate in *§Reaching the store*. Round 7 below is what closing it took: a
 workflow parity sweep against both siblings, the deferral note deleted from
-`publish.yml`, and the seed tag the version bump computes from.
+`publish.yml`, the seed tag the version bump computes from, and one gate this
+chapter had recorded wrong.
 
 Rounds 2–5 — the deep clean the chapter is half-named for — **did not happen, and
 are not being quietly dropped.** See *§What this chapter did not do* at the end.
@@ -331,6 +332,50 @@ than about how much changed since the tag below it, and the claim is the one
 Chapter 2's ticket rail already made: every dashboard verb, every folder verb,
 both directions, both modes, 129 scenarios.
 
+**And then it failed, on the one gate this chapter had written down wrong.**
+
+```
+apps.nextcloud.com responded HTTP 400
+["App grafana_sync does not exist, you need to register it first"]
+```
+
+Gate 9 in the table above said *the first accepted release registers it*. That is
+not true, and nothing in the run up to that point could have revealed it: the
+version bump, the tag, the packaging, the GitHub Release and the **signing** all
+went green. The store checks the signature against a certificate it already holds
+and still refuses the upload, because a countersigned certificate and a registered
+app id are two different records and the certificate does not imply the id.
+
+**Registration is one call, and it is the one call that is not in `publish.yml`:**
+
+```sh
+curl -X POST https://apps.nextcloud.com/api/v1/apps \
+  -H "Authorization: Token $NEXTCLOUD_STORE_TOKEN" \
+  -d '{"certificate": "<grafana_sync.crt>", "signature": "<sha512 of the app id>"}'
+```
+
+The signature is over the literal string `grafana_sync` — the app id, not the
+tarball — and it proves possession of the private key behind the certificate.
+`201` means registered. It is deliberately not in the workflow: it happens exactly
+once in an app's life, and a step that is a no-op on every run but the first is a
+step nobody reads when it breaks.
+
+**Penpot had already written this down**, in its own §Gate 9, with the working
+curl. It was not read, because the gate table in *this* file said the gate was
+automatic — so the summary of the sibling was trusted over the sibling. That is
+the same failure as Round 7's first paragraph, one level up: **a note is only as
+current as the last time somebody checked it against the thing it describes.**
+
+**The recovery cost nothing, which was luck and also design.** The release job
+carries no source checkout — it is pure artifact plus secrets — so re-running only
+the failed job after registering replayed the upload against the same tarball and
+the same tag. `gh run rerun --failed` reuses the successful jobs' outputs, so the
+version job did not fire a second time and there is no stranded `v2.0.0`. Had the
+version and release work lived in one job, the fix would have needed a hand-edited
+tag on a released commit.
+
+Second attempt: `HTTP 201`, `Published grafana_sync 1.0.0 to apps.nextcloud.com`.
+
 ---
 
 ## The gates — what this chapter cannot do alone
@@ -360,8 +405,8 @@ wait.
 | 6 | Private key in `NEXTCLOUD_STORE_KEY` | Dr K | ✅ |
 | 7 | Durable backup of the private key | Dr K | ✅ GCP `nextcloud-grafana`, round-tripped by modulus |
 | 8 | `NEXTCLOUD_STORE_TOKEN` set | Dr K | ✅ in the `nextcloud-store` environment, with the token |
-| 9 | Register the app id | either | ✅ the first accepted release registers it |
-| 10 | Cut the release | either | ✅ Round 7 |
+| 9 | Register the app id | either | ✅ **a separate call, and it must come first** — see Round 7 |
+| 10 | Cut the release | either | ✅ `v1.0.0`, HTTP 201 |
 
 ### The three things the CSR PR needed, and this one got right first try
 
