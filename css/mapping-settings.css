@@ -29,13 +29,14 @@
 }
 
 /* grafana-folder | mode      (row 1)
- * nc-folder      | tf        (row 2)
- * actions                    (row 3, spans the two left columns)
- * groups spans all three rows in the third (wider) column. */
+ * nc-folder      | version   (row 2)
+ * tf                         (row 3, spans the two left columns)
+ * actions                    (row 4, spans the two left columns)
+ * groups spans all four rows in the third (wider) column. */
 .grafana-sync-mappings__grid {
 	display: grid;
 	grid-template-columns: minmax(140px, 0.9fr) minmax(140px, 0.9fr) minmax(340px, 2.2fr);
-	grid-template-rows: auto auto auto;
+	grid-template-rows: auto auto auto auto;
 	gap: 10px 18px;
 	align-items: start;
 }
@@ -43,8 +44,9 @@
 .gf-folder     { grid-area: 1 / 1; }
 .gf-nc         { grid-area: 2 / 1; }
 .gf-mode       { grid-area: 1 / 2; }
-.gf-tf         { grid-area: 2 / 2; align-self: center; }
-.gf-groups { grid-area: 1 / 3 / 4 / 4; align-self: stretch; } /* span all rows in col 3 */
+.gf-version    { grid-area: 2 / 2; }
+.gf-tf         { grid-area: 3 / 1 / 4 / 3; align-self: center; }
+.gf-groups { grid-area: 1 / 3 / 5 / 4; align-self: stretch; } /* span all rows in col 3 */
 
 /* ⓘ info button next to each field label — a pure-CSS hover/focus tooltip
  * (no JS, no @nextcloud/vue). Reliable where the native `title=` was useless. */
@@ -162,9 +164,9 @@
 }
 
 /* Save / Sync / Delete — a horizontal group of colored, icon-only buttons.
- * Row 3 of the grid, spanning the two left columns, pinned to the bottom. */
+ * Row 4 of the grid, spanning the two left columns, pinned to the bottom. */
 .grafana-sync-mappings__actions {
-	grid-area: 3 / 1 / 4 / 3;
+	grid-area: 4 / 1 / 5 / 3;
 	align-self: end;
 	display: flex;
 	gap: 8px;
@@ -233,7 +235,7 @@
 		grid-template-columns: 1fr;
 		grid-template-rows: auto;
 	}
-	.gf-folder, .gf-nc, .gf-mode, .gf-tf, .gf-groups,
+	.gf-folder, .gf-nc, .gf-mode, .gf-version, .gf-tf, .gf-groups,
 	.grafana-sync-mappings__actions {
 		grid-area: auto;
 	}

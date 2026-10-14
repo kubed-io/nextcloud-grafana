@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A mapping chooses its Grafana dashboard version.** v1 keeps the classic JSON; v2 mirrors Grafana 13's new dashboards as YAML, so tabs and auto-grid layouts survive an edit from Nextcloud instead of being flattened.
+
+### Changed
+
+- Requires PHP 8.2.
+
 ## [1.0.0] - 2026-09-07
 
 The first release. Everything is new, which is why there is no *Changed* or

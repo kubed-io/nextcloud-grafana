@@ -227,13 +227,28 @@ There's a third state you don't configure: **unmapped**. That's what a sync file
 
 ---
 
+## 🧬 v1 or v2 — JSON or YAML
+
+Grafana 13 serves every dashboard through two APIs, and a mapping picks one. The file format comes with it.
+
+| Version | The file is | Read and written through |
+|---|---|---|
+| **v1** (default) | Classic dashboard JSON | `/api/dashboards` |
+| **v2** | YAML — `apiVersion`, `kind`, `metadata`, `spec`, the shape Grafana's Git Sync writes | `dashboard.grafana.app/v2` |
+
+**Pick v2 for dashboards that use tabs, auto-grid layouts or conditional rendering.** A v1 write cannot express them, so editing such a dashboard through a v1 mapping quietly flattens it. A v2 mapping keeps every one. Files carry their own shape, so moving one between a v1 and a v2 folder loses nothing either. v2 needs a Grafana that serves `dashboard.grafana.app/v2` — every Grafana 13 does.
+
+📄 [`dashboards/create.feature`](features/dashboards/create.feature) · ✏️ [`dashboards/edit.feature`](features/dashboards/edit.feature)
+
+---
+
 ## 🛠 Setup, in three moves
 
 **1. Point it at Grafana.** Base URL and a service-account token, stored encrypted and never echoed back. That is the whole connection.
 
 ![The Grafana Sync admin settings: an Instance card holding the base URL and service-account token, and a Sync Settings card with the scheduled pull and its interval](screenshots/connection.png)
 
-**2. Map a folder to a folder.** Pick the Grafana folder from a live picker, name the Nextcloud folder, choose the mode, and pick which groups get to see it. Backed by a Team Folder or an admin-owned shared folder, your call. The subfolders come along automatically — there is nothing per-folder to configure and nothing that can drift from what Grafana actually contains.
+**2. Map a folder to a folder.** Pick the Grafana folder from a live picker, name the Nextcloud folder, choose the mode and the version, and pick which groups get to see it. Backed by a Team Folder or an admin-owned shared folder, your call. The subfolders come along automatically — there is nothing per-folder to configure and nothing that can drift from what Grafana actually contains.
 
 ![The Folder mappings admin panel showing two mapping cards, each with its Grafana folder and uid, the Nextcloud folder, the mode, a Team Folder flag and group checkboxes](screenshots/mappings.png)
 
@@ -256,7 +271,7 @@ echo "$GRAFANA_TOKEN" | occ grafana_sync:set-token      # stdin keeps it out of 
 occ grafana_sync:test-connection
 
 # Map a Grafana folder to a Nextcloud folder
-occ grafana_sync:add-mapping '{"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe","nc_folder":"Observe","mode":"sync","nc_groups":["ops"],"use_team_folder":true}'
+occ grafana_sync:add-mapping '{"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe","nc_folder":"Observe","mode":"sync","version":2,"nc_groups":["ops"],"use_team_folder":true}'
 occ grafana_sync:list-mappings
 occ grafana_sync:set-groups <mapping-id> ops,admins
 occ grafana_sync:remove-mapping <mapping-id>

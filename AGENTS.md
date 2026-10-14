@@ -119,6 +119,17 @@ without a real reason documented in a spec under `docs/superpowers/specs/`:
   ATTRIBUTE on both dashboards and folders (`features/*/tags.feature`); they just
   have nothing to do with which folder a mapping points at.
 - **The metadata key is `grafana_mode = link|sync`.**
+- **The mapping's version picks the READ; the body's shape picks the WRITE.** A pull
+  reads through `/api/dashboards` (v1, JSON) or `dashboard.grafana.app/v2` (v2, YAML)
+  and writes the file in that format. Every write decodes the file with
+  `DashboardDocument` and sends it through `GrafanaClient::writeDocument()`, which picks
+  the API from the body itself — so a v2 dashboard is never flattened by a classic
+  write, and a file crossing between versions loses nothing. Never branch on the
+  mapping's version in a write path, and never wrap a classic body in a v2 envelope.
+  (`docs/superpowers/specs/2026-10-14-mapping-version-design.md`)
+- **The one bundled library is `symfony/yaml`, prefixed into `lib/Vendor/` by
+  `composer install` and never committed.** A checkout without `composer install` fatals
+  on load; `package.yml` refuses to pack one.
 - **Loop prevention is a content-hash guard.** Pulls must not trigger pushes; hash
   the spec we *sent*, not Grafana's echoed-back object (Grafana bumps a `version`
   int on every save — see saga risk #6).

@@ -149,6 +149,7 @@
 			grafana_folder_title: title,
 			nc_folder: fieldValue(card, '.js-nc-folder'),
 			mode: mode,
+			version: fieldValue(card, '.js-version') === '2' ? 2 : 1,
 			nc_groups: groups,
 			use_team_folder: tfEl ? tfEl.checked : true,
 		};
@@ -301,6 +302,7 @@
 		folder: t('grafana_sync', 'The Grafana folder to mirror. Its dashboards become the files in the Nextcloud folder. Bound by uid, so a rename in Grafana never breaks the mapping.'),
 		nc: t('grafana_sync', 'Name of the Nextcloud folder the dashboards appear in.'),
 		mode: t('grafana_sync', 'Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
+		version: t('grafana_sync', 'v1: the classic dashboard JSON. v2: the new dashboard API, as YAML — it keeps the tabs and auto-grid layouts that v1 would flatten.'),
 		tf: t('grafana_sync', 'On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 		groups: t('grafana_sync', 'Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 	};
@@ -374,6 +376,8 @@
 		fixField(card, '.js-grafana-folder', uid, label, { uid: uid, title: title });
 		fixField(card, '.js-nc-folder', ncFolder, ncFolder);
 		fixField(card, '.js-mode', mode, mode === 'sync' ? t('grafana_sync', 'Sync') : t('grafana_sync', 'Link'));
+		var version = Number(mapping.version) === 2 ? 2 : 1;
+		fixField(card, '.js-version', String(version), version === 2 ? t('grafana_sync', 'v2 · YAML') : t('grafana_sync', 'v1 · JSON'));
 
 		// The storage backend is immutable too, but it stays a checkbox so the choice
 		// remains legible — disabled, exactly as the template renders it.
@@ -461,6 +465,11 @@
 			+     '<select class="js-mode">'
 			+       '<option value="sync" selected>' + t('grafana_sync', 'Sync') + '</option>'
 			+       '<option value="link">' + t('grafana_sync', 'Link') + '</option>'
+			+     '</select></div>'
+			+   '<div class="grafana-sync-field gf-version"><label>' + t('grafana_sync', 'Version') + info(DESC.version) + '</label>'
+			+     '<select class="js-version">'
+			+       '<option value="1" selected>' + t('grafana_sync', 'v1 · JSON') + '</option>'
+			+       '<option value="2">' + t('grafana_sync', 'v2 · YAML') + '</option>'
 			+     '</select></div>'
 			+   '<div class="grafana-sync-field gf-tf"><label class="grafana-sync-checkbox">'
 			+     '<input type="checkbox" class="js-use-team-folder"' + tfAttrs + ' /> ' + t('grafana_sync', 'Team Folder') + info(DESC.tf) + '</label></div>'

@@ -37,6 +37,7 @@ $desc = [
 	'folder' => $l->t('The Grafana folder to mirror. Its dashboards become the files in the Nextcloud folder. Bound by uid, so a rename in Grafana never breaks the mapping.'),
 	'nc' => $l->t('Name of the Nextcloud folder the dashboards appear in.'),
 	'mode' => $l->t('Sync: the full dashboard body lives here and edits push back to Grafana. Link: a read-only pointer that opens the dashboard in Grafana.'),
+	'version' => $l->t('v1: the classic dashboard JSON. v2: the new dashboard API, as YAML — it keeps the tabs and auto-grid layouts that v1 would flatten.'),
 	'tf' => $l->t('On = an ownerless Team Folder (groupfolders). Off = a folder in the admin account shared to the groups. Saved with the mapping; the folder is provisioned when the sync engine lands.'),
 	'groups' => $l->t('Which Nextcloud groups the folder is shared with. Saved with the mapping; applied when the sync engine provisions the folder.'),
 ];
@@ -83,6 +84,7 @@ $info = static function (string $tip) use ($icon): string {
 			$uid = (string)($m['grafana_folder_uid'] ?? '');
 			$title = (string)($m['grafana_folder_title'] ?? '');
 			$modeSel = (($m['mode'] ?? '') === 'link') ? 'link' : 'sync';
+			$versionSel = ((int)($m['version'] ?? 1) === 2) ? 2 : 1;
 			$label = $title !== '' ? $title . ' (' . $uid . ')' : $uid;
 			$selectedGroups = $m['nc_groups'] ?? [];
 			$useTf = filter_var($m['use_team_folder'] ?? $tfAvailable, FILTER_VALIDATE_BOOLEAN);
@@ -117,6 +119,13 @@ $info = static function (string $tip) use ($icon): string {
 								 mapping was written, so changing it invalidates what is on
 								 disk. Re-create the mapping instead. */ ?>
 						<span class="grafana-sync-fixed js-mode" data-value="<?php p($modeSel); ?>"><?php p($modeSel === 'sync' ? $l->t('Sync') : $l->t('Link')); ?></span>
+					</div>
+					<div class="grafana-sync-field gf-version">
+						<label><?php p($l->t('Version'));
+			print_unescaped($info($desc['version'])); ?></label>
+						<?php /* Immutable, like mode: it decided which API every file under
+								 the mapping is read through and which format it is in. */ ?>
+						<span class="grafana-sync-fixed js-version" data-value="<?php p((string)$versionSel); ?>"><?php p($versionSel === 2 ? $l->t('v2 · YAML') : $l->t('v1 · JSON')); ?></span>
 					</div>
 					<div class="grafana-sync-field gf-tf">
 						<?php /* Immutable: switching backend migrates the folder and every
