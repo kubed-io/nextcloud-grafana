@@ -632,13 +632,19 @@ final class SyncService {
 			// (a pointer never pushes), so it stays empty.
 			$read = $this->readClocksForLink($uid);
 			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
-			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
+			$body = DashboardBody::encodeReference($row, $url, $row['folderUid'], $mapping->version);
 			$version = '';
 		} else {
 			// Deliberately UNGUARDED: a transient 500/timeout throws, pullOne catches it,
 			// and the file counts as failed. Swallowing it here would report a clean pull
-			// over content we never managed to read.
-			$read = $this->grafana->readDashboardSpec($uid);
+			// over content we never managed to read. A version-2 dashboard Grafana could
+			// not convert throws the same way, and keeps the file it already has.
+			//
+			// THE ONE PLACE A MAPPING'S VERSION PICKS AN API. Every write goes through
+			// whatever its body names (GrafanaClient::writeDocument); a pull decides
+			// what the folder's files ARE.
+			$v2 = $mapping->version === Mapping::VERSION_2;
+			$read = $v2 ? $this->grafana->readDashboardResource($uid) : $this->grafana->readDashboardSpec($uid);
 			if ($read === null) {
 				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
 					'app' => Application::APP_ID,
@@ -651,7 +657,7 @@ final class SyncService {
 				return false;
 			}
 			$version = $read->version();
-			$body = DashboardBody::encodeSync($read->spec);
+			$body = $v2 ? DashboardBody::encodeResource($read->spec) : DashboardBody::encodeSync($read->spec);
 		}
 
 		// A MIRROR IN THE TRASH IS STILL THIS DASHBOARD'S MIRROR. `indexByUid` walks the
@@ -873,12 +879,10 @@ final class SyncService {
 	 */
 	private static function tagsIn(string $body): TagSet {
 		try {
-			$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
+			return DashboardDocument::decode($body)->tags();
+		} catch (\RuntimeException) {
 			return TagSet::empty();
 		}
-		$tags = is_array($decoded) ? ($decoded['tags'] ?? null) : null;
-		return TagSet::of(is_array($tags) ? $tags : []);
 	}
 
 	/**

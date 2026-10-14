@@ -55,9 +55,22 @@ use JsonSerializable;
  * (a read-only pointer that opens the dashboard in Grafana — the natural fit for
  * operator/GitOps-provisioned dashboards owned elsewhere).
  *
- * THERE IS NO FORMAT OPTION, because dashboards are JSON. If Grafana's v2 App
- * Platform serialization is ever picked up it will be decided by what Grafana serves,
- * not by a per-folder switch set before anyone knows the answer.
+ * ## VERSION: WHICH OF GRAFANA'S DASHBOARD APIS THE FOLDER IS READ THROUGH
+ *
+ * `1` (the default) is the classic dashboard JSON from `/api/dashboards/*`; `2` is the
+ * `dashboard.grafana.app/v2` resource, kept as YAML. The format follows from the
+ * version and from nothing else — there is no separate format switch.
+ *
+ * This used to say there was no format option, and Round 8 of the saga removed one
+ * that nothing read. The field that came back is not a format: Grafana 13 stores each
+ * dashboard in one version and serves it through all of them, and a classic write over
+ * a version-2 dashboard flattens what only v2 can hold (tabs, the auto grid) — measured,
+ * with no error. So a folder of v2 dashboards needs to be written through v2.
+ *
+ * The version decides how a pull READS the folder and which format it writes. A write
+ * goes through whatever API the body's own shape names ({@see DashboardDocument}), so
+ * a file crossing between a v1 and a v2 mapping loses nothing. Spec:
+ * docs/superpowers/specs/2026-10-14-mapping-version-design.md.
  *
  * Storage model (mirrors the n8n master's Mapping, so the two reduce cleanly into a
  * shared base later): `useTeamFolder` picks the backend — an ownerless Team Folder
@@ -91,6 +104,7 @@ use JsonSerializable;
  *  - `grafanaFolderUid` MUST be non-empty.
  *  - `ncFolder` MUST be non-empty (after normalising away surrounding slashes).
  *  - `mode` MUST be `sync` or `link`.
+ *  - `version` MUST be 1 or 2.
  *  - `ncFolderId` is 0 or a real Nextcloud file id; never negative.
  */
 final class Mapping implements JsonSerializable {
@@ -110,6 +124,7 @@ final class Mapping implements JsonSerializable {
 		public readonly string $mode,
 		public readonly bool $useTeamFolder,
 		public readonly int $ncFolderId = 0,
+		public readonly int $version = self::VERSION_1,
 	) {
 	}
 
@@ -129,6 +144,7 @@ final class Mapping implements JsonSerializable {
 			$this->mode,
 			$this->useTeamFolder,
 			max(0, $id),
+			$this->version,
 		);
 	}
 
@@ -142,6 +158,7 @@ final class Mapping implements JsonSerializable {
 			$this->mode,
 			$this->useTeamFolder,
 			$this->ncFolderId,
+			$this->version,
 		);
 	}
 
@@ -209,6 +226,15 @@ final class Mapping implements JsonSerializable {
 		// nonsense, so it reads as 0 rather than being trusted.
 		$ncFolderId = max(0, (int)($data['nc_folder_id'] ?? 0));
 
+		// Version 1 when omitted — and when READ BACK from a row saved before the field
+		// existed, which is the same thing: every such mapping was a version-1 mapping.
+		// Accepted as an int (occ JSON) or a digit string (a form field); anything else,
+		// `"v2"` included, is refused rather than guessed at.
+		$version = $data['version'] ?? self::VERSION_1;
+		if (is_string($version) && preg_match('/^[0-9]+$/', $version) === 1) {
+			$version = (int)$version;
+		}
+
 		if ($uid === '') {
 			throw new \InvalidArgumentException('grafana_folder_uid is required');
 		}
@@ -220,7 +246,10 @@ final class Mapping implements JsonSerializable {
 		if (!in_array($mode, [self::MODE_SYNC, self::MODE_LINK], true)) {
 			throw new \InvalidArgumentException('mode must be "sync" or "link"');
 		}
-		return new self($id, $uid, $title, $ncFolder, $mode, $useTeamFolder, $ncFolderId);
+		if (!in_array($version, [self::VERSION_1, self::VERSION_2], true)) {
+			throw new \InvalidArgumentException('version must be 1 or 2');
+		}
+		return new self($id, $uid, $title, $ncFolder, $mode, $useTeamFolder, $ncFolderId, $version);
 	}
 
 	/** @return array<string,mixed> */
@@ -233,6 +262,7 @@ final class Mapping implements JsonSerializable {
 			'nc_folder_id' => $this->ncFolderId,
 			'mode' => $this->mode,
 			'use_team_folder' => $this->useTeamFolder,
+			'version' => $this->version,
 		];
 	}
 

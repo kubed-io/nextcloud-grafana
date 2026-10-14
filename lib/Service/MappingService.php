@@ -52,6 +52,7 @@ final class MappingService {
 		private StorageService $storage,
 		private RecycleBin $recycleBin,
 		private ExistingDashboards $existing,
+		private GrafanaClient $grafana,
 	) {
 	}
 
@@ -116,6 +117,14 @@ final class MappingService {
 		$this->assertNcFolderUnique($all, $mapping->ncFolder, null);
 		$this->assertNotTheRecycleBin($mapping);
 		$this->assertIdUnique($all, $mapping->id);
+
+		// A VERSION-2 MAPPING NEEDS A GRAFANA THAT SERVES VERSION 2. Asked once, here,
+		// because the alternative is a mapping that saves happily and then fails every
+		// pull with a 404 — the same lesson as the Team Folder backend above. Version 1
+		// never asks: every Grafana serves the classic API.
+		if ($mapping->version === Mapping::VERSION_2 && !$this->grafana->servesDashboardV2()) {
+			throw new \InvalidArgumentException('This Grafana does not serve version 2 dashboards (dashboard.grafana.app/v2).');
+		}
 
 		// READ BEFORE ANYTHING IS PROVISIONED, so a refusal costs nothing and the
 		// number the admin is shown is the number that would go.

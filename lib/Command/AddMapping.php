@@ -27,8 +27,11 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * The JSON is the mapping shape, e.g.:
  *   {"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe",
- *    "nc_folder":"observe","mode":"sync",
+ *    "nc_folder":"observe","mode":"sync","version":2,
  *    "nc_groups":["admin"],"use_team_folder":true}
+ *
+ * `version` is 1 (classic JSON, the default) or 2 (the dashboard.grafana.app/v2
+ * resource, as YAML).
  *
  * Plus one key that is NOT part of a mapping: `"purge_dashboards":true` answers the
  * refusal a `link` mapping gets when its folder already holds dashboard files. Those
