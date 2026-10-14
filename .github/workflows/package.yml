@@ -52,6 +52,21 @@ jobs:
         # empty = the ref this workflow runs on; publish.yml passes the release tag
         ref: ${{ inputs.ref }}
 
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.4'
+        coverage: none
+        tools: composer:v2
+
+    # The app's one runtime library: symfony/yaml, prefixed into lib/Vendor by the
+    # post-install hook. Never committed, so the tarball is the only place it ships —
+    # and a tarball without it fatals on load, hence the guard.
+    - name: Install PHP dependencies
+      run: |
+        composer install --no-dev --prefer-dist --no-progress
+        test -f lib/Vendor/autoload.php || { echo "::error::lib/Vendor was not generated"; exit 1; }
+
     - name: Setup Node
       uses: actions/setup-node@v7
       with:

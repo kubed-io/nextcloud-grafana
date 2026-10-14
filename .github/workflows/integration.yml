@@ -139,7 +139,9 @@ jobs:
       # via the GHA services feature. The token the suite uses is minted from
       # these admin creds at runtime (bin/mint-grafana-token.sh).
       grafana:
-        image: grafana/grafana:13.0.2
+        # Production's version: the dashboard v2 behaviour this suite asserts was
+        # measured on 13.2.1 (docs/superpowers/specs/2026-10-14-mapping-version-design.md).
+        image: grafana/grafana:13.2.1
         ports:
         - 3000:3000
         env:
@@ -178,6 +180,12 @@ jobs:
         extensions: mbstring, iconv, fileinfo, intl, sqlite, pdo_sqlite, gd, zip, curl, xml
         coverage: none
         tools: composer:v2
+
+    # The app's one runtime library (symfony/yaml, prefixed into lib/Vendor by the
+    # post-install hook). Without it the app fatals on load.
+    - name: Install the app's PHP dependencies
+      working-directory: apps/${{ env.APP_ID }}
+      run: composer install --no-dev --prefer-dist --no-progress
 
     - name: Install Behat deps
       working-directory: apps/${{ env.APP_ID }}/tests/integration

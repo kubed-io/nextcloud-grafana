@@ -53,6 +53,11 @@ use OCP\Files\Events\Node\NodeRenamedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
 use OCP\SystemTag\MapperEvent;
 
+// The one third-party library the app ships: symfony/yaml for version-2 files, prefixed
+// under OCA\GrafanaSync\Vendor by `composer install` (Strauss) so another app's Symfony
+// can never be the copy that loads. Generated, never committed — see composer.json.
+require_once __DIR__ . '/../Vendor/autoload.php';
+
 /**
  * App bootstrap.
  *

@@ -131,6 +131,8 @@ This is a community integration and is not affiliated with, endorsed by, or spon
          (bin_enabled) decides whether a delete is recoverable. 31 is therefore the
          technical minimum; the declared floor is 32 because 30 and 31 are both past
          end of life, so nothing supported is lost by asking for the newer one. -->
+    <!-- PHP 8.2 because the bundled symfony/yaml 7.4 needs it; 8.1 is past end of life. -->
+    <php min-version="8.2"/>
     <nextcloud min-version="32" max-version="34"/>
   </dependencies>
   <settings>
