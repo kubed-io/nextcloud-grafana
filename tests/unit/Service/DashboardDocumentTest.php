@@ -84,6 +84,54 @@ final class DashboardDocumentTest extends TestCase {
 		DashboardDocument::decode($content);
 	}
 
+	/** @return iterable<string, array{string}> */
+	public static function malformedResources(): iterable {
+		yield 'a lower-case kind' => ["apiVersion: dashboard.grafana.app/v2\nkind: dashboard\nmetadata:\n  name: d1\nspec: {}\n"];
+		yield 'a path in apiVersion' => ["apiVersion: dashboard.grafana.app/../../api/x?\nkind: Dashboard\nmetadata:\n  name: d1\nspec: {}\n"];
+		yield 'a query in apiVersion' => ["apiVersion: 'dashboard.grafana.app/v2?x=1'\nkind: Dashboard\nmetadata:\n  name: d1\nspec: {}\n"];
+		yield 'another group' => ["apiVersion: folder.grafana.app/v1\nkind: Dashboard\nspec: {}\n"];
+		yield 'no spec' => ["apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\n"];
+		yield 'a JSON body that names a kind' => ['{"kind":"Dashboard","title":"x"}'];
+	}
+
+	/**
+	 * A body that reaches for the resource shape and misses is refused, never sent as a
+	 * classic dashboard: that would replace the real dashboard with an empty one, and an
+	 * `apiVersion` is part of the request URL.
+	 */
+	#[DataProvider('malformedResources')]
+	public function testRefusesAnAlmostResource(string $content): void {
+		$this->expectException(\RuntimeException::class);
+
+		DashboardDocument::decode($content);
+	}
+
+	/**
+	 * Nothing this app writes is YAML except a resource and a pointer, so other YAML is a
+	 * mistake. `TODO: fix this` is a YAML map — and in a version-1 folder it used to be
+	 * refused as invalid JSON, which is the behaviour it keeps.
+	 */
+	public function testRefusesYamlThatIsNeitherAResourceNorAPointer(): void {
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('neither valid JSON nor a version 2 dashboard');
+
+		DashboardDocument::decode("TODO: fix this\n");
+	}
+
+	/** A version-2 link's pointer is YAML too, and its tags are read from it. */
+	public function testAcceptsAYamlPointer(): void {
+		$doc = DashboardDocument::decode("\$schema: grafana.reference/v1\nuid: d1\ntitle: Fleet\ntags:\n  - ops\n");
+
+		self::assertFalse($doc->isResource());
+		self::assertTrue($doc->tags()->equals(TagSet::of(['ops'])));
+	}
+
+	public function testAcceptsEveryDashboardApiVersionGrafanaNames(): void {
+		foreach (['v1', 'v2', 'v2beta1', 'v2alpha1', 'v0alpha1'] as $v) {
+			self::assertTrue(DashboardDocument::decode("apiVersion: dashboard.grafana.app/$v\nkind: Dashboard\nmetadata:\n  name: d\nspec: {}\n")->isResource(), $v);
+		}
+	}
+
 	public function testUidTitleTagsReadBothShapes(): void {
 		$classic = DashboardDocument::decode('{"uid":"fleet","title":" Fleet Health ","tags":["ops","dns"]}');
 		$resource = DashboardDocument::decode(self::YAML);

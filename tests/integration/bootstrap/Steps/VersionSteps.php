@@ -29,8 +29,13 @@ trait VersionSteps {
 		$title = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
 		$uid = 'nc-tabs-' . bin2hex(random_bytes(3));
 
-		$this->grafanaPutDashboardV2($uid, $this->grafanaFolderUidForMapping($folder), self::tabbedSpec($title));
+		$grafanaFolder = $this->grafanaFolderUidForMapping($folder);
+		$this->grafanaPutDashboardV2($uid, $grafanaFolder, self::tabbedSpec($title));
 		$this->createdDashboardUids[] = $uid;
+		// A DASHBOARD WRITTEN THROUGH THE RESOURCE API IS SEARCHABLE A MOMENT LATER, not at
+		// once, and the pull finds dashboards by searching. Waiting here is the harness
+		// letting Grafana settle, the way a person would not notice it had to.
+		$this->waitUntilGrafanaSearchFinds($uid, $grafanaFolder);
 		$this->pullEveryMapping();
 
 		$this->lastUid = $uid;
@@ -43,7 +48,21 @@ trait VersionSteps {
 				return;
 			}
 		}
-		throw new \RuntimeException("the pull did not mirror '$title' into '$folder'");
+		throw new \RuntimeException("the pull did not mirror '$title' into '$folder'; it reported "
+			. json_encode($this->lastPullReport));
+	}
+
+	/** The pull lists a folder's dashboards by searching it, so that is the question asked. */
+	private function waitUntilGrafanaSearchFinds(string $uid, string $folderUid): void {
+		for ($i = 0; $i < 40; $i++) {
+			$res = $this->grafanaClient()->request('GET', 'search', ['query' => ['folderUIDs' => $folderUid, 'type' => 'dash-db']]);
+			$rows = json_decode((string)$res->getBody(), true);
+			if (is_array($rows) && in_array($uid, array_column($rows, 'uid'), true)) {
+				return;
+			}
+			usleep(250_000);
+		}
+		throw new \RuntimeException("Grafana's search of folder '$folderUid' never listed '$uid'");
 	}
 
 	/** @Then the dashboard in Grafana still has its tabs */

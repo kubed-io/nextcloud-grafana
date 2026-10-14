@@ -236,7 +236,7 @@ Grafana 13 serves every dashboard through two APIs, and a mapping picks one. The
 | **v1** (default) | Classic dashboard JSON | `/api/dashboards` |
 | **v2** | YAML — `apiVersion`, `kind`, `metadata`, `spec`, the shape Grafana's Git Sync writes | `dashboard.grafana.app/v2` |
 
-**Pick v2 for dashboards that use tabs, auto-grid layouts or conditional rendering.** A v1 write cannot express them, so editing such a dashboard through a v1 mapping quietly flattens it. A v2 mapping keeps every one. Files carry their own shape, so moving one between a v1 and a v2 folder loses nothing either. v2 needs a Grafana that serves `dashboard.grafana.app/v2` — every Grafana 13 does.
+**Pick v2 for dashboards that use tabs, auto-grid layouts or conditional rendering.** A v1 write cannot express them, so editing such a dashboard through a v1 mapping quietly flattens it. A v2 mapping keeps every one. A file is written through the API its own shape belongs to, so moving one between a v1 and a v2 folder loses nothing on the way; from then on it is read the new folder's way. v2 needs a Grafana that serves `dashboard.grafana.app/v2` — every Grafana 13 does.
 
 📄 [`dashboards/create.feature`](features/dashboards/create.feature) · ✏️ [`dashboards/edit.feature`](features/dashboards/edit.feature)
 

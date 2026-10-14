@@ -93,8 +93,8 @@ final class ReconcileNameJob extends QueuedJob {
 				if ($stem === '' || $jsonTitle === $stem) {
 					return; // already in sync
 				}
-				// In the syntax the file came in: JSON for a classic body, YAML for a version-2
-				// one. An encode failure throws → caught + logged by the outer try.
+				// In its shape's syntax: JSON for a classic body, YAML for a version-2 resource.
+				// An encode failure throws → caught + logged by the outer try.
 				$encoded = $doc->withTitle($stem)->encode();
 				// Write the title guarded (so the writeback / name-sync don't echo),
 				// then push to Grafana ourselves — one tick, one push.

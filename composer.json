@@ -39,6 +39,7 @@
 		"psalm": "psalm --no-cache",
 		"prefix-dependencies": [
 			"sh -c 'test -f bin/strauss.phar || (mkdir -p bin && curl -fsSL -o bin/strauss.phar https://github.com/BrianHenryIE/strauss/releases/download/0.31.1/strauss.phar)'",
+			"sh -c 'echo \"17dc2baf27b9a3f52834e3db729c8365d8915a80e37a087d253cf705387aa887  bin/strauss.phar\" | sha256sum -c --quiet - || { rm -f bin/strauss.phar; echo \"strauss.phar does not match its pinned sha256\" >&2; exit 1; }'",
 			"@php bin/strauss.phar --silent"
 		],
 		"post-install-cmd": [

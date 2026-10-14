@@ -412,7 +412,12 @@ trait MappingSteps {
 			(bool)($m['use_team_folder'] ?? false),
 			'storage',
 		);
-		Assert::assertSame($expected['version'] ?? '', (string)($m['version'] ?? ''), 'version');
+		// ONLY WHEN SOMETHING SAID WHAT IT SHOULD BE — the form, or a declared default. A
+		// scenario that declares no defaults has no opinion about the version, and reading
+		// that silence as "blank" would refuse every mapping the app stores correctly.
+		if (isset($expected['version'])) {
+			Assert::assertSame($expected['version'], (string)($m['version'] ?? ''), 'version');
+		}
 		$wanted = $this->groupList($expected['groups'] ?? '');
 		$stored = array_values(array_map('strval', (array)($m['nc_groups'] ?? [])));
 		sort($wanted);

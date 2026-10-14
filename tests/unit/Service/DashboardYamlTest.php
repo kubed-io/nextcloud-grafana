@@ -82,6 +82,24 @@ final class DashboardYamlTest extends TestCase {
 		self::assertSame("md: |-\n  line1\n  line2\n", $yaml);
 	}
 
+	/**
+	 * A few hundred bytes of aliases expand to gigabytes, and the first copy of the result
+	 * would take the worker down. Grafana never writes an alias, so a document that
+	 * expands past any real dashboard is refused while it is still cheap to say so.
+	 */
+	public function testAnAliasBombIsRefused(): void {
+		$yaml = "a: &a [x, x, x, x, x, x, x, x, x, x]\n";
+		foreach (range('b', 'h') as $i => $k) {
+			$prev = $i === 0 ? 'a' : range('b', 'h')[$i - 1];
+			$yaml .= "$k: &$k [" . implode(', ', array_fill(0, 10, "*$prev")) . "]\n";
+		}
+
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('too large');
+
+		DashboardYaml::parse($yaml);
+	}
+
 	public function testInvalidYamlSaysSo(): void {
 		$this->expectException(\RuntimeException::class);
 		$this->expectExceptionMessage('The dashboard file is not valid YAML');

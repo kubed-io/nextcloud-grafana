@@ -74,11 +74,14 @@ final class AddMapping extends Command {
 			// nc_groups travels ALONGSIDE the mapping, not inside it: they are applied
 			// to the provisioned folder and read back from it, never stored.
 			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? [], $purge);
-		} catch (\InvalidArgumentException $e) {
+		} catch (\RuntimeException $e) {
+			// InvalidArgumentException (a refusal) and RuntimeException (Grafana could not
+			// be asked whether it serves version 2) both end here: a message, not a trace.
 			$output->writeln('<error>' . $e->getMessage() . '</error>');
 			return 1;
 		}
-		$output->writeln('<info>Added mapping ' . $saved->id . ' (' . $saved->grafanaFolderUid . ' → ' . $saved->ncFolder . ').</info>');
+		$output->writeln('<info>Added mapping ' . $saved->id . ' (' . $saved->grafanaFolderUid . ' → ' . $saved->ncFolder
+			. ', ' . $saved->mode . ', version ' . $saved->version . ').</info>');
 		return 0;
 	}
 }

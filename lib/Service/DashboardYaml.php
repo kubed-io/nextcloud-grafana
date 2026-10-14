@@ -43,6 +43,12 @@ final class DashboardYaml {
 
 	private const PARSE = Yaml::PARSE_OBJECT_FOR_MAP | Yaml::PARSE_EXCEPTION_ON_INVALID_TYPE;
 
+	/**
+	 * More values than any dashboard holds — the largest live one is ~20,000 — so a
+	 * document past it is an alias expansion, not a dashboard.
+	 */
+	private const MAX_NODES = 1_000_000;
+
 	public static function dump(\stdClass $doc): string {
 		$yaml = Yaml::dump(self::forDump($doc), PHP_INT_MAX, 2, self::DUMP);
 		// Symfony ends a document that closes on a literal block without a newline. A
@@ -59,9 +65,30 @@ final class DashboardYaml {
 	 */
 	public static function parse(string $yaml): mixed {
 		try {
-			return Yaml::parse($yaml, self::PARSE);
+			$parsed = Yaml::parse($yaml, self::PARSE);
 		} catch (ParseException $e) {
 			throw new \RuntimeException('The dashboard file is not valid YAML: ' . $e->getMessage(), 0, $e);
+		}
+		// AN ALIAS BOMB PARSES CHEAPLY AND EXPANDS LATER. Aliases share their arrays
+		// copy-on-write, so a few hundred bytes parse in a few megabytes — and the first
+		// deep copy or encode of the result takes gigabytes. Counting the values with a
+		// ceiling costs at most the ceiling, so it is refused while that is still true.
+		$budget = self::MAX_NODES;
+		self::spend($parsed, $budget);
+		return $parsed;
+	}
+
+	private static function spend(mixed $value, int &$budget): void {
+		if (--$budget < 0) {
+			throw new \RuntimeException('The dashboard file is too large once its YAML aliases are expanded.');
+		}
+		if ($value instanceof \stdClass) {
+			$value = get_object_vars($value);
+		}
+		if (is_array($value)) {
+			foreach ($value as $child) {
+				self::spend($child, $budget);
+			}
 		}
 	}
 

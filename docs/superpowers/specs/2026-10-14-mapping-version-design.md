@@ -123,12 +123,13 @@ v2 answered 200) and does not convert a classic spec it is handed, so the dashbo
 be stored as a v2 object with classic fields in it. Grafana's classic API converts a
 classic body properly; the app lets it.
 
-**"Then rewritten as YAML"** means the gesture leaves the file in its mapping's format, not
-"eventually". Where the hook that saw the gesture can write the file, it does, under the
-`SyncGuard` like every other stamp; where it cannot (a copy's hook holds locks — see
-`CopyService`), the follow-up job that already repairs bodies after a hook
-(`ReconcileNameJob`) does it. A user who makes a new dashboard in a v2 folder and opens it
-finds YAML.
+**"Then rewritten"** means: a *create* leaves the file in its folder's format —
+`CreateService` reads the new dashboard back through the folder's version and rewrites
+the file under the `SyncGuard`, so a user who makes a new dashboard in a v2 folder and
+opens it finds YAML. Where that write is refused (a copy's hook holds locks), and for a
+file *moved* between a v1 and a v2 folder, the next pull rewrites it: the move itself is
+written whole through the file's own API, and nothing is lost in between. *(As built;
+an earlier draft promised `ReconcileNameJob` would do the rewrite, which it does not.)*
 
 ## Platform facts the design rests on
 

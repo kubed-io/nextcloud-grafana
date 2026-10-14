@@ -99,7 +99,7 @@ final class NameSyncListener implements IEventListener {
 		// reconcile for a file that is not a dashboard. The title is `title`, or `spec.title`
 		// in a version-2 file.
 		try {
-			$jsonTitle = DashboardDocument::decode($node->getContent())->title();
+			$jsonTitle = DashboardDocument::decodeNonEmpty($node->getContent())->title();
 		} catch (\RuntimeException) {
 			return;
 		}

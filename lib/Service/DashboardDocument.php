@@ -37,6 +37,13 @@ namespace OCA\GrafanaSync\Service;
 final class DashboardDocument {
 	public const API_GROUP = 'dashboard.grafana.app';
 
+	/**
+	 * Every dashboard version Grafana names (`v1`, `v2`, `v2beta1`, `v0alpha1`, …) and
+	 * nothing else. A resource's `apiVersion` becomes part of the request URL, so a
+	 * value with a path, a query or another group in it is refused, not sent.
+	 */
+	private const API_VERSION = '#^dashboard\.grafana\.app/v[0-9]+(?:(?:alpha|beta)[0-9]+)?$#';
+
 	private function __construct(
 		private readonly \stdClass $body,
 		private readonly bool $resource,
@@ -68,12 +75,12 @@ final class DashboardDocument {
 			if (!$decoded instanceof \stdClass) {
 				throw new \RuntimeException('The dashboard file is not a YAML map.');
 			}
-			return self::of($decoded);
+			return self::of($decoded, true);
 		}
 		if (!$decoded instanceof \stdClass) {
 			throw new \RuntimeException('The dashboard file is not a JSON object.');
 		}
-		return self::of($decoded);
+		return self::of($decoded, false);
 	}
 
 	/**
@@ -99,12 +106,35 @@ final class DashboardDocument {
 		return new self(self::copy($resource), true);
 	}
 
-	private static function of(\stdClass $body): self {
-		$apiVersion = $body->apiVersion ?? null;
-		$isResource = is_string($apiVersion)
-			&& str_starts_with($apiVersion, self::API_GROUP . '/')
-			&& ($body->kind ?? null) === 'Dashboard';
-		return new self($body, $isResource);
+	/**
+	 * Which shape a decoded body is — and a refusal for one that is neither.
+	 *
+	 * **A BODY THAT REACHES FOR THE RESOURCE SHAPE AND MISSES IS REFUSED.** Anything
+	 * with an `apiVersion`, a `kind` or a `spec` is meant to be a resource; sent as a
+	 * classic dashboard instead (a `kind: dashboard` typo, a mis-indented key) it would
+	 * replace the real dashboard with an empty one, silently.
+	 *
+	 * **YAML IS A RESOURCE OR A POINTER.** Nothing this app writes as YAML is anything
+	 * else, so other YAML is a mistake — `TODO: fix this` parses as a map, and in a
+	 * version-1 folder it was always refused as invalid JSON.
+	 */
+	private static function of(\stdClass $body, bool $fromYaml): self {
+		if (isset($body->apiVersion) || isset($body->kind) || isset($body->spec)) {
+			$apiVersion = $body->apiVersion ?? null;
+			if (!is_string($apiVersion) || preg_match(self::API_VERSION, $apiVersion) !== 1
+				|| ($body->kind ?? null) !== 'Dashboard'
+				|| !(($body->spec ?? null) instanceof \stdClass)) {
+				throw new \RuntimeException(
+					'The dashboard file is not a dashboard.grafana.app Dashboard: it needs an apiVersion like '
+					. 'dashboard.grafana.app/v2, kind: Dashboard, metadata and spec.',
+				);
+			}
+			return new self($body, true);
+		}
+		if ($fromYaml && ($body->{'$schema'} ?? null) !== DashboardBody::REFERENCE_SCHEMA) {
+			throw new \RuntimeException('The dashboard file is neither valid JSON nor a version 2 dashboard in YAML.');
+		}
+		return new self($body, false);
 	}
 
 	public function isResource(): bool {
