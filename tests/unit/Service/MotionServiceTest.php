@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\CreateService;
 use OCA\GrafanaSync\Service\DashboardMetadata;
+use OCA\GrafanaSync\Service\DashboardSpec;
 use OCA\GrafanaSync\Service\FolderMirror;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\ManagedFile;
@@ -20,6 +21,7 @@ use OCA\GrafanaSync\Service\MotionService;
 use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\ReplacedByMoveStore;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCA\GrafanaSync\Tests\Unit\Doubles\GrafanaClientDouble;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -34,6 +36,8 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(MotionService::class)]
 final class MotionServiceTest extends TestCase {
+	use GrafanaClientDouble;
+
 	private const SRC_PATH = '/alice/files/src/Dash.grafana';
 	private const DST_PATH = '/alice/files/dst/Dash.grafana';
 	private const UNMAPPED_PATH = '/alice/files/loose/Dash.grafana';
@@ -50,7 +54,7 @@ final class MotionServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->mappings = $this->createStub(MappingService::class);
 		$this->metadata = $this->createMock(DashboardMetadata::class);
-		$this->grafana = $this->createMock(GrafanaClient::class);
+		$this->grafana = $this->grafanaClientDouble();
 		// A tree that always answers with the destination subfolder's uid — the folder
 		// creation it does on the way is FolderMirror's own business, covered there.
 		$this->folderMirror = $this->createStub(FolderMirror::class);
@@ -535,5 +539,79 @@ final class MotionServiceTest extends TestCase {
 		$this->metadata->expects(self::once())->method('clear')->with(42);
 
 		$this->service->onMove($this->file(self::UNMAPPED_PATH), self::SRC_PATH);
+	}
+
+	// ── version 2: a move never flattens what it moves ────────────────────────
+
+	private const RESOURCE = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: stale\n"
+		. "spec:\n  title: Dash\n  layout:\n    kind: TabsLayout\n    spec:\n      tabs: []\n";
+
+	private function v2Mapping(string $id, string $folderUid, string $ncFolder): Mapping {
+		return Mapping::fromArray(['id' => $id, 'grafana_folder_uid' => $folderUid, 'nc_folder' => $ncFolder, 'mode' => 'sync', 'version' => 2]);
+	}
+
+	public function testReparentingAV2FilePutsTheNewFolder(): void {
+		$same = $this->v2Mapping('m-a', 'gf-a', 'a');
+		$this->metadata->method('read')->willReturn($this->managed('dash-1'));
+		$this->mappings->method('resolveForPath')->willReturn($same);
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->with(self::callback(static fn (array $b): bool => $b['metadata']['name'] === 'dash-1'
+				&& $b['metadata']['annotations']['grafana.app/folder'] === 'gf-subfolder'
+				&& $b['spec']->layout->kind === 'TabsLayout'))
+			->willReturn(['metadata' => ['name' => 'dash-1', 'generation' => 4]]);
+
+		$this->service->onMove($this->file('/a/sub/Dash.grafana', self::RESOURCE), '/a/Dash.grafana');
+	}
+
+	/** The body decides the wire, so a v2 file entering a v1 mapping is still written through v2. */
+	public function testAV2FileMovedIntoAV1MappingIsWrittenThroughV2(): void {
+		$this->metadata->method('read')->willReturn($this->managed('dash-keep'));
+		$this->mappings->method('resolveForPath')->willReturnMap([
+			[self::SRC_PATH, $this->v2Mapping('m-src', 'gf-src', 'src')],
+			[self::DST_PATH, $this->mapping('m-dst', 'gf-dst', 'dst')],
+		]);
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->with(self::callback(static fn (array $b): bool => $b['metadata']['name'] === 'dash-keep'))
+			->willReturn(['metadata' => ['name' => 'dash-keep', 'generation' => 5]]);
+
+		$this->service->onMove($this->file(self::DST_PATH, self::RESOURCE), self::SRC_PATH);
+	}
+
+	/**
+	 * Parking the dashboard an overwrite superseded reads it through the version of the
+	 * mapping it came from — a classic read of a v2 dashboard would park it flattened.
+	 */
+	public function testDisposingASupersededV2DashboardReadsItThroughV2(): void {
+		$bin = $this->createStub(RecycleBin::class);
+		$bin->method('activeFolderUid')->willReturn('gf-bin');
+		$service = new MotionService(
+			$this->mappings, $this->metadata, $this->grafana, $this->folderMirror, $bin,
+			$this->replaced, $this->createService, new SyncGuard(), new NullLogger(),
+		);
+		$v2 = $this->v2Mapping('m-obs', 'gf-obs', 'observe');
+		$this->metadata->method('read')->willReturn($this->managed('dash-arrived'));
+		$this->mappings->method('resolveForPath')->willReturn($v2);
+		$this->replaced->mark(7, 42, 'dash-kept');
+
+		$this->grafana->expects(self::never())->method('readDashboard');
+		$this->grafana->method('readDashboardResource')->with('dash-arrived')->willReturn(new DashboardSpec((object)[
+			'apiVersion' => 'dashboard.grafana.app/v2', 'kind' => 'Dashboard',
+			'metadata' => (object)['name' => 'dash-arrived', 'generation' => 2],
+			'spec' => (object)['title' => 'Arrived', 'layout' => (object)['kind' => 'TabsLayout']],
+		], null, null));
+		$parked = [];
+		$this->grafana->method('putDashboardResource')->willReturnCallback(function (array $b) use (&$parked): array {
+			$parked[] = $b;
+			return ['metadata' => ['name' => $b['metadata']['name'], 'generation' => 3]];
+		});
+
+		$service->onMove($this->file('/alice/files/observe/morton/Dash.grafana', self::RESOURCE), '/alice/files/observe/blurn/Dash.grafana');
+
+		$intoBin = array_values(array_filter($parked, static fn (array $b): bool => $b['metadata']['name'] === 'dash-arrived'));
+		self::assertCount(1, $intoBin, 'the superseded dashboard was not parked');
+		self::assertSame('gf-bin', $intoBin[0]['metadata']['annotations']['grafana.app/folder']);
+		self::assertSame('TabsLayout', $intoBin[0]['spec']->layout->kind, 'parked flattened');
 	}
 }

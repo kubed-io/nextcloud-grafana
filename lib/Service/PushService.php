@@ -68,19 +68,13 @@ final class PushService {
 		}
 
 		$content = $node->getContent();
-		// AN EMPTIED FILE IS NOT AN EMPTY DASHBOARD. Decoding reads empty content as a
-		// dashboard-to-be, which is right for a file being born and ruinous here: this
-		// file already IS a dashboard, and pushing nothing would wipe it in Grafana.
-		if (trim($content) === '') {
-			throw new \RuntimeException('The dashboard file is empty.');
-		}
 		// Classic JSON or a version-2 resource, decoded with every `{}` intact — and the
 		// body's own shape decides the API it goes to (GrafanaClient::writeDocument), so
 		// a v2 dashboard is never flattened by a classic write.
 		//
 		// The metadata uid is the identity thread — forced onto the body so a hand-edited
 		// `uid` (or `metadata.name`) can never retarget a different dashboard.
-		$doc = DashboardDocument::decode($content)->withUid($managed->uid);
+		$doc = DashboardDocument::decodeNonEmpty($content)->withUid($managed->uid);
 
 		$resp = $this->grafana->writeDocument($doc, $this->resolveFolderUid($node, $managed), $node->getName());
 

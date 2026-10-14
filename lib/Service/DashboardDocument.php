@@ -76,6 +76,21 @@ final class DashboardDocument {
 		return self::of($decoded);
 	}
 
+	/**
+	 * {@see decode()}, for a file that already IS a dashboard — the one being pushed,
+	 * parked, restored, moved or tagged.
+	 *
+	 * Empty content reads as a dashboard-to-be for a file being born, and that is ruinous
+	 * here: sending it would replace a real dashboard with an empty one. So an emptied
+	 * file is refused, as it was when every one of these call sites decoded JSON itself.
+	 */
+	public static function decodeNonEmpty(string $content): self {
+		if (trim($content) === '') {
+			throw new \RuntimeException('The dashboard file is empty.');
+		}
+		return self::decode($content);
+	}
+
 	public static function classic(\stdClass $dashboard): self {
 		return new self(self::copy($dashboard), false);
 	}

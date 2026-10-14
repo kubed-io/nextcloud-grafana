@@ -59,6 +59,14 @@ final class DashboardDocumentTest extends TestCase {
 		self::assertEquals(new \stdClass(), $doc->body());
 	}
 
+	/** A file that already IS a dashboard must never read as an empty one. */
+	public function testDecodeNonEmptyRefusesAnEmptiedFile(): void {
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('The dashboard file is empty.');
+
+		DashboardDocument::decodeNonEmpty(" \n");
+	}
+
 	/** @return iterable<string, array{string, string}> */
 	public static function notDashboards(): iterable {
 		yield 'a JSON list' => ['[1,2]', 'JSON'];

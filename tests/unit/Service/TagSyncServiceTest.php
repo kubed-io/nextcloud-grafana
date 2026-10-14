@@ -19,6 +19,7 @@ use OCA\GrafanaSync\Service\NextcloudTags;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\TagSet;
 use OCA\GrafanaSync\Service\TagSyncService;
+use OCA\GrafanaSync\Tests\Unit\Doubles\GrafanaClientDouble;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -36,6 +37,8 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(TagSyncService::class)]
 final class TagSyncServiceTest extends TestCase {
+	use GrafanaClientDouble;
+
 	private GrafanaClient $grafana;
 	private NextcloudTags $ncTags;
 	private ?ManagedFile $managed = null;
@@ -45,7 +48,7 @@ final class TagSyncServiceTest extends TestCase {
 	private ?string $written = null;
 
 	protected function setUp(): void {
-		$this->grafana = $this->createMock(GrafanaClient::class);
+		$this->grafana = $this->grafanaClientDouble();
 		$this->ncTags = $this->createMock(NextcloudTags::class);
 		$this->managed = new ManagedFile('d1', Mapping::MODE_SYNC, '', '', 'm-demo', '');
 	}
@@ -110,6 +113,24 @@ final class TagSyncServiceTest extends TestCase {
 
 	public function testAFileThatIsNotJsonIsLeftAlone(): void {
 		self::assertFalse($this->service()->pushDashboard($this->file('not json'), TagSet::of(['dns'])));
+		self::assertNull($this->written);
+	}
+
+	/** A version-2 file's tags are `spec.tags`, and the file stays the YAML it was. */
+	public function testATagOnAV2FileLandsInSpecTagsAndStaysYaml(): void {
+		$yaml = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\nspec:\n  title: Alpha\n  tags:\n    - dns\n";
+
+		self::assertTrue($this->service()->pushDashboard($this->file($yaml), TagSet::of(['dns', 'prod'])));
+
+		self::assertSame(
+			"apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\nspec:\n  title: Alpha\n  tags:\n    - dns\n    - prod\n",
+			$this->written,
+		);
+	}
+
+	/** An empty file has no tags to agree with; writing some would invent a dashboard. */
+	public function testAnEmptyFileIsLeftAlone(): void {
+		self::assertFalse($this->service()->pushDashboard($this->file(''), TagSet::of(['dns'])));
 		self::assertNull($this->written);
 	}
 

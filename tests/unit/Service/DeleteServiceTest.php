@@ -19,6 +19,7 @@ use OCA\GrafanaSync\Service\ManagedFile;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\RecycleBin;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCA\GrafanaSync\Tests\Unit\Doubles\GrafanaClientDouble;
 use OCP\Files\File;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -32,6 +33,8 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(DeleteService::class)]
 final class DeleteServiceTest extends TestCase {
+	use GrafanaClientDouble;
+
 	private const BIN_UID = 'bin-folder-uid';
 
 	private GrafanaClient $grafana;
@@ -42,7 +45,7 @@ final class DeleteServiceTest extends TestCase {
 	private DeleteService $service;
 
 	protected function setUp(): void {
-		$this->grafana = $this->createMock(GrafanaClient::class);
+		$this->grafana = $this->grafanaClientDouble();
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		$this->create = $this->createMock(CreateService::class);
 		// A restore puts the dashboard back where the FILE is, which for a file at the
@@ -259,5 +262,40 @@ final class DeleteServiceTest extends TestCase {
 		$this->grafana->expects(self::once())->method('deleteDashboard')->with('d1');
 
 		$this->service->hardDelete($this->managed('d1'));
+	}
+
+	// ── version 2: a parked dashboard keeps everything it held ────────────────
+
+	private const RESOURCE = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: dash-1\n"
+		. "spec:\n  title: Board\n  layout:\n    kind: TabsLayout\n    spec:\n      tabs: []\n";
+
+	public function testParkingAV2FileInTheBinPutsItThroughV2WithTheBinFolder(): void {
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->with(self::callback(static fn (array $b): bool => $b['metadata']['name'] === 'dash-1'
+				&& $b['metadata']['annotations']['grafana.app/folder'] === self::BIN_UID
+				&& $b['spec']->layout->kind === 'TabsLayout'))
+			->willReturn(['metadata' => ['name' => 'dash-1', 'generation' => 5]]);
+
+		$this->service->softDelete($this->file(5, self::RESOURCE), $this->managed('dash-1'), self::BIN_UID);
+	}
+
+	public function testRestoringAV2FilePutsItBack(): void {
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->with(self::callback(static fn (array $b): bool => $b['metadata']['annotations']['grafana.app/folder'] === 'gf-alpha'))
+			->willReturn(['metadata' => ['name' => 'dash-1', 'generation' => 6]]);
+		$this->metadata->expects(self::once())->method('write')->with(5, [DashboardMetadata::KEY_VERSION => '6']);
+
+		$this->service->restore($this->file(5, self::RESOURCE), $this->managed('dash-1'), $this->mapping());
+	}
+
+	/** An emptied file is not an empty dashboard: parking it would blank the real one. */
+	public function testAnEmptiedFileIsNeverParked(): void {
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('The dashboard file is empty.');
+
+		$this->service->softDelete($this->file(5, ''), $this->managed('dash-1'), self::BIN_UID);
 	}
 }
