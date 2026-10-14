@@ -262,12 +262,20 @@ Scenarios to propose once this lands: a move between a v1 and a v2 mapping; a co
 v2 folder; a tag added on the pill reaching `spec.tags`; a v2 dashboard parked in and
 restored from the recycle bin; a classic JSON uploaded into a v2 folder becoming YAML.
 
-## Open — Dr K's
+## How the YAML library ships (Dr K, 2026-10-14)
 
-1. **How the YAML library is packaged.** Prefixing with Strauss (active, 0.31.1 released
-   2026-10-08) into `lib/Vendor/` either (a) **committed**, so `lib/` is what ships and
-   `package.yml`, `deploy-dev.sh` and the integration job need nothing new — at the price
-   of ~60 generated files in review diffs, excluded from Psalm and php-cs-fixer — or (b)
-   **generated** by `composer install --no-dev` in every one of those three places.
-   Recommendation: (a), because the three build paths are where this family's deploys
-   have broken before, and a committed vendor directory cannot be forgotten by one of them.
+*"I don't want third party stuff committed when we can easily pull it again."*
+
+- `composer.json` requires `symfony/yaml ^7.4`; Strauss is a dev dependency, and a
+  `post-install-cmd` hook prefixes the library into **`lib/Vendor/`, which is gitignored**.
+  Every `composer install` — the unit and quality jobs, the dev pod — produces it with no
+  step of its own to forget.
+- `package.yml` and `deploy-dev.sh` run no composer today, so each gains one
+  `composer install` line. Both already copy `lib/`, so the prefixed library rides along
+  with no change to what they pack. The package job fails if `lib/Vendor/autoload.php` is
+  missing, so a tarball that would die on "class not found" never ships.
+- **Not the PECL `yaml` extension in the Nextcloud image**, though Dr K asked whether it
+  could be: a store user on a stock image does not have it, so the bundled copy ships
+  regardless and the extension would only add a second code path. It also cannot do the
+  job — `yaml_parse()` returns every map as a PHP array, so an empty `{}` comes back `[]`,
+  the defect `DashboardBody::encodeSync()` documents for JSON.

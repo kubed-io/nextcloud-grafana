@@ -44,7 +44,10 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 **Files:**
 - Modify: `composer.json` — `require: {"php": "^8.2", "symfony/yaml": "^7.4"}`, `replace: {"symfony/polyfill-ctype": "*", "symfony/deprecation-contracts": "*"}`, `extra.strauss` (target `lib/Vendor`, `namespace_prefix` `OCA\\GrafanaSync\\Vendor\\`, `classmap_prefix` `OCA_GrafanaSync_Vendor_`, `delete_vendor_packages: true`), a `prefix-dependencies` script
-- Create: `lib/Vendor/**` (Strauss output, committed — per Dr K's answer to the spec's open question)
+- Modify: `composer.json` `require-dev` `brianhenryie/strauss`, `scripts.post-install-cmd` + `post-update-cmd` → `strauss`
+- Modify: `.gitignore` — `lib/Vendor/` (generated, never committed: Dr K)
+- Modify: `.github/workflows/package.yml` — `composer install --prefer-dist --no-progress` before Package, and a guard that fails when `lib/Vendor/autoload.php` is missing
+- Modify: `/projects/kubed-io/nextcloud/components/grafana/deploy-dev.sh` — `composer install` before staging (separate repo: its own commit, flagged in the PR)
 - Modify: `lib/AppInfo/Application.php` — `require_once __DIR__ . '/../Vendor/autoload.php';` at file scope, above the class
 - Modify: `appinfo/info.xml` — `<php min-version="8.2"/>` inside `<dependencies>`
 - Modify: `psalm.xml` (`<ignoreFiles><directory name="lib/Vendor"/>`), `.php-cs-fixer.dist.php` (`->notPath('lib/Vendor')`), `composer.json` `lint` script (skip `lib/Vendor`)
@@ -58,7 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 - [ ] **Step 1: Write the failing test** — `VendorTest::testThePrefixedYamlLoads`: `Yaml::parse("a: {}", Yaml::PARSE_OBJECT_FOR_MAP)` returns an object whose `a` is an empty `\stdClass`; `testNoUnprefixedSymfonyIsShipped`: no `lib/Vendor` file declares `namespace Symfony\`.
 - [ ] **Step 2: Run** `composer run test:unit -- --filter VendorTest` — Expected: FAIL, class not found.
-- [ ] **Step 3: Add the dependency and run Strauss** (`composer require symfony/yaml:^7.4 && composer run prefix-dependencies`); wire the autoload, the floor, the exclusions and the CI image as listed.
+- [ ] **Step 3: Add the dependency** (`composer require symfony/yaml:^7.4 && composer require --dev brianhenryie/strauss`); the post-install hook writes `lib/Vendor/`; wire the autoload, the floor, the exclusions, the gitignore, the package guard and the CI image as listed.
 - [ ] **Step 4: Run** `composer run test:unit && composer run cs:check && composer run lint` — Expected: PASS; cs and lint do not mention `lib/Vendor`.
 - [ ] **Step 5: Commit** — `build: ship symfony/yaml 7.4 prefixed under OCA\GrafanaSync\Vendor`
 
