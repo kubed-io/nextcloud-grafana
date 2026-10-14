@@ -62,7 +62,15 @@ trait VersionSteps {
 			}
 			usleep(250_000);
 		}
-		throw new \RuntimeException("Grafana's search of folder '$folderUid' never listed '$uid'");
+		// SAY WHERE IT IS INSTEAD. A fresh CI Grafana has answered differently from a live
+		// one here, so the failure carries what each API reports about the dashboard.
+		$byUid = json_decode((string)$this->grafanaClient()->request('GET', 'search', ['query' => ['dashboardUIDs' => $uid]])->getBody(), true);
+		$classic = $this->grafanaGetDashboard($uid);
+		$resource = $this->grafanaGetDashboardV2($uid);
+		throw new \RuntimeException("Grafana's search of folder '$folderUid' never listed '$uid'. "
+			. 'Search by uid: ' . json_encode($byUid)
+			. '; classic meta.folderUid: ' . json_encode($classic['meta']['folderUid'] ?? null)
+			. '; v2 folder annotation: ' . json_encode($resource->metadata->annotations->{'grafana.app/folder'} ?? null));
 	}
 
 	/** @Then the dashboard in Grafana still has its tabs */
