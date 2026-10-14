@@ -286,6 +286,12 @@ folder that already holds dashboards*.
 
 ## Next
 
+**Prune only what is really gone.** A fresh Grafana 13.2's search lags a write (18.5 s
+measured), and the pull prunes a mirror whose dashboard search did not list — so a pull
+inside that window could prune a mirror the app has just written (it comes back on the
+next pull). Version-independent; deferred from PR #85's review. Fix: confirm with one
+GET by uid before pruning. Noted at `SyncService::pruneStale()`.
+
 Scenarios to propose once this lands: a move between a v1 and a v2 mapping; a copy in a
 v2 folder; a tag added on the pill reaching `spec.tags`; a v2 dashboard parked in and
 restored from the recycle bin; a classic JSON uploaded into a v2 folder becoming YAML.

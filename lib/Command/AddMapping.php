@@ -74,9 +74,11 @@ final class AddMapping extends Command {
 			// nc_groups travels ALONGSIDE the mapping, not inside it: they are applied
 			// to the provisioned folder and read back from it, never stored.
 			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? [], $purge);
-		} catch (\RuntimeException $e) {
-			// InvalidArgumentException (a refusal) and RuntimeException (Grafana could not
-			// be asked whether it serves version 2) both end here: a message, not a trace.
+		} catch (\InvalidArgumentException|\RuntimeException $e) {
+			// BOTH FAMILIES, NAMED. A refusal is an InvalidArgumentException, which is a
+			// LogicException — not a RuntimeException — so catching only the latter let
+			// every refusal escape as a raw console exception. A RuntimeException is Grafana
+			// failing to say whether it serves version 2. Either way: a message, not a trace.
 			$output->writeln('<error>' . $e->getMessage() . '</error>');
 			return 1;
 		}

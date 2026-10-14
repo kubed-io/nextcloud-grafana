@@ -42,7 +42,7 @@ final class DashboardDocument {
 	 * nothing else. A resource's `apiVersion` becomes part of the request URL, so a
 	 * value with a path, a query or another group in it is refused, not sent.
 	 */
-	private const API_VERSION = '#^dashboard\.grafana\.app/v[0-9]+(?:(?:alpha|beta)[0-9]+)?$#';
+	private const API_VERSION = '#^dashboard\.grafana\.app/v[0-9]+(?:(?:alpha|beta)[0-9]+)?$#D';
 
 	private function __construct(
 		private readonly \stdClass $body,

@@ -50,6 +50,7 @@ final class DashboardYaml {
 	private const MAX_NODES = 1_000_000;
 
 	public static function dump(\stdClass $doc): string {
+		self::assertLoaded();
 		$yaml = Yaml::dump(self::forDump($doc), PHP_INT_MAX, 2, self::DUMP);
 		// Symfony ends a document that closes on a literal block without a newline. A
 		// file ends with one; `|-` strips it from the value, so nothing it holds moves.
@@ -64,6 +65,7 @@ final class DashboardYaml {
 	 *                           which syntax to look at
 	 */
 	public static function parse(string $yaml): mixed {
+		self::assertLoaded();
 		try {
 			$parsed = Yaml::parse($yaml, self::PARSE);
 		} catch (ParseException $e) {
@@ -76,6 +78,18 @@ final class DashboardYaml {
 		$budget = self::MAX_NODES;
 		self::spend($parsed, $budget);
 		return $parsed;
+	}
+
+	/**
+	 * A broken deployment (no `composer install`, so no `lib/Vendor`) fails here as an
+	 * ordinary RuntimeException every caller already handles, rather than as a
+	 * class-not-found Error that escapes them — `Application` deliberately loads the
+	 * library only if it is there.
+	 */
+	private static function assertLoaded(): void {
+		if (!class_exists(Yaml::class)) {
+			throw new \RuntimeException('The YAML library is missing from this install of grafana_sync (lib/Vendor); reinstall the app.');
+		}
 	}
 
 	private static function spend(mixed $value, int &$budget): void {

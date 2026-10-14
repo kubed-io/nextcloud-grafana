@@ -92,6 +92,7 @@ final class DashboardDocumentTest extends TestCase {
 		yield 'another group' => ["apiVersion: folder.grafana.app/v1\nkind: Dashboard\nspec: {}\n"];
 		yield 'no spec' => ["apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\n"];
 		yield 'a JSON body that names a kind' => ['{"kind":"Dashboard","title":"x"}'];
+		yield 'a newline after the version' => ['{"apiVersion":"dashboard.grafana.app/v2\\n","kind":"Dashboard","metadata":{"name":"d"},"spec":{}}'];
 	}
 
 	/**

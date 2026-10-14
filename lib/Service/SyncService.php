@@ -482,6 +482,13 @@ final class SyncService {
 	 * local mirror is removed — and the caller already holds the SyncGuard so the delete
 	 * does not mirror back. Returns the number of files pruned.
 	 *
+	 * KNOWN GAP, DEFERRED (PR #85 review): "not seen" means "not listed by /api/search",
+	 * and a fresh Grafana 13.2 indexes search asynchronously (18.5 s measured). A pull
+	 * inside that window would prune a mirror the app has just written — a sync file comes
+	 * back from the trash on the next pull, a link pointer is regenerated. Not seen on an
+	 * upgraded, legacy-backed Grafana. The fix is one GET by uid confirming a dashboard is
+	 * really gone or elsewhere before pruning it; see the spec's "Next".
+	 *
 	 * @param array<string,Node> $existingByUid managed files for this mapping, keyed by uid
 	 * @param array<string,bool> $seenUids uids still present in the mapped folder (written this pull)
 	 */
