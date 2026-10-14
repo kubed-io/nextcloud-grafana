@@ -24,7 +24,8 @@ itself is the authoritative detail.
 | [CONTRIBUTING.md](CONTRIBUTING.md) | This file — process, conventions, dev loop. |
 | [SECURITY.md](SECURITY.md) | How to report vulnerabilities. Read before filing a "security" issue publicly. |
 | [AGENTS.md](AGENTS.md) | Cold-start orientation for AI coding agents. |
-| [saga/](saga/) | Long-form design narrative across chapters. Chapter 1 = how the app was built; Chapter 2 = packaging it for the world; Chapter 3 = the audition (the mode/motion refactor + edge-case features); Chapter 4 = app store submission. **The "why" behind the code.** |
+| [docs/superpowers/](docs/superpowers/) | Designs (`specs/`, written before the code) and implementation plans (`plans/`). **The "why" behind current work.** |
+| [docs/saga/](docs/saga/) | The build narrative, **deprecated 2026-10-14** — history only. Code comments still cite it; nothing new is written there. |
 | [appinfo/](appinfo/) | Nextcloud app metadata (`info.xml`, routes). The store validates against this. |
 | [lib/](lib/) | PHP backend (`OCA\GrafanaSync`): controllers, services, listeners, migrations, background jobs. |
 | [src/](src/) | JS frontend source (Files row icon + "Open in Grafana" action). Built by Vite into `dist/`. |
@@ -39,7 +40,7 @@ itself is the authoritative detail.
 
 Things that don't live here yet but are coming: the integration test suite, the
 docker-compose stack that backs it, and the Nextcloud app store submission artifacts.
-See [saga/Chapter_2_Pretty_Package.md](saga/Chapter_2_Pretty_Package.md) for the running
+See [docs/saga/Chapter_2_Service_for_a_King.md](docs/saga/Chapter_2_Service_for_a_King.md) for the running
 to-do list.
 
 ---
@@ -70,7 +71,7 @@ If a Nextcloud-native path isn't obvious, look at how a mature first-party app d
 CI green is necessary, not sufficient. **Every change must be tried by a human on a
 real Nextcloud instance with the change applied.** Spin up the devcontainer, deploy the
 app into a running NC, click the thing, watch the logs. Until the integration suite in
-[saga/Chapter_2_Pretty_Package.md §4a](saga/Chapter_2_Pretty_Package.md) lands, this is
+[docs/saga/Chapter_2_Service_for_a_King.md §4a](docs/saga/Chapter_2_Service_for_a_King.md) lands, this is
 the only check that catches real-world wiring bugs. State explicitly in your PR
 description **what you tested, where, and how.**
 
@@ -84,7 +85,7 @@ not move. If an agent wrote it:
   helpers that already exist or misuse APIs that are right next to the line they changed.
 - **Re-derive the assertion before the test.** First-pass AI tests often assert what the
   code happens to do, not what the spec says. See `FilenameCodec` in
-  [saga/Chapter_2_Pretty_Package.md §5.2](saga/Chapter_2_Pretty_Package.md) for a worked
+  [docs/saga/Chapter_2_Service_for_a_King.md §5.2](docs/saga/Chapter_2_Service_for_a_King.md) for a worked
   example.
 - **Verify external references.** Action versions, package versions, API endpoints — all
   of it. LLMs reach for stale majors. Check `gh api repos/<o>/<r>/releases/latest`.
@@ -155,10 +156,11 @@ Two artifacts differ by who's driving:
 
 - **Humans:** open **an issue** first to track what's desired or broken — the place scope
   gets agreed before code is written (see steps 1–2 above).
-- **Agents:** update the **[saga](saga/)** — the long-form "why" behind the change (the
-  design narrative, the lessons learned, what's still `@todo`). The saga is the agent's
-  durable memory across sessions; the changelog and README are for users, the saga is for
-  whoever picks up the work next.
+- **Agents:** write a **spec and a plan** under [`docs/superpowers/`](docs/superpowers/) —
+  the design and Dr K's rulings in `specs/YYYY-MM-DD-<topic>-design.md` before the code,
+  the step-by-step build in `plans/YYYY-MM-DD-<topic>.md`. That is the agent's durable
+  memory across sessions; the changelog and README are for users, the spec is for
+  whoever picks up the work next. (The saga used to do this job and is deprecated.)
 
 ---
 
@@ -176,9 +178,9 @@ The devcontainer is the supported path. Anything else, you're on your own.
 
 You still need a Nextcloud instance to deploy into — the integration stack
 (docker-compose with NC + Grafana + db) is described in
-[saga/Chapter_2_Pretty_Package.md §4a](saga/Chapter_2_Pretty_Package.md) and is not yet
+[docs/saga/Chapter_2_Service_for_a_King.md §4a](docs/saga/Chapter_2_Service_for_a_King.md) and is not yet
 wired up. In the meantime, the homelab cluster's `cloud` namespace is the canonical test
-target; deploy with `kubectl cp` (see [saga/Chapter_1_Mise_en_Place.md](saga/Chapter_1_Mise_en_Place.md)
+target; deploy with `kubectl cp` (see [docs/saga/Chapter_1_Mise_en_Place.md](docs/saga/Chapter_1_Mise_en_Place.md)
 §15 for the deploy loop).
 
 ### Without the devcontainer
@@ -206,7 +208,7 @@ Repeat this loop until the thing works:
    ```
    Output lands in `dist/grafana_sync-files.js`.
 3. **Deploy into a running Nextcloud** (the app folder must appear under `custom_apps/`).
-   The cluster path is documented in [saga/Chapter_1_Mise_en_Place.md](saga/Chapter_1_Mise_en_Place.md) §15.
+   The cluster path is documented in [docs/saga/Chapter_1_Mise_en_Place.md](docs/saga/Chapter_1_Mise_en_Place.md) §15.
    **Do not bump `appinfo/info.xml` `<version>` during local dev** — NC will trigger an
    upgrade flow and you'll waste a pod restart.
 4. **Verify in the UI / via `occ`.** Watch `data/nextcloud.log` (or the pod logs).
@@ -219,7 +221,7 @@ test for the Grafana REST client.
 ## Testing
 
 The unit suite is **required on every PR that touches `lib/`**. Integration and e2e
-suites don't exist yet (see [Chapter 2 §5](saga/Chapter_2_Pretty_Package.md)); when they
+suites don't exist yet (see [Chapter 2 §5](docs/saga/Chapter_2_Service_for_a_King.md)); when they
 do, the same rule applies.
 
 ### Run the unit suite
@@ -309,7 +311,7 @@ What the dashboards look for from your PR:
 Action versions in dashboards are kept current by Dependabot (when configured). If you're
 editing a dashboard, **verify the action's latest major** with `gh api
 repos/<owner>/<repo>/releases/latest` — the stale-major footgun is documented in
-[Chapter 2 §5.2](saga/Chapter_2_Pretty_Package.md).
+[Chapter 2 §5.2](docs/saga/Chapter_2_Service_for_a_King.md).
 
 ### Dashboard authoring conventions
 
@@ -365,7 +367,7 @@ repos/<owner>/<repo>/releases/latest` — the stale-major footgun is documented 
     words (e.g. `- Dependabot enabled.`, `- Bumped Vite to v8.`).
   - **`**BREAKING:**` is the only thing that may stretch** — what breaks, how to
     migrate — under `Changed`.
-  - The deeper why / file lists / design go in the **saga** or PR description.
+  - The deeper why / file lists / design go in a **spec** or the PR description.
   - When in doubt, write the line, then cut it in half.
   - **Only ever edit `## [Unreleased]`.** Every versioned section below it is
     **immutable** — those notes shipped with a release; never reword, reorder, or
@@ -388,7 +390,7 @@ Manual, intentional, not on every merge.
    GitHub Release with `grafana_sync-<version>.tar.gz` attached.
 
 The release tarball is the artifact eventually consumed by the Nextcloud app store
-(see [saga/Chapter_4_Showtime.md](saga/Chapter_4_Showtime.md)).
+(see [docs/saga/Chapter_3_The_Menu_and_the_Deep_Clean.md](docs/saga/Chapter_3_The_Menu_and_the_Deep_Clean.md)).
 
 ---
 
@@ -402,9 +404,9 @@ If you've found a vulnerability, **do not open a public issue.** Follow
 ## Where to look next
 
 - **"How does this app work?"** → [README.md](README.md)
-- **"Why was it built this way?"** → [saga/Chapter_1_Mise_en_Place.md](saga/Chapter_1_Mise_en_Place.md)
-- **"What's the roadmap to a clean release?"** → [saga/Chapter_2_Pretty_Package.md](saga/Chapter_2_Pretty_Package.md)
-- **"How does it get on the app store?"** → [saga/Chapter_4_Showtime.md](saga/Chapter_4_Showtime.md)
+- **"Why was it built this way?"** → [docs/saga/Chapter_1_Mise_en_Place.md](docs/saga/Chapter_1_Mise_en_Place.md)
+- **"What's the roadmap to a clean release?"** → [docs/saga/Chapter_2_Service_for_a_King.md](docs/saga/Chapter_2_Service_for_a_King.md)
+- **"How does it get on the app store?"** → [docs/saga/Chapter_3_The_Menu_and_the_Deep_Clean.md](docs/saga/Chapter_3_The_Menu_and_the_Deep_Clean.md)
 - **"I'm an AI agent — where do I start?"** → [AGENTS.md](AGENTS.md)
 
 Thanks for contributing. Be kind in reviews, validate on a real instance, and write a

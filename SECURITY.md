@@ -124,11 +124,11 @@ PR gets blocked or a release gets held:
 - **Psalm** (PHP static analysis) — uploads SARIF to the Security tab; new findings
   block merge.
 - **CodeQL** (JS / TS) — uploads to the Security tab; new findings block merge.
-- **Dependabot** ([Chapter 2 §13](saga/Chapter_2_Pretty_Package.md)) — alerts and version
+- **Dependabot** ([Chapter 2 §13](docs/saga/Chapter_2_Service_for_a_King.md)) — alerts and version
   updates active for `composer`, `npm`, and `github-actions`; auto security-update PRs are
   not yet enabled, so alerts are triaged and fixed by hand (e.g. Chapter 4 §4.5's
   "meanwhile" pass).
-- **Secret scanning** ([Chapter 2 §13](saga/Chapter_2_Pretty_Package.md)) — enabled,
+- **Secret scanning** ([Chapter 2 §13](docs/saga/Chapter_2_Service_for_a_King.md)) — enabled,
   GitHub-side. **Push protection** (reject a push containing a known secret format before
   it lands) is not yet enabled.
 
