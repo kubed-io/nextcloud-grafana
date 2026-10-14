@@ -94,6 +94,9 @@ final class DashboardYaml {
 
 	private static function forDump(mixed $value): mixed {
 		if ($value instanceof \stdClass) {
+			// array-key, not string: PHP stores a numeric property name (`{"0": …}`) as an
+			// int key here, which is exactly the case the list check below exists for.
+			/** @var array<array-key, mixed> $fields */
 			$fields = array_map(self::forDump(...), get_object_vars($value));
 			// Empty, or keyed like a list: only an object stays a map.
 			return ($fields === [] || array_is_list($fields)) ? (object)$fields : $fields;

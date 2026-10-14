@@ -514,8 +514,9 @@ final class GrafanaClient {
 		}
 		$conversion = $resource->status->conversion ?? null;
 		if ($conversion instanceof \stdClass && ($conversion->failed ?? false) === true) {
-			$why = is_string($conversion->error ?? null) && $conversion->error !== ''
-				? $conversion->error
+			$error = $conversion->error ?? null;
+			$why = is_string($error) && $error !== ''
+				? $error
 				: 'Grafana could not convert this dashboard to version 2.';
 			throw new GrafanaApiException($why, 422);
 		}

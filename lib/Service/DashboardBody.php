@@ -121,7 +121,7 @@ final class DashboardBody {
 			'tags' => $tags,
 		];
 		return $version === Mapping::VERSION_2
-			? DashboardYaml::dump((object)$payload)
+			? DashboardYaml::dump(self::map($payload))
 			: json_encode($payload, self::JSON_PRETTY);
 	}
 
@@ -140,12 +140,26 @@ final class DashboardBody {
 		$meta = $resource->metadata ?? null;
 		$name = $meta instanceof \stdClass && is_string($meta->name ?? null) ? $meta->name : '';
 		$spec = $resource->spec ?? null;
-		return DashboardYaml::dump((object)[
+		return DashboardYaml::dump(self::map([
 			'apiVersion' => (string)($resource->apiVersion ?? ''),
 			'kind' => (string)($resource->kind ?? 'Dashboard'),
-			'metadata' => (object)['name' => $name],
+			'metadata' => self::map(['name' => $name]),
 			'spec' => $spec instanceof \stdClass ? $spec : new \stdClass(),
-		]);
+		]));
+	}
+
+	/**
+	 * A map as a `\stdClass`, which is what the YAML codec writes as a map. An `(object)`
+	 * cast is one too at runtime, but reads to static analysis as a shaped object.
+	 *
+	 * @param array<string, mixed> $fields
+	 */
+	private static function map(array $fields): \stdClass {
+		$map = new \stdClass();
+		foreach ($fields as $key => $value) {
+			$map->{$key} = $value;
+		}
+		return $map;
 	}
 
 	/**
