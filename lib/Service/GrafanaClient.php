@@ -561,13 +561,27 @@ final class GrafanaClient {
 		if ($doc->uid() === '') {
 			$doc = $doc->withUid(DashboardBody::mintUid());
 		}
-		$path = '/apis/' . $doc->apiVersion() . '/namespaces/default/dashboards/' . rawurlencode($doc->uid());
-		$ack = $this->decode($this->request('PUT', $path, [], DashboardBody::toResourceBody($doc, $folderUid, $basename, $message)));
+		$ack = $this->putDashboardResource(DashboardBody::toResourceBody($doc, $folderUid, $basename, $message));
 		$meta = is_array($ack['metadata'] ?? null) ? $ack['metadata'] : [];
 		return [
 			'uid' => is_string($meta['name'] ?? null) ? $meta['name'] : $doc->uid(),
 			'version' => isset($meta['generation']) && is_scalar($meta['generation']) ? (string)$meta['generation'] : '',
 		];
+	}
+
+	/**
+	 * `PUT /apis/<apiVersion>/namespaces/default/dashboards/<name>` — the resource
+	 * primitive under {@see writeDocument()}, as {@see upsertDashboard()} is the classic
+	 * one. The URL comes from the body, because Grafana refuses a body whose
+	 * `apiVersion` is not the URL's. The body is {@see DashboardBody::toResourceBody()}'s;
+	 * the return is the resource Grafana stored.
+	 *
+	 * @param array{apiVersion:string, kind:string, metadata:array{name:string, annotations:array<string,string>}, spec:\stdClass} $body
+	 * @return array<string,mixed>
+	 */
+	public function putDashboardResource(array $body): array {
+		$path = '/apis/' . $body['apiVersion'] . '/namespaces/default/dashboards/' . rawurlencode($body['metadata']['name']);
+		return $this->decode($this->request('PUT', $path, [], $body));
 	}
 
 	/**

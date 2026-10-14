@@ -68,41 +68,37 @@ final class PushService {
 		}
 
 		$content = $node->getContent();
-		try {
-			// Decode as an object (not assoc): Grafana's schema is strict about JSON
-			// *types* — an empty `{}` round-tripped through an assoc array would re-encode
-			// as `[]` and be rejected. stdClass preserves the file's object/array shapes.
-			$spec = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException $e) {
-			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
+		// AN EMPTIED FILE IS NOT AN EMPTY DASHBOARD. Decoding reads empty content as a
+		// dashboard-to-be, which is right for a file being born and ruinous here: this
+		// file already IS a dashboard, and pushing nothing would wipe it in Grafana.
+		if (trim($content) === '') {
+			throw new \RuntimeException('The dashboard file is empty.');
 		}
-		if (!$spec instanceof \stdClass) {
-			throw new \RuntimeException('The dashboard file is not a JSON object.');
-		}
-		// The metadata uid is the identity thread — force it onto the spec so a
-		// hand-edited `uid` in the file can never retarget a different dashboard.
-		$spec->uid = $managed->uid;
+		// Classic JSON or a version-2 resource, decoded with every `{}` intact — and the
+		// body's own shape decides the API it goes to (GrafanaClient::writeDocument), so
+		// a v2 dashboard is never flattened by a classic write.
+		//
+		// The metadata uid is the identity thread — forced onto the body so a hand-edited
+		// `uid` (or `metadata.name`) can never retarget a different dashboard.
+		$doc = DashboardDocument::decode($content)->withUid($managed->uid);
 
-		$body = DashboardBody::toUpsertBody($spec, $this->resolveFolderUid($node, $managed), $node->getName());
-		$resp = $this->grafana->upsertDashboard($body);
+		$resp = $this->grafana->writeDocument($doc, $this->resolveFolderUid($node, $managed), $node->getName());
 
 		// Full success: stamp the synced hash so this exact content won't re-trigger a
 		// push (loop guard), plus the version Grafana just bumped to.
 		$update = [DashboardMetadata::KEY_SYNCED_HASH => sha1($content)];
-		$version = isset($resp['version']) ? (string)$resp['version'] : '';
+		$version = $resp['version'];
 		if ($version !== '') {
 			$update[DashboardMetadata::KEY_VERSION] = $version;
 		}
 		$this->metadata->write($node->getId(), $update);
 		$this->stampGrafanaClock($node, $managed->uid);
 
-		// THE THIRD SURFACE. Tags are a top-level key in the spec, so editing the JSON
-		// by hand is a way to change them — and Grafana has just accepted that change.
-		// Without this the file and Grafana would agree while the Nextcloud tags said
-		// something else, until a pull happened to correct it.
-		$inBody = $spec->tags ?? null;
-		$tags = TagSet::of(is_array($inBody) ? $inBody : []);
-		$this->tagSync->applyToDashboard($node, $tags);
+		// THE THIRD SURFACE. Tags are a key in the body (`spec.tags` in a resource), so
+		// editing the file by hand is a way to change them — and Grafana has just
+		// accepted that change. Without this the file and Grafana would agree while the
+		// Nextcloud tags said something else, until a pull happened to correct it.
+		$this->tagSync->applyToDashboard($node, $doc->tags());
 		return true;
 	}
 
@@ -167,11 +163,10 @@ final class PushService {
 	 */
 	private function uidInBody(File $node): string {
 		try {
-			$decoded = json_decode($node->getContent(), true, 512, JSON_THROW_ON_ERROR);
+			return DashboardDocument::decode($node->getContent())->uid();
 		} catch (\Throwable) {
-			return ''; // not JSON; createForFile will report it properly
+			return ''; // not a dashboard; createForFile will report it properly
 		}
-		return is_array($decoded) ? trim((string)($decoded['uid'] ?? '')) : '';
 	}
 
 	/**
