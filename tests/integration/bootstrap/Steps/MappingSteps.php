@@ -412,6 +412,12 @@ trait MappingSteps {
 			(bool)($m['use_team_folder'] ?? false),
 			'storage',
 		);
+		// ONLY WHEN SOMETHING SAID WHAT IT SHOULD BE — the form, or a declared default. A
+		// scenario that declares no defaults has no opinion about the version, and reading
+		// that silence as "blank" would refuse every mapping the app stores correctly.
+		if (isset($expected['version'])) {
+			Assert::assertSame($expected['version'], (string)($m['version'] ?? ''), 'version');
+		}
 		$wanted = $this->groupList($expected['groups'] ?? '');
 		$stored = array_values(array_map('strval', (array)($m['nc_groups'] ?? [])));
 		sort($wanted);
@@ -823,6 +829,10 @@ trait MappingSteps {
 		}
 		if (array_key_exists('storage', $form)) {
 			$data['use_team_folder'] = $this->storageToModel($form['storage']);
+		}
+		if (array_key_exists('version', $form)) {
+			// As the admin form sends it: the digit. The app reads `"2"` as 2.
+			$data['version'] = $form['version'];
 		}
 
 		return $this->occ('grafana_sync:add-mapping ' . escapeshellarg(json_encode($data, JSON_THROW_ON_ERROR)));

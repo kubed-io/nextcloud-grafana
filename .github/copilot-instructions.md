@@ -17,8 +17,9 @@ your comments with them:**
 - **`AGENTS.md`** — cold-start orientation + the architectural non-negotiables.
 - **`CONTRIBUTING.md`** — conventions, PR rules, testing policy.
 - **`SECURITY.md`** — the deliberate trust boundary (esp. network egress).
-- **`saga/`** (current, open chapter) — the "why" behind the design. If the saga
-  locks a decision, do not suggest relitigating it.
+- **`docs/superpowers/specs/`** — the "why" behind the design. If a spec locks a
+  decision, do not suggest relitigating it. (`docs/saga/` is the deprecated history
+  those specs replaced; a decision there still stands unless a spec supersedes it.)
 
 Prefer these over assumptions. When a convention is undocumented here, the mature
 sibling repo `kubed-io/nextcloud-n8n` is the reference — this app is a deliberate

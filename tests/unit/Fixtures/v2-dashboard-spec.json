@@ -1,0 +1,725 @@
+{
+  "annotations": [
+    {
+      "kind": "AnnotationQuery",
+      "spec": {
+        "query": {
+          "kind": "DataQuery",
+          "group": "grafana",
+          "version": "v0",
+          "datasource": {
+            "name": "-- Grafana --"
+          },
+          "spec": {}
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "builtIn": true,
+        "legacyOptions": {
+          "type": "dashboard"
+        }
+      }
+    }
+  ],
+  "cursorSync": "Crosshair",
+  "description": "Crossplane 2 in namespace crossplane: core (composite, package and revision controllers), the RBAC manager, and the packages it installed - Providers reconcile managed resources against an outside API (only provider-opentofu here: every managed resource is an OpenTofu Workspace), Functions run the steps of each Composition's pipeline (go-templating, patch-and-transform). The kubed.io definitions (LDAP, Keycloak, PostgreSQL, GCP) are the APIs apps use; each composite renders through its Composition into Workspaces. Metrics are core's and the packages' own (controller_runtime_*, function_run_function_*, circuit_breaker_events_total, crossplane_managed_resource_*), scraped since 2026-10-06 by PodMonitor crossplane. Packages, API, Composites, Engine, Functions, Managed, Workload, Logs and Resources are tabs; a tab only queries while it is open.",
+  "editable": true,
+  "elements": {
+    "panel-11": {
+      "kind": "Panel",
+      "spec": {
+        "id": 11,
+        "title": "Revisions",
+        "description": "Every package revision. Crossplane keeps the previous one Inactive (revisionHistoryLimit) so an upgrade can roll back by flipping which revision is Active.\n\n**Careful:** Healthy is the package itself; Runtime is its pod.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "yesoreyeram-infinity-datasource",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "kubernetes"
+                    },
+                    "spec": {
+                      "columns": [],
+                      "filters": [],
+                      "format": "table",
+                      "pagination_max_pages": 50,
+                      "pagination_mode": "list",
+                      "pagination_param_list_field_name": "P",
+                      "pagination_param_list_field_type": "replace",
+                      "pagination_param_list_value": "apis/pkg.crossplane.io/v1/providerrevisions,apis/pkg.crossplane.io/v1/functionrevisions,apis/pkg.crossplane.io/v1/configurationrevisions",
+                      "parser": "jq-backend",
+                      "root_selector": "def epoch: if . == null then null else sub(\"\\\\.[0-9]+\"; \"\") | fromdateiso8601 * 1000 end;\ndef cond($t): (.status.conditions // []) | map(select(.type == $t)) | .[0] // {};\n[.items[] | . as $r | ($r.kind | sub(\"Revision$\"; \"\")) as $k\n| {Package: ($r.metadata.labels[\"pkg.crossplane.io/package\"] // \"\"), Kind: $k, Revision: $r.metadata.name,\nImage: ($r.spec.image // $r.spec.packageImage // \"\" | sub(\"^.*/\"; \"\")), Number: ($r.spec.revision // 0), State: ($r.spec.desiredState // \"\"),\nHealthy: (($r | cond(\"RevisionHealthy\")).status // \"Unknown\"), Runtime: (($r | cond(\"RuntimeHealthy\")).status // \"Unknown\"),\npath: \"apis/pkg.crossplane.io/v1/\\($r.kind | ascii_downcase)s/\\($r.metadata.name)\",\nCreated: ($r.metadata.creationTimestamp | epoch)}]\n| if length == 0 then [{Package: \"\", Kind: \"\", Revision: \"\", Image: \"\", Number: 0, State: \"\", Healthy: \"\", Runtime: \"\", path: \"\", Created: 0}] else . end",
+                      "source": "url",
+                      "type": "json",
+                      "url": "https://kubernetes.default.svc/${__pagination.P}",
+                      "url_options": {
+                        "headers": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json"
+                          }
+                        ],
+                        "method": "GET"
+                      }
+                    }
+                  },
+                  "refId": "A",
+                  "hidden": false
+                }
+              }
+            ],
+            "transformations": [
+              {
+                "kind": "Transformation",
+                "group": "filterByValue",
+                "spec": {
+                  "options": {
+                    "filters": [
+                      {
+                        "config": {
+                          "id": "equal",
+                          "options": {
+                            "value": ""
+                          }
+                        },
+                        "fieldName": "Revision"
+                      }
+                    ],
+                    "match": "all",
+                    "type": "exclude"
+                  }
+                }
+              },
+              {
+                "kind": "Transformation",
+                "group": "organize",
+                "spec": {
+                  "options": {
+                    "excludeByName": {},
+                    "indexByName": {
+                      "Created": 8,
+                      "Healthy": 5,
+                      "Image": 7,
+                      "Kind": 1,
+                      "Number": 3,
+                      "Package": 0,
+                      "Revision": 2,
+                      "Runtime": 6,
+                      "State": 4
+                    },
+                    "renameByName": {}
+                  }
+                }
+              }
+            ],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "table",
+          "version": "13.2.1",
+          "spec": {
+            "options": {
+              "cellHeight": "sm",
+              "enablePagination": false,
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": false,
+                  "displayName": "Package"
+                }
+              ]
+            },
+            "fieldConfig": {
+              "defaults": {
+                "noValue": "–",
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false,
+                  "minWidth": 50
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Revision"
+                  },
+                  "properties": [
+                    {
+                      "id": "links",
+                      "value": [
+                        {
+                          "targetBlank": false,
+                          "title": "Open the revision",
+                          "url": "/d/k8s-resource/kubernetes-resource?var-path=${__data.fields.path}&var-back=crossplane"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 330
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Healthy"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "type": "color-text"
+                      }
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "options": {
+                            "False": {
+                              "color": "red",
+                              "index": 1,
+                              "text": "✗"
+                            },
+                            "True": {
+                              "color": "green",
+                              "index": 0,
+                              "text": "✓"
+                            },
+                            "Unknown": {
+                              "color": "orange",
+                              "index": 2,
+                              "text": "?"
+                            }
+                          },
+                          "type": "value"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 80
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Runtime"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "type": "color-text"
+                      }
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "options": {
+                            "False": {
+                              "color": "red",
+                              "index": 1,
+                              "text": "✗"
+                            },
+                            "True": {
+                              "color": "green",
+                              "index": 0,
+                              "text": "✓"
+                            },
+                            "Unknown": {
+                              "color": "orange",
+                              "index": 2,
+                              "text": "?"
+                            }
+                          },
+                          "type": "value"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 80
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "State"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "type": "color-text"
+                      }
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "options": {
+                            "Active": {
+                              "color": "green",
+                              "index": 0
+                            },
+                            "Inactive": {
+                              "color": "text",
+                              "index": 1
+                            }
+                          },
+                          "type": "value"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 90
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Number"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.width",
+                      "value": 80
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Created"
+                  },
+                  "properties": [
+                    {
+                      "id": "unit",
+                      "value": "dateTimeFromNow"
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 120
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "path"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.hideFrom.viz",
+                      "value": true
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "panel-21": {
+      "kind": "Panel",
+      "spec": {
+        "id": 21,
+        "title": "Definitions",
+        "description": "CompositeResourceDefinitions. Versions marked * are the referenceable one compositions use.\n\n**Careful:** Established False means Crossplane is not serving the kind - every composite of it is stuck.",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "query": {
+                    "kind": "DataQuery",
+                    "group": "yesoreyeram-infinity-datasource",
+                    "version": "v0",
+                    "datasource": {
+                      "name": "kubernetes"
+                    },
+                    "spec": {
+                      "columns": [],
+                      "filters": [],
+                      "format": "table",
+                      "parser": "jq-backend",
+                      "root_selector": "def epoch: if . == null then null else sub(\"\\\\.[0-9]+\"; \"\") | fromdateiso8601 * 1000 end;\ndef cond($t): (.status.conditions // []) | map(select(.type == $t)) | .[0] // {};\n[.items[] | . as $x\n| {Kind: $x.spec.names.kind, Definition: $x.metadata.name, Group: $x.spec.group,\nVersions: ([$x.spec.versions[] | select(.served) | .name + (if .referenceable then \"*\" else \"\" end)] | join(\" \")),\nScope: ($x.spec.scope // \"Cluster\"), Claim: ($x.spec.claimNames.kind // \"\"),\nEstablished: (($x | cond(\"Established\")).status // \"Unknown\"),\nDefault: ($x.spec.defaultCompositionRef.name // \"\"),\nCreated: ($x.metadata.creationTimestamp | epoch)}]",
+                      "source": "url",
+                      "type": "json",
+                      "url": "https://kubernetes.default.svc/apis/apiextensions.crossplane.io/v2/compositeresourcedefinitions",
+                      "url_options": {
+                        "headers": [
+                          {
+                            "key": "Accept",
+                            "value": "application/json"
+                          }
+                        ],
+                        "method": "GET"
+                      }
+                    }
+                  },
+                  "refId": "A",
+                  "hidden": false
+                }
+              }
+            ],
+            "transformations": [
+              {
+                "kind": "Transformation",
+                "group": "organize",
+                "spec": {
+                  "options": {
+                    "excludeByName": {},
+                    "indexByName": {
+                      "Claim": 5,
+                      "Created": 8,
+                      "Default": 7,
+                      "Definition": 1,
+                      "Established": 6,
+                      "Group": 2,
+                      "Kind": 0,
+                      "Scope": 4,
+                      "Versions": 3
+                    },
+                    "renameByName": {}
+                  }
+                }
+              }
+            ],
+            "queryOptions": {}
+          }
+        },
+        "vizConfig": {
+          "kind": "VizConfig",
+          "group": "table",
+          "version": "13.2.1",
+          "spec": {
+            "options": {
+              "cellHeight": "sm",
+              "enablePagination": false,
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": false,
+                  "displayName": "Kind"
+                }
+              ]
+            },
+            "fieldConfig": {
+              "defaults": {
+                "noValue": "–",
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false,
+                  "minWidth": 50
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Kind"
+                  },
+                  "properties": [
+                    {
+                      "id": "links",
+                      "value": [
+                        {
+                          "targetBlank": false,
+                          "title": "Open the definition",
+                          "url": "/d/k8s-crd/kubernetes-crd?var-crdname=${__data.fields.Definition}&var-back=crossplane"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Definition"
+                  },
+                  "properties": [
+                    {
+                      "id": "links",
+                      "value": [
+                        {
+                          "targetBlank": false,
+                          "title": "Open the XRD object",
+                          "url": "/d/k8s-resource/kubernetes-resource?var-path=apis/apiextensions.crossplane.io/v2/compositeresourcedefinitions/${__value.raw}&var-back=crossplane"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Established"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.cellOptions",
+                      "value": {
+                        "type": "color-text"
+                      }
+                    },
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "options": {
+                            "False": {
+                              "color": "red",
+                              "index": 1,
+                              "text": "✗"
+                            },
+                            "True": {
+                              "color": "green",
+                              "index": 0,
+                              "text": "✓"
+                            },
+                            "Unknown": {
+                              "color": "orange",
+                              "index": 2,
+                              "text": "?"
+                            }
+                          },
+                          "type": "value"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 100
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "Created"
+                  },
+                  "properties": [
+                    {
+                      "id": "unit",
+                      "value": "dateTimeFromNow"
+                    },
+                    {
+                      "id": "custom.width",
+                      "value": 120
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "kind": "TabsLayout",
+    "spec": {
+      "tabs": [
+        {
+          "kind": "TabsLayoutTab",
+          "spec": {
+            "title": "One",
+            "layout": {
+              "kind": "AutoGridLayout",
+              "spec": {
+                "maxColumnCount": 3,
+                "columnWidthMode": "standard",
+                "rowHeightMode": "standard",
+                "fillScreen": false,
+                "items": [
+                  {
+                    "kind": "AutoGridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-11"
+                      }
+                    }
+                  },
+                  {
+                    "kind": "AutoGridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-21"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "links": [
+    {
+      "title": "OpenTofu",
+      "type": "link",
+      "icon": "dashboard",
+      "tooltip": "The OpenTofu app: every Workspace the provider runs",
+      "url": "/d/opentofu/opentofu",
+      "tags": [],
+      "asDropdown": false,
+      "targetBlank": false,
+      "includeVars": false,
+      "keepTime": false
+    },
+    {
+      "title": "Namespace",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Namespace crossplane",
+      "url": "/d/k8s-namespace/kubernetes-namespace?var-app_namespace=crossplane&var-back=crossplane",
+      "tags": [],
+      "asDropdown": false,
+      "targetBlank": false,
+      "includeVars": false,
+      "keepTime": false
+    },
+    {
+      "title": "Explorer",
+      "type": "link",
+      "icon": "doc",
+      "tooltip": "Every Crossplane kind by API group",
+      "url": "/d/k8s-explorer/kubernetes-explorer?var-kind=crossplane",
+      "tags": [],
+      "asDropdown": false,
+      "targetBlank": false,
+      "includeVars": false,
+      "keepTime": false
+    },
+    {
+      "title": "apps/crossplane",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "How this app is deployed: the example/cluster repository",
+      "url": "https://github.com/example/cluster/tree/main/apps/crossplane",
+      "tags": [],
+      "asDropdown": false,
+      "targetBlank": false,
+      "includeVars": false,
+      "keepTime": false
+    }
+  ],
+  "liveNow": false,
+  "preload": false,
+  "tags": [
+    "app",
+    "crossplane",
+    "iac"
+  ],
+  "timeSettings": {
+    "timezone": "browser",
+    "from": "now-24h",
+    "to": "now",
+    "autoRefresh": "5m",
+    "autoRefreshIntervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "hideTimepicker": false,
+    "fiscalYearStartMonth": 0
+  },
+  "title": "Fixture: tabs over an auto grid",
+  "variables": [
+    {
+      "kind": "QueryVariable",
+      "spec": {
+        "name": "pod",
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
+        "label": "Pod",
+        "hide": "dontHide",
+        "refresh": "onTimeRangeChanged",
+        "skipUrlSync": false,
+        "query": {
+          "kind": "DataQuery",
+          "group": "prometheus",
+          "version": "v0",
+          "datasource": {
+            "name": "prometheus"
+          },
+          "spec": {
+            "query": "label_values(kube_pod_info{namespace=\"crossplane\"}, pod)",
+            "refId": "pod"
+          }
+        },
+        "regex": "",
+        "regexApplyTo": "value",
+        "sort": "alphabeticalAsc",
+        "definition": "label_values(kube_pod_info{namespace=\"crossplane\"}, pod)",
+        "options": [],
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "allowCustomValue": true
+      }
+    },
+    {
+      "kind": "ConstantVariable",
+      "spec": {
+        "name": "app_namespace",
+        "query": "crossplane",
+        "current": {
+          "text": "crossplane",
+          "value": "crossplane"
+        },
+        "hide": "hideVariable",
+        "skipUrlSync": true,
+        "description": "Parameter for a shared library panel"
+      }
+    }
+  ]
+}

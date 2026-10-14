@@ -148,32 +148,28 @@ final class TagSyncService {
 		// is what makes a tag applied out here survive being moved back into a mapping.
 		// Nothing below calls Grafana; the write is only a write, and PushService will
 		// not push a file with no uid.
+		// Classic JSON or a version-2 resource (tags at `spec.tags`), written back in the
+		// syntax it came in. An empty file is left alone: it has no tags to agree with,
+		// and writing some would invent a dashboard.
 		try {
-			$spec = json_decode($file->getContent(), false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException $e) {
-			$this->logger->warning('grafana_sync: a tagged dashboard file is not valid JSON', [
+			$doc = DashboardDocument::decodeNonEmpty($file->getContent());
+		} catch (\RuntimeException $e) {
+			$this->logger->warning('grafana_sync: a tagged dashboard file is not a dashboard', [
 				'app' => Application::APP_ID,
 				'fileId' => $file->getId(),
 				'exception' => $e,
 			]);
 			return false;
 		}
-		if (!$spec instanceof \stdClass) {
-			return false;
-		}
 
-		$inBody = $spec->tags ?? null;
-		$current = TagSet::of(is_array($inBody) ? $inBody : []);
-		if ($current->equals($wanted)) {
+		if ($doc->tags()->equals($wanted)) {
 			return false; // already agrees — writing would only restart the loop
 		}
 
-		// A LIST, never an object. json_encode turns a gappy array into `{"0":"dns"}`,
-		// and Grafana does not read that back as tags.
-		$spec->tags = $wanted->toList();
-
 		try {
-			$file->putContent(json_encode($spec, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+			// A LIST, never an object — withTags() sees to it; Grafana does not read
+			// `{"0":"dns"}` back as tags.
+			$file->putContent($doc->withTags($wanted)->encode());
 		} catch (\Throwable $e) {
 			$this->logger->warning('grafana_sync: could not write tags into a dashboard file', [
 				'app' => Application::APP_ID,

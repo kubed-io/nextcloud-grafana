@@ -62,7 +62,7 @@ final class CreateService {
 	 */
 	public function createForFile(File $node, Mapping $mapping, bool $asNewDashboard = false): string {
 		$content = $node->getContent();
-		$spec = $this->parseFileBody($content);
+		$doc = DashboardDocument::decode($content);
 
 		// A COPY IS ALWAYS A BIRTH, and the body it was copied from names its own
 		// dashboard — every mirror a sync writes carries `uid` in the JSON. Left in, the
@@ -79,10 +79,10 @@ final class CreateService {
 		// answers. The filename is the authority here for the same reason a rename's is:
 		// it is the thing the user just changed.
 		if ($asNewDashboard) {
-			unset($spec->uid);
+			$doc = $doc->withoutUid();
 			$display = FilenameCodec::displayName($node->getName());
 			if ($display !== '') {
-				$spec->title = $display;
+				$doc = $doc->withTitle($display);
 			}
 		}
 
@@ -93,59 +93,63 @@ final class CreateService {
 		// directly in the mapped folder resolves to the mapping without a round-trip,
 		// and a reserved-root ("/") mapping still yields null, which toUpsertBody omits.
 		$folderUid = $this->folderMirror->folderUidFor($node, $mapping);
-		$body = DashboardBody::toUpsertBody($spec, $folderUid, $node->getName());
-		$created = $this->grafana->upsertDashboard($body);
+		// The body's own shape picks the API (GrafanaClient::writeDocument): the classic
+		// starter goes to the classic API even in a version-2 folder, which loses nothing
+		// because it holds nothing only v2 can.
+		$created = $this->grafana->writeDocument($doc, $folderUid, $node->getName());
 
-		$uid = (string)($created['uid'] ?? '');
+		$uid = $created['uid'];
 		if ($uid === '') {
 			throw new \RuntimeException('Grafana create did not return a dashboard uid');
 		}
-		$version = (string)($created['version'] ?? '');
+		$version = $created['version'];
 
-		// Use the ORIGINAL file bytes for the loop-guard hash: NodeWrittenListener
-		// computes sha1($node->getContent()) on the next save, so they must match.
-		$this->stampFile($node, $mapping, $uid, $version, $content);
-
-		// And give the new file the dashboard's clock. Same reasoning as the push
-		// ({@see PushService::stampGrafanaClock()}): Grafana sets meta.created and
-		// meta.updated itself and will not take ours, and the create ack does not
-		// return them — so the only way to agree with Grafana about when this
-		// dashboard came into being is to ask. Swallowed on failure: the dashboard
-		// exists and the file is stamped, so a cosmetic clock must not undo that.
+		// ONE READ BACK, through the folder's own version, for two things.
+		//
+		// The clock — same reasoning as the push ({@see PushService::stampGrafanaClock()}):
+		// Grafana sets created/updated itself and will not take ours, and the create ack
+		// does not return them, so the only way to agree with Grafana about when this
+		// dashboard came into being is to ask. Swallowed on failure: the dashboard exists,
+		// so a cosmetic clock must not undo that.
+		$v2 = $mapping->version === Mapping::VERSION_2;
 		try {
-			$read = $this->grafana->readDashboardSpec($uid);
-			$this->times->apply($node, $read?->lastChanged(), $read?->created);
+			$read = $v2 ? $this->grafana->readDashboardResource($uid) : $this->grafana->readDashboardSpec($uid);
 		} catch (\Throwable $e) {
-			$this->logger->warning('grafana_sync: created, but could not read the dashboard back to stamp its clock', [
+			$read = null;
+			$this->logger->warning('grafana_sync: created, but could not read the dashboard back', [
 				'uid' => $uid,
 				'exception' => $e,
 			]);
 		}
 
-		return $uid;
-	}
+		// And the body, WHEN THE FILE IS NOT IN ITS FOLDER'S FORMAT — the classic starter
+		// in a version-2 folder, a YAML file moved into a version-1 one. A pull would put
+		// it right eventually; the gesture does it now, so the user who opens the new
+		// file finds what every other file in the folder looks like. If the file cannot
+		// be written here (a copy's hook holds locks), the next pull does it.
+		$written = $content;
+		if ($read !== null && $doc->isResource() !== $v2) {
+			$body = $v2 ? DashboardBody::encodeResource($read->spec) : DashboardBody::encodeSync($read->spec);
+			try {
+				$this->guard->run(static function () use ($node, $body): void {
+					$node->putContent($body);
+				});
+				$written = $body;
+				$version = $read->version() !== '' ? $read->version() : $version;
+			} catch (\Throwable $e) {
+				$this->logger->info('grafana_sync: created; the next pull writes the file in its folder\'s format', [
+					'uid' => $uid,
+					'exception' => $e,
+				]);
+			}
+		}
 
-	/**
-	 * Decode the file as a stdClass (objects, not assoc) so an empty `{}` round-trips
-	 * correctly. An **empty** file is tolerated (a fresh "New"-menu file) — Grafana mints
-	 * a minimal dashboard with the filename as its title (via {@see DashboardBody::toUpsertBody}).
-	 * A **non-empty, non-object** body (a JSON array or scalar) is a malformed dashboard and
-	 * fails loudly, consistent with {@see PushService::push} — we never silently coerce it
-	 * into an empty dashboard.
-	 */
-	private function parseFileBody(string $content): \stdClass {
-		if (trim($content) === '') {
-			return new \stdClass();
-		}
-		try {
-			$decoded = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException $e) {
-			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
-		}
-		if (!$decoded instanceof \stdClass) {
-			throw new \RuntimeException('The dashboard file is not a JSON object.');
-		}
-		return $decoded;
+		// The loop-guard hash is of the bytes the file HOLDS: NodeWrittenListener
+		// computes sha1($node->getContent()) on the next save, so they must match.
+		$this->stampFile($node, $mapping, $uid, $version, $written);
+		$this->times->apply($node, $read?->lastChanged(), $read?->created);
+
+		return $uid;
 	}
 
 	/**

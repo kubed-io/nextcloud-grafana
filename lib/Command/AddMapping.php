@@ -27,8 +27,11 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * The JSON is the mapping shape, e.g.:
  *   {"grafana_folder_uid":"af397c9y8enswf","grafana_folder_title":"observe",
- *    "nc_folder":"observe","mode":"sync",
+ *    "nc_folder":"observe","mode":"sync","version":2,
  *    "nc_groups":["admin"],"use_team_folder":true}
+ *
+ * `version` is 1 (classic JSON, the default) or 2 (the dashboard.grafana.app/v2
+ * resource, as YAML).
  *
  * Plus one key that is NOT part of a mapping: `"purge_dashboards":true` answers the
  * refusal a `link` mapping gets when its folder already holds dashboard files. Those
@@ -71,11 +74,16 @@ final class AddMapping extends Command {
 			// nc_groups travels ALONGSIDE the mapping, not inside it: they are applied
 			// to the provisioned folder and read back from it, never stored.
 			$saved = $this->service->add(Mapping::fromArray($data), $data['nc_groups'] ?? [], $purge);
-		} catch (\InvalidArgumentException $e) {
+		} catch (\InvalidArgumentException|\RuntimeException $e) {
+			// BOTH FAMILIES, NAMED. A refusal is an InvalidArgumentException, which is a
+			// LogicException — not a RuntimeException — so catching only the latter let
+			// every refusal escape as a raw console exception. A RuntimeException is Grafana
+			// failing to say whether it serves version 2. Either way: a message, not a trace.
 			$output->writeln('<error>' . $e->getMessage() . '</error>');
 			return 1;
 		}
-		$output->writeln('<info>Added mapping ' . $saved->id . ' (' . $saved->grafanaFolderUid . ' → ' . $saved->ncFolder . ').</info>');
+		$output->writeln('<info>Added mapping ' . $saved->id . ' (' . $saved->grafanaFolderUid . ' → ' . $saved->ncFolder
+			. ', ' . $saved->mode . ', version ' . $saved->version . ').</info>');
 		return 0;
 	}
 }

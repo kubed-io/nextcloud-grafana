@@ -26,5 +26,8 @@
 		<include>
 			<directory suffix=".php">../lib</directory>
 		</include>
+		<exclude>
+			<directory>../lib/Vendor</directory>
+		</exclude>
 	</source>
 </phpunit>

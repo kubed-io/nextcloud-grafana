@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\GrafanaApiException;
+use OCA\GrafanaSync\Service\DashboardDocument;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\TagSet;
 use OCP\Http\Client\IClient;
@@ -279,6 +280,126 @@ final class GrafanaClientTest extends TestCase {
 	 *
 	 * @param IResponse|\Throwable $result what the mocked verb returns, or throws
 	 */
+	// ── version-2 dashboards ───────────────────────────────────────────────────
+	//
+	// Measured against a live Grafana 13.2.1 (docs/superpowers/specs/
+	// 2026-10-14-mapping-version-design.md): PUT is an upsert, a body's apiVersion must
+	// match the URL's, the folder is an annotation, and generation is the version.
+
+	private const V2 = 'https://grafana.test/apis/dashboard.grafana.app/v2/namespaces/default/dashboards';
+
+	private const RESOURCE_JSON = '{"apiVersion":"dashboard.grafana.app/v2","kind":"Dashboard",'
+		. '"metadata":{"name":"fleet","generation":4,"creationTimestamp":"2026-10-14T18:17:46Z",'
+		. '"annotations":{"grafana.app/updatedTimestamp":"2026-10-14T18:17:55Z","grafana.app/folder":"f1"}},'
+		. '"spec":{"title":"Fleet","elements":{}},"status":{}}';
+
+	public function testReadDashboardResourceHitsTheV2Url(): void {
+		$calls = new \ArrayObject();
+		$read = $this->client($this->response(self::RESOURCE_JSON), $calls)->readDashboardResource('fleet');
+
+		self::assertSame(['GET', self::V2 . '/fleet'], [$calls[0][0], $calls[0][1]]);
+		self::assertNotNull($read);
+		self::assertSame('fleet', $read->spec->metadata->name);
+		self::assertEquals(new \stdClass(), $read->spec->spec->elements);
+	}
+
+	public function testReadDashboardResourceDatesFromMetadata(): void {
+		$read = $this->client($this->response(self::RESOURCE_JSON), new \ArrayObject())->readDashboardResource('fleet');
+
+		self::assertSame(strtotime('2026-10-14T18:17:55Z'), $read?->updated);
+		self::assertSame(strtotime('2026-10-14T18:17:46Z'), $read?->created);
+	}
+
+	public function testANeverUpdatedResourceIsDatedByItsCreation(): void {
+		$json = '{"apiVersion":"dashboard.grafana.app/v2","kind":"Dashboard",'
+			. '"metadata":{"name":"fleet","generation":1,"creationTimestamp":"2026-10-14T18:17:46Z"},"spec":{}}';
+		$read = $this->client($this->response($json), new \ArrayObject())->readDashboardResource('fleet');
+
+		self::assertNull($read?->updated);
+		self::assertSame(strtotime('2026-10-14T18:17:46Z'), $read?->lastChanged());
+	}
+
+	/** A dashboard Grafana could not convert must fail loudly, never mirror as `{}`. */
+	public function testAFailedConversionThrows(): void {
+		$json = '{"apiVersion":"dashboard.grafana.app/v2","kind":"Dashboard","metadata":{"name":"fleet"},'
+			. '"spec":{},"status":{"conversion":{"failed":true,"storedVersion":"v0alpha1","error":"panel 3 has no type"}}}';
+
+		$this->expectException(GrafanaApiException::class);
+		$this->expectExceptionMessage('panel 3 has no type');
+
+		$this->client($this->response($json), new \ArrayObject())->readDashboardResource('fleet');
+	}
+
+	/** Grafana refuses a body whose apiVersion is not the URL's, so the body picks the URL. */
+	public function testWriteDocumentPutsAResourceToItsOwnApiVersion(): void {
+		$calls = new \ArrayObject();
+		$doc = DashboardDocument::resource((object)[
+			'apiVersion' => 'dashboard.grafana.app/v2beta1', 'kind' => 'Dashboard',
+			'metadata' => (object)['name' => 'fleet'], 'spec' => (object)['title' => 'Fleet'],
+		]);
+
+		$this->client($this->response(self::RESOURCE_JSON), $calls)->writeDocument($doc, 'f1');
+
+		self::assertSame('PUT', $calls[0][0]);
+		self::assertSame('https://grafana.test/apis/dashboard.grafana.app/v2beta1/namespaces/default/dashboards/fleet', $calls[0][1]);
+		$sent = json_decode($calls[0][2]['body'], true);
+		self::assertSame('dashboard.grafana.app/v2beta1', $sent['apiVersion']);
+		self::assertSame('f1', $sent['metadata']['annotations']['grafana.app/folder']);
+	}
+
+	public function testWriteDocumentPostsAClassicBody(): void {
+		$calls = new \ArrayObject();
+		$doc = DashboardDocument::classic((object)['uid' => 'fleet', 'title' => 'Fleet', 'version' => 3]);
+
+		$written = $this->client($this->response('{"uid":"fleet","version":4,"status":"success"}'), $calls)
+			->writeDocument($doc, 'f1', 'Fleet.grafana', 'saved');
+
+		self::assertSame(['POST', 'https://grafana.test/api/dashboards/db'], [$calls[0][0], $calls[0][1]]);
+		$sent = json_decode($calls[0][2]['body'], true);
+		self::assertSame(['dashboard', 'overwrite', 'message', 'folderUid'], array_keys($sent));
+		self::assertNull($sent['dashboard']['id']);
+		self::assertArrayNotHasKey('version', $sent['dashboard']);
+		self::assertSame(['uid' => 'fleet', 'version' => '4'], $written);
+	}
+
+	public function testWriteDocumentMintsAUidForABornResource(): void {
+		$calls = new \ArrayObject();
+		$doc = DashboardDocument::resource((object)[
+			'apiVersion' => 'dashboard.grafana.app/v2', 'kind' => 'Dashboard',
+			'metadata' => new \stdClass(), 'spec' => (object)['title' => 'Copy'],
+		]);
+
+		$this->client($this->response(self::RESOURCE_JSON), $calls)->writeDocument($doc, 'f1');
+
+		$name = json_decode($calls[0][2]['body'], true)['metadata']['name'];
+		self::assertMatchesRegularExpression('/^[a-z0-9]{14}$/', $name);
+		self::assertSame(self::V2 . '/' . $name, $calls[0][1]);
+	}
+
+	public function testWriteDocumentReturnsGenerationAsVersion(): void {
+		$doc = DashboardDocument::resource(json_decode(self::RESOURCE_JSON, false));
+
+		self::assertSame(
+			['uid' => 'fleet', 'version' => '4'],
+			$this->client($this->response(self::RESOURCE_JSON), new \ArrayObject())->writeDocument($doc, 'f1'),
+		);
+	}
+
+	public function testServesDashboardV2ReadsTheGroupVersions(): void {
+		$calls = new \ArrayObject();
+		$group = '{"kind":"APIGroup","name":"dashboard.grafana.app","versions":[{"version":"v2"},{"version":"v1"}]}';
+
+		self::assertTrue($this->client($this->response($group), $calls)->servesDashboardV2());
+		self::assertSame('https://grafana.test/apis/dashboard.grafana.app', $calls[0][1]);
+
+		$old = '{"kind":"APIGroup","versions":[{"version":"v1beta1"},{"version":"v2beta1"}]}';
+		self::assertFalse($this->client($this->response($old), new \ArrayObject())->servesDashboardV2());
+	}
+
+	public function testAGrafanaWithoutTheGroupDoesNotServeV2(): void {
+		self::assertFalse($this->client($this->httpError(404), new \ArrayObject())->servesDashboardV2());
+	}
+
 	private function client(object $result, \ArrayObject $calls): GrafanaClient {
 		$config = $this->createStub(IAppConfig::class);
 		// Two parameters against an interface that declares five: PHP passes extra

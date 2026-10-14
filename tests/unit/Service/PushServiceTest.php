@@ -20,7 +20,9 @@ use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\PushService;
+use OCA\GrafanaSync\Service\TagSet;
 use OCA\GrafanaSync\Service\TagSyncService;
+use OCA\GrafanaSync\Tests\Unit\Doubles\GrafanaClientDouble;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
@@ -40,6 +42,8 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(PushService::class)]
 final class PushServiceTest extends TestCase {
+	use GrafanaClientDouble;
+
 	private MappingService $mappings;
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
@@ -49,7 +53,7 @@ final class PushServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->mappings = $this->createStub(MappingService::class);
-		$this->grafana = $this->createMock(GrafanaClient::class);
+		$this->grafana = $this->grafanaClientDouble();
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		// A file sitting directly in its mapped folder: the mirror answers with the
 		// mapping's own Grafana folder and contacts nothing. The subfolder behaviour
@@ -345,5 +349,104 @@ final class PushServiceTest extends TestCase {
 		$this->grafana->method('readDashboardSpec')->willThrowException(new \RuntimeException('boom'));
 
 		self::assertTrue($this->service->push($this->file(9, '{"title":"Board"}')));
+	}
+
+	// ── version 2: the body decides the wire ──────────────────────────────────
+
+	private const RESOURCE = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\n"
+		. "spec:\n  title: Board\n  tags:\n    - ops\n  elements: {  }\n";
+
+	public function testAResourceFileIsPutThroughV2(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn($this->mapping('gf-alpha', 'map-alpha'));
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$captured = null;
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->willReturnCallback(function (array $body) use (&$captured): array {
+				$captured = $body;
+				return ['metadata' => ['name' => 'd1', 'generation' => 8]];
+			});
+		$this->metadata->expects(self::once())->method('write')
+			->with(1, [DashboardMetadata::KEY_SYNCED_HASH => sha1(self::RESOURCE), DashboardMetadata::KEY_VERSION => '8']);
+
+		self::assertTrue($this->service->push($this->file(1, self::RESOURCE)));
+
+		self::assertSame('dashboard.grafana.app/v2', $captured['apiVersion']);
+		self::assertSame('d1', $captured['metadata']['name']);
+		self::assertSame('gf-alpha', $captured['metadata']['annotations']['grafana.app/folder']);
+		self::assertEquals(new \stdClass(), $captured['spec']->elements, 'an empty {} stays an object on the wire');
+	}
+
+	/** Review Focus 3: a hand-edited `metadata.name` cannot retarget another dashboard. */
+	public function testTheMetadataUidWinsOverAnEditedMetadataName(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn($this->mapping());
+
+		$captured = null;
+		$this->grafana->method('putDashboardResource')->willReturnCallback(function (array $body) use (&$captured): array {
+			$captured = $body;
+			return ['metadata' => ['name' => 'd1', 'generation' => 2]];
+		});
+
+		$this->service->push($this->file(1, str_replace('name: d1', 'name: someone-elses', self::RESOURCE)));
+
+		self::assertSame('d1', $captured['metadata']['name']);
+	}
+
+	/** The + New starter is classic wherever it lands, and goes to the classic API. */
+	public function testAClassicFileInAV2FolderPostsClassic(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn(Mapping::fromArray([
+			'id' => 'map-alpha', 'grafana_folder_uid' => 'gf-alpha', 'nc_folder' => 'alpha', 'mode' => 'sync', 'version' => 2,
+		]));
+		$this->grafana->expects(self::never())->method('putDashboardResource');
+		$this->grafana->expects(self::once())->method('upsertDashboard')->willReturn(['uid' => 'd1', 'version' => 3]);
+
+		self::assertTrue($this->service->push($this->file(1, '{"uid":"d1","title":"Board","panels":[]}')));
+	}
+
+	public function testTagsAreReadFromSpecTags(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn($this->mapping());
+		$this->grafana->method('putDashboardResource')->willReturn(['metadata' => ['name' => 'd1', 'generation' => 2]]);
+		$tags = $this->createMock(TagSyncService::class);
+		$tags->expects(self::once())->method('applyToDashboard')
+			->with(self::anything(), self::callback(static fn (TagSet $t): bool => $t->equals(TagSet::of(['ops']))));
+		$this->service = new PushService(
+			$this->mappings, $this->grafana, $this->metadata, $this->folderMirror, $this->createService,
+			new MirrorTimes(new NullLogger()), $tags, new NullLogger(),
+		);
+
+		$this->service->push($this->file(1, self::RESOURCE));
+	}
+
+	/** Review Focus 2: broken YAML is refused, naming YAML, and nothing reaches Grafana. */
+	public function testInvalidYamlIsRefusedWithAMessage(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn($this->mapping());
+		$this->grafana->expects(self::never())->method('putDashboardResource');
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('not valid YAML');
+
+		$this->service->push($this->file(1, "apiVersion: dashboard.grafana.app/v2\nspec: [1, 2\n"));
+	}
+
+	/**
+	 * An EMPTIED managed file is refused, never pushed as an empty dashboard. Decoding
+	 * reads empty content as an empty dashboard (right for a file being born); for a
+	 * file that already IS a dashboard, pushing that would wipe it in Grafana.
+	 */
+	public function testAnEmptiedManagedFileIsRefused(): void {
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->mappings->method('getById')->willReturn($this->mapping());
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('The dashboard file is empty.');
+
+		$this->service->push($this->file(1, "\n"));
 	}
 }

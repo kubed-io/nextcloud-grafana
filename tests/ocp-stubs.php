@@ -114,6 +114,10 @@ namespace OCP\Files {
 			// StorageService turns a mapping's stored folder id back into a path, and
 			// TagChangeListener turns the bare file id a tag event carries into a node.
 			public function getFirstNodeById(int $id): ?Node;
+
+			// ReconcileNameJob finds the file it was queued for by id in the user's folder.
+			/** @return list<Node> */
+			public function getById($id): array;
 		}
 	}
 	// The storage root — declared after Folder, which it extends. TrashPurgeHook asks it
@@ -153,12 +157,33 @@ namespace OCP\Files\Cache {
 
 }
 
+namespace OCP\AppFramework\Utility {
+	// A job's constructor takes one; the job tests never read the clock.
+	if (!interface_exists(ITimeFactory::class, false)) {
+		interface ITimeFactory {
+		}
+	}
+}
+
 namespace OCP\BackgroundJob {
 	// Passed to SyncService for the async dispatch path; the sync-path tests never
 	// enqueue, so declaration-only is enough to satisfy the type.
 	if (!interface_exists(IJobList::class, false)) {
 		interface IJobList {
 			public function add($job, $argument = null): void;
+		}
+	}
+	// Just enough for a job to be constructed; its tests call run() directly.
+	if (!class_exists(Job::class, false)) {
+		abstract class Job {
+			public function __construct(\OCP\AppFramework\Utility\ITimeFactory $time) {
+			}
+
+			abstract protected function run($argument);
+		}
+	}
+	if (!class_exists(QueuedJob::class, false)) {
+		abstract class QueuedJob extends Job {
 		}
 	}
 }

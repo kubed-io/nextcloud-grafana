@@ -183,4 +183,13 @@ final class NameSyncListenerTest extends TestCase {
 			$this->file('Fleet Health (1).grafana', $this->json('Capacity')),
 		));
 	}
+
+	/** A version-2 file's title is `spec.title`; a YAML title edit names the file the same way. */
+	public function testAV2TitleIsSpecTitle(): void {
+		$this->metadata->method('read')->willReturn($this->managed());
+		$this->expectEnqueue('filename_from_title');
+		$yaml = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: dash-1\nspec:\n  title: Renamed\n";
+
+		$this->listener->handle(new NodeWrittenEvent($this->file('Board.grafana', $yaml)));
+	}
 }

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Listener;
 
 use OCA\GrafanaSync\BackgroundJob\ReconcileNameJob;
+use OCA\GrafanaSync\Service\DashboardDocument;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\ResolvesActingUser;
@@ -94,14 +95,14 @@ final class NameSyncListener implements IEventListener {
 		}
 
 		// Read (shared lock — safe even during a rename) to compare names and only enqueue on a
-		// real mismatch. JSON_THROW_ON_ERROR makes an unparseable file a cheap explicit bail
-		// (so we never enqueue a reconcile for a file that isn't valid JSON).
+		// real mismatch. An unparseable file is a cheap explicit bail, so we never enqueue a
+		// reconcile for a file that is not a dashboard. The title is `title`, or `spec.title`
+		// in a version-2 file.
 		try {
-			$spec = json_decode($node->getContent(), false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
+			$jsonTitle = DashboardDocument::decodeNonEmpty($node->getContent())->title();
+		} catch (\RuntimeException) {
 			return;
 		}
-		$jsonTitle = ($spec instanceof \stdClass && isset($spec->title) && is_string($spec->title)) ? trim($spec->title) : '';
 
 		// The acting user resolves the file in the job (team-folder files are mounted per-user) —
 		// same approach as the writeback's async push job.

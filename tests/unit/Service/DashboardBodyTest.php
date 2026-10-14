@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\DashboardBody;
+use OCA\GrafanaSync\Service\DashboardDocument;
 use OCA\GrafanaSync\Service\GrafanaClient;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -132,5 +133,66 @@ final class DashboardBodyTest extends TestCase {
 		$dash = (object)['uid' => 'u1']; // no title
 		$body = DashboardBody::toUpsertBody($dash, null, 'My Board (2).grafana');
 		self::assertSame('My Board', $body['dashboard']->title, 'title derived from filename, collision suffix stripped');
+	}
+
+	// ── version 2 ──────────────────────────────────────────────────────────────
+
+	public function testEncodeResourceStripsVolatileMetadataAndStatus(): void {
+		$read = json_decode('{"apiVersion":"dashboard.grafana.app/v2","kind":"Dashboard","metadata":{"name":"fleet",'
+			. '"namespace":"default","uid":"k8s-uid","resourceVersion":"17","generation":4,"creationTimestamp":"2026-10-14T18:17:46Z",'
+			. '"labels":{"grafana.app/deprecatedInternalID":"1"},"annotations":{"grafana.app/folder":"f1"},"managedFields":[]},'
+			. '"spec":{"title":"Fleet","elements":{}},"status":{"conversion":{"failed":false}}}', false);
+
+		self::assertSame(
+			"apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: fleet\nspec:\n  title: Fleet\n  elements: {  }\n",
+			DashboardBody::encodeResource($read),
+		);
+	}
+
+	public function testResourceBodySetsFolderAndMessage(): void {
+		$doc = DashboardDocument::decode("apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: fleet\n  labels:\n    a: b\nspec:\n  title: Fleet\n");
+
+		$body = DashboardBody::toResourceBody($doc, 'f1', 'Fleet.grafana', 'saved');
+
+		self::assertSame('dashboard.grafana.app/v2', $body['apiVersion']);
+		self::assertSame('Dashboard', $body['kind']);
+		self::assertSame(
+			['name' => 'fleet', 'annotations' => ['grafana.app/folder' => 'f1', 'grafana.app/message' => 'saved']],
+			$body['metadata'],
+		);
+		self::assertSame('Fleet', $body['spec']->title);
+	}
+
+	/** Without the annotation Grafana moves the dashboard to General — only the root may omit it. */
+	public function testResourceBodyOmitsTheFolderOnlyForTheRoot(): void {
+		$doc = DashboardDocument::decode("apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: fleet\nspec: {}\n");
+
+		foreach ([null, '', GrafanaClient::FOLDER_GENERAL] as $root) {
+			$annotations = DashboardBody::toResourceBody($doc, $root)['metadata']['annotations'];
+			self::assertArrayNotHasKey('grafana.app/folder', $annotations);
+			self::assertSame('Updated by Nextcloud (grafana_sync)', $annotations['grafana.app/message']);
+		}
+	}
+
+	public function testResourceBodyTitlesAnUntitledDashboardFromTheFile(): void {
+		$doc = DashboardDocument::decode("apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: fleet\nspec: {}\n");
+
+		self::assertSame('Fleet Health', DashboardBody::toResourceBody($doc, 'f1', 'Fleet Health (2).grafana')['spec']->title);
+	}
+
+	public function testReferenceAsYaml(): void {
+		$row = ['uid' => 'fleet', 'title' => 'Fleet', 'tags' => ['ops']];
+
+		self::assertSame(
+			"\$schema: grafana.reference/v1\nuid: fleet\ntitle: Fleet\nurl: 'https://grafana.test/d/fleet'\nfolderUid: f1\ntags:\n  - ops\n",
+			DashboardBody::encodeReference($row, 'https://grafana.test/d/fleet', 'f1', 2),
+		);
+		// Version 1 is untouched.
+		self::assertStringStartsWith('{', DashboardBody::encodeReference($row, 'https://grafana.test/d/fleet', 'f1'));
+	}
+
+	public function testMintUidShape(): void {
+		self::assertMatchesRegularExpression('/^[a-z0-9]{14}$/', DashboardBody::mintUid());
+		self::assertNotSame(DashboardBody::mintUid(), DashboardBody::mintUid());
 	}
 }

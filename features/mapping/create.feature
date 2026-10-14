@@ -10,6 +10,7 @@ Feature: Mapping a Grafana folder to a Nextcloud folder
   - creating a mapping creates its nextcloud folder if it doesn't exist at the moment of creation
   - if the folder is a team folder, the folder is created with the team folder api
   - a link mapping cannot hold dashboard files, so unmapped ones already in the folder are purged on accept
+  - a version 2 mapping writes its folder afresh, so unmapped dashboard files already in it are purged on accept
 
   Background:
     Given the app is enabled
@@ -28,28 +29,32 @@ Feature: Mapping a Grafana folder to a Nextcloud folder
       | mode      | link         |
       | groups    |              |
       | storage   | admin folder |
+      | version   | 1            |
     When the admin submits this mapping:
       | grafana folder | observe     |
       | nc folder      | <nc folder> |
       | mode           | <mode>      |
       | groups         | <groups>    |
       | storage        | <storage>   |
+      | version        | <version>   |
     Then the mapping matches the form, unset fields at their defaults
 
     Examples: one field at a time, and nothing at all
-      | nc folder  | mode | groups    | storage     |
-      |            |      |           |             |
-      | Dashboards |      |           |             |
-      |            | link |           |             |
-      |            | sync |           |             |
-      |            |      | admin     |             |
-      |            |      | admin,ops |             |
-      |            |      |           | team folder |
+      | nc folder  | mode | groups    | storage     | version |
+      |            |      |           |             |         |
+      | Dashboards |      |           |             |         |
+      |            | link |           |             |         |
+      |            | sync |           |             |         |
+      |            |      | admin     |             |         |
+      |            |      | admin,ops |             |         |
+      |            |      |           | team folder |         |
+      |            |      |           |             | 1       |
+      |            |      |           |             | 2       |
 
     Examples: and in combination
-      | nc folder  | mode | groups    | storage     |
-      | Dashboards | sync | admin,ops | team folder |
-      | observe    | link | admin     | team folder |
+      | nc folder  | mode | groups    | storage     | version |
+      | Dashboards | sync | admin,ops | team folder | 2       |
+      | observe    | link | admin     | team folder | 1       |
 
     # notes: ../AGENTS.md#creating-a-mapping-saves-the-form
 
@@ -63,6 +68,22 @@ Feature: Mapping a Grafana folder to a Nextcloud folder
       | grafana folder | observe    |
       | nc folder      | Dashboards |
       | mode           | link       |
+    And allows the existing unmapped dashboards to be purged
+    Then the mapping matches the form, unset fields at their defaults
+    And no ".grafana" dashboards exist under "/Dashboards" in Nextcloud
+    And "Dashboards/Fleet/Keeper.grafana" left no trash entry
+
+  # notes: ../AGENTS.md#a-version-2-mapping-may-not-be-made-over-dashboards-that-already-exist
+  @admin @occ @ui
+  Scenario: Mapping at version 2 over a folder that already holds dashboards
+    Given a Grafana folder named "observe" exists
+    And a folder "Dashboards" already exists
+    And an unmapped dashboard file at "Dashboards/Fleet/Keeper.grafana"
+    When the admin submits this mapping:
+      | grafana folder | observe    |
+      | nc folder      | Dashboards |
+      | mode           | sync       |
+      | version        | 2          |
     And allows the existing unmapped dashboards to be purged
     Then the mapping matches the form, unset fields at their defaults
     And no ".grafana" dashboards exist under "/Dashboards" in Nextcloud

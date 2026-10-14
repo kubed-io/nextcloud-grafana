@@ -106,7 +106,7 @@ final class MotionService {
 			// few minutes later. A file arriving from outside every mapping leaves nothing
 			// behind to clean up, which is why that case is still left alone.
 			if ($from !== null) {
-				$this->disposeSuperseded($node, $superseded);
+				$this->disposeSuperseded($node, $superseded, $from);
 			}
 			return;
 		}
@@ -184,12 +184,10 @@ final class MotionService {
 	private function reparentWithinMapping(File $node, ManagedFile $managed, Mapping $to): void {
 		$folderUid = $this->folderMirror->folderUidFor($node, $to);
 
-		$spec = $this->decodeSpec($node->getContent());
-		$spec->uid = $managed->uid;
-		$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
+		$doc = DashboardDocument::decodeNonEmpty($node->getContent())->withUid($managed->uid);
+		$version = $this->grafana->writeDocument($doc, $folderUid, $node->getName())['version'];
 
 		$update = [DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? ''];
-		$version = isset($resp['version']) ? (string)$resp['version'] : '';
 		if ($version !== '') {
 			$update[DashboardMetadata::KEY_VERSION] = $version;
 		}
@@ -242,13 +240,15 @@ final class MotionService {
 	 * {@see \OCA\GrafanaSync\Listener\CreateInGrafanaListener} is that caller.
 	 */
 	public function bindTo(File $node, string $uid, Mapping $to): void {
-		$spec = $this->decodeSpec($node->getContent());
-		$spec->uid = $uid; // identity is the metadata uid, never the file's typed value
+		// Identity is the metadata uid, never the file's typed value; and the body's own
+		// shape picks the API, so a version-2 file entering a version-1 mapping is still
+		// written whole (the next pull rewrites it in the folder's format).
+		$doc = DashboardDocument::decodeNonEmpty($node->getContent())->withUid($uid);
 		// THE SUBFOLDER, NOT THE MAPPING ROOT. Using $to->grafanaFolderUid put a file
 		// dragged into another mapping's subfolder at that mapping's top level, which
 		// is the same bug the same-mapping path had — one rule, so one resolution.
 		$folderUid = $this->folderMirror->folderUidFor($node, $to);
-		$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
+		$version = $this->grafana->writeDocument($doc, $folderUid, $node->getName())['version'];
 
 		// THE MODE COMES BACK TOO. A file that left with the bin on is stamped `unmapped`,
 		// and re-adopting it without re-stating the mode left a live mirror in a sync
@@ -263,7 +263,6 @@ final class MotionService {
 			DashboardMetadata::KEY_MODE => $to->mode,
 			DashboardMetadata::KEY_FOLDER_UID => $folderUid ?? '',
 		];
-		$version = isset($resp['version']) ? (string)$resp['version'] : '';
 		if ($version !== '') {
 			$update[DashboardMetadata::KEY_VERSION] = $version;
 		}
@@ -322,9 +321,8 @@ final class MotionService {
 			// folder move is the only reversible removal there is — and because nothing
 			// was destroyed, the file KEEPS its uid and can restore to the same dashboard.
 			// It stops belonging to a mapping, which is what `unmapped` means.
-			$spec = $this->decodeSpec($node->getContent());
-			$spec->uid = $managed->uid;
-			$this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $binUid, $node->getName()));
+			$doc = DashboardDocument::decodeNonEmpty($node->getContent())->withUid($managed->uid);
+			$this->grafana->writeDocument($doc, $binUid, $node->getName());
 			$this->guard->run(fn () => $this->metadata->write($node->getId(), [
 				DashboardMetadata::KEY_MAPPING => '',
 				DashboardMetadata::KEY_MODE => DashboardMetadata::MODE_UNMAPPED,
@@ -361,7 +359,7 @@ final class MotionService {
 	 * correct; a leftover dashboard is a duplicate an admin can remove, and throwing here
 	 * would abort a rename event whose file has already moved.
 	 */
-	private function disposeSuperseded(File $node, string $uid): void {
+	private function disposeSuperseded(File $node, string $uid, Mapping $from): void {
 		if ($uid === '') {
 			return;
 		}
@@ -378,17 +376,29 @@ final class MotionService {
 			// PARKED WITH ITS OWN BODY, read back from Grafana rather than taken from the
 			// file — the file now holds the ARRIVAL's bytes, and parking those under this
 			// uid would overwrite the very thing the bin exists to preserve.
-			$record = $this->grafana->readDashboard($uid);
-			$body = $record['dashboard'] ?? null;
-			if (!is_array($body)) {
-				return;
+			//
+			// READ THROUGH THE VERSION OF THE MAPPING IT CAME FROM. A classic read of a
+			// version-2 dashboard is a flattened copy, and parking that would make the bin
+			// keep less than the dashboard had.
+			if ($from->version === Mapping::VERSION_2) {
+				$read = $this->grafana->readDashboardResource($uid);
+				if ($read === null) {
+					return;
+				}
+				$doc = DashboardDocument::resource($read->spec);
+			} else {
+				$record = $this->grafana->readDashboard($uid);
+				$body = $record['dashboard'] ?? null;
+				if (!is_array($body)) {
+					return;
+				}
+				$spec = json_decode(json_encode($body, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+				if (!$spec instanceof \stdClass) {
+					return;
+				}
+				$doc = DashboardDocument::classic($spec);
 			}
-			$spec = json_decode(json_encode($body, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
-			if (!$spec instanceof \stdClass) {
-				return;
-			}
-			$spec->uid = $uid;
-			$this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $binUid, $node->getName()));
+			$this->grafana->writeDocument($doc->withUid($uid), $binUid, $node->getName());
 			$this->logger->info('grafana_sync motion: parked the dashboard the overwrite superseded', [
 				'app' => Application::APP_ID,
 				'uid' => $uid,
@@ -408,17 +418,5 @@ final class MotionService {
 		$this->guard->run(function () use ($node): void {
 			$this->metadata->clear($node->getId());
 		});
-	}
-
-	private function decodeSpec(string $content): \stdClass {
-		try {
-			$decoded = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException $e) {
-			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
-		}
-		if (!$decoded instanceof \stdClass) {
-			throw new \RuntimeException('The dashboard file is not a JSON object.');
-		}
-		return $decoded;
 	}
 }

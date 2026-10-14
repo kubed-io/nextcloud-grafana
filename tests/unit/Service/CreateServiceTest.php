@@ -17,6 +17,7 @@ use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MirrorTimes;
 use OCA\GrafanaSync\Service\SyncGuard;
+use OCA\GrafanaSync\Tests\Unit\Doubles\GrafanaClientDouble;
 use OCP\Files\File;
 use OCP\Files\Node;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -36,12 +37,14 @@ use Psr\Log\NullLogger;
  */
 #[CoversClass(CreateService::class)]
 final class CreateServiceTest extends TestCase {
+	use GrafanaClientDouble;
+
 	private GrafanaClient $grafana;
 	private DashboardMetadata $metadata;
 	private CreateService $service;
 
 	protected function setUp(): void {
-		$this->grafana = $this->createMock(GrafanaClient::class);
+		$this->grafana = $this->grafanaClientDouble();
 		$this->metadata = $this->createMock(DashboardMetadata::class);
 		// A real SyncGuard: run() executes the callback (brackets it in enter/leave).
 		$folderMirror = $this->createStub(FolderMirror::class);
@@ -278,5 +281,112 @@ final class CreateServiceTest extends TestCase {
 		$node->method('getMTime')->willReturn(0);
 		$node->expects(self::once())->method('touch')->with($expected);
 		return $node;
+	}
+
+	// ── version 2 ──────────────────────────────────────────────────────────────
+
+	private function v2Mapping(): Mapping {
+		return Mapping::fromArray(['id' => 'map-v2', 'grafana_folder_uid' => 'gf-demo', 'nc_folder' => 'demo', 'mode' => 'sync', 'version' => 2]);
+	}
+
+	/** A File that records what is written to it, and reads back what it holds. */
+	private function writableFile(int $id, string $content, string $name = 'My Dash.grafana'): File {
+		$node = $this->createMock(File::class);
+		$held = $content;
+		$node->method('getId')->willReturn($id);
+		$node->method('getName')->willReturn($name);
+		$node->method('getContent')->willReturnCallback(static function () use (&$held): string {
+			return $held;
+		});
+		$node->method('putContent')->willReturnCallback(static function (string $c) use (&$held): void {
+			$held = $c;
+		});
+		return $node;
+	}
+
+	private function readBack(string $uid, int $generation = 1): DashboardSpec {
+		return new DashboardSpec((object)[
+			'apiVersion' => 'dashboard.grafana.app/v2', 'kind' => 'Dashboard',
+			'metadata' => (object)['name' => $uid, 'generation' => $generation, 'resourceVersion' => '5'],
+			'spec' => (object)['title' => 'My Dash', 'elements' => new \stdClass()],
+		], 1771000900, 1771000000);
+	}
+
+	/**
+	 * The + New starter is classic JSON wherever it lands. In a version-2 folder it is
+	 * created through the classic API (nothing in it is v2-only, so nothing is lost) and
+	 * the file is then rewritten as the YAML its folder holds — so the user who opens
+	 * the new dashboard finds what every other file there looks like.
+	 */
+	public function testTheStarterInAV2FolderIsCreatedClassicThenRewrittenAsYaml(): void {
+		$this->grafana->expects(self::once())->method('upsertDashboard')->willReturn(['uid' => 'new-uid', 'version' => 1]);
+		$this->grafana->expects(self::never())->method('putDashboardResource');
+		$this->grafana->method('readDashboardResource')->with('new-uid')->willReturn($this->readBack('new-uid', 1));
+		$node = $this->writableFile(1, '{"title":"New dashboard","tags":[],"panels":[],"schemaVersion":39}');
+
+		$yaml = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: new-uid\nspec:\n  title: 'My Dash'\n  elements: {  }\n";
+		// The hash is of the bytes the file now HOLDS, or the next save would read as an edit.
+		$this->metadata->expects(self::once())->method('stampSynced')
+			->with(1, 'new-uid', Mapping::MODE_SYNC, '1', $yaml, 'map-v2');
+
+		$this->service->createForFile($node, $this->v2Mapping());
+
+		self::assertSame($yaml, $node->getContent());
+	}
+
+	public function testAYamlFileInAV2FolderIsCreatedThroughV2(): void {
+		$content = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: kept\nspec:\n  title: Mine\n";
+		$this->grafana->expects(self::never())->method('upsertDashboard');
+		$this->grafana->expects(self::once())->method('putDashboardResource')
+			->with(self::callback(static fn (array $b): bool => $b['metadata']['name'] === 'kept'
+				&& $b['metadata']['annotations']['grafana.app/folder'] === 'gf-demo'))
+			->willReturn(['metadata' => ['name' => 'kept', 'generation' => 1]]);
+		$this->grafana->method('readDashboardResource')->willReturn($this->readBack('kept'));
+		$node = $this->writableFile(1, $content);
+		$node->expects(self::never())->method('putContent');
+
+		$this->metadata->expects(self::once())->method('stampSynced')
+			->with(1, 'kept', Mapping::MODE_SYNC, '1', $content, 'map-v2');
+
+		self::assertSame('kept', $this->service->createForFile($node, $this->v2Mapping()));
+	}
+
+	/** A copy is a birth: the copied body's name is the original's, so a uid is minted. */
+	public function testABornCopyOfAResourceGetsAMintedUid(): void {
+		$content = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: original\nspec:\n  title: Original\n";
+		$captured = null;
+		$this->grafana->method('putDashboardResource')->willReturnCallback(function (array $b) use (&$captured): array {
+			$captured = $b;
+			return ['metadata' => ['name' => $b['metadata']['name'], 'generation' => 1]];
+		});
+		$this->grafana->method('readDashboardResource')->willReturn(null);
+
+		$uid = $this->service->createForFile($this->writableFile(1, $content, 'Original (1).grafana'), $this->v2Mapping(), true);
+
+		self::assertNotSame('original', $uid);
+		self::assertMatchesRegularExpression('/^[a-z0-9]{14}$/', $uid);
+		self::assertSame('Original (1)', $captured['spec']->title, 'named after the file, like a classic copy');
+	}
+
+	/** A version-2 YAML file moved into a version-1 folder is written through v2, then becomes JSON. */
+	public function testAYamlFileInAV1FolderIsWrittenThroughV2ThenRewrittenAsJson(): void {
+		$content = "apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: kept\nspec:\n  title: Mine\n";
+		$this->grafana->expects(self::once())->method('putDashboardResource')->willReturn(['metadata' => ['name' => 'kept', 'generation' => 2]]);
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'kept', 'id' => 9, 'title' => 'Mine', 'version' => 2], null, null));
+		$node = $this->writableFile(1, $content);
+
+		$this->service->createForFile($node, $this->mapping());
+
+		self::assertSame("{\n    \"uid\": \"kept\",\n    \"title\": \"Mine\"\n}", $node->getContent());
+	}
+
+	/** Version 1 with a classic body never rewrites the file — the original bytes stay. */
+	public function testAV1CreateNeverRewritesTheFile(): void {
+		$this->grafana->method('upsertDashboard')->willReturn(['uid' => 'u', 'version' => 1]);
+		$node = $this->writableFile(1, '{"title":"My Dash","panels":[]}');
+		$node->expects(self::never())->method('putContent');
+
+		$this->service->createForFile($node, $this->mapping());
 	}
 }

@@ -29,14 +29,12 @@ For the user-facing "what does it do?" → [README.md](README.md).
 2. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** for the process — issue-first flow,
    PR rules, what CI expects, testing policy, release flow. **Don't re-derive any
    of this; the contributing doc is the source of truth.**
-3. **Read [`saga/`](saga/)** for the "why" behind the code. The saga is the
-   durable design + progress narrative (chef metaphor; Dr K narrates). **A chapter
-   is not finished until Dr K says so** — the current chapter stays open, and its
-   latest "Where we are" / progress-log section is the authoritative current-state
-   record. Read that first.
-   - [Chapter_1_Mise_en_Place.md](saga/Chapter_1_Mise_en_Place.md) — feasibility
-     against live Grafana, the file-by-file port plan (the "prep list" / buckets),
-     the admin-connection POC, and the running progress log. **Currently open.**
+3. **Read [`docs/superpowers/`](docs/superpowers/)** for the "why" behind current
+   work: a design in `specs/` before the code, its plan in `plans/`. The newest spec
+   on a topic is the authoritative record of what Dr K ruled.
+   - **[`docs/saga/`](docs/saga/) is deprecated** (frozen 2026-10-14). It is the
+     history of how the app was built, and code comments still cite it ("saga Ch2
+     §14"), so read it for an old decision — but never write to it.
 
 This repo is a deliberate copy of the mature
 [kubed-io/nextcloud-n8n](https://github.com/kubed-io/nextcloud-n8n) plugin (the
@@ -45,7 +43,7 @@ undocumented, the master repo is the reference. The long-term arc is to abstract
 the shared core once drupal + grafana copies both exist — keep changes easy to
 later DRY out.
 
-If the task is about **how a thing works**, the README + the saga are where to
+If the task is about **how a thing works**, the README + the specs are where to
 look. If the task is about **the process of getting a change in**, CONTRIBUTING.md
 owns that — don't ask the human to re-explain the PR flow.
 
@@ -63,7 +61,8 @@ owns that — don't ask the human to re-explain the PR flow.
 | [config/](config/) | App-level static config (if any). |
 | [.github/dashboards/](.github/dashboards/) | `tests.yml`, `quality.yml`, `publish.yml`. |
 | [.devcontainer/](.devcontainer/) | PHP 8.3 + Node + GH CLI dev environment. |
-| [saga/](saga/) | The long-form design narrative. **Read before refactoring anything non-trivial.** |
+| [docs/superpowers/](docs/superpowers/) | Designs (`specs/`) and implementation plans (`plans/`). **Read before refactoring anything non-trivial.** |
+| [docs/saga/](docs/saga/) | The deprecated build narrative — history only, cited by code comments. |
 | [composer.json](composer.json) [package.json](package.json) | Dep manifests + script entrypoints. |
 | [psalm.xml](psalm.xml) [.php-cs-fixer.dist.php](.php-cs-fixer.dist.php) [tests/psalm-baseline.xml](tests/psalm-baseline.xml) | Static analysis + style config. |
 | [CHANGELOG.md](CHANGELOG.md) | Every PR adds a line under `## [Unreleased]`. |
@@ -101,7 +100,7 @@ CI runs all of the above (see [CONTRIBUTING.md §What CI expects](CONTRIBUTING.m
 ## Architectural non-negotiables
 
 These are inherited from the master and adapted to Grafana. **Don't relitigate**
-without a real reason documented in the saga:
+without a real reason documented in a spec under `docs/superpowers/specs/`:
 
 - **No `External Storage` / `OCP\Files\Storage` backend.** Wrong tool for "API
   ⇆ JSON files."
@@ -120,6 +119,17 @@ without a real reason documented in the saga:
   ATTRIBUTE on both dashboards and folders (`features/*/tags.feature`); they just
   have nothing to do with which folder a mapping points at.
 - **The metadata key is `grafana_mode = link|sync`.**
+- **The mapping's version picks the READ; the body's shape picks the WRITE.** A pull
+  reads through `/api/dashboards` (v1, JSON) or `dashboard.grafana.app/v2` (v2, YAML)
+  and writes the file in that format. Every write decodes the file with
+  `DashboardDocument` and sends it through `GrafanaClient::writeDocument()`, which picks
+  the API from the body itself — so a v2 dashboard is never flattened by a classic
+  write, and a file crossing between versions loses nothing. Never branch on the
+  mapping's version in a write path, and never wrap a classic body in a v2 envelope.
+  (`docs/superpowers/specs/2026-10-14-mapping-version-design.md`)
+- **The one bundled library is `symfony/yaml`, prefixed into `lib/Vendor/` by
+  `composer install` and never committed.** A checkout without `composer install` fatals
+  on load; `package.yml` refuses to pack one.
 - **Loop prevention is a content-hash guard.** Pulls must not trigger pushes; hash
   the spec we *sent*, not Grafana's echoed-back object (Grafana bumps a `version`
   int on every save — see saga risk #6).
@@ -201,7 +211,7 @@ Long version in [CONTRIBUTING.md](CONTRIBUTING.md). Short version:
    - **DevOps/CI/tooling not touching app code** → shortest, e.g. "CI: add
      integration dashboard." No rationale, no file lists, no method names.
    - Only `**BREAKING:**` entries may stretch. The why / file lists / design go in
-     the **saga** or PR description — never the changelog.
+     a **spec** or the PR description — never the changelog.
    - **Only ever edit `## [Unreleased]`.** Every section below it has a version
      number and is **immutable** — those notes already shipped; never reword,
      reorder, or delete them. New work always goes under `[Unreleased]`.
@@ -276,8 +286,9 @@ In short, a feature PR touches:
 - a **`## [Unreleased]`** changelog entry.
 
 Two artifacts split by who's driving: **humans open an issue** to track the work;
-**agents update the [saga](saga/)** (the durable "why" + lessons + remaining `@todo`
-for the next session). Do the saga update — it's your memory across sessions.
+**agents write a superpowers spec + plan** under [`docs/superpowers/`](docs/superpowers/)
+before the code (the durable "why", Dr K's rulings, what is left for the next session).
+The deprecated saga is never updated.
 
 ---
 
@@ -298,11 +309,12 @@ for the next session). Do the saga update — it's your memory across sessions.
 
 ## When stuck
 
-- **"How does X work?"** → grep `lib/` + skim the relevant saga chapter.
+- **"How does X work?"** → grep `lib/` + the newest spec on it in `docs/superpowers/specs/`.
 - **"What's the convention for Y?"** → [CONTRIBUTING.md](CONTRIBUTING.md).
-- **"Why was this decided?"** → [saga/](saga/), most likely Chapter 1 §15.
+- **"Why was this decided?"** → [`docs/superpowers/specs/`](docs/superpowers/specs/), then the
+  deprecated [`docs/saga/`](docs/saga/) for anything older than 2026-10-14.
 - **"Is this a vulnerability?"** → [SECURITY.md](SECURITY.md).
-- **"Can I just refactor this?"** → only if tests cover it and the saga doesn't lock it.
+- **"Can I just refactor this?"** → only if tests cover it and no spec locks it.
 
 That's the whole map. Now go read [CONTRIBUTING.md](CONTRIBUTING.md) before
 opening anything.

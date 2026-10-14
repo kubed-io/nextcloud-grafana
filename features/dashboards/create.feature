@@ -8,10 +8,12 @@ Feature: Creating a dashboard
   Background:
     Given the app is connected to Grafana
     And the following mappings were made:
-      | grafana folder | nc folder | mode | storage      | groups |
-      | Demo           | Demo      | sync | admin folder |        |
-      | links          | Pointers  | link | admin folder |        |
-      | Shared         | Shared    | sync | team folder  | admin  |
+      | grafana folder | nc folder        | mode | storage      | groups | version |
+      | Demo           | Demo             | sync | admin folder |        |         |
+      | links          | Pointers         | link | admin folder |        |         |
+      | Shared         | Shared           | sync | team folder  | admin  |         |
+      | Dynamic        | Dynamic          | sync | admin folder |        | 2       |
+      | dynamic-links  | Dynamic Pointers | link | admin folder |        | 2       |
     And the following items in the mappings:
       | path              |
       | /Demo/Team        |
@@ -43,6 +45,7 @@ Feature: Creating a dashboard
       | Demo/Team        | Demo/Team         |
       | Shared           | Shared            |
       | Shared/Quarterly | Shared/Quarterly  |
+      | Dynamic          | Dynamic           |
 
     # A subfolder is not a second kind of destination — it is the same rule one
     # level down, which is exactly why it is worth a row rather than a scenario.
@@ -60,12 +63,14 @@ Feature: Creating a dashboard
     And the file holds "<contents>"
 
     Examples: one gesture, and the mapping decides what the file is
-      | grafana folder    | nc folder        | mode | version | contents                   |
-      | Demo              | Demo             | sync | set     | the dashboard's full JSON  |
-      | Demo/Team         | Demo/Team        | sync | set     | the dashboard's full JSON  |
-      | links             | Pointers         | link | absent  | a pointer to the dashboard |
-      | links/Nested      | Pointers/Nested  | link | absent  | a pointer to the dashboard |
-      | Shared            | Shared           | sync | set     | the dashboard's full JSON  |
+      | grafana folder    | nc folder        | mode | version | contents                            |
+      | Demo              | Demo             | sync | set     | the dashboard's full JSON           |
+      | Demo/Team         | Demo/Team        | sync | set     | the dashboard's full JSON           |
+      | links             | Pointers         | link | absent  | a pointer to the dashboard          |
+      | links/Nested      | Pointers/Nested  | link | absent  | a pointer to the dashboard          |
+      | Shared            | Shared           | sync | set     | the dashboard's full JSON           |
+      | Dynamic           | Dynamic          | sync | set     | the dashboard's full YAML           |
+      | dynamic-links     | Dynamic Pointers | link | absent  | a pointer to the dashboard, in YAML |
 
     # notes: ../AGENTS.md#only-a-mapping-renames-a-folder
     # A version records what a push last sent, and a link never pushes.

@@ -36,9 +36,16 @@ final class DashboardSpec {
 	) {
 	}
 
-	/** The dashboard's own `version`, as the string {@see DashboardMetadata} banks. */
+	/**
+	 * The dashboard's own `version`, as the string {@see DashboardMetadata} banks.
+	 *
+	 * A version-2 read holds the whole resource, which has no `version`: its
+	 * `metadata.generation` is the same counter (the classic API reports one as the
+	 * other — measured on Grafana 13.2.1), so `grafana_version` means one thing in both.
+	 */
 	public function version(): string {
-		$raw = $this->spec->version ?? null;
+		$meta = $this->spec->metadata ?? null;
+		$raw = $meta instanceof \stdClass ? ($meta->generation ?? null) : ($this->spec->version ?? null);
 		return is_scalar($raw) ? (string)$raw : '';
 	}
 

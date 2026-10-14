@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Service\Mapping;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -259,9 +260,61 @@ final class MappingTest extends TestCase {
 			'nc_folder' => 'observe',
 			'mode' => 'link',
 			'use_team_folder' => false,
+			'version' => 2,
 		]);
+		self::assertSame(2, $original->toArray()['version']);
 		$round = Mapping::fromArray($original->toArray());
 		self::assertEquals($original, $round);
+	}
+
+	// ── version ────────────────────────────────────────────────────────────────
+
+	/** Version 1 is what every mapping was before the field existed, so it is the default. */
+	public function testVersionDefaultsToOne(): void {
+		$m = Mapping::fromArray(['grafana_folder_uid' => 'uid1', 'nc_folder' => 'observe']);
+
+		self::assertSame(Mapping::VERSION_1, $m->version);
+		self::assertSame(1, $m->toArray()['version']);
+	}
+
+	/** A row saved before this field existed reads as version 1, unchanged. */
+	public function testAStoredRowWithoutVersionReadsAsOne(): void {
+		$stored = ['id' => 'old', 'grafana_folder_uid' => 'uid1', 'grafana_folder_title' => 'observe',
+			'nc_folder' => 'observe', 'nc_folder_id' => 7, 'mode' => 'sync', 'use_team_folder' => false];
+
+		self::assertSame(1, Mapping::fromArray($stored)->version);
+	}
+
+	/** occ JSON carries an int, a form field arrives as a string; both mean the same. */
+	public function testAcceptsTwoAsIntOrString(): void {
+		foreach ([2, '2'] as $given) {
+			self::assertSame(2, Mapping::fromArray(['grafana_folder_uid' => 'u', 'nc_folder' => 'f', 'version' => $given])->version);
+		}
+	}
+
+	/** @return iterable<string, array{mixed}> */
+	public static function unknownVersions(): iterable {
+		yield 'three' => [3];
+		yield 'zero' => [0];
+		yield 'a v-prefixed name' => ['v2'];
+		yield 'a fraction' => ['1.5'];
+		yield 'empty' => [''];
+	}
+
+	/** Like an unknown mode: saying nonsense is not the same as saying nothing. */
+	#[DataProvider('unknownVersions')]
+	public function testRejectsAnUnknownVersion(mixed $given): void {
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessage('version must be 1 or 2');
+
+		Mapping::fromArray(['grafana_folder_uid' => 'u', 'nc_folder' => 'f', 'version' => $given]);
+	}
+
+	public function testWithersKeepTheVersion(): void {
+		$m = Mapping::fromArray(['grafana_folder_uid' => 'u', 'nc_folder' => 'f', 'version' => 2]);
+
+		self::assertSame(2, $m->withNcFolderId(9)->version);
+		self::assertSame(2, $m->withNcFolder('g')->version);
 	}
 
 	public function testJsonSerializeMatchesToArray(): void {

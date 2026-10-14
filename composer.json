@@ -4,7 +4,8 @@
 	"type": "project",
 	"license": "AGPL-3.0-or-later",
 	"require": {
-		"php": "^8.1"
+		"php": "^8.2",
+		"symfony/yaml": "^7.4"
 	},
 	"require-dev": {
 		"nextcloud/ocp": "^33.0",
@@ -32,9 +33,37 @@
 	},
 	"scripts": {
 		"test:unit": "phpunit --configuration tests/phpunit.unit.xml",
-		"lint": "find lib -name '*.php' -print0 | xargs -0 -n1 php -l",
+		"lint": "find lib -path lib/Vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l",
 		"cs:check": "php-cs-fixer fix --dry-run --diff",
 		"cs:fix": "php-cs-fixer fix",
-		"psalm": "psalm --no-cache"
+		"psalm": "psalm --no-cache",
+		"prefix-dependencies": [
+			"sh -c 'test -f bin/strauss.phar || (mkdir -p bin && curl -fsSL -o bin/strauss.phar https://github.com/BrianHenryIE/strauss/releases/download/0.31.1/strauss.phar)'",
+			"sh -c 'echo \"17dc2baf27b9a3f52834e3db729c8365d8915a80e37a087d253cf705387aa887  bin/strauss.phar\" | sha256sum -c --quiet - || { rm -f bin/strauss.phar; echo \"strauss.phar does not match its pinned sha256\" >&2; exit 1; }'",
+			"@php bin/strauss.phar --silent"
+		],
+		"post-install-cmd": [
+			"@prefix-dependencies"
+		],
+		"post-update-cmd": [
+			"@prefix-dependencies"
+		]
+	},
+	"extra": {
+		"strauss": {
+			"target_directory": "lib/Vendor",
+			"namespace_prefix": "OCA\\GrafanaSync\\Vendor\\",
+			"classmap_prefix": "OCA_GrafanaSync_Vendor_",
+			"packages": [
+				"symfony/yaml"
+			],
+			"delete_vendor_packages": false,
+			"exclude_from_copy": {
+				"packages": [
+					"symfony/deprecation-contracts",
+					"symfony/polyfill-ctype"
+				]
+			}
+		}
 	}
 }

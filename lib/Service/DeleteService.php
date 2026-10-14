@@ -73,9 +73,9 @@ final class DeleteService {
 		if ($binUid !== null) {
 			// BIN ON: park the dashboard in the bin folder, keeping its uid. Metadata is left
 			// intact (uid + mapping) so restore can move it back to the right folder.
-			$spec = $this->decodeSpec($node->getContent());
-			$spec->uid = $managed->uid;
-			$this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $binUid, $node->getName()));
+			// Through the API the body names, so a version-2 dashboard is parked whole.
+			$doc = DashboardDocument::decodeNonEmpty($node->getContent())->withUid($managed->uid);
+			$this->grafana->writeDocument($doc, $binUid, $node->getName());
 			return;
 		}
 
@@ -211,15 +211,13 @@ final class DeleteService {
 				return;
 			}
 
-			$spec = $this->decodeSpec($node->getContent());
-			$spec->uid = $managed->uid;
+			$doc = DashboardDocument::decodeNonEmpty($node->getContent())->withUid($managed->uid);
 			// Where the file actually IS, not where its mapping starts. Restoring a whole
 			// folder brings back files that live in subfolders, and the folder cascade
 			// deleted the Grafana folders on the way in — so this both puts each dashboard
 			// back under the right parent and re-creates any level that is missing.
 			$folderUid = $this->folderMirror->folderUidFor($node, $mapping);
-			$resp = $this->grafana->upsertDashboard(DashboardBody::toUpsertBody($spec, $folderUid, $node->getName()));
-			$version = isset($resp['version']) ? (string)$resp['version'] : '';
+			$version = $this->grafana->writeDocument($doc, $folderUid, $node->getName())['version'];
 			if ($version !== '') {
 				$this->guard->run(fn () => $this->metadata->write($node->getId(), [DashboardMetadata::KEY_VERSION => $version]));
 			}
@@ -282,17 +280,5 @@ final class DeleteService {
 		$this->guard->run(function () use ($node): void {
 			$this->metadata->clear($node->getId());
 		});
-	}
-
-	private function decodeSpec(string $content): \stdClass {
-		try {
-			$decoded = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException $e) {
-			throw new \RuntimeException('The dashboard file is not valid JSON: ' . $e->getMessage(), 0, $e);
-		}
-		if (!$decoded instanceof \stdClass) {
-			throw new \RuntimeException('The dashboard file is not a JSON object.');
-		}
-		return $decoded;
 	}
 }

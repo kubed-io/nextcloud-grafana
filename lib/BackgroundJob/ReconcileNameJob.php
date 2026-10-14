@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace OCA\GrafanaSync\BackgroundJob;
 
 use OCA\GrafanaSync\AppInfo\Application;
-use OCA\GrafanaSync\Service\DashboardBody;
+use OCA\GrafanaSync\Service\DashboardDocument;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\FilenameCodec;
 use OCA\GrafanaSync\Service\PushService;
@@ -85,21 +85,18 @@ final class ReconcileNameJob extends QueuedJob {
 			$dashUid = $managed->uid;
 
 			$stem = FilenameCodec::displayName($node->getName());
-			$spec = json_decode($node->getContent(), false);
-			if (!$spec instanceof \stdClass) {
-				return;
-			}
-			$jsonTitle = isset($spec->title) && is_string($spec->title) ? trim($spec->title) : '';
+			// Throws on a file that is not a dashboard — caught + logged by the outer try.
+			$doc = DashboardDocument::decodeNonEmpty($node->getContent());
+			$jsonTitle = $doc->title();
 
 			if ($action === 'title_from_filename') {
 				if ($stem === '' || $jsonTitle === $stem) {
 					return; // already in sync
 				}
-				$spec->title = $stem;
-				// The codebase's shared encode flags (includes JSON_THROW_ON_ERROR, so an encode
-				// failure throws → caught + logged by the outer try, never a silent bad write).
-				$encoded = json_encode($spec, DashboardBody::JSON_PRETTY);
-				// Write the JSON title guarded (so the writeback / name-sync don't echo),
+				// In its shape's syntax: JSON for a classic body, YAML for a version-2 resource.
+				// An encode failure throws → caught + logged by the outer try.
+				$encoded = $doc->withTitle($stem)->encode();
+				// Write the title guarded (so the writeback / name-sync don't echo),
 				// then push to Grafana ourselves — one tick, one push.
 				$this->guard->run(function () use ($node, $encoded): void {
 					$node->putContent($encoded);

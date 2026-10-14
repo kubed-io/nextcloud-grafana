@@ -482,6 +482,13 @@ final class SyncService {
 	 * local mirror is removed — and the caller already holds the SyncGuard so the delete
 	 * does not mirror back. Returns the number of files pruned.
 	 *
+	 * KNOWN GAP, DEFERRED (PR #85 review): "not seen" means "not listed by /api/search",
+	 * and a fresh Grafana 13.2 indexes search asynchronously (18.5 s measured). A pull
+	 * inside that window would prune a mirror the app has just written — a sync file comes
+	 * back from the trash on the next pull, a link pointer is regenerated. Not seen on an
+	 * upgraded, legacy-backed Grafana. The fix is one GET by uid confirming a dashboard is
+	 * really gone or elsewhere before pruning it; see the spec's "Next".
+	 *
 	 * @param array<string,Node> $existingByUid managed files for this mapping, keyed by uid
 	 * @param array<string,bool> $seenUids uids still present in the mapped folder (written this pull)
 	 */
@@ -632,13 +639,19 @@ final class SyncService {
 			// (a pointer never pushes), so it stays empty.
 			$read = $this->readClocksForLink($uid);
 			$url = $row['url'] !== '' ? $this->grafana->deepLinkFromPath($row['url']) : $this->grafana->deepLink($uid);
-			$body = DashboardBody::encodeReference($row, $url, $row['folderUid']);
+			$body = DashboardBody::encodeReference($row, $url, $row['folderUid'], $mapping->version);
 			$version = '';
 		} else {
 			// Deliberately UNGUARDED: a transient 500/timeout throws, pullOne catches it,
 			// and the file counts as failed. Swallowing it here would report a clean pull
-			// over content we never managed to read.
-			$read = $this->grafana->readDashboardSpec($uid);
+			// over content we never managed to read. A version-2 dashboard Grafana could
+			// not convert throws the same way, and keeps the file it already has.
+			//
+			// THE ONE PLACE A MAPPING'S VERSION PICKS AN API. Every write goes through
+			// whatever its body names (GrafanaClient::writeDocument); a pull decides
+			// what the folder's files ARE.
+			$v2 = $mapping->version === Mapping::VERSION_2;
+			$read = $v2 ? $this->grafana->readDashboardResource($uid) : $this->grafana->readDashboardSpec($uid);
 			if ($read === null) {
 				$this->logger->warning('grafana_sync pull: dashboard record carried no spec; skipping', [
 					'app' => Application::APP_ID,
@@ -651,7 +664,7 @@ final class SyncService {
 				return false;
 			}
 			$version = $read->version();
-			$body = DashboardBody::encodeSync($read->spec);
+			$body = $v2 ? DashboardBody::encodeResource($read->spec) : DashboardBody::encodeSync($read->spec);
 		}
 
 		// A MIRROR IN THE TRASH IS STILL THIS DASHBOARD'S MIRROR. `indexByUid` walks the
@@ -873,12 +886,10 @@ final class SyncService {
 	 */
 	private static function tagsIn(string $body): TagSet {
 		try {
-			$decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
+			return DashboardDocument::decode($body)->tags();
+		} catch (\RuntimeException) {
 			return TagSet::empty();
 		}
-		$tags = is_array($decoded) ? ($decoded['tags'] ?? null) : null;
-		return TagSet::of(is_array($tags) ? $tags : []);
 	}
 
 	/**

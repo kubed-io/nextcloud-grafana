@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\GrafanaSync\Tests\Unit\Service;
 
+use OCA\GrafanaSync\Exception\GrafanaApiException;
 use OCA\GrafanaSync\Service\DashboardBody;
 use OCA\GrafanaSync\Service\DashboardMetadata;
 use OCA\GrafanaSync\Service\DashboardSpec;
@@ -24,6 +25,7 @@ use OCA\GrafanaSync\Service\PushService;
 use OCA\GrafanaSync\Service\StorageService;
 use OCA\GrafanaSync\Service\SyncGuard;
 use OCA\GrafanaSync\Service\SyncService;
+use OCA\GrafanaSync\Service\TagSet;
 use OCA\GrafanaSync\Service\TagSyncService;
 use OCA\GrafanaSync\Service\TrashControl;
 use OCA\GrafanaSync\Service\TrashReconcileService;
@@ -139,7 +141,7 @@ final class SyncServiceTest extends TestCase {
 		);
 	}
 
-	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false): Mapping {
+	private function mapping(string $mode = Mapping::MODE_SYNC, string $id = 'map-alpha', bool $useTeamFolder = false, int $version = Mapping::VERSION_1): Mapping {
 		return Mapping::fromArray([
 			'id' => $id,
 			'grafana_folder_uid' => 'gf-alpha',
@@ -147,7 +149,119 @@ final class SyncServiceTest extends TestCase {
 			'nc_folder' => 'alpha',
 			'mode' => $mode,
 			'use_team_folder' => $useTeamFolder,
+			'version' => $version,
 		]);
+	}
+
+	/** A dashboard as `dashboard.grafana.app/v2` serves it, metadata and status included. */
+	private function resource(string $uid, string $title, int $generation = 3, array $tags = []): DashboardSpec {
+		return new DashboardSpec((object)[
+			'apiVersion' => 'dashboard.grafana.app/v2',
+			'kind' => 'Dashboard',
+			'metadata' => (object)['name' => $uid, 'generation' => $generation, 'resourceVersion' => '99',
+				'annotations' => (object)['grafana.app/folder' => 'gf-alpha']],
+			'spec' => (object)['title' => $title, 'tags' => $tags, 'elements' => new \stdClass()],
+			'status' => new \stdClass(),
+		], null, null);
+	}
+
+	/** A Folder that holds nothing yet and captures the one file the pull creates. */
+	private function emptyFolderCapturing(\ArrayObject $written): Folder {
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([]);
+		$folder->method('nodeExists')->willReturn(false);
+		$folder->method('newFile')->willReturnCallback(function (string $name, string $body) use ($written): File {
+			$written[$name] = $body;
+			return $this->file(100, $name);
+		});
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		return $folder;
+	}
+
+	// ── version 2 ──────────────────────────────────────────────────────────────
+
+	public function testAV2SyncPullWritesTheResourceAsYaml(): void {
+		$written = new \ArrayObject();
+		$this->emptyFolderCapturing($written);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->expects(self::never())->method('readDashboardSpec');
+		$this->grafana->method('readDashboardResource')->with('d1')->willReturn($this->resource('d1', 'Board'));
+
+		$this->service->pullOne($this->mapping(version: Mapping::VERSION_2));
+
+		self::assertSame(
+			"apiVersion: dashboard.grafana.app/v2\nkind: Dashboard\nmetadata:\n  name: d1\nspec:\n  title: Board\n  tags: []\n  elements: {  }\n",
+			$written['Board.grafana'],
+		);
+	}
+
+	public function testAV2LinkPullWritesThePointerAsYaml(): void {
+		$written = new \ArrayObject();
+		$this->emptyFolderCapturing($written);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('deepLinkFromPath')->willReturn('https://grafana.example/d/d1/x');
+		$this->grafana->expects(self::never())->method('readDashboardResource');
+
+		$this->service->pullOne($this->mapping(Mapping::MODE_LINK, version: Mapping::VERSION_2));
+
+		self::assertStringStartsWith("\$schema: grafana.reference/v1\nuid: d1\n", $written['Board.grafana']);
+	}
+
+	/** Version 1 is byte-for-byte what it always was. */
+	public function testAV1PullIsUnchanged(): void {
+		$written = new \ArrayObject();
+		$this->emptyFolderCapturing($written);
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->expects(self::never())->method('readDashboardResource');
+		$this->grafana->method('readDashboardSpec')
+			->willReturn(new DashboardSpec((object)['uid' => 'd1', 'id' => 4, 'title' => 'Board', 'version' => 5, 'options' => new \stdClass()], null, null));
+
+		$this->service->pullOne($this->mapping());
+
+		self::assertSame("{\n    \"uid\": \"d1\",\n    \"title\": \"Board\",\n    \"options\": {}\n}", $written['Board.grafana']);
+	}
+
+	public function testAV2PullStampsGenerationAsVersion(): void {
+		$this->emptyFolderCapturing(new \ArrayObject());
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardResource')->willReturn($this->resource('d1', 'Board', 7));
+
+		$this->metadata->expects(self::once())->method('stampSynced')
+			->with(100, 'd1', Mapping::MODE_SYNC, '7', self::stringStartsWith('apiVersion:'), 'map-alpha');
+
+		$this->service->pullOne($this->mapping(version: Mapping::VERSION_2));
+	}
+
+	/** A dashboard Grafana could not convert is a failed file, and the mirror keeps what it had. */
+	public function testAFailedConversionIsAFailedFileAndKeepsTheOldBody(): void {
+		$existing = $this->mirror(10, FilenameCodec::format('Board', 'd1', false, 0), "apiVersion: dashboard.grafana.app/v2\n");
+		$existing->expects(self::never())->method('putContent');
+		$folder = $this->createStub(Folder::class);
+		$folder->method('getDirectoryListing')->willReturn([$existing]);
+		$this->storage->method('isAvailable')->willReturn(true);
+		$this->storage->method('ensureFolder')->willReturn($folder);
+		$this->metadata->method('read')->willReturn($this->managed('d1', Mapping::MODE_SYNC, 'map-alpha'));
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardResource')->willThrowException(new GrafanaApiException('panel 3 has no type', 422));
+
+		$res = $this->service->pullOne($this->mapping(version: Mapping::VERSION_2));
+
+		self::assertSame(1, $res['failed']);
+		self::assertSame(0, $res['succeeded']);
+	}
+
+	public function testTagsComeFromSpecTagsInAV2Body(): void {
+		$this->emptyFolderCapturing(new \ArrayObject());
+		$this->grafana->method('listDashboards')->willReturn([$this->row('d1', 'Board')]);
+		$this->grafana->method('readDashboardResource')->willReturn($this->resource('d1', 'Board', 3, ['ops', 'dns']));
+		$tags = $this->createMock(TagSyncService::class);
+		$tags->expects(self::once())->method('applyToDashboard')
+			->with(self::anything(), self::callback(static fn (TagSet $t): bool => $t->equals(TagSet::of(['ops', 'dns']))));
+		$this->tagSync = $tags;
+		$this->rebuildService();
+
+		$this->service->pullOne($this->mapping(version: Mapping::VERSION_2));
 	}
 
 	/** A managed `.grafana` File stub with a fixed id + name (no verified interactions). */

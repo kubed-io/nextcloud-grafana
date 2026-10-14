@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Unit\Service;
 
 use OCA\GrafanaSync\Exception\ExistingDashboardsException;
 use OCA\GrafanaSync\Service\ExistingDashboards;
+use OCA\GrafanaSync\Service\GrafanaClient;
 use OCA\GrafanaSync\Service\Mapping;
 use OCA\GrafanaSync\Service\MappingService;
 use OCA\GrafanaSync\Service\RecycleBin;
@@ -71,8 +72,15 @@ final class MappingServiceTest extends TestCase {
 		return $existing;
 	}
 
+	/** A Grafana that serves version-2 dashboards, unless a test says otherwise. */
+	private function grafana(bool $servesV2 = true): GrafanaClient {
+		$grafana = $this->createStub(GrafanaClient::class);
+		$grafana->method('servesDashboardV2')->willReturn($servesV2);
+		return $grafana;
+	}
+
 	private function service(): MappingService {
-		return new MappingService($this->config(), $this->storage(), $this->recycleBin(), $this->existingDashboards());
+		return new MappingService($this->config(), $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana());
 	}
 
 	/**
@@ -137,6 +145,39 @@ final class MappingServiceTest extends TestCase {
 		self::assertSame('uid-a', $all[0]->grafanaFolderUid);
 		self::assertSame('bravo', $all[1]->ncFolder);
 		self::assertSame('link', $all[1]->mode);
+	}
+
+	public function testAddThenListRoundTripsTheVersion(): void {
+		$svc = $this->service();
+		$svc->add(Mapping::fromArray(['grafana_folder_uid' => 'uid-a', 'nc_folder' => 'alpha', 'version' => 2]));
+		$svc->add($this->mapping('uid-b', 'bravo'));
+
+		$all = $svc->list();
+		self::assertSame(2, $all[0]->version);
+		self::assertSame(1, $all[1]->version);
+	}
+
+	/** Refused when made, rather than saved and then failing every pull with a 404. */
+	public function testAV2MappingIsRefusedWhenGrafanaHasNoV2(): void {
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana(false));
+
+		try {
+			$svc->add(Mapping::fromArray(['grafana_folder_uid' => 'uid-a', 'nc_folder' => 'alpha', 'version' => 2]));
+			self::fail('a version-2 mapping was saved on a Grafana without version 2');
+		} catch (\InvalidArgumentException $e) {
+			self::assertSame('This Grafana does not serve version 2 dashboards (dashboard.grafana.app/v2).', $e->getMessage());
+		}
+		self::assertSame([], $svc->list());
+	}
+
+	public function testAV1MappingNeverAsksGrafanaAboutVersions(): void {
+		$grafana = $this->createMock(GrafanaClient::class);
+		$grafana->expects(self::never())->method('servesDashboardV2');
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(), $this->existingDashboards(), $grafana);
+
+		$svc->add($this->mapping('uid-a', 'alpha'));
+
+		self::assertCount(1, $svc->list());
 	}
 
 	public function testPersistsAcrossServiceInstances(): void {
@@ -260,7 +301,7 @@ final class MappingServiceTest extends TestCase {
 	 * dashboards out of the bin.
 	 */
 	public function testTheRecycleBinFolderCannotBeMapped(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards());
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards(), $this->grafana());
 
 		$this->expectException(\InvalidArgumentException::class);
 		$this->expectExceptionMessageMatches('/cannot be mapped because it is the recycle bin/');
@@ -273,7 +314,7 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	public function testTheRecycleBinClashIsCaseInsensitive(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards());
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin('nextcloud-trash'), $this->existingDashboards(), $this->grafana());
 
 		$this->expectException(\InvalidArgumentException::class);
 		$svc->add(Mapping::fromArray([
@@ -331,6 +372,7 @@ final class MappingServiceTest extends TestCase {
 			$this->storage(),
 			$this->recycleBin(),
 			$this->existingDashboardsHolding([$this->dashFile(), $this->dashFile()]),
+			$this->grafana(),
 		);
 
 		try {
@@ -354,6 +396,7 @@ final class MappingServiceTest extends TestCase {
 			$this->storage(),
 			$this->recycleBin(),
 			$this->existingDashboardsHolding($files, $purged),
+			$this->grafana(),
 		);
 
 		$svc->add($this->linkMapping(), [], true);
@@ -363,10 +406,10 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	/**
-	 * A SYNC MAPPING IS UNTOUCHED. It pushes what it finds up to Grafana, so nothing is
-	 * destroyed and nothing is confirmed — the rule is about links alone, and asking a
-	 * sync mapping the question would refuse the ordinary case of mapping a folder that
-	 * already holds work.
+	 * A VERSION-1 SYNC MAPPING IS UNTOUCHED. It pushes what it finds up to Grafana, so
+	 * nothing is destroyed and nothing is confirmed — asking it the question would refuse
+	 * the ordinary case of mapping a folder that already holds work. The rule is about
+	 * links and version 2, below.
 	 */
 	public function testASyncMappingOverTheSameFilesIsNotEvenAsked(): void {
 		$purged = null;
@@ -375,6 +418,7 @@ final class MappingServiceTest extends TestCase {
 			$this->storage(),
 			$this->recycleBin(),
 			$this->existingDashboardsHolding([$this->dashFile()], $purged),
+			$this->grafana(),
 		);
 
 		$svc->add(Mapping::fromArray([
@@ -386,6 +430,61 @@ final class MappingServiceTest extends TestCase {
 
 		self::assertCount(1, $svc->list());
 		self::assertNull($purged, 'a sync mapping destroyed files it should have adopted');
+	}
+
+	private function v2SyncMapping(): Mapping {
+		return Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a',
+			'grafana_folder_title' => 'observe',
+			'nc_folder' => 'Dashboards',
+			'mode' => 'sync',
+			'version' => 2,
+		]);
+	}
+
+	/**
+	 * A VERSION-2 MAPPING IS ASKED, TOO (Dr K). The files it would find are what a
+	 * removed mapping left behind — typically a version-1 mapping's classic JSON — and a
+	 * version-2 mapping holding them would push them back through the classic API on the
+	 * first "Sync to Grafana", flattening the very dashboards it exists to keep whole. So
+	 * they go first, on the admin's word, and the first pull writes the folder afresh.
+	 */
+	public function testAV2SyncMappingOverExistingDashboardsIsRefusedWithTheCount(): void {
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding([$this->dashFile(), $this->dashFile(), $this->dashFile()]),
+			$this->grafana(),
+		);
+
+		try {
+			$svc->add($this->v2SyncMapping());
+			self::fail('a version-2 mapping over three dashboard files was accepted');
+		} catch (ExistingDashboardsException $e) {
+			self::assertSame(3, $e->dashboards);
+			self::assertStringContainsString('version 2', $e->getMessage());
+			self::assertStringContainsString('permanently deleted', $e->getMessage());
+			self::assertStringContainsString('replaced by what this mapping pulls', $e->getMessage());
+		}
+		self::assertSame([], $svc->list(), 'the refused mapping was stored anyway');
+	}
+
+	public function testAcknowledgingTheV2PurgeCreatesTheMappingAndDestroysTheFiles(): void {
+		$purged = null;
+		$files = [$this->dashFile(), $this->dashFile()];
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding($files, $purged),
+			$this->grafana(),
+		);
+
+		$svc->add($this->v2SyncMapping(), [], true);
+
+		self::assertSame(2, $svc->list()[0]->version);
+		self::assertSame($files, $purged);
 	}
 
 	/**
@@ -400,6 +499,7 @@ final class MappingServiceTest extends TestCase {
 			$this->storage(),
 			$this->recycleBin(),
 			$this->existingDashboardsHolding([$this->dashFile()], $purged),
+			$this->grafana(),
 		);
 		$svc->add(Mapping::fromArray([
 			'grafana_folder_uid' => 'uid-taken',
@@ -419,7 +519,7 @@ final class MappingServiceTest extends TestCase {
 
 	/** With no bin configured nothing is reserved, so an ordinary mapping still saves. */
 	public function testWithNoBinConfiguredNothingIsReserved(): void {
-		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(''), $this->existingDashboards());
+		$svc = new MappingService($this->config(), $this->storage(), $this->recycleBin(''), $this->existingDashboards(), $this->grafana());
 
 		$svc->add(Mapping::fromArray([
 			'grafana_folder_uid' => 'uid-a',
@@ -605,7 +705,7 @@ final class MappingServiceTest extends TestCase {
 			},
 		);
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana());
 		$mapping = $service->add(
 			Mapping::fromArray(['id' => 'm1', 'grafana_folder_uid' => 'a', 'nc_folder' => 'a', 'mode' => 'sync']),
 			['design', 'admin'],
@@ -622,7 +722,7 @@ final class MappingServiceTest extends TestCase {
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 		$config->expects(self::never())->method('setValueString');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana());
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame(['design'], $this->appliedGroups['m1']);
 	}
@@ -632,7 +732,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana());
 		$service->updateGroups('m1', 'design,admin,sales');
 		self::assertSame(['design'], $service->updateGroups('m1', 'design'));
 		self::assertSame([], $service->updateGroups('m1', ''));
@@ -643,7 +743,7 @@ final class MappingServiceTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueString')->willReturn('[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync"}]');
 
-		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards());
+		$service = new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana());
 		$service->updateGroups('m1', 'design');
 		$mapping = $service->getById('m1');
 		self::assertNotNull($mapping);
@@ -663,7 +763,7 @@ final class MappingServiceTest extends TestCase {
 			'[{"id":"m1","grafana_folder_uid":"a","nc_folder":"a","mode":"sync","nc_groups":["devs"]}]',
 		);
 
-		$mappings = (new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards()))->list();
+		$mappings = (new MappingService($config, $this->storage(), $this->recycleBin(), $this->existingDashboards(), $this->grafana()))->list();
 		self::assertCount(1, $mappings);
 		self::assertArrayNotHasKey('nc_groups', $mappings[0]->toArray());
 	}
