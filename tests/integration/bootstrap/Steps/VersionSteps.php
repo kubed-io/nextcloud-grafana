@@ -54,10 +54,12 @@ trait VersionSteps {
 
 	/** The pull lists a folder's dashboards by searching it, so that is the question asked. */
 	private function waitUntilGrafanaSearchFinds(string $uid, string $folderUid): void {
-		for ($i = 0; $i < 40; $i++) {
+		$started = microtime(true);
+		for ($i = 0; $i < 360; $i++) {
 			$res = $this->grafanaClient()->request('GET', 'search', ['query' => ['folderUIDs' => $folderUid, 'type' => 'dash-db']]);
 			$rows = json_decode((string)$res->getBody(), true);
 			if (is_array($rows) && in_array($uid, array_column($rows, 'uid'), true)) {
+				fwrite(STDERR, sprintf("search listed %s after %.1fs\n", $uid, microtime(true) - $started));
 				return;
 			}
 			usleep(250_000);

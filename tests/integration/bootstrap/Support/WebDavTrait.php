@@ -284,7 +284,12 @@ trait WebDavTrait {
 			'headers' => ['Depth' => '0', 'Content-Type' => 'application/xml'],
 			'body' => $reqBody,
 		]);
-		Assert::assertSame(207, $res->getStatusCode(), "PROPFIND $path failed: " . (string)$res->getBody());
+		// A PLAIN EXCEPTION, not an Assert: a failed PHPUnit assertion inside Behat cannot
+		// format itself (it asks for a PHPUnit configuration Behat never loads), and the
+		// status and body — the only clues — were lost to a type error about that.
+		if ($res->getStatusCode() !== 207) {
+			throw new \RuntimeException("PROPFIND $path failed: HTTP {$res->getStatusCode()}\n" . mb_substr((string)$res->getBody(), 0, 2000));
+		}
 		$xml = (string)$res->getBody();
 		$doc = new \SimpleXMLElement($xml);
 		$doc->registerXPathNamespace('d', 'DAV:');
