@@ -245,6 +245,26 @@ Moves, copies, renames, tags and the recycle bin across versions are covered by 
 tests in this round; their scenarios are listed under *Next* rather than added, so the
 Gherkin diff stays a statement of the feature rather than a census of it.
 
+## Re-mapping a folder at version 2 (Dr K, 2026-10-14)
+
+*"When you remap the folder as v2, it should warn that this will first delete all the
+\*.grafana files that already exist and overwrite with what this mapping will do."*
+
+A version is fixed when a mapping is made, so moving a folder to version 2 is: remove
+the mapping (its sync files stay, unmapped, still carrying their uids), then map the
+folder again at version 2. A Nextcloud folder may only be mapped once, so the remove
+always comes first.
+
+The files left behind are version 1's classic JSON, and a version-2 mapping holding
+them would push them back through the classic API on the first "Sync to Grafana" —
+flattening the very dashboards it exists to keep whole. So a version-2 mapping asks the
+link mapping's question: the unmapped `.grafana` files under the folder are counted,
+the admin is told they will be permanently deleted and replaced by what the mapping
+pulls, and they are purged only on that answer (`purge_dashboards`). The siblings ask
+only for a link; here a version-2 mapping asks too. A version-1 sync mapping still
+adopts what it finds. Gherkin: `mapping/create.feature`, *Mapping at version 2 over a
+folder that already holds dashboards*.
+
 ## Not in this round
 
 - Changing a mapping's version in place, or converting a folder's files between formats.

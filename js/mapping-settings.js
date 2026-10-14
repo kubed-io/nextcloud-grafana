@@ -218,13 +218,23 @@
 	 * holds none — so the mapping is created with no warning at all.
 	 */
 	function confirmPurge(card, count, folder) {
-		var msg = n(
-			'grafana_sync',
-			'"{folder}" already holds {count} dashboard file. Mapping it in link mode will permanently delete it — it will not go to the trash and cannot be recovered. Move it elsewhere first if you want to keep it.',
-			'"{folder}" already holds {count} dashboard files. Mapping it in link mode will permanently delete them — they will not go to the trash and cannot be recovered. Move them elsewhere first if you want to keep them.',
-			count,
-			{ folder: folder, count: count }
-		);
+		// Two mappings ask: a link (it holds pointers, not dashboards) and a version 2
+		// mapping (it writes every file afresh as YAML). Same question, its own reason.
+		var msg = readCard(card).mode === 'link'
+			? n(
+				'grafana_sync',
+				'"{folder}" already holds {count} dashboard file. Mapping it in link mode will permanently delete it — it will not go to the trash and cannot be recovered. Move it elsewhere first if you want to keep it.',
+				'"{folder}" already holds {count} dashboard files. Mapping it in link mode will permanently delete them — they will not go to the trash and cannot be recovered. Move them elsewhere first if you want to keep them.',
+				count,
+				{ folder: folder, count: count }
+			)
+			: n(
+				'grafana_sync',
+				'"{folder}" already holds {count} dashboard file. A version 2 mapping deletes it first — it will not go to the trash and cannot be recovered — and writes what Grafana holds in its place, as YAML. Move it elsewhere first if you want to keep it.',
+				'"{folder}" already holds {count} dashboard files. A version 2 mapping deletes them first — they will not go to the trash and cannot be recovered — and writes what Grafana holds in their place, as YAML. Move them elsewhere first if you want to keep them.',
+				count,
+				{ folder: folder, count: count }
+			);
 
 		window.GrafanaSync.confirmDestructive({
 			title: t('grafana_sync', 'Delete these dashboard files?'),

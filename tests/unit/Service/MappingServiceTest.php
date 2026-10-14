@@ -406,10 +406,10 @@ final class MappingServiceTest extends TestCase {
 	}
 
 	/**
-	 * A SYNC MAPPING IS UNTOUCHED. It pushes what it finds up to Grafana, so nothing is
-	 * destroyed and nothing is confirmed — the rule is about links alone, and asking a
-	 * sync mapping the question would refuse the ordinary case of mapping a folder that
-	 * already holds work.
+	 * A VERSION-1 SYNC MAPPING IS UNTOUCHED. It pushes what it finds up to Grafana, so
+	 * nothing is destroyed and nothing is confirmed — asking it the question would refuse
+	 * the ordinary case of mapping a folder that already holds work. The rule is about
+	 * links and version 2, below.
 	 */
 	public function testASyncMappingOverTheSameFilesIsNotEvenAsked(): void {
 		$purged = null;
@@ -430,6 +430,61 @@ final class MappingServiceTest extends TestCase {
 
 		self::assertCount(1, $svc->list());
 		self::assertNull($purged, 'a sync mapping destroyed files it should have adopted');
+	}
+
+	private function v2SyncMapping(): Mapping {
+		return Mapping::fromArray([
+			'grafana_folder_uid' => 'uid-a',
+			'grafana_folder_title' => 'observe',
+			'nc_folder' => 'Dashboards',
+			'mode' => 'sync',
+			'version' => 2,
+		]);
+	}
+
+	/**
+	 * A VERSION-2 MAPPING IS ASKED, TOO (Dr K). The files it would find are what a
+	 * removed mapping left behind — typically a version-1 mapping's classic JSON — and a
+	 * version-2 mapping holding them would push them back through the classic API on the
+	 * first "Sync to Grafana", flattening the very dashboards it exists to keep whole. So
+	 * they go first, on the admin's word, and the first pull writes the folder afresh.
+	 */
+	public function testAV2SyncMappingOverExistingDashboardsIsRefusedWithTheCount(): void {
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding([$this->dashFile(), $this->dashFile(), $this->dashFile()]),
+			$this->grafana(),
+		);
+
+		try {
+			$svc->add($this->v2SyncMapping());
+			self::fail('a version-2 mapping over three dashboard files was accepted');
+		} catch (ExistingDashboardsException $e) {
+			self::assertSame(3, $e->dashboards);
+			self::assertStringContainsString('version 2', $e->getMessage());
+			self::assertStringContainsString('permanently deleted', $e->getMessage());
+			self::assertStringContainsString('replaced by what this mapping pulls', $e->getMessage());
+		}
+		self::assertSame([], $svc->list(), 'the refused mapping was stored anyway');
+	}
+
+	public function testAcknowledgingTheV2PurgeCreatesTheMappingAndDestroysTheFiles(): void {
+		$purged = null;
+		$files = [$this->dashFile(), $this->dashFile()];
+		$svc = new MappingService(
+			$this->config(),
+			$this->storage(),
+			$this->recycleBin(),
+			$this->existingDashboardsHolding($files, $purged),
+			$this->grafana(),
+		);
+
+		$svc->add($this->v2SyncMapping(), [], true);
+
+		self::assertSame(2, $svc->list()[0]->version);
+		self::assertSame($files, $purged);
 	}
 
 	/**

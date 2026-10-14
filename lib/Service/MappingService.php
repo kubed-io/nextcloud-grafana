@@ -132,19 +132,31 @@ final class MappingService {
 		// AFTER `assertNcFolderUnique()`, WHICH IS WHY THIS ONLY EVER SEES UNMAPPED
 		// FILES. A folder already in use is refused one line up, so a tree belonging
 		// to another mapping never reaches this check.
-		$existing = $mapping->mode === Mapping::MODE_LINK ? $this->existing->under($mapping) : [];
+		//
+		// A LINK, AND A VERSION-2 MAPPING. A link holds pointers, so dashboard files are a
+		// contradiction in it. A version-2 mapping over files a removed mapping left behind
+		// — usually version 1's classic JSON — would push them back through the classic
+		// API on the first "Sync to Grafana" and flatten the dashboards it exists to keep
+		// whole; so they go first, on the admin's word, and the first pull writes the
+		// folder afresh as YAML (Dr K, 2026-10-14).
+		$link = $mapping->mode === Mapping::MODE_LINK;
+		$existing = ($link || $mapping->version === Mapping::VERSION_2) ? $this->existing->under($mapping) : [];
 		if ($existing !== [] && !$purgeDashboards) {
 			// THE FOLDER NAME AS THE APP RESOLVED IT, not as the admin typed it — they
 			// may have typed nothing at all and taken the Grafana folder's title as the
 			// default. `"" already holds 3 dashboards` is a poor sentence to read just
 			// before destroying something.
+			$why = $link
+				? 'A link mapping holds pointers rather than dashboards, so they would be permanently deleted — '
+					. 'not moved to the trash, and not recoverable.'
+				: 'A version 2 mapping writes every file afresh from Grafana, so they would be permanently deleted — '
+					. 'not moved to the trash, and not recoverable — and replaced by what this mapping pulls.';
 			throw new ExistingDashboardsException(sprintf(
-				'"%s" already holds %d dashboard file%s. A link mapping holds pointers rather '
-				. 'than dashboards, so they would be permanently deleted — not moved to the '
-				. 'trash, and not recoverable. Move them elsewhere first, or confirm the deletion.',
+				'"%s" already holds %d dashboard file%s. %s Move them elsewhere first, or confirm the deletion.',
 				$mapping->ncFolder,
 				count($existing),
 				count($existing) === 1 ? '' : 's',
+				$why,
 			), count($existing), $mapping->ncFolder);
 		}
 		// Provisioning is where the Nextcloud half of the pair becomes knowable, so

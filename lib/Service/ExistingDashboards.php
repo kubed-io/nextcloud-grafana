@@ -56,10 +56,13 @@ use Psr\Log\LoggerInterface;
  * {@see SyncGuard} raised, clearing a folder so it can mirror a Grafana folder would
  * destroy dashboards in the very folder it is about to mirror.
  *
- * ## ONLY `link`, AND ONLY UNMAPPED
+ * ## ONLY `link` OR VERSION 2, AND ONLY UNMAPPED
  *
- * A `sync` mapping pushes what it finds up to Grafana, so nothing is destroyed and
- * nothing is confirmed — the caller decides that, not this class. And a tree that
+ * A version-1 `sync` mapping pushes what it finds up to Grafana, so nothing is
+ * destroyed and nothing is confirmed. A version-2 mapping is asked the same question as
+ * a link: the files it would find are what a removed mapping left — usually version
+ * 1's classic JSON — and pushing those back would flatten the dashboards a version-2
+ * mapping exists to keep whole. The caller decides which mappings ask, not this class. And a tree that
  * already belongs to a mapping never reaches here: a folder in use is refused first
  * ({@see MappingService::assertNcFolderUnique()}). So "no `.grafana` anywhere in the
  * tree" holds implicitly for every mapped tree without being checked.

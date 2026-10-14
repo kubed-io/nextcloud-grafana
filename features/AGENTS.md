@@ -311,8 +311,23 @@ reach this rule — `A Nextcloud folder may only be mapped once` refuses first �
 "no `.grafana` anywhere in the tree" holds implicitly for every mapped tree without
 being checked.
 
-SYNC IS UNTOUCHED. A sync mapping pushes what it finds up to Grafana, so nothing is
-destroyed and nothing is confirmed.
+SYNC AT VERSION 1 IS UNTOUCHED. A version-1 sync mapping pushes what it finds up to
+Grafana, so nothing is destroyed and nothing is confirmed. Version 2 is the next
+section.
+
+### A version-2 mapping may not be made over dashboards that already exist
+
+THE SAME THREE STEPS, ONE SETTING APART (Dr K, 2026-10-14). A folder mapped at
+version 1, the mapping removed — leaving its classic JSON behind, unmapped and still
+carrying each dashboard's uid — then re-mapped at version 2. That is exactly how an
+admin moves a folder to version 2, because a version is fixed when a mapping is made.
+
+A version-2 mapping holding those files would push them back through the classic API
+on the first "Sync to Grafana", flattening the very dashboards it was made to keep
+whole. So they go first, on the admin's word, and the first pull writes the folder
+afresh as YAML. The second beat, the purge and the subfolder are the link rule's, for
+the link rule's reasons; only the reason the files cannot stay differs, which is why
+this is a scenario of its own rather than a row beside the link one.
 
 ### A mapping the app cannot honour is refused, and says why — RETIRED
 
