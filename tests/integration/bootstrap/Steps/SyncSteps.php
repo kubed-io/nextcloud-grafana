@@ -11,6 +11,7 @@ namespace OCA\GrafanaSync\Tests\Integration\Steps;
 
 use Behat\Gherkin\Node\TableNode;
 use PHPUnit\Framework\Assert;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Manual pull steps (saga Ch2 Course 2, "Sync from Grafana"): drive the reconciler
@@ -157,21 +158,50 @@ trait SyncSteps {
 	 * @When I edit the file's panels and save
 	 */
 	public function iEditTheFilesPanelsAndSave(): void {
+		$raw = $this->davGet($this->currentFilePath);
+		$this->editedPanelTitle = 'Edited-' . bin2hex(random_bytes(3));
+
 		// Object decode: an assoc round-trip rewrites the spec's empty `{}` objects as
 		// `[]`, which Grafana rejects. Editing the panels must not reshape the rest.
-		$spec = json_decode($this->davGet($this->currentFilePath), false, 512, JSON_THROW_ON_ERROR);
-		if (!$spec instanceof \stdClass) {
-			throw new \RuntimeException('the dashboard file is not a JSON object');
+		$spec = json_decode($raw, false);
+		if ($spec instanceof \stdClass) {
+			$spec->panels = [(object)['type' => 'text', 'title' => $this->editedPanelTitle]];
+			$this->davPut($this->currentFilePath, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+		} else {
+			// A VERSION-2 FILE: its panels are the Panel elements, and the layout points
+			// at them by name — so a panel is edited in place (its title), never replaced,
+			// or the edit would also be an edit to the layout.
+			$resource = Yaml::parse($raw, Yaml::PARSE_OBJECT_FOR_MAP);
+			if (!$resource instanceof \stdClass || !isset($resource->spec->elements)) {
+				throw new \RuntimeException('the dashboard file is neither classic JSON nor a version-2 dashboard');
+			}
+			foreach (get_object_vars($resource->spec->elements) as $element) {
+				if (($element->kind ?? '') === 'Panel') {
+					$element->spec->title = $this->editedPanelTitle;
+				}
+			}
+			$this->davPut($this->currentFilePath, Yaml::dump($resource, PHP_INT_MAX, 2, Yaml::DUMP_OBJECT_AS_MAP));
 		}
-		$this->editedPanelTitle = 'Edited-' . bin2hex(random_bytes(3));
-		$spec->panels = [(object)['type' => 'text', 'title' => $this->editedPanelTitle]];
-		$this->davPut($this->currentFilePath, json_encode($spec, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 		$this->occ('grafana_sync:sync push');
 	}
 
 	/** @Then the dashboard in Grafana holds the file's panels */
 	public function theDashboardHoldsTheFilesPanels(): void {
 		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		// A version-2 file is asked about in its own terms: the panels are its elements.
+		if (json_decode($this->davGet($this->currentFilePath)) === null) {
+			$resource = $this->grafanaGetDashboardV2($uid);
+			$titles = [];
+			foreach (get_object_vars($resource->spec->elements ?? new \stdClass()) as $element) {
+				$titles[] = (string)($element->spec->title ?? '');
+			}
+			if (!in_array($this->editedPanelTitle, $titles, true)) {
+				throw new \RuntimeException(
+					"Grafana's panels are [" . implode(', ', $titles) . "], without '{$this->editedPanelTitle}'",
+				);
+			}
+			return;
+		}
 		$record = $this->grafanaGetDashboard($uid);
 		if ($record === null) {
 			throw new \RuntimeException("Grafana has no dashboard '$uid'");
@@ -351,12 +381,26 @@ trait SyncSteps {
 	 * mode is visible to a person, and the only place a pull can get it wrong.
 	 */
 	public function theFileHoldsContents(string $contents): void {
-		$body = json_decode($this->davGet($this->currentFilePath), true);
+		$raw = $this->davGet($this->currentFilePath);
+		$contents = trim($contents);
+
+		// A VERSION-2 MIRROR IS YAML, AND NOT JSON. Asserted as both halves: a v2 file
+		// that came out as JSON is the version being ignored, which a YAML parser would
+		// happily accept (JSON is nearly YAML) and so would never catch.
+		if (str_ends_with($contents, 'YAML')) {
+			if (json_decode($raw) !== null) {
+				throw new \RuntimeException('the mirror is JSON; a version-2 mapping writes YAML');
+			}
+			$this->assertYamlBody(Yaml::parse($raw), $contents);
+			return;
+		}
+
+		$body = json_decode($raw, true);
 		if (!is_array($body)) {
 			throw new \RuntimeException('the mirror is not JSON');
 		}
 		$isPointer = ($body['$schema'] ?? '') === 'grafana.reference/v1';
-		switch (trim($contents)) {
+		switch ($contents) {
 			case "the dashboard's full JSON":
 				if ($isPointer) {
 					throw new \RuntimeException('a sync mirror holds a pointer; it should hold the dashboard');
@@ -367,6 +411,34 @@ trait SyncSteps {
 				return;
 			case 'a pointer to the dashboard':
 				if (!$isPointer) {
+					throw new \RuntimeException('a link holds the dashboard body; it should hold only a pointer');
+				}
+				return;
+			default:
+				throw new \RuntimeException("'$contents' is not a body this vocabulary knows");
+		}
+	}
+
+	/** The YAML half of {@see theFileHoldsContents()}. */
+	private function assertYamlBody(mixed $body, string $contents): void {
+		if (!is_array($body)) {
+			throw new \RuntimeException('the mirror is not a YAML map');
+		}
+		switch ($contents) {
+			case "the dashboard's full YAML":
+				$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+				if (($body['apiVersion'] ?? '') !== 'dashboard.grafana.app/v2' || ($body['kind'] ?? '') !== 'Dashboard') {
+					throw new \RuntimeException('the mirror is not a dashboard.grafana.app/v2 Dashboard');
+				}
+				if (($body['metadata']['name'] ?? '') !== $uid) {
+					throw new \RuntimeException("the mirror names '" . ($body['metadata']['name'] ?? '') . "', not its dashboard '$uid'");
+				}
+				if (!isset($body['spec']['layout'], $body['spec']['elements'])) {
+					throw new \RuntimeException('the mirror carries no layout and elements, so it is not the dashboard');
+				}
+				return;
+			case 'a pointer to the dashboard, in YAML':
+				if (($body['$schema'] ?? '') !== 'grafana.reference/v1') {
 					throw new \RuntimeException('a link holds the dashboard body; it should hold only a pointer');
 				}
 				return;

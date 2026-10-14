@@ -28,28 +28,32 @@ Feature: Mapping a Grafana folder to a Nextcloud folder
       | mode      | link         |
       | groups    |              |
       | storage   | admin folder |
+      | version   | 1            |
     When the admin submits this mapping:
       | grafana folder | observe     |
       | nc folder      | <nc folder> |
       | mode           | <mode>      |
       | groups         | <groups>    |
       | storage        | <storage>   |
+      | version        | <version>   |
     Then the mapping matches the form, unset fields at their defaults
 
     Examples: one field at a time, and nothing at all
-      | nc folder  | mode | groups    | storage     |
-      |            |      |           |             |
-      | Dashboards |      |           |             |
-      |            | link |           |             |
-      |            | sync |           |             |
-      |            |      | admin     |             |
-      |            |      | admin,ops |             |
-      |            |      |           | team folder |
+      | nc folder  | mode | groups    | storage     | version |
+      |            |      |           |             |         |
+      | Dashboards |      |           |             |         |
+      |            | link |           |             |         |
+      |            | sync |           |             |         |
+      |            |      | admin     |             |         |
+      |            |      | admin,ops |             |         |
+      |            |      |           | team folder |         |
+      |            |      |           |             | 1       |
+      |            |      |           |             | 2       |
 
     Examples: and in combination
-      | nc folder  | mode | groups    | storage     |
-      | Dashboards | sync | admin,ops | team folder |
-      | observe    | link | admin     | team folder |
+      | nc folder  | mode | groups    | storage     | version |
+      | Dashboards | sync | admin,ops | team folder | 2       |
+      | observe    | link | admin     | team folder | 1       |
 
     # notes: ../AGENTS.md#creating-a-mapping-saves-the-form
 

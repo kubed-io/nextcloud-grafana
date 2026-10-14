@@ -233,14 +233,14 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 ```gherkin
       | Dynamic        | Dynamic          | sync | admin folder |        | 2       |
-      | dynamic links  | Dynamic Pointers | link | admin folder |        | 2       |
+      | dynamic-links  | Dynamic Pointers | link | admin folder |        | 2       |
 ```
 
 *Create a new dashboard in a mapped folder* gains `| Dynamic | Dynamic |`. *Create a dashboard in Grafana* gains:
 
 ```gherkin
       | Dynamic           | Dynamic          | sync | set     | the dashboard's full YAML           |
-      | dynamic links     | Dynamic Pointers | link | absent  | a pointer to the dashboard, in YAML |
+      | dynamic-links     | Dynamic Pointers | link | absent  | a pointer to the dashboard, in YAML |
 ```
 
 **`features/dashboards/edit.feature`** — the Background is untouched. The version-2 mapping is declared in the scenario itself, so the version is on the page where the rule is stated (Dr K: the scenario must say which version its mapping is). A rule of its own after *Edit a dashboard file outside every mapping*:

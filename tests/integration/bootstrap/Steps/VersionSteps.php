@@ -1,0 +1,83 @@
+<?php
+
+/**
+ * SPDX-FileCopyrightText: 2026 kubed-io
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+declare(strict_types=1);
+
+namespace OCA\GrafanaSync\Tests\Integration\Steps;
+
+/**
+ * What only a version-2 mapping keeps (`dashboards/edit.feature`).
+ *
+ * A dashboard with TABS is the witness. Tabs exist only in the v2 schema: the classic
+ * API reads them as a row panel, and a classic write stores that row — so a dashboard
+ * that still has its tabs after an edit is one that was never written through v1.
+ * Measured on Grafana 13.2.1 (docs/superpowers/specs/2026-10-14-mapping-version-design.md).
+ *
+ * The dashboard is made in Grafana and pulled, because a tabbed dashboard cannot be
+ * authored any other way: the classic body a Nextcloud file would start from has no
+ * way to say "tabs".
+ */
+trait VersionSteps {
+	/**
+	 * @Given a dashboard file named :filename in :folder whose dashboard has tabs
+	 */
+	public function aDashboardFileNamedInWhoseDashboardHasTabs(string $filename, string $folder): void {
+		$title = preg_replace('/\.grafana$/', '', $filename) ?? $filename;
+		$uid = 'nc-tabs-' . bin2hex(random_bytes(3));
+
+		$this->grafanaPutDashboardV2($uid, $this->grafanaFolderUidForMapping($folder), self::tabbedSpec($title));
+		$this->createdDashboardUids[] = $uid;
+		$this->pullEveryMapping();
+
+		$this->lastUid = $uid;
+		$this->currentFolder = $folder;
+		foreach ($this->davListDashboardFiles($folder) as $name) {
+			$path = $folder . '/' . $name;
+			if ($this->davReadMetadata($path, self::META_UID) === $uid) {
+				$this->currentFilePath = $path;
+				$this->originalPath = $path;
+				return;
+			}
+		}
+		throw new \RuntimeException("the pull did not mirror '$title' into '$folder'");
+	}
+
+	/** @Then the dashboard in Grafana still has its tabs */
+	public function theDashboardInGrafanaStillHasItsTabs(): void {
+		$uid = (string)$this->davReadMetadata($this->currentFilePath, self::META_UID);
+		$resource = $this->grafanaGetDashboardV2($uid);
+		if ($resource === null) {
+			throw new \RuntimeException("Grafana has no dashboard '$uid'");
+		}
+		$layout = (string)($resource->spec->layout->kind ?? '');
+		if ($layout !== 'TabsLayout') {
+			throw new \RuntimeException("the dashboard's layout is '$layout' — its tabs were flattened");
+		}
+	}
+
+	/** One text panel on one tab, laid out by the auto grid: nothing classic can say. */
+	private static function tabbedSpec(string $title): \stdClass {
+		return json_decode(json_encode([
+			'title' => $title,
+			'elements' => ['panel-1' => ['kind' => 'Panel', 'spec' => [
+				'id' => 1, 'title' => 'Hello', 'description' => '', 'links' => [],
+				'data' => ['kind' => 'QueryGroup', 'spec' => ['queries' => [], 'transformations' => [], 'queryOptions' => new \stdClass()]],
+				'vizConfig' => ['kind' => 'VizConfig', 'group' => 'text', 'version' => '', 'spec' => [
+					'options' => ['content' => 'hello', 'mode' => 'markdown'],
+					'fieldConfig' => ['defaults' => new \stdClass(), 'overrides' => []],
+				]],
+			]]],
+			'layout' => ['kind' => 'TabsLayout', 'spec' => ['tabs' => [['kind' => 'TabsLayoutTab', 'spec' => [
+				'title' => 'One',
+				'layout' => ['kind' => 'AutoGridLayout', 'spec' => [
+					'maxColumnCount' => 3, 'columnWidthMode' => 'standard', 'rowHeightMode' => 'standard',
+					'items' => [['kind' => 'AutoGridLayoutItem', 'spec' => ['element' => ['kind' => 'ElementReference', 'name' => 'panel-1']]]],
+				]],
+			]]]]],
+		], JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+	}
+}

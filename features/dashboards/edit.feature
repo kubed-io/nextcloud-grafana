@@ -43,6 +43,22 @@ Feature: Editing a dashboard
     When I edit the file's panels and save
     Then the file holds no Grafana metadata at all
 
+    # ── RULE: a version 2 mapping keeps what version 1 would flatten ─────────
+    # notes: ../AGENTS.md#an-edit-in-a-version-2-mapping-keeps-its-tabs
+
+  @user @in-nextcloud @gesture @ui
+  Scenario: Edit a dashboard with tabs in a version 2 mapping
+    Given a mapping with the following values:
+      | grafana folder | Dynamic      |
+      | nc folder      | Dynamic      |
+      | mode           | sync         |
+      | storage        | admin folder |
+      | version        | 2            |
+    And a dashboard file named "Fleet Health.grafana" in "Dynamic" whose dashboard has tabs
+    When I edit the file's panels and save
+    Then the dashboard in Grafana holds the file's panels
+    And the dashboard in Grafana still has its tabs
+
     # ── RULE: an edit made in Grafana reaches the mirror, dates and all ───────
     # notes: ../AGENTS.md#an-edit-in-grafana-reaches-the-mirrored-file
 

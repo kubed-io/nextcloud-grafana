@@ -217,6 +217,37 @@ trait GrafanaApiTrait {
 		Assert::assertSame(200, $res->getStatusCode(), "PATCH Grafana folder $uid tags failed: " . (string)$res->getBody());
 	}
 
+	/**
+	 * A dashboard as `dashboard.grafana.app/v2` holds it, decoded as objects (an empty
+	 * `{}` stays one) — or null when Grafana has no such dashboard.
+	 */
+	private function grafanaGetDashboardV2(string $uid): ?\stdClass {
+		$res = $this->grafanaClient()->request('GET', '../apis/dashboard.grafana.app/v2/namespaces/default/dashboards/' . rawurlencode($uid));
+		if ($res->getStatusCode() === 404) {
+			return null;
+		}
+		Assert::assertSame(200, $res->getStatusCode(), "GET Grafana v2 dashboard $uid failed: " . (string)$res->getBody());
+		$decoded = json_decode((string)$res->getBody(), false);
+		return $decoded instanceof \stdClass ? $decoded : null;
+	}
+
+	/**
+	 * Create (or replace) a version-2 dashboard: `PUT` is an upsert on this API. The
+	 * folder is an annotation; without it Grafana puts the dashboard in General.
+	 */
+	private function grafanaPutDashboardV2(string $uid, string $folderUid, \stdClass $spec): void {
+		$res = $this->grafanaClient()->request('PUT', '../apis/dashboard.grafana.app/v2/namespaces/default/dashboards/' . rawurlencode($uid), [
+			'headers' => ['Content-Type' => 'application/json'],
+			'body' => json_encode([
+				'apiVersion' => 'dashboard.grafana.app/v2',
+				'kind' => 'Dashboard',
+				'metadata' => ['name' => $uid, 'annotations' => ['grafana.app/folder' => $folderUid]],
+				'spec' => $spec,
+			], JSON_THROW_ON_ERROR),
+		]);
+		Assert::assertContains($res->getStatusCode(), [200, 201], "PUT Grafana v2 dashboard $uid failed: " . (string)$res->getBody());
+	}
+
 	/** The app-platform path for one folder, relative to the client's `/api/` base. */
 	private function folderResourcePath(string $uid): string {
 		// The Grafana client is based at `<url>/api/`, and this resource sits outside

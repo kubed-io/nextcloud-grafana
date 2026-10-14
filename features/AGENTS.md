@@ -250,6 +250,13 @@ downloads nothing and pushes nothing back, so a mapping made without an opinion
 about mode cannot cost anything. An *unknown* mode is still refused — saying
 nothing and saying nonsense are different inputs and get different answers.
 
+**`version` defaults to `1`**, which is what every mapping was before the field
+existed — so a stored mapping without it reads as version 1, unchanged. `1` and `2`
+both get a row of their own, the way `mode` does, because each is a value someone can
+type; the version-2 row is also the only place this file shows that the app accepts
+one. What version 2 DOES is not this feature's business (`dashboards/create.feature`,
+`dashboards/edit.feature`); that the form keeps it is.
+
 **`use_team_folder` defaults to false**, matching Penpot and n8n. A Team Folder
 needs groupfolders, an OPTIONAL app absent from a stock Nextcloud, so defaulting to
 it made the default mapping the one that could not be provisioned. A default must
@@ -391,7 +398,10 @@ live migration:
 - the **Team Folder** flag — switching backend migrates the provisioned folder
   and all of its shares;
 - **mode** — it decided how every existing file under the mapping was written, so
-  changing it silently invalidates what is on disk.
+  changing it silently invalidates what is on disk;
+- **version** — the same, one level down: it decided which API every file was read
+  through and whether it is JSON or YAML. Changing it is removing the mapping and
+  mapping the folder again.
 
 This replaced a scenario that performed four `When`s in a row against a
 full-mapping `update()`. It read as a script rather than as instances of one
@@ -1361,6 +1371,18 @@ that folder IS. Nothing restates "sync" or "unmapped" in a step.
 The pair is the whole input space for a create: a `sync` mapping, a `link`
 mapping, and outside every mapping. The mode is not a scenario, it is a property
 of the folder the file landed in.
+
+**The version is the same kind of property**, so it is a column of the same table
+rather than a scenario: `Dynamic` and `Dynamic Pointers` are the sync and link pair
+again, at version 2, and every Examples row that names them is the existing rule over
+one more folder. Blank is version 1, the default. Two of those rows assert what a
+version-2 pull writes — the dashboard as YAML, and the pointer as YAML — and the
+`Create a new dashboard in a mapped folder` row asserts only that the + New starter,
+which is classic JSON wherever it lands, still becomes a dashboard there.
+
+**Two columns here are called `version`, and they are different things.** The
+Background's is the MAPPING's (`1`/`2`); the `Create a dashboard in Grafana` Examples'
+is the FILE's `grafana_version` metadata (`set`/`absent`), which was there first.
 
 **Declaring a second mapping used to wipe the first, silently.** `a mapping with
 the following values:` reset the store on every call, so a Background could only
@@ -2387,10 +2409,11 @@ under test, so the table is the specification.
 
 THE KEYS ARE THE FIVE `stampSynced` WRITES when a file lands: `grafana_uid`,
 `grafana_mapping`, `grafana_mode`, `grafana_version`, `grafana_syncedHash`. The
-metadata store registers two more — `grafana_folderUid` (the source Grafana
-folder, for the nested-folder cascade) and `grafana_apiVersion` (classic JSON vs
-v2 YAML, so a file self-describes how to be read back) — but **nothing writes
-either one yet**; they are banked for the subfolder and YAML courses. The old
+metadata store registers one more, `grafana_folderUid` — the Grafana folder a move or
+a recycle-bin park last put the dashboard in — which a landing does not write, so it is
+not in this table. (This note used to name a second, `grafana_apiVersion`, as banked;
+it was never registered, and the mapping version made it unnecessary: a file's own
+shape says whether it is classic JSON or a version-2 resource.) The old
 `file-type.feature` listed both in its PROPFIND table, which asserted values the
 app has never set.
 
@@ -3391,6 +3414,28 @@ because the tags were the interesting part there, and named after the pull.
 The behaviour is that someone edited a dashboard. The body arriving and the pills
 matching are both end states of that, which is why they are `Then`s here rather
 than a scenario in a file about tags.
+
+### An edit in a version-2 mapping keeps its tabs
+
+THE REASON A MAPPING HAS A VERSION AT ALL, stated as the rule it protects. Grafana 13
+stores each dashboard in one version and serves it through every API; a classic write
+over a version-2 dashboard reads the tabs back as a row panel and stores that —
+measured on 13.2.1, silently, with no error. So an edit made through a version-1
+mapping flattens a tabbed dashboard, and through a version-2 mapping it does not.
+
+**The mapping is declared in the scenario, not the Background** (Dr K: the scenario has
+to say which version its mapping is). The version is the whole point of the rule, so
+it belongs on the page where the rule is; the Background's two mappings are the
+version-1 cases every other scenario here edits.
+
+TABS ARE THE WITNESS because nothing else is as unambiguous: they exist only in the v2
+schema, so a dashboard that still has them after an edit was never written through v1.
+The dashboard is made in Grafana and pulled, because a tabbed dashboard cannot be
+authored from a classic file at all.
+
+The version-1 half — that the same edit through a version-1 mapping DOES flatten — is
+deliberately not a scenario. It is a loss, not a behaviour anyone wants, and specifying
+it would make a future Grafana that stopped losing it fail this suite.
 
 ## mapping/rename
 

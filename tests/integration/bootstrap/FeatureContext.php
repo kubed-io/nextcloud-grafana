@@ -23,6 +23,7 @@ use OCA\GrafanaSync\Tests\Integration\Steps\ResourceSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\SyncSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\TagSteps;
 use OCA\GrafanaSync\Tests\Integration\Steps\TrashSteps;
+use OCA\GrafanaSync\Tests\Integration\Steps\VersionSteps;
 use OCA\GrafanaSync\Tests\Integration\Support\GrafanaApiTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\OccTrait;
 use OCA\GrafanaSync\Tests\Integration\Support\SetupTrait;
@@ -65,6 +66,7 @@ final class FeatureContext implements Context {
 	use ResourceSteps;
 	use FolderSteps;
 	use TagSteps;
+	use VersionSteps;
 
 	private const APP_ID = 'grafana_sync';
 
