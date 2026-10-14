@@ -38,6 +38,11 @@ namespace OCA\GrafanaSync\Service;
  *    writeback is a straight upsert of the file contents.
  *  - `link` mode — a tiny `{$schema:"grafana.reference/v1", uid, title, url,
  *    folderUid, tags}` pointer, not a runtime artifact.
+ *
+ * And each in two cuts, by the mapping's version: version 1 is the classic dashboard
+ * as JSON, version 2 the `dashboard.grafana.app/v2` resource as YAML
+ * ({@see encodeResource()}, {@see toResourceBody()}). A pointer is the same six fields
+ * in either, written in its folder's format.
  */
 final class DashboardBody {
 	/**
@@ -99,7 +104,7 @@ final class DashboardBody {
 	 *
 	 * @param array<string,mixed> $dashboard search row or dashboard object (uid/title/tags)
 	 */
-	public static function encodeReference(array $dashboard, string $url, string $folderUid): string {
+	public static function encodeReference(array $dashboard, string $url, string $folderUid, int $version = Mapping::VERSION_1): string {
 		$uid = (string)($dashboard['uid'] ?? '');
 		$tags = [];
 		foreach ($dashboard['tags'] ?? [] as $t) {
@@ -115,7 +120,32 @@ final class DashboardBody {
 			'folderUid' => $folderUid,
 			'tags' => $tags,
 		];
-		return json_encode($payload, self::JSON_PRETTY);
+		return $version === Mapping::VERSION_2
+			? DashboardYaml::dump((object)$payload)
+			: json_encode($payload, self::JSON_PRETTY);
+	}
+
+	/**
+	 * A version-2 file: the resource read from `dashboard.grafana.app/v2`, cut down to
+	 * what Grafana's own Git Sync export writes — `apiVersion`, `kind`, `metadata.name`,
+	 * `spec` — as YAML.
+	 *
+	 * The rest of `metadata` and all of `status` go for the reason `id` and `version` go
+	 * from a classic body: Grafana rewrites them on every save (resourceVersion,
+	 * generation, timestamps, the updatedBy annotation), so a file that kept them would
+	 * churn on every pull. `metadata.name` is the uid and stays as the identity. The
+	 * folder annotation goes too: the Nextcloud folder is the answer, as it is for v1.
+	 */
+	public static function encodeResource(\stdClass $resource): string {
+		$meta = $resource->metadata ?? null;
+		$name = $meta instanceof \stdClass && is_string($meta->name ?? null) ? $meta->name : '';
+		$spec = $resource->spec ?? null;
+		return DashboardYaml::dump((object)[
+			'apiVersion' => (string)($resource->apiVersion ?? ''),
+			'kind' => (string)($resource->kind ?? 'Dashboard'),
+			'metadata' => (object)['name' => $name],
+			'spec' => $spec instanceof \stdClass ? $spec : new \stdClass(),
+		]);
 	}
 
 	/**
@@ -155,6 +185,61 @@ final class DashboardBody {
 			$body['folderUid'] = $folderUid;
 		}
 		return $body;
+	}
+
+	/**
+	 * The `PUT /apis/<apiVersion>/namespaces/default/dashboards/<uid>` body for a
+	 * resource — the version-2 counterpart of {@see toUpsertBody()}.
+	 *
+	 * `metadata` is rebuilt rather than carried: the name (the uid) plus the two
+	 * annotations this app owns. **The folder annotation is on every write except the
+	 * reserved root**, because a PUT without it moves the dashboard to General
+	 * (measured on Grafana 13.2.1) — the same rule that makes {@see toUpsertBody()}
+	 * omit `folderUid` only for the root. The commit message rides in
+	 * `grafana.app/message`, where the classic API takes `message`.
+	 *
+	 * The body's `apiVersion` is kept, not replaced: Grafana refuses a body whose
+	 * apiVersion differs from the URL's, so the caller PUTs to the version it names.
+	 *
+	 * @return array{apiVersion:string, kind:string, metadata:array{name:string, annotations:array<string,string>}, spec:\stdClass}
+	 */
+	public static function toResourceBody(DashboardDocument $doc, ?string $folderUid, string $basename = '', string $message = ''): array {
+		$body = $doc->body();
+		$spec = $body->spec ?? null;
+		$spec = $spec instanceof \stdClass ? $spec : new \stdClass();
+		if ($doc->title() === '') {
+			$spec->title = self::titleFromBasename($basename);
+		}
+
+		$annotations = [];
+		if ($folderUid !== null && $folderUid !== '' && $folderUid !== GrafanaClient::FOLDER_GENERAL) {
+			$annotations['grafana.app/folder'] = $folderUid;
+		}
+		$annotations['grafana.app/message'] = $message !== '' ? $message : self::DEFAULT_MESSAGE;
+
+		return [
+			'apiVersion' => $doc->apiVersion(),
+			'kind' => 'Dashboard',
+			'metadata' => ['name' => $doc->uid(), 'annotations' => $annotations],
+			'spec' => $spec,
+		];
+	}
+
+	/**
+	 * A new dashboard uid in Grafana's own shape — fourteen lowercase alphanumerics,
+	 * like `af397c9y8enswf` — for a version-2 dashboard born from a copy.
+	 *
+	 * The classic API mints one itself when `uid` is absent; the resource API needs a
+	 * name up front. `metadata.generateName` would mint `<prefix>xxxxx`, which looks
+	 * like nothing else in the instance.
+	 */
+	public static function mintUid(): string {
+		$alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+		$uid = '';
+		for ($i = 0; $i < 14; $i++) {
+			$uid .= $alphabet[random_int(0, 35)];
+		}
+		return $uid;
 	}
 
 	/**

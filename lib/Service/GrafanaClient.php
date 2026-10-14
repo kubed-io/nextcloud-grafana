@@ -64,6 +64,13 @@ final class GrafanaClient {
 	 */
 	private const FOLDERS_RESOURCE = '/apis/folder.grafana.app/v1beta1/namespaces/default/folders';
 
+	/**
+	 * Version-2 dashboards. Namespace `default` is org 1, as {@see FOLDERS_RESOURCE}
+	 * already assumes. Only reads go here: a write goes to whatever version its body
+	 * names ({@see writeDocument()}).
+	 */
+	public const DASHBOARDS_V2 = '/apis/dashboard.grafana.app/v2/namespaces/default/dashboards';
+
 	/** `/api/search` row type for a dashboard (vs `dash-folder`). */
 	private const TYPE_DASHBOARD = 'dash-db';
 
@@ -472,6 +479,119 @@ final class GrafanaClient {
 	public function upsertDashboard(array $body): array {
 		$res = $this->request('POST', '/api/dashboards/db', [], $body);
 		return $this->decode($res);
+	}
+
+	/**
+	 * One dashboard as its `dashboard.grafana.app/v2` resource — what a version-2 pull
+	 * mirrors. The version-2 counterpart of {@see readDashboardSpec()}, with the same
+	 * `\stdClass` decode for the same reason (an empty `{}` must stay one).
+	 *
+	 * `spec` on the returned {@see DashboardSpec} is the WHOLE resource, metadata
+	 * included, because the clocks and the version live there: `creationTimestamp`, the
+	 * `grafana.app/updatedTimestamp` annotation (absent on a dashboard never updated),
+	 * and `generation`. Those match the classic `meta.created` / `meta.updated` /
+	 * `version` exactly (measured on Grafana 13.2.1), so one read is enough.
+	 *
+	 * Every dashboard reads through v2 whatever version it is stored in — Grafana
+	 * converts. **A conversion can fail**, and then Grafana still answers 200, with
+	 * `status.conversion.failed`. That throws: mirroring the half-converted body would
+	 * write a file that is not the dashboard, and the next push would make it so.
+	 */
+	public function readDashboardResource(string $uid): ?DashboardSpec {
+		$res = $this->request('GET', self::DASHBOARDS_V2 . '/' . rawurlencode($uid));
+		$body = (string)$res->getBody();
+		if ($body === '') {
+			return null;
+		}
+		try {
+			$resource = json_decode($body, false, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException $e) {
+			$this->logger->warning('Grafana response was not valid JSON', ['exception' => $e]);
+			throw new \RuntimeException('Grafana response was not valid JSON.', 0, $e);
+		}
+		if (!$resource instanceof \stdClass || !($resource->spec ?? null) instanceof \stdClass) {
+			return null;
+		}
+		$conversion = $resource->status->conversion ?? null;
+		if ($conversion instanceof \stdClass && ($conversion->failed ?? false) === true) {
+			$why = is_string($conversion->error ?? null) && $conversion->error !== ''
+				? $conversion->error
+				: 'Grafana could not convert this dashboard to version 2.';
+			throw new GrafanaApiException($why, 422);
+		}
+		$meta = $resource->metadata ?? new \stdClass();
+		$annotations = $meta->annotations ?? new \stdClass();
+		return new DashboardSpec(
+			$resource,
+			DashboardSpec::parseTime($annotations->{'grafana.app/updatedTimestamp'} ?? null),
+			DashboardSpec::parseTime($meta->creationTimestamp ?? null),
+		);
+	}
+
+	/**
+	 * Write a dashboard through the API its body belongs to — the one door every write
+	 * in this app goes through.
+	 *
+	 *  - **a classic body** → `POST /api/dashboards/db`, exactly as
+	 *    {@see upsertDashboard()} always has;
+	 *  - **a resource** → `PUT /apis/<its own apiVersion>/namespaces/default/dashboards/<uid>`.
+	 *    PUT is an upsert there (it creates a missing name — measured), and the URL is
+	 *    the body's own version because Grafana refuses a body whose apiVersion is not
+	 *    the URL's. A resource with no name is a birth, and gets a uid minted in
+	 *    Grafana's shape ({@see DashboardBody::mintUid()}).
+	 *
+	 * **A classic body is never wrapped in an envelope** to reach the v2 API. That would
+	 * be shorter and wrong: v2 validates almost nothing and does not convert, so the
+	 * dashboard would be stored as a v2 object with classic fields in it. Grafana's
+	 * classic API converts a classic body properly.
+	 *
+	 * Returns the uid written and the version Grafana now holds (the classic `version`,
+	 * or the resource's `generation` — the same counter).
+	 *
+	 * @return array{uid:string, version:string}
+	 */
+	public function writeDocument(DashboardDocument $doc, ?string $folderUid, string $basename = '', string $message = ''): array {
+		if (!$doc->isResource()) {
+			$ack = $this->upsertDashboard(DashboardBody::toUpsertBody($doc->body(), $folderUid, $basename, $message));
+			return [
+				'uid' => (string)($ack['uid'] ?? ''),
+				'version' => isset($ack['version']) && is_scalar($ack['version']) ? (string)$ack['version'] : '',
+			];
+		}
+		if ($doc->uid() === '') {
+			$doc = $doc->withUid(DashboardBody::mintUid());
+		}
+		$path = '/apis/' . $doc->apiVersion() . '/namespaces/default/dashboards/' . rawurlencode($doc->uid());
+		$ack = $this->decode($this->request('PUT', $path, [], DashboardBody::toResourceBody($doc, $folderUid, $basename, $message)));
+		$meta = is_array($ack['metadata'] ?? null) ? $ack['metadata'] : [];
+		return [
+			'uid' => is_string($meta['name'] ?? null) ? $meta['name'] : $doc->uid(),
+			'version' => isset($meta['generation']) && is_scalar($meta['generation']) ? (string)$meta['generation'] : '',
+		];
+	}
+
+	/**
+	 * Whether this Grafana serves `dashboard.grafana.app/v2` — asked once, when a
+	 * version-2 mapping is made, so a Grafana that cannot hold one refuses the mapping
+	 * instead of failing every pull with a 404. Every Grafana 13 does.
+	 *
+	 * A 404 on the group itself is "no": an older Grafana has no app platform at all.
+	 */
+	public function servesDashboardV2(): bool {
+		try {
+			$group = $this->decode($this->request('GET', '/apis/dashboard.grafana.app'));
+		} catch (GrafanaApiException $e) {
+			if ($e->httpStatus === 404) {
+				return false;
+			}
+			throw $e;
+		}
+		foreach ((array)($group['versions'] ?? []) as $version) {
+			if (is_array($version) && ($version['version'] ?? null) === 'v2') {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

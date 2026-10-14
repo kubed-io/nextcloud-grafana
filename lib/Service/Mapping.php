@@ -97,6 +97,11 @@ final class Mapping implements JsonSerializable {
 	public const MODE_SYNC = 'sync';
 	public const MODE_LINK = 'link';
 
+	/** Classic dashboard JSON, through `/api/dashboards/*`. */
+	public const VERSION_1 = 1;
+	/** The `dashboard.grafana.app/v2` resource, as YAML. */
+	public const VERSION_2 = 2;
+
 	public function __construct(
 		public readonly string $id,
 		public readonly string $grafanaFolderUid,

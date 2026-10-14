@@ -80,4 +80,12 @@ final class DashboardSpecTest extends TestCase {
 		self::assertSame('7', (new DashboardSpec((object)['version' => 7], null, null))->version());
 		self::assertSame('', (new DashboardSpec((object)[], null, null))->version());
 	}
+
+	/** The classic API's `version` IS the resource's generation (measured on 13.2.1). */
+	public function testVersionIsGenerationForAResource(): void {
+		$resource = (object)['apiVersion' => 'dashboard.grafana.app/v2', 'metadata' => (object)['name' => 'd1', 'generation' => 7]];
+
+		self::assertSame('7', (new DashboardSpec($resource, null, null))->version());
+		self::assertSame('3', (new DashboardSpec((object)['uid' => 'd1', 'version' => 3], null, null))->version());
+	}
 }
