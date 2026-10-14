@@ -180,7 +180,10 @@ trait SyncSteps {
 					$element->spec->title = $this->editedPanelTitle;
 				}
 			}
-			$this->davPut($this->currentFilePath, Yaml::dump($resource, PHP_INT_MAX, 2, Yaml::DUMP_OBJECT_AS_MAP));
+			// The app's own flags: without DUMP_EMPTY_ARRAY_AS_SEQUENCE every empty list
+			// (`links: []`) is written back as a map, and Grafana refuses the dashboard.
+			$this->davPut($this->currentFilePath, Yaml::dump($resource, PHP_INT_MAX, 2,
+				Yaml::DUMP_OBJECT_AS_MAP | Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE | Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK));
 		}
 		$this->occ('grafana_sync:sync push');
 	}

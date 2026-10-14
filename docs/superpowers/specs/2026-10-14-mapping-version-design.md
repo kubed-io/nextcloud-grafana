@@ -161,6 +161,13 @@ with a 404. The README states the requirement. *(My call.)*
 13.2.1, so the integration job's image moves to `grafana/grafana:13.2.1` in this round,
 for the reason the PHP in CI matches the pod's. *(My call.)*
 
+**A fresh Grafana 13.2.1 indexes search asynchronously.** Measured in CI: a dashboard
+written through the v2 API was listed by `/api/search` after 18.5 s, and a classic write
+can lag too. The live instance (upgraded, legacy-backed) lists a write at once. The app
+finds a folder's dashboards by searching it, so on a fresh install a dashboard made in
+Grafana reaches Nextcloud on the next scheduled pull rather than an immediate one — fine
+for the product. The test harness waits for search to list every dashboard it creates.
+
 Grafana can report `status.conversion.failed: true` for a dashboard it cannot convert.
 A pull skips that dashboard with a warning and counts it as failed — the same treatment
 as a record with no spec today. Nothing is written over the file it already has.

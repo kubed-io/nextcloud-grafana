@@ -32,10 +32,6 @@ trait VersionSteps {
 		$grafanaFolder = $this->grafanaFolderUidForMapping($folder);
 		$this->grafanaPutDashboardV2($uid, $grafanaFolder, self::tabbedSpec($title));
 		$this->createdDashboardUids[] = $uid;
-		// A DASHBOARD WRITTEN THROUGH THE RESOURCE API IS SEARCHABLE A MOMENT LATER, not at
-		// once, and the pull finds dashboards by searching. Waiting here is the harness
-		// letting Grafana settle, the way a person would not notice it had to.
-		$this->waitUntilGrafanaSearchFinds($uid, $grafanaFolder);
 		$this->pullEveryMapping();
 
 		$this->lastUid = $uid;
@@ -50,29 +46,6 @@ trait VersionSteps {
 		}
 		throw new \RuntimeException("the pull did not mirror '$title' into '$folder'; it reported "
 			. json_encode($this->lastPullReport));
-	}
-
-	/** The pull lists a folder's dashboards by searching it, so that is the question asked. */
-	private function waitUntilGrafanaSearchFinds(string $uid, string $folderUid): void {
-		$started = microtime(true);
-		for ($i = 0; $i < 360; $i++) {
-			$res = $this->grafanaClient()->request('GET', 'search', ['query' => ['folderUIDs' => $folderUid, 'type' => 'dash-db']]);
-			$rows = json_decode((string)$res->getBody(), true);
-			if (is_array($rows) && in_array($uid, array_column($rows, 'uid'), true)) {
-				fwrite(STDERR, sprintf("search listed %s after %.1fs\n", $uid, microtime(true) - $started));
-				return;
-			}
-			usleep(250_000);
-		}
-		// SAY WHERE IT IS INSTEAD. A fresh CI Grafana has answered differently from a live
-		// one here, so the failure carries what each API reports about the dashboard.
-		$byUid = json_decode((string)$this->grafanaClient()->request('GET', 'search', ['query' => ['dashboardUIDs' => $uid]])->getBody(), true);
-		$classic = $this->grafanaGetDashboard($uid);
-		$resource = $this->grafanaGetDashboardV2($uid);
-		throw new \RuntimeException("Grafana's search of folder '$folderUid' never listed '$uid'. "
-			. 'Search by uid: ' . json_encode($byUid)
-			. '; classic meta.folderUid: ' . json_encode($classic['meta']['folderUid'] ?? null)
-			. '; v2 folder annotation: ' . json_encode($resource->metadata->annotations->{'grafana.app/folder'} ?? null));
 	}
 
 	/** @Then the dashboard in Grafana still has its tabs */

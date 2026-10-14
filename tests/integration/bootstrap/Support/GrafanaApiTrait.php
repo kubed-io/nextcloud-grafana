@@ -135,6 +135,7 @@ trait GrafanaApiTrait {
 			'body' => $body,
 		]);
 		Assert::assertSame(200, $res->getStatusCode(), "create Grafana dashboard $uid failed: " . (string)$res->getBody());
+		$this->waitUntilGrafanaSearchFinds($uid, $folderUid);
 	}
 
 	/**
@@ -163,6 +164,7 @@ trait GrafanaApiTrait {
 			'body' => $body,
 		]);
 		Assert::assertSame(200, $res->getStatusCode(), "create tagged Grafana dashboard $uid failed: " . (string)$res->getBody());
+		$this->waitUntilGrafanaSearchFinds($uid, $folderUid);
 	}
 
 	/**
@@ -246,6 +248,33 @@ trait GrafanaApiTrait {
 			], JSON_THROW_ON_ERROR),
 		]);
 		Assert::assertContains($res->getStatusCode(), [200, 201], "PUT Grafana v2 dashboard $uid failed: " . (string)$res->getBody());
+		$this->waitUntilGrafanaSearchFinds($uid, $folderUid);
+	}
+
+	/**
+	 * Wait until Grafana's search lists a dashboard just written into a folder.
+	 *
+	 * GRAFANA 13.2 INDEXES SEARCH ASYNCHRONOUSLY on a fresh install (unified storage):
+	 * measured in CI, a write was listed after up to 18.5 s. The app finds a folder's
+	 * dashboards by searching it, so an arrange that creates a dashboard and pulls at
+	 * once races the index — which in production is simply the next scheduled pull.
+	 * Waiting here is the harness letting Grafana settle; the folder query is the one
+	 * the pull asks.
+	 */
+	private function waitUntilGrafanaSearchFinds(string $uid, string $folderUid): void {
+		$folder = $folderUid === '' ? 'general' : $folderUid;
+		$started = microtime(true);
+		for ($i = 0; $i < 240; $i++) {
+			$res = $this->grafanaClient()->request('GET', 'search', ['query' => ['folderUIDs' => $folder, 'type' => 'dash-db']]);
+			$rows = json_decode((string)$res->getBody(), true);
+			if (is_array($rows) && in_array($uid, array_column($rows, 'uid'), true)) {
+				return;
+			}
+			usleep(250_000);
+		}
+		throw new \RuntimeException(sprintf(
+			"Grafana's search of folder '%s' never listed '%s' (waited %.0fs)", $folder, $uid, microtime(true) - $started,
+		));
 	}
 
 	/** The app-platform path for one folder, relative to the client's `/api/` base. */
