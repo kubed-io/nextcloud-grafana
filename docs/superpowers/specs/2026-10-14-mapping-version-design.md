@@ -237,7 +237,9 @@ exact text is in the plan; the claims are:
    made from the Files app in a v2 folder is created in Grafana like any other.
 3. **`dashboards/edit.feature`** — the reason for the feature, as a rule: *an edit to a
    file in a version-2 mapping keeps what only version 2 can hold.* A dashboard with tabs
-   is edited from Nextcloud and still has its tabs in Grafana.
+   is edited from Nextcloud and still has its tabs in Grafana. The version-2 mapping is
+   declared in the scenario, not the Background: the version is the whole point of the
+   rule, so it is on the page where the rule is (Dr K).
 
 Moves, copies, renames, tags and the recycle bin across versions are covered by unit
 tests in this round; their scenarios are listed under *Next* rather than added, so the

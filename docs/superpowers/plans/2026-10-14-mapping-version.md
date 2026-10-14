@@ -222,7 +222,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 **Files:**
 - Modify: `features/mapping/create.feature`, `features/dashboards/create.feature`, `features/dashboards/edit.feature` (exact text below)
 - Modify: `tests/integration/bootstrap/Steps/MappingSteps.php` (`addMappingFromForm` :808 sends `version`; `theMappingMatchesTheForm` :393 asserts it), `SyncSteps.php` (`the file holds :contents` :353 learns *the dashboard's full YAML* and *a pointer to the dashboard, in YAML*; `I edit the file's panels and save` :159 and `the dashboard in Grafana holds the file's panels` :173 handle a resource), new steps `a dashboard file named :name in :folder whose dashboard has tabs` and `the dashboard in Grafana still has its tabs` (v2 GET, `spec.layout.kind === 'TabsLayout'`), `Support/GrafanaApiTrait.php` (v2 GET/PUT helpers)
-- Modify: `features/AGENTS.md` — `### Creating a mapping saves the form` (a version paragraph), `### There is no way to change a mapping except its groups` (a **version** bullet), `### The mappings in the Background` (the two v2 mappings), new `### An edit in a version-2 mapping keeps its tabs`; correct the stale `grafana_apiVersion` paragraph (~:2390), which claims a key that is not registered.
+- Modify: `features/AGENTS.md` — `### Creating a mapping saves the form` (a version paragraph), `### There is no way to change a mapping except its groups` (a **version** bullet), `### The mappings in the Background` (the two v2 mappings in `dashboards/create`), new `### An edit in a version-2 mapping keeps its tabs` (why the mapping is declared in the scenario rather than the Background); correct the stale `grafana_apiVersion` paragraph (~:2390), which claims a key that is not registered.
 
 **`features/mapping/create.feature`** — the defaults table gains `| version   | 1            |`, the submitted table `| version        | <version>   |`, both Examples tables a `version` column; *one field at a time* gains rows `1` and `2`; *in combination* row one takes `2`, row two `1`.
 
@@ -240,15 +240,21 @@ SPDX-License-Identifier: AGPL-3.0-or-later
       | dynamic links     | Dynamic Pointers | link | absent  | a pointer to the dashboard, in YAML |
 ```
 
-**`features/dashboards/edit.feature`** — the Background gains a fourth mapping (`Dynamic` / `Dynamic` / `sync` / `admin folder` / version `2`), and a rule of its own after *Edit a dashboard file outside every mapping*:
+**`features/dashboards/edit.feature`** — the Background is untouched. The version-2 mapping is declared in the scenario itself, so the version is on the page where the rule is stated (Dr K: the scenario must say which version its mapping is). A rule of its own after *Edit a dashboard file outside every mapping*:
 
 ```gherkin
     # ── RULE: a version 2 mapping keeps what version 1 would flatten ─────────
     # notes: ../AGENTS.md#an-edit-in-a-version-2-mapping-keeps-its-tabs
 
   @user @in-nextcloud @gesture @ui
-  Scenario: Edit a dashboard file whose dashboard has tabs
-    Given a dashboard file named "Fleet Health.grafana" in "Dynamic" whose dashboard has tabs
+  Scenario: Edit a dashboard with tabs in a version 2 mapping
+    Given a mapping with the following values:
+      | grafana folder | Dynamic      |
+      | nc folder      | Dynamic      |
+      | mode           | sync         |
+      | storage        | admin folder |
+      | version        | 2            |
+    And a dashboard file named "Fleet Health.grafana" in "Dynamic" whose dashboard has tabs
     When I edit the file's panels and save
     Then the dashboard in Grafana holds the file's panels
     And the dashboard in Grafana still has its tabs
