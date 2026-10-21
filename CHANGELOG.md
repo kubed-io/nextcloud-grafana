@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Supports Nextcloud 35.
 - **A mapping chooses its Grafana dashboard version.** v1 keeps the classic JSON; v2 mirrors Grafana 13's new dashboards as YAML, so tabs and auto-grid layouts survive an edit from Nextcloud instead of being flattened.
 
 ### Changed
