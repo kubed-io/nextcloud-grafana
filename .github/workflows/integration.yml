@@ -55,7 +55,7 @@ jobs:
   #
   # A PR runs the CEILING ONLY. That is where the work is aimed and where a real
   # break shows up, and it keeps review cheap: three legs, not nine. `main` runs
-  # every major in info.xml's range — floor, middle and ceiling — so the whole claim
+  # every major in info.xml's range, floor to ceiling, so the whole claim
   # is executed on every merge instead of once per push to every branch.
   #
   # The bet, stated plainly so it can be revisited: a change that works on the newest
@@ -79,9 +79,9 @@ jobs:
         EVENT: ${{ github.event_name }}
       run: |
         if [ "$EVENT" = "pull_request" ]; then
-          matrix='["stable34"]'
+          matrix='["stable35"]'
         else
-          matrix='["stable32", "stable33", "stable34"]'
+          matrix='["stable32", "stable33", "stable34", "stable35"]'
         fi
         echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
         echo "Nextcloud versions for this $EVENT run: $matrix" >> "$GITHUB_STEP_SUMMARY"

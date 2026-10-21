@@ -133,7 +133,7 @@ This is a community integration and is not affiliated with, endorsed by, or spon
          end of life, so nothing supported is lost by asking for the newer one. -->
     <!-- PHP 8.2 because the bundled symfony/yaml 7.4 needs it; 8.1 is past end of life. -->
     <php min-version="8.2"/>
-    <nextcloud min-version="32" max-version="34"/>
+    <nextcloud min-version="32" max-version="35"/>
   </dependencies>
   <settings>
     <!-- Section order (by priority): Instance (5, base URL + token in one card —
