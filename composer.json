@@ -5,7 +5,7 @@
 	"license": "AGPL-3.0-or-later",
 	"require": {
 		"php": "^8.2",
-		"symfony/yaml": "^7.4"
+		"symfony/yaml": "^8.1"
 	},
 	"require-dev": {
 		"nextcloud/ocp": "^33.0",
