@@ -8,7 +8,7 @@
 		"symfony/yaml": "^7.4"
 	},
 	"require-dev": {
-		"nextcloud/ocp": "^33.0",
+		"nextcloud/ocp": "^35.0",
 		"nextcloud/coding-standard": "^1.4",
 		"phpunit/phpunit": "^12.0",
 		"vimeo/psalm": "^6.0",
